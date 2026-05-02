@@ -1,8 +1,15 @@
 ---
-import { getCollection, render } from "astro:content";
+import { getCollection, getEntry, render } from "astro:content";
+import type { CollectionEntry } from "astro:content";
 import BaseLayout from "~/layouts/BaseLayout.astro";
 import JsonLd from "~/components/JsonLd.astro";
 import Breadcrumbs from "~/components/Breadcrumbs.astro";
+import Container from "~/components/Container.astro";
+import Section from "~/components/Section.astro";
+import Prose from "~/components/Prose.astro";
+import AeoAnswerBlock from "~/components/AeoAnswerBlock.astro";
+import VerticalTag from "~/components/VerticalTag.astro";
+import CrossLinkRail from "~/components/CrossLinkRail.astro";
 import { type LocaleCode } from "~/lib/config";
 import { chromeStrings } from "~/lib/strings";
 
@@ -16,14 +23,97 @@ export async function getStaticPaths() {
 
 const { entry } = Astro.props;
 const { locale } = Astro.params as { locale: LocaleCode };
-const { Content } = await render(entry);
+const { Content, headings } = await render(entry);
 const data = entry.data;
 
+type ToolEntry = CollectionEntry<"tools">;
+type WorkflowEntry = CollectionEntry<"workflows">;
+type LearnEntry = CollectionEntry<"learn">;
+
 const allLearn = await getCollection("learn");
+const allTools = await getCollection("tools");
+const allWorkflows = await getCollection("workflows");
+
 const availableLocales = allLearn
   .filter((l) => l.data.canonical_slug === data.canonical_slug)
   .map((l) => l.data.locale);
 
+const chrome = chromeStrings(locale);
+
+// ----- Localized strings -----
+const labels = {
+  en: {
+    type_label_prefix: "ENTRY TYPE",
+    last_updated: "Last updated",
+    toc_label: "On this page",
+    rail_tools: "Related tools",
+    rail_workflows: "Related workflows",
+    rail_learn: "Continue reading",
+  },
+  es: {
+    type_label_prefix: "TIPO",
+    last_updated: "Última actualización",
+    toc_label: "En esta página",
+    rail_tools: "Herramientas relacionadas",
+    rail_workflows: "Workflows relacionados",
+    rail_learn: "Sigue leyendo",
+  },
+  "pt-BR": {
+    type_label_prefix: "TIPO",
+    last_updated: "Última atualização",
+    toc_label: "Nesta página",
+    rail_tools: "Ferramentas relacionadas",
+    rail_workflows: "Workflows relacionados",
+    rail_learn: "Continue lendo",
+  },
+} as const;
+
+const t = labels[locale];
+
+// ----- TOC headings: keep h2/h3 only -----
+const tocHeadings = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+
+// ----- Cross-link computation -----
+async function resolveTools(slugs: string[]): Promise<ToolEntry[]> {
+  const resolved = await Promise.all(
+    slugs.map((slug) =>
+      getEntry("tools", `${locale}/${slug}`).catch(() => undefined)
+    )
+  );
+  return resolved.filter((tt): tt is ToolEntry => tt !== undefined);
+}
+async function resolveWorkflows(slugs: string[]): Promise<WorkflowEntry[]> {
+  const resolved = await Promise.all(
+    slugs.map((slug) =>
+      getEntry("workflows", `${locale}/${slug}`).catch(() => undefined)
+    )
+  );
+  return resolved.filter((w): w is WorkflowEntry => w !== undefined);
+}
+
+const relatedTools = await resolveTools(data.related_tools ?? []);
+const relatedWorkflows = await resolveWorkflows(data.related_workflows ?? []);
+
+// Sibling learn entries: same type OR sharing a vertical
+const siblingLearn: LearnEntry[] = allLearn
+  .filter(
+    (l) =>
+      l.data.locale === locale &&
+      l.data.canonical_slug !== data.canonical_slug
+  )
+  .map((l) => {
+    const sameType = l.data.type === data.type ? 2 : 0;
+    const sharedVerticals = (l.data.verticals ?? []).filter((v) =>
+      (data.verticals ?? []).includes(v)
+    ).length;
+    return { entry: l, score: sameType + sharedVerticals };
+  })
+  .filter((r) => r.score > 0)
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 4)
+  .map((r) => r.entry);
+
+// ----- JSON-LD by type -----
 const jsonLdByType: Record<typeof data.type, Record<string, unknown>> = {
   definition: {
     "@context": "https://schema.org",
@@ -57,8 +147,16 @@ const jsonLdByType: Record<typeof data.type, Record<string, unknown>> = {
 };
 
 const jsonLd = jsonLdByType[data.type];
-const chrome = chromeStrings(locale);
+
+// Tool name lookup for related_tools meta line
+const toolMeta: Record<string, string> = Object.fromEntries(
+  relatedTools.map((tt) => [
+    tt.data.slug,
+    tt.data.category,
+  ])
+);
 ---
+
 <BaseLayout
   title={`${data.title} — ooligo`}
   description={data.target_questions[0] ?? data.title}
@@ -68,21 +166,277 @@ const chrome = chromeStrings(locale);
 >
   <JsonLd slot="head" data={jsonLd} />
   <main id="main">
-    <Breadcrumbs
-      items={[
-        { label: "ooligo", href: `/${locale}/` },
-        { label: chrome.nav.learn, href: `/${locale}/learn/` },
-        { label: data.title },
-      ]}
-    />
+    <Section density="md">
+      <Container>
+        <Breadcrumbs
+          items={[
+            { label: "ooligo", href: `/${locale}/` },
+            { label: chrome.nav.learn, href: `/${locale}/learn/` },
+            { label: data.title },
+          ]}
+        />
 
-    <header>
-      <h1>{data.title}</h1>
-      <p><em>{data.type}</em> · last updated {data.last_updated}</p>
-    </header>
+        <!-- ============ HEADER ============ -->
+        <header class="learn-header">
+          <div class="learn-type-row">
+            <span class="learn-type-label">
+              {t.type_label_prefix} ·
+            </span>
+            <span class="learn-type">{data.type}</span>
+          </div>
+          <h1 class="learn-title">{data.title}</h1>
+          <p class="learn-meta">
+            <span class="learn-meta-date">
+              {t.last_updated} {data.last_updated}
+            </span>
+            {data.verticals && data.verticals.length > 0 && (
+              <>
+                <span class="learn-meta-sep" aria-hidden="true">·</span>
+                <span class="learn-meta-vtags">
+                  {data.verticals.map((vSlug) => (
+                    <VerticalTag slug={vSlug} locale={locale} size="sm" />
+                  ))}
+                </span>
+              </>
+            )}
+          </p>
+        </header>
 
-    <article>
-      <Content />
-    </article>
+        <!-- ============ AEO BLOCK ============ -->
+        <div class="learn-aeo">
+          <AeoAnswerBlock
+            questions={data.target_questions}
+            locale={locale}
+          />
+        </div>
+
+        <!-- ============ BODY + TOC SPLIT ============ -->
+        <div class="learn-layout">
+          <Prose width="prose" class="learn-body">
+            <Content />
+          </Prose>
+
+          {tocHeadings.length > 1 && (
+            <aside class="learn-toc-wrap">
+              <nav class="learn-toc" aria-label={t.toc_label}>
+                <div class="learn-toc-label">{t.toc_label}</div>
+                <ol class="learn-toc-list">
+                  {tocHeadings.map((h) => (
+                    <li class:list={["learn-toc-item", `learn-toc-depth-${h.depth}`]}>
+                      <a href={`#${h.slug}`} class="learn-toc-link">
+                        {h.text}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            </aside>
+          )}
+        </div>
+      </Container>
+    </Section>
+
+    <!-- ============ CROSS-LINK RAILS ============ -->
+    {(relatedTools.length > 0 ||
+      relatedWorkflows.length > 0 ||
+      siblingLearn.length > 0) && (
+      <Section density="md" divided surface="surface-1">
+        <Container>
+          <div class="rails-grid">
+            {relatedTools.length > 0 && (
+              <CrossLinkRail
+                heading={t.rail_tools}
+                variant="compact"
+                links={relatedTools.map((tt) => ({
+                  label: tt.data.name,
+                  href: `/${locale}/tools/${tt.data.slug}/`,
+                  meta: toolMeta[tt.data.slug],
+                }))}
+              />
+            )}
+            {relatedWorkflows.length > 0 && (
+              <CrossLinkRail
+                heading={t.rail_workflows}
+                variant="compact"
+                links={relatedWorkflows.map((w) => ({
+                  label: w.data.title,
+                  href: `/${locale}/workflows/${w.data.slug}/`,
+                  meta: w.data.artifact_type,
+                }))}
+              />
+            )}
+            {siblingLearn.length > 0 && (
+              <CrossLinkRail
+                heading={t.rail_learn}
+                variant="compact"
+                links={siblingLearn.map((l) => ({
+                  label: l.data.title,
+                  href: `/${locale}/learn/${l.data.slug}/`,
+                  meta: l.data.type,
+                }))}
+              />
+            )}
+          </div>
+        </Container>
+      </Section>
+    )}
   </main>
 </BaseLayout>
+
+<style>
+  /* ============ HEADER ============ */
+  .learn-header {
+    margin-top: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border-subtle);
+    max-width: var(--container-prose);
+  }
+
+  .learn-type-row {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-tertiary);
+  }
+  .learn-type-label {
+    font-weight: 600;
+  }
+  .learn-type {
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .learn-title {
+    margin: 0;
+    font-size: var(--text-3xl);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+  }
+
+  .learn-meta {
+    margin: 1rem 0 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+  .learn-meta-date {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .learn-meta-sep {
+    color: var(--color-border);
+  }
+  .learn-meta-vtags {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* ============ AEO BLOCK ============ */
+  .learn-aeo {
+    margin: 2rem 0 2.5rem;
+    max-width: var(--container-prose);
+  }
+
+  /* ============ BODY + TOC ============ */
+  .learn-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.5rem;
+  }
+  @media (min-width: 1024px) {
+    .learn-layout {
+      grid-template-columns: minmax(0, var(--container-prose)) 14rem;
+      gap: 3rem;
+    }
+  }
+
+  .learn-body {
+    min-width: 0;
+  }
+
+  /* ============ TOC ============ */
+  .learn-toc-wrap {
+    /* Hidden on mobile to keep the body uncluttered. The reading
+       container is short enough that a TOC is overhead at small widths. */
+    display: none;
+  }
+  @media (min-width: 1024px) {
+    .learn-toc-wrap {
+      display: block;
+    }
+  }
+
+  .learn-toc {
+    position: sticky;
+    top: calc(64px + 1.5rem);
+    align-self: start;
+    border-left: 1px solid var(--color-border-subtle);
+    padding-left: 1rem;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+  }
+
+  .learn-toc-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-tertiary);
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+  }
+
+  .learn-toc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .learn-toc-item {
+    line-height: 1.4;
+  }
+  .learn-toc-depth-3 {
+    padding-left: 0.75rem;
+  }
+
+  .learn-toc-link {
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    transition: color 150ms var(--ease-out-soft);
+  }
+  .learn-toc-link:hover {
+    color: var(--color-accent);
+  }
+
+  /* ============ RAILS ============ */
+  .rails-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  @media (min-width: 768px) {
+    .rails-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2.5rem;
+    }
+  }
+  @media (min-width: 1280px) {
+    .rails-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+</style>
