@@ -13,6 +13,7 @@ const baseFrontmatter = {
   translated_from: z.string().optional(),
   translated_at: z.string().optional(),
   translation_model: z.string().optional(),
+  source_sha256: z.string().optional(),
 };
 
 const tools = defineCollection({
