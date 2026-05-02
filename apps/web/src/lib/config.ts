@@ -72,6 +72,13 @@ export function localeText<T>(
   return table[locale] ?? table.en;
 }
 
+// ----- Repo -----
+//
+// Single source of truth for the GitHub repo. Used by chrome links
+// (Header, Footer) and contribution CTAs ("Edit on GitHub", "Missing X?").
+export const REPO_URL = "https://github.com/marius-bughiu/ooligo" as const;
+export const REPO_BRANCH = "main" as const;
+
 // ----- AdSense -----
 //
 // Hardcoded publisher + slot IDs (intentional — no env indirection).

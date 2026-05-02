@@ -50,6 +50,13 @@ export type ChromeStrings = {
     intermediate: string;
     advanced: string;
   };
+  contribute: {
+    edit_page: string;
+    add_tool: string;
+    add_learn: string;
+    add_comparison: string;
+    add_workflow: string;
+  };
 };
 
 const en: ChromeStrings = {
@@ -91,6 +98,13 @@ const en: ChromeStrings = {
     beginner: "beginner",
     intermediate: "intermediate",
     advanced: "advanced",
+  },
+  contribute: {
+    edit_page: "Edit this page on GitHub",
+    add_tool: "Tool missing? Add it on GitHub",
+    add_learn: "Topic missing? Add an entry on GitHub",
+    add_comparison: "Comparison missing? Add it on GitHub",
+    add_workflow: "Workflow missing? Add it on GitHub",
   },
 };
 
@@ -134,6 +148,13 @@ const es: ChromeStrings = {
     intermediate: "intermedio",
     advanced: "avanzado",
   },
+  contribute: {
+    edit_page: "Editar esta página en GitHub",
+    add_tool: "¿Falta una herramienta? Añádela en GitHub",
+    add_learn: "¿Falta un tema? Añade una entrada en GitHub",
+    add_comparison: "¿Falta una comparación? Añádela en GitHub",
+    add_workflow: "¿Falta un workflow? Añádelo en GitHub",
+  },
 };
 
 const ptBR: ChromeStrings = {
@@ -175,6 +196,13 @@ const ptBR: ChromeStrings = {
     beginner: "iniciante",
     intermediate: "intermediário",
     advanced: "avançado",
+  },
+  contribute: {
+    edit_page: "Editar esta página no GitHub",
+    add_tool: "Falta uma ferramenta? Adicione no GitHub",
+    add_learn: "Falta um tópico? Adicione uma entrada no GitHub",
+    add_comparison: "Falta uma comparação? Adicione no GitHub",
+    add_workflow: "Falta um workflow? Adicione no GitHub",
   },
 };
 
