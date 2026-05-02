@@ -39,7 +39,7 @@ export type ChromeStrings = {
     repo: string;
     status: string;
     rights: string;
-    transparency: string;
+    brand_tagline: string;
   };
   meta: {
     skip_to_content: string;
@@ -76,8 +76,7 @@ const en: ChromeStrings = {
     repo: "Repository",
     status: "Status",
     rights: "All rights reserved.",
-    transparency:
-      "AI-generated and AI-translated content, transparently labeled.",
+    brand_tagline: "The AI workflow marketplace for ops leaders.",
   },
   meta: {
     skip_to_content: "Skip to content",
@@ -114,8 +113,7 @@ const es: ChromeStrings = {
     repo: "Repositorio",
     status: "Estado",
     rights: "Todos los derechos reservados.",
-    transparency:
-      "Contenido generado y traducido por IA, etiquetado de forma transparente.",
+    brand_tagline: "El marketplace de workflows de IA para líderes de operaciones.",
   },
   meta: {
     skip_to_content: "Saltar al contenido",
@@ -152,8 +150,7 @@ const ptBR: ChromeStrings = {
     repo: "Repositório",
     status: "Status",
     rights: "Todos os direitos reservados.",
-    transparency:
-      "Conteúdo gerado e traduzido por IA, com rotulagem transparente.",
+    brand_tagline: "O marketplace de workflows de IA para líderes de operações.",
   },
   meta: {
     skip_to_content: "Pular para o conteúdo",
