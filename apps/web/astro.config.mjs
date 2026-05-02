@@ -12,6 +12,8 @@ export default defineConfig({
   site: siteUrl,
   output: "static",
   integrations: [mdx(), sitemap({
+    // Internal design system gallery — keep out of the public sitemap.
+    filter: (page) => !page.includes("/design/"),
     i18n: {
       defaultLocale: "en",
       locales: {
