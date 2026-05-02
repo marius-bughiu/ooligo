@@ -71,3 +71,31 @@ export function localeText<T>(
 ): T {
   return table[locale] ?? table.en;
 }
+
+// ----- AdSense -----
+//
+// All AdSense IDs are env-driven so the loader script and ad slots stay
+// dark in any environment that does not opt in (dev, preview, /design/,
+// missing-env builds). Component renderers must null-check before
+// emitting markup. See SponsoredAdSlot.astro and BaseLayout.astro.
+//
+// Required env (Cloudflare Pages + local .env):
+//   PUBLIC_ADSENSE_CLIENT       e.g. "ca-pub-XXXXXXXXXXXXXXXX"
+//   PUBLIC_ADSENSE_SLOT_LEARN   10-digit slot id from AdSense console
+//   PUBLIC_ADSENSE_SLOT_VS      10-digit slot id from AdSense console
+//
+// Slot IDs must be created as "Display ads → In-article" native units.
+// NOT auto ads, NOT in-feed, NOT page-level. See plan.
+export const ADSENSE_CLIENT: string | null =
+  import.meta.env.PUBLIC_ADSENSE_CLIENT ?? null;
+
+export const ADSENSE_SLOTS = {
+  learnInArticle: import.meta.env.PUBLIC_ADSENSE_SLOT_LEARN ?? null,
+  vsInArticle: import.meta.env.PUBLIC_ADSENSE_SLOT_VS ?? null,
+} as const;
+
+/** Minimum raw-markdown body length required to render an in-article ad
+ * slot on a learn detail page. Below this, the page is treated as
+ * "thin content" and the slot is suppressed (avoids AdSense policy
+ * issues on definitions/short FAQs). */
+export const ADSENSE_MIN_BODY_CHARS = 1500;
