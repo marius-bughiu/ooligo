@@ -44,4 +44,10 @@ See [ROADMAP.md](./ROADMAP.md) · [STACK.md](./STACK.md) · [ARCHITECTURE.md](./
 
 ## License
 
-MIT. See [LICENSE](./LICENSE).
+ooligo uses a split license model:
+
+- **Source code** — [MIT](./LICENSE). Build it, fork it, ship it.
+- **Site content** under `content/` — [CC BY-SA 4.0](./LICENSE-CONTENT). Reuse with attribution; derivatives must stay CC BY-SA.
+- **Brand** — the name "ooligo", the wordmark, the logo, and the visual brand identity are **not** covered by either license and are reserved by Marius Bughiu. Forks must use a different name and identity.
+
+Contributing? See [CONTRIBUTING.md](./CONTRIBUTING.md).
