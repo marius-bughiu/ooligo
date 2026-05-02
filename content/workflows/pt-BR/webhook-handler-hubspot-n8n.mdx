@@ -1,0 +1,54 @@
+---
+slug: webhook-handler-hubspot-n8n
+canonical_slug: webhook-handler-hubspot-n8n
+locale: pt-BR
+verticals: [revops]
+title: Webhook handler genérico do HubSpot em n8n
+artifact_type: n8n-flow
+tools_used: [n8n, hubspot]
+roles: [revops, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 45min
+ai_generated: true
+human_tested: false
+ai_translated: true
+translated_from: en/webhook-handler-hubspot-n8n.mdx
+translated_at: "2026-05-02T00:00:00Z"
+translation_model: claude-opus-4-7
+---
+
+Um flow de n8n que recebe qualquer webhook de HubSpot Workflows, valida o payload, roteia por tipo de evento e faz fan-out pros sistemas downstream. Um handler, uma URL, todos os eventos do HubSpot que você se importa. Substitui uma pasta de Zaps one-off segurada com esperança.
+
+## O que você vai precisar
+
+- n8n self-hosted ou cloud, com ao menos um worker ativo
+- HubSpot Workflows num tier pago (a action de webhook exige)
+- Um signing secret que você controle, configurado nos dois lados
+- Sistemas downstream com webhooks ou APIs alcançáveis (Slack, Salesforce, seu próprio serviço)
+
+## Setup
+
+1. **Crie o nó de webhook do n8n.** Configure como POST, sem auth no nível do nó (vamos validar dentro do flow). Salve a URL de produção.
+2. **Configure o signing secret.** HubSpot Workflows pode incluir um header custom em webhooks de saída. Configure esse header com um shared secret. O primeiro nó do flow valida o header contra o secret armazenado nas credenciais do n8n.
+3. **Construa o router.** Um nó Switch sobre o campo de tipo de evento do payload. Cada saída é uma branch discreta: mudança de stage de deal, contato criado, update de ticket, evento custom.
+4. **Cabeie as branches.** Cada branch trata um tipo de evento com lógica própria e chamadas downstream. Mantenha as branches rasas; uma branch com mais de cinco nós merece o próprio flow.
+5. **Adicione captura de erros.** Um flow Error Trigger no final que loga rodadas falhas, posta no Slack e re-executa de uma dead-letter queue.
+
+## Como funciona
+
+HubSpot Workflows dispara webhooks com um payload pequeno (object ID, tipo de evento, portal ID, timestamp). O primeiro trabalho do flow do n8n é enrichment: pega o object ID e faz uma leitura de follow-up no HubSpot pra obter o registro completo. O segundo trabalho é roteamento. O terceiro é ação downstream. O quarto é acknowledgement de volta pro HubSpot, idealmente com um 200 rápido antes do trabalho pesado começar pra que o HubSpot não retentre.
+
+O handoff async é o padrão-chave. Qualquer coisa além de uma leitura rápida de CRM deveria ir pra uma fila (nó Wait do n8n ou fila externa) pra que o webhook responda em menos de um segundo. O comportamento de retry do HubSpot é tolerante mas não infinito.
+
+## Pontos de atenção
+
+- **Validação de assinatura precisa ser o primeiro nó.** Pular significa que qualquer um com a URL pode disparar eventos falsos. Construa uma vez, copie em todo flow de webhook.
+- **Tempestades de replay.** Um workflow do HubSpot mal configurado pode disparar dez mil eventos numa hora. O handler precisa rate-limitar por object ID ou você vai DDoSar seu próprio downstream.
+- **Drift de schema.** HubSpot adiciona campos nos payloads de webhook. O router deve ignorar campos desconhecidos, não crashear.
+- **Idempotência.** O mesmo evento pode chegar duas vezes. Cada ação downstream precisa de uma chave de dedupe (o ID do evento serve).
+
+## Stack
+
+- **HubSpot Workflows** — fonte de eventos
+- **n8n** — receptor de webhook, router, fan-out
+- **Sistemas downstream** — Slack, Salesforce, serviços internos, o que seu time roda

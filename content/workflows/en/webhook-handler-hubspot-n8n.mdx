@@ -1,0 +1,50 @@
+---
+slug: webhook-handler-hubspot-n8n
+canonical_slug: webhook-handler-hubspot-n8n
+locale: en
+verticals: [revops]
+title: Generic HubSpot webhook handler in n8n
+artifact_type: n8n-flow
+tools_used: [n8n, hubspot]
+roles: [revops, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 45min
+ai_generated: true
+human_tested: false
+---
+
+An n8n flow that receives any HubSpot workflow webhook, validates the payload, routes by event type, and fans out to your downstream systems. One handler, one URL, every HubSpot event you care about. Replaces a folder of one-off Zaps held together with hope.
+
+## What you'll need
+
+- n8n self-hosted or cloud, at least one active worker
+- HubSpot Workflows on a paid tier (the webhook action requires it)
+- A signing secret you control, set on both sides
+- Downstream systems with reachable webhooks or APIs (Slack, Salesforce, your own service)
+
+## Setup
+
+1. **Create the n8n webhook node.** Configure it as POST, no auth at the node level (we will validate inside the flow). Save the production URL.
+2. **Set the signing secret.** HubSpot Workflows can include a custom header on outbound webhooks. Configure that header to a shared secret. The first node in the flow validates the header against the secret stored in n8n credentials.
+3. **Build the router.** A Switch node keyed on the event type field in the payload. Each output is a discrete branch: deal stage change, contact created, ticket update, custom event.
+4. **Wire the branches.** Each branch handles one event type with its own logic and downstream calls. Keep the branches shallow; a branch with more than five nodes belongs in its own flow.
+5. **Add an error capture.** A trailing Error Trigger flow that logs failed runs, posts to Slack, and replays from a dead-letter queue.
+
+## How it works
+
+HubSpot Workflows fire webhooks with a small payload (object ID, event type, portal ID, timestamp). The n8n flow's first job is enrichment: it takes the object ID and does a follow-up read to HubSpot to get the full record. The second job is routing. The third is downstream action. The fourth is acknowledgment back to HubSpot, ideally with a fast 200 before the heavy work starts so HubSpot does not retry.
+
+Async handoff is the key pattern. Anything beyond a quick CRM read should go to a queue (n8n Wait node or external queue) so the webhook responds in under a second. HubSpot's retry behavior is forgiving but not infinite.
+
+## Watch-outs
+
+- **Signature validation must be the first node.** Skipping it means anyone with the URL can fire fake events. Build it once, copy it into every webhook flow.
+- **Replay storms.** A misconfigured HubSpot workflow can fire ten thousand events in an hour. The handler should rate-limit per object ID or you will DDoS your own downstream.
+- **Schema drift.** HubSpot adds fields to webhook payloads. The router should ignore unknown fields, not crash on them.
+- **Idempotency.** The same event can arrive twice. Every downstream action needs a dedupe key (the event ID is good).
+
+## Stack
+
+- **HubSpot Workflows** — event source
+- **n8n** — webhook receiver, router, fan-out
+- **Downstream systems** — Slack, Salesforce, internal services, whatever your team runs
