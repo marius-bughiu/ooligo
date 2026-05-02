@@ -74,24 +74,19 @@ export function localeText<T>(
 
 // ----- AdSense -----
 //
-// All AdSense IDs are env-driven so the loader script and ad slots stay
-// dark in any environment that does not opt in (dev, preview, /design/,
-// missing-env builds). Component renderers must null-check before
-// emitting markup. See SponsoredAdSlot.astro and BaseLayout.astro.
+// Hardcoded publisher + slot IDs (intentional — no env indirection).
+// AdSense IDs are not secrets: the publisher ID is rendered on every
+// page in the loader script and ads.txt anyway, and slot IDs are
+// emitted in <ins data-ad-slot> markup.
 //
-// Required env (Cloudflare Pages + local .env):
-//   PUBLIC_ADSENSE_CLIENT       e.g. "ca-pub-XXXXXXXXXXXXXXXX"
-//   PUBLIC_ADSENSE_SLOT_LEARN   10-digit slot id from AdSense console
-//   PUBLIC_ADSENSE_SLOT_VS      10-digit slot id from AdSense console
-//
-// Slot IDs must be created as "Display ads → In-article" native units.
-// NOT auto ads, NOT in-feed, NOT page-level. See plan.
-export const ADSENSE_CLIENT: string | null =
-  import.meta.env.PUBLIC_ADSENSE_CLIENT ?? null;
+// Slot IDs are "Display ads → In-article" native units configured in
+// the AdSense console. NOT auto ads, NOT in-feed, NOT page-level.
+// See SponsoredAdSlot.astro for placement chrome.
+export const ADSENSE_CLIENT = "ca-pub-1537458730659685" as const;
 
 export const ADSENSE_SLOTS = {
-  learnInArticle: import.meta.env.PUBLIC_ADSENSE_SLOT_LEARN ?? null,
-  vsInArticle: import.meta.env.PUBLIC_ADSENSE_SLOT_VS ?? null,
+  learnInArticle: "6410706738",
+  vsInArticle: "8754858539",
 } as const;
 
 /** Minimum raw-markdown body length required to render an in-article ad
