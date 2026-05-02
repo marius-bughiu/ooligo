@@ -39,8 +39,12 @@ function parseLocaleArg(): string | null {
   const args = process.argv.slice(2);
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
+    if (a === undefined) continue;
     if (a.startsWith("--locale=")) return a.slice("--locale=".length);
-    if (a === "--locale" && args[i + 1]) return args[i + 1];
+    if (a === "--locale") {
+      const next = args[i + 1];
+      if (next !== undefined) return next;
+    }
   }
   return null;
 }
