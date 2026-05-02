@@ -1,6 +1,7 @@
 import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
 import sitemap from "@astrojs/sitemap";
+import tailwindcss from "@tailwindcss/vite";
 
 // https://astro.build/config
 // site URL is overridable per-environment so the deploy workflow can target
@@ -34,5 +35,8 @@ export default defineConfig({
   trailingSlash: "always",
   build: {
     format: "directory",
+  },
+  vite: {
+    plugins: [tailwindcss()],
   },
 });
