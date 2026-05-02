@@ -33,7 +33,8 @@ See [ROADMAP.md](./ROADMAP.md) · [STACK.md](./STACK.md) · [ARCHITECTURE.md](./
 
 ## Live
 
-- **Production:** https://ooligo.pages.dev (custom domain pending)
+- **Production:** [ooligo.com](https://ooligo.com)
+- **Cloudflare backup URL:** [ooligo.pages.dev](https://ooligo.pages.dev)
 - **Repo:** [github.com/marius-bughiu/ooligo](https://github.com/marius-bughiu/ooligo)
 - **CI/Deploy:** every push to `main` builds and uploads via Wrangler — see [DEPLOYMENT.md](./DEPLOYMENT.md)
 
