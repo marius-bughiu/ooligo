@@ -7,7 +7,7 @@ Choices optimized for AI-native operation, programmatic SEO at scale, and build-
 | Layer | Choice | Rationale |
 |---|---|---|
 | **Framework** | [Astro](https://astro.build) with React islands | Static-first SSG, ideal for content sites; ships zero JS by default; first-class i18n routing; faster Lighthouse scores than Next out of the box |
-| **Hosting** | [Cloudflare Pages](https://pages.cloudflare.com) | Free tier, edge-cached globally, no Vercel build-minute ceiling; Workers + Cron Triggers for pipeline jobs |
+| **Hosting** | [Cloudflare Pages](https://pages.cloudflare.com) (direct upload via Wrangler from GitHub Actions — see [DEPLOYMENT.md](./DEPLOYMENT.md)) | Free tier, edge-cached globally, no Vercel build-minute ceiling; Workers + Cron Triggers for pipeline jobs |
 | **Database** | [Supabase](https://supabase.com) (Postgres) | Free tier generous for our scale; row-level security if we ever expose data; managed Postgres beats SQLite for cross-region edge reads |
 | **Content store** | MDX + JSON in repo (canonical) + Postgres mirror for queryable data | Version control = build-in-public artifact; Postgres is the read layer for search, filters, comparisons |
 | **Search** | [Pagefind](https://pagefind.app) (build-time, static) initially → [Meilisearch](https://meilisearch.com) when scale demands | Pagefind is free, runs at build time, perfect for static sites |

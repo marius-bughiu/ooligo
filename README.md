@@ -29,7 +29,13 @@ Adjacent verticals (Marketing Ops, Customer Success, Sales, Insurance, etc.) and
 - **Multi-vertical, multi-locale data model from day 1.** Adding a vertical = config + a few curated pages. Adding a locale = config change + translation pipeline run.
 - **Public repo, public roadmap, public metrics.** Build in public.
 
-See [ROADMAP.md](./ROADMAP.md) · [STACK.md](./STACK.md) · [ARCHITECTURE.md](./ARCHITECTURE.md) · [CONTENT_PIPELINE.md](./CONTENT_PIPELINE.md)
+See [ROADMAP.md](./ROADMAP.md) · [STACK.md](./STACK.md) · [ARCHITECTURE.md](./ARCHITECTURE.md) · [CONTENT_PIPELINE.md](./CONTENT_PIPELINE.md) · [DEPLOYMENT.md](./DEPLOYMENT.md)
+
+## Live
+
+- **Production:** https://ooligo.pages.dev (custom domain pending)
+- **Repo:** [github.com/marius-bughiu/ooligo](https://github.com/marius-bughiu/ooligo)
+- **CI/Deploy:** every push to `main` builds and uploads via Wrangler — see [DEPLOYMENT.md](./DEPLOYMENT.md)
 
 ## Status
 

@@ -3,8 +3,12 @@ import mdx from "@astrojs/mdx";
 import sitemap from "@astrojs/sitemap";
 
 // https://astro.build/config
+// site URL is overridable per-environment so the deploy workflow can target
+// the *.pages.dev URL until the custom domain is wired up.
+const siteUrl = process.env.PUBLIC_SITE_URL ?? "https://ooligo.com";
+
 export default defineConfig({
-  site: "https://ooligo.com",
+  site: siteUrl,
   output: "static",
   integrations: [mdx(), sitemap({
     i18n: {
