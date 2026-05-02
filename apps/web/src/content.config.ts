@@ -1,7 +1,19 @@
 import { defineCollection, z } from "astro:content";
 import { glob } from "astro/loaders";
 
-const LOCALE = z.enum(["en", "es", "pt-BR"]);
+const LOCALE = z.enum([
+  "en",
+  "es",
+  "pt-BR",
+  "ja",
+  "ru",
+  "ro",
+  "fr",
+  "de",
+  "zh-CN",
+  "ko",
+  "ar",
+]);
 const SLUG = z.string().regex(/^[a-z0-9-]+$/);
 
 const baseFrontmatter = {

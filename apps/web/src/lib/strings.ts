@@ -178,12 +178,14 @@ const ptBR: ChromeStrings = {
   },
 };
 
-const STRINGS: Record<LocaleCode, ChromeStrings> = {
+const STRINGS: Partial<Record<LocaleCode, ChromeStrings>> & {
+  en: ChromeStrings;
+} = {
   en,
   es,
   "pt-BR": ptBR,
 };
 
 export function chromeStrings(locale: LocaleCode): ChromeStrings {
-  return STRINGS[locale];
+  return STRINGS[locale] ?? STRINGS.en;
 }
