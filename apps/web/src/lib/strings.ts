@@ -45,6 +45,11 @@ export type ChromeStrings = {
     skip_to_content: string;
     home: string;
   };
+  difficulty: {
+    beginner: string;
+    intermediate: string;
+    advanced: string;
+  };
 };
 
 const en: ChromeStrings = {
@@ -81,6 +86,11 @@ const en: ChromeStrings = {
   meta: {
     skip_to_content: "Skip to content",
     home: "ooligo, home",
+  },
+  difficulty: {
+    beginner: "beginner",
+    intermediate: "intermediate",
+    advanced: "advanced",
   },
 };
 
@@ -119,6 +129,11 @@ const es: ChromeStrings = {
     skip_to_content: "Saltar al contenido",
     home: "ooligo, inicio",
   },
+  difficulty: {
+    beginner: "principiante",
+    intermediate: "intermedio",
+    advanced: "avanzado",
+  },
 };
 
 const ptBR: ChromeStrings = {
@@ -155,6 +170,11 @@ const ptBR: ChromeStrings = {
   meta: {
     skip_to_content: "Pular para o conteúdo",
     home: "ooligo, início",
+  },
+  difficulty: {
+    beginner: "iniciante",
+    intermediate: "intermediário",
+    advanced: "avançado",
   },
 };
 
