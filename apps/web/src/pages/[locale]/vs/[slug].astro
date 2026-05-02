@@ -1,8 +1,16 @@
 ---
 import { getCollection, getEntry, render } from "astro:content";
+import type { CollectionEntry } from "astro:content";
 import BaseLayout from "~/layouts/BaseLayout.astro";
 import JsonLd from "~/components/JsonLd.astro";
 import Breadcrumbs from "~/components/Breadcrumbs.astro";
+import Container from "~/components/Container.astro";
+import Section from "~/components/Section.astro";
+import Prose from "~/components/Prose.astro";
+import ToolMonogram from "~/components/ToolMonogram.astro";
+import ScorePill from "~/components/ScorePill.astro";
+import CapabilityChip from "~/components/CapabilityChip.astro";
+import PricingLabel from "~/components/PricingLabel.astro";
 import { type LocaleCode } from "~/lib/config";
 import { chromeStrings } from "~/lib/strings";
 
@@ -19,90 +27,690 @@ const { locale } = Astro.params as { locale: LocaleCode };
 const { Content } = await render(entry);
 const data = entry.data;
 
+type ToolEntry = CollectionEntry<"tools">;
+
 const allComparisons = await getCollection("comparisons");
 const availableLocales = allComparisons
   .filter((c) => c.data.canonical_slug === data.canonical_slug)
   .map((c) => c.data.locale);
 
-// Resolve referenced tool entries for the current locale to render names.
-async function resolveTools(slugs: string[]) {
-  const tools = await Promise.all(
-    slugs.map((slug) => getEntry("tools", `${locale}/${slug}`).catch(() => undefined))
+async function resolveTools(slugs: string[]): Promise<ToolEntry[]> {
+  const resolved = await Promise.all(
+    slugs.map((slug) =>
+      getEntry("tools", `${locale}/${slug}`).catch(() => undefined)
+    )
   );
-  return tools.filter((t): t is NonNullable<typeof t> => t !== undefined);
+  return resolved.filter((tt): tt is ToolEntry => tt !== undefined);
 }
 
 const toolSlugs =
   data.type === "pairwise"
     ? [data.tool_a!, data.tool_b!]
     : data.tools ?? [];
-
 const tools = await resolveTools(toolSlugs);
+
 const chrome = chromeStrings(locale);
 
-const titleByType: Record<typeof data.type, string> = {
-  pairwise: tools.length === 2 ? `${tools[0]?.data.name} vs ${tools[1]?.data.name}` : data.slug,
-  roundup: `Best ${data.verticals[0]} tools — ${data.slug}`,
-  alternatives: `Alternatives to ${tools[0]?.data.name ?? data.slug}`,
-};
-const pageTitle = titleByType[data.type];
+// ----- Localized strings -----
+const labels = {
+  en: {
+    last_updated: "Last updated",
+    spec_pricing: "Pricing",
+    spec_score: "Score",
+    spec_ai_native: "AI-native",
+    spec_mcp: "MCP",
+    spec_api: "API",
+    spec_integrations: "Integrations",
+    spec_breakdown_ux: "UX",
+    spec_breakdown_ai: "AI quality",
+    spec_breakdown_pricing: "Pricing value",
+    spec_breakdown_integrations: "Integrations",
+    cta_visit: "Visit",
+    yes: "Yes",
+    no: "No",
+    title_pairwise: (a: string, b: string) => `${a} vs ${b}`,
+    title_alternatives: (focal: string) => `Alternatives to ${focal}`,
+    title_roundup_prefix: "Best",
+    title_roundup_suffix: "tools",
+    section_compare: "Compare side-by-side",
+    section_lineup: "The lineup",
+    rank: "Rank",
+  },
+  es: {
+    last_updated: "Última actualización",
+    spec_pricing: "Precios",
+    spec_score: "Puntaje",
+    spec_ai_native: "AI-native",
+    spec_mcp: "MCP",
+    spec_api: "API",
+    spec_integrations: "Integraciones",
+    spec_breakdown_ux: "UX",
+    spec_breakdown_ai: "Calidad de IA",
+    spec_breakdown_pricing: "Valor del precio",
+    spec_breakdown_integrations: "Integraciones",
+    cta_visit: "Visitar",
+    yes: "Sí",
+    no: "No",
+    title_pairwise: (a: string, b: string) => `${a} vs ${b}`,
+    title_alternatives: (focal: string) => `Alternativas a ${focal}`,
+    title_roundup_prefix: "Mejores",
+    title_roundup_suffix: "herramientas",
+    section_compare: "Comparar lado a lado",
+    section_lineup: "La selección",
+    rank: "Pos.",
+  },
+  "pt-BR": {
+    last_updated: "Última atualização",
+    spec_pricing: "Preços",
+    spec_score: "Pontuação",
+    spec_ai_native: "AI-native",
+    spec_mcp: "MCP",
+    spec_api: "API",
+    spec_integrations: "Integrações",
+    spec_breakdown_ux: "UX",
+    spec_breakdown_ai: "Qualidade da IA",
+    spec_breakdown_pricing: "Custo-benefício",
+    spec_breakdown_integrations: "Integrações",
+    cta_visit: "Visitar",
+    yes: "Sim",
+    no: "Não",
+    title_pairwise: (a: string, b: string) => `${a} vs ${b}`,
+    title_alternatives: (focal: string) => `Alternativas para ${focal}`,
+    title_roundup_prefix: "Melhores",
+    title_roundup_suffix: "ferramentas",
+    section_compare: "Comparar lado a lado",
+    section_lineup: "A lista",
+    rank: "Pos.",
+  },
+} as const;
 
+const t = labels[locale];
+
+// ----- Title -----
+let pageTitle: string;
+if (data.type === "pairwise" && tools.length === 2) {
+  pageTitle = t.title_pairwise(tools[0]!.data.name, tools[1]!.data.name);
+} else if (data.type === "alternatives" && tools.length > 0) {
+  pageTitle = t.title_alternatives(tools[0]!.data.name);
+} else if (data.type === "roundup") {
+  pageTitle = `${t.title_roundup_prefix} ${data.verticals[0]} ${t.title_roundup_suffix}`;
+} else {
+  pageTitle = data.slug.replace(/-/g, " ");
+}
+
+// ----- Roundup/alternatives ranking: sort by score desc -----
+const ranked = [...tools].sort(
+  (a, b) => (b.data.ooligo_score ?? 0) - (a.data.ooligo_score ?? 0)
+);
+
+// ----- For pairwise compare table: integration overlap detection -----
+function integrationOverlap(): Set<string> {
+  if (data.type !== "pairwise" || tools.length !== 2) return new Set();
+  const a = new Set(tools[0]!.data.integrations ?? []);
+  const b = new Set(tools[1]!.data.integrations ?? []);
+  return new Set([...a].filter((x) => b.has(x)));
+}
+const overlap = integrationOverlap();
+
+// ----- JSON-LD (kept from previous template) -----
 const jsonLd: Record<string, unknown> = {
   "@context": "https://schema.org",
   "@type": "ItemList",
-  itemListElement: tools.map((t, i) => ({
+  itemListElement: tools.map((tt, i) => ({
     "@type": "ListItem",
     position: i + 1,
     item: {
       "@type": "SoftwareApplication",
-      name: t.data.name,
-      url: t.data.website,
-      applicationCategory: t.data.category,
+      name: tt.data.name,
+      url: tt.data.website,
+      applicationCategory: tt.data.category,
     },
   })),
 };
+
+// Format integrations for the compare table — mark overlap visually.
+function formatIntegrations(list: string[] | undefined): string[] {
+  return (list ?? []).slice(0, 8);
+}
 ---
+
 <BaseLayout
   title={`${pageTitle} — ooligo`}
-  description={`Side-by-side comparison: ${tools.map((t) => t.data.name).join(", ")}.`}
+  description={`Side-by-side comparison: ${tools.map((tt) => tt.data.name).join(", ")}.`}
   locale={locale}
   pagePath={`/vs/${data.slug}`}
   availableLocales={availableLocales}
 >
   <JsonLd slot="head" data={jsonLd} />
   <main id="main">
-    <Breadcrumbs
-      items={[
-        { label: "ooligo", href: `/${locale}/` },
-        { label: chrome.nav.comparisons, href: `/${locale}/vs/` },
-        { label: pageTitle },
-      ]}
-    />
+    <Section density="md">
+      <Container>
+        <Breadcrumbs
+          items={[
+            { label: "ooligo", href: `/${locale}/` },
+            { label: chrome.nav.comparisons, href: `/${locale}/vs/` },
+            { label: pageTitle },
+          ]}
+        />
 
-    <header>
-      <h1>{pageTitle}</h1>
-      <p>Last updated: {data.last_updated}</p>
-    </header>
+        <!-- ============ HEADER ============ -->
+        <header class="vs-header">
+          <h1 class="vs-title">{pageTitle}</h1>
+          <p class="vs-meta">
+            <span class="vs-type">{data.type}</span>
+            <span class="vs-meta-sep" aria-hidden="true">·</span>
+            <span class="vs-updated">
+              {t.last_updated} {data.last_updated}
+            </span>
+          </p>
+        </header>
 
-    {tools.length > 0 && (
-      <section>
-        <h2>Tools in this comparison</h2>
-        <ul>
-          {tools.map((t) => (
-            <li>
-              <a href={`/${locale}/tools/${t.data.slug}`}>
-                <strong>{t.data.name}</strong>
-              </a>
-              {" — "}
-              <span>{t.data.category}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-    )}
+        <!-- ============ PAIRWISE LAYOUT ============ -->
+        {data.type === "pairwise" && tools.length === 2 && (
+          <>
+            <!-- Two-column hero -->
+            <div class="vs-hero">
+              {tools.map((tt) => (
+                <a href={`/${locale}/tools/${tt.data.slug}/`} class="vs-hero-col">
+                  <ToolMonogram name={tt.data.name} size={56} />
+                  <div class="vs-hero-col-id">
+                    <h2 class="vs-hero-col-name">{tt.data.name}</h2>
+                    <div class="vs-hero-col-category">{tt.data.category}</div>
+                  </div>
+                  {tt.data.ooligo_score != null && (
+                    <ScorePill score={tt.data.ooligo_score} size="md" />
+                  )}
+                </a>
+              ))}
+            </div>
 
-    <article>
-      <Content />
-    </article>
+            <!-- Compare table -->
+            <h2 class="vs-section-title">{t.section_compare}</h2>
+            <div class="compare-table-wrap">
+              <table class="compare-table">
+                <thead>
+                  <tr>
+                    <th class="compare-row-label" scope="col"></th>
+                    {tools.map((tt) => (
+                      <th scope="col" class="compare-col-head">
+                        <a href={`/${locale}/tools/${tt.data.slug}/`}>
+                          {tt.data.name}
+                        </a>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th class="compare-row-label" scope="row">{t.spec_pricing}</th>
+                    {tools.map((tt) => (
+                      <td class="compare-cell">
+                        <PricingLabel
+                          model={tt.data.pricing_model}
+                          startsAt={tt.data.pricing_starts_at}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th class="compare-row-label" scope="row">{t.spec_score}</th>
+                    {tools.map((tt) => (
+                      <td class="compare-cell">
+                        {tt.data.ooligo_score != null ? (
+                          <div class="compare-score">
+                            <div class="compare-score-bar" data-band={
+                              tt.data.ooligo_score >= 9 ? "high" :
+                              tt.data.ooligo_score >= 7 ? "mid" : "low"
+                            }>
+                              <div
+                                class="compare-score-fill"
+                                style={`width:${(tt.data.ooligo_score / 10) * 100}%`}
+                              ></div>
+                            </div>
+                            <span class="compare-score-num">{tt.data.ooligo_score}</span>
+                          </div>
+                        ) : (
+                          <span class="compare-empty">—</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th class="compare-row-label" scope="row">{t.spec_ai_native}</th>
+                    {tools.map((tt) => (
+                      <td class="compare-cell">
+                        {tt.data.ai_native ? (
+                          <CapabilityChip label={t.yes} variant="accent" size="sm" />
+                        ) : (
+                          <span class="compare-no">{t.no}</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th class="compare-row-label" scope="row">{t.spec_mcp}</th>
+                    {tools.map((tt) => (
+                      <td class="compare-cell">
+                        {tt.data.mcp_available ? (
+                          <CapabilityChip label={t.yes} size="sm" />
+                        ) : (
+                          <span class="compare-no">{t.no}</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th class="compare-row-label" scope="row">{t.spec_api}</th>
+                    {tools.map((tt) => (
+                      <td class="compare-cell">
+                        {tt.data.api_available ? (
+                          <CapabilityChip label={t.yes} size="sm" />
+                        ) : (
+                          <span class="compare-no">{t.no}</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th class="compare-row-label" scope="row">{t.spec_integrations}</th>
+                    {tools.map((tt) => (
+                      <td class="compare-cell compare-cell-integrations">
+                        {formatIntegrations(tt.data.integrations).map((int) => (
+                          <span
+                            class:list={[
+                              "compare-integration",
+                              overlap.has(int) && "compare-integration-overlap",
+                            ]}
+                          >
+                            {int}
+                          </span>
+                        ))}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        <!-- ============ ROUNDUP / ALTERNATIVES ============ -->
+        {data.type !== "pairwise" && tools.length > 0 && (
+          <>
+            <h2 class="vs-section-title">{t.section_lineup}</h2>
+            <ol class="ranked-list">
+              {ranked.map((tt, i) => (
+                <li class="ranked-item">
+                  <span class="ranked-rank">{i + 1}</span>
+                  <a href={`/${locale}/tools/${tt.data.slug}/`} class="ranked-id">
+                    <ToolMonogram name={tt.data.name} size={36} />
+                    <div class="ranked-id-text">
+                      <h3 class="ranked-name">{tt.data.name}</h3>
+                      <div class="ranked-category">{tt.data.category}</div>
+                    </div>
+                  </a>
+                  <div class="ranked-meta">
+                    <PricingLabel
+                      model={tt.data.pricing_model}
+                      startsAt={tt.data.pricing_starts_at}
+                    />
+                    <div class="ranked-chips">
+                      {tt.data.ai_native && <CapabilityChip label="AI-NATIVE" variant="accent" />}
+                      {tt.data.mcp_available && <CapabilityChip label="MCP" />}
+                    </div>
+                  </div>
+                  <div class="ranked-score-cell">
+                    {tt.data.ooligo_score != null && (
+                      <>
+                        <div
+                          class="compare-score-bar"
+                          data-band={
+                            tt.data.ooligo_score >= 9 ? "high" :
+                            tt.data.ooligo_score >= 7 ? "mid" : "low"
+                          }
+                        >
+                          <div
+                            class="compare-score-fill"
+                            style={`width:${(tt.data.ooligo_score / 10) * 100}%`}
+                          ></div>
+                        </div>
+                        <ScorePill score={tt.data.ooligo_score} size="sm" />
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+
+        <!-- ============ MDX COMMENTARY ============ -->
+        <div class="vs-commentary">
+          <Prose width="prose">
+            <Content />
+          </Prose>
+        </div>
+      </Container>
+    </Section>
   </main>
 </BaseLayout>
+
+<style>
+  /* ============ HEADER ============ */
+  .vs-header {
+    margin-top: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+  .vs-title {
+    margin: 0;
+    font-size: var(--text-3xl);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+  }
+  .vs-meta {
+    margin: 0.875rem 0 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+  .vs-type {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-secondary);
+  }
+  .vs-meta-sep {
+    color: var(--color-border);
+  }
+
+  /* ============ PAIRWISE HERO ============ */
+  .vs-hero {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-top: 2.5rem;
+  }
+  @media (min-width: 768px) {
+    .vs-hero {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.25rem;
+    }
+  }
+
+  .vs-hero-col {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    background-color: var(--color-bg-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    transition: border-color 150ms var(--ease-out-soft),
+      background-color 150ms var(--ease-out-soft);
+  }
+  .vs-hero-col:hover {
+    border-color: var(--color-border);
+    background-color: var(--color-bg-surface-2);
+  }
+
+  .vs-hero-col-id {
+    flex: 1;
+    min-width: 0;
+  }
+  .vs-hero-col-name {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .vs-hero-col-category {
+    margin-top: 0.25rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
+  }
+
+  /* ============ SECTION TITLES ============ */
+  .vs-section-title {
+    margin: 3rem 0 1.5rem;
+    font-size: var(--text-xl);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  /* ============ COMPARE TABLE ============ */
+  .compare-table-wrap {
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    background-color: var(--color-bg-surface-1);
+  }
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+  .compare-table thead th {
+    position: sticky;
+    top: 64px;
+    background-color: var(--color-bg-surface-2);
+    z-index: 1;
+  }
+
+  .compare-table th,
+  .compare-table td {
+    padding: 0.875rem 1rem;
+    border-top: 1px solid var(--color-border-subtle);
+    text-align: left;
+    vertical-align: top;
+  }
+  .compare-table thead tr th {
+    border-top: 0;
+  }
+
+  .compare-row-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-tertiary);
+    background-color: var(--color-bg-surface-2);
+    width: 10rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .compare-col-head {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    letter-spacing: -0.02em;
+  }
+  .compare-col-head a {
+    color: inherit;
+    transition: color 150ms var(--ease-out-soft);
+  }
+  .compare-col-head a:hover {
+    color: var(--color-accent);
+  }
+
+  .compare-cell {
+    color: var(--color-text-primary);
+  }
+
+  .compare-no {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+  .compare-empty {
+    color: var(--color-text-tertiary);
+  }
+
+  .compare-cell-integrations {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .compare-integration {
+    display: inline-flex;
+    padding: 0.15rem 0.4rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-xs);
+    line-height: 1.4;
+  }
+  .compare-integration-overlap {
+    color: var(--color-accent);
+    border-color: color-mix(
+      in oklab,
+      var(--color-accent) 35%,
+      var(--color-border-subtle)
+    );
+    background-color: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  }
+
+  /* Score bar (used in compare table + ranked list) */
+  .compare-score {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+  .compare-score-bar {
+    flex: 1;
+    max-width: 8rem;
+    height: 6px;
+    background-color: var(--color-bg-surface-2);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+  }
+  .compare-score-fill {
+    height: 100%;
+    background-color: var(--color-text-tertiary);
+  }
+  .compare-score-bar[data-band="high"] .compare-score-fill {
+    background-color: var(--color-accent);
+  }
+  .compare-score-bar[data-band="mid"] .compare-score-fill {
+    background-color: var(--color-text-primary);
+  }
+  .compare-score-num {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  /* ============ RANKED LIST (roundup / alternatives) ============ */
+  .ranked-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-bg-surface-1);
+    overflow: hidden;
+  }
+
+  .ranked-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--color-border-subtle);
+  }
+  .ranked-item:first-child {
+    border-top: 0;
+  }
+  @media (min-width: 768px) {
+    .ranked-item {
+      grid-template-columns: auto 1fr auto auto;
+      gap: 1.5rem;
+    }
+  }
+
+  .ranked-rank {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    color: var(--color-text-tertiary);
+    width: 2.5rem;
+    text-align: center;
+    letter-spacing: -0.02em;
+  }
+
+  .ranked-id {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    color: var(--color-text-primary);
+    transition: color 150ms var(--ease-out-soft);
+  }
+  .ranked-id:hover {
+    color: var(--color-accent);
+  }
+
+  .ranked-id-text {
+    min-width: 0;
+  }
+
+  .ranked-name {
+    margin: 0;
+    font-size: var(--text-base);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .ranked-category {
+    margin-top: 0.125rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
+  }
+
+  .ranked-meta {
+    display: none;
+    align-items: center;
+    gap: 0.625rem;
+  }
+  @media (min-width: 768px) {
+    .ranked-meta {
+      display: flex;
+    }
+  }
+
+  .ranked-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .ranked-score-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
+    min-width: 6rem;
+  }
+  .ranked-score-cell .compare-score-bar {
+    width: 6rem;
+  }
+
+  /* ============ COMMENTARY ============ */
+  .vs-commentary {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--color-border-subtle);
+  }
+</style>
