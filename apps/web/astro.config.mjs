@@ -12,8 +12,16 @@ export default defineConfig({
   site: siteUrl,
   output: "static",
   integrations: [mdx(), sitemap({
-    // Internal design system gallery — keep out of the public sitemap.
-    filter: (page) => !page.includes("/design/"),
+    // Keep these out of the public sitemap:
+    //   - /design/  internal design-system gallery
+    //   - /og/      per-entity OG images (asset endpoints, not pages)
+    //   - /og.svg   default OG image
+    //   - /404      error page
+    filter: (page) =>
+      !page.includes("/design/") &&
+      !page.includes("/og/") &&
+      !page.endsWith("/og.svg") &&
+      !page.includes("/404"),
     i18n: {
       defaultLocale: "en",
       locales: {
