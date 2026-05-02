@@ -19,6 +19,7 @@ const tools = defineCollection({
   loader: glob({
     pattern: "**/*.mdx",
     base: "../../content/tools",
+    generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
   schema: z.object({
     ...baseFrontmatter,
@@ -53,6 +54,7 @@ const comparisons = defineCollection({
   loader: glob({
     pattern: "**/*.mdx",
     base: "../../content/comparisons",
+    generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
   schema: z
     .object({
@@ -84,6 +86,7 @@ const workflows = defineCollection({
   loader: glob({
     pattern: "**/*.mdx",
     base: "../../content/workflows",
+    generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
   schema: z.object({
     ...baseFrontmatter,
@@ -112,6 +115,7 @@ const learn = defineCollection({
   loader: glob({
     pattern: "**/*.mdx",
     base: "../../content/learn",
+    generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
   schema: z.object({
     ...baseFrontmatter,
@@ -129,6 +133,7 @@ const stacks = defineCollection({
   loader: glob({
     pattern: "**/*.mdx",
     base: "../../content/stacks",
+    generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
   schema: z.object({
     ...baseFrontmatter,

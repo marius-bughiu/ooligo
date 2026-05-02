@@ -8,11 +8,11 @@ Five core entities. Every entity has a `locale`, `verticals[]` (multi-tag), and 
 
 | Entity | Path | Purpose |
 |---|---|---|
-| **Tool** | `content/tools/[slug].[locale].mdx` | A single AI tool, MCP server, agent, GPT, plugin |
-| **Comparison** | `content/comparisons/[slug].[locale].mdx` | Pairwise (`clay-vs-apollo`) or roundup (`best-ai-dialers`) |
-| **Workflow** | `content/workflows/[slug].[locale].mdx` | Production-ready artifact: prompt pack, Claude Skill, Cursor rule, n8n flow, agent template |
-| **Learn** | `content/learn/[slug].[locale].mdx` | AEO-optimized FAQ / glossary / framework / how-to |
-| **Stack** | `content/stacks/[slug].[locale].mdx` | Curated end-to-end stack for a vertical use case ("the AI-native SDR stack") |
+| **Tool** | `content/tools/[locale]/[slug].mdx` | A single AI tool, MCP server, agent, GPT, plugin |
+| **Comparison** | `content/comparisons/[locale]/[slug].mdx` | Pairwise (`clay-vs-apollo`) or roundup (`best-ai-dialers`) |
+| **Workflow** | `content/workflows/[locale]/[slug].mdx` | Production-ready artifact: prompt pack, Claude Skill, Cursor rule, n8n flow, agent template |
+| **Learn** | `content/learn/[locale]/[slug].mdx` | AEO-optimized FAQ / glossary / framework / how-to |
+| **Stack** | `content/stacks/[locale]/[slug].mdx` | Curated end-to-end stack for a vertical use case ("the AI-native SDR stack") |
 
 Plus two configuration documents:
 
@@ -201,7 +201,7 @@ Every non-`en` content file is generated from its `en` sibling and tagged:
 
 ```yaml
 ai_translated: true
-translated_from: clay.en.mdx
+translated_from: en/clay.mdx
 translated_at: 2026-05-15T12:00:00Z
 translation_model: claude-sonnet-4-6
 ```

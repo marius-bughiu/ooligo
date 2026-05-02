@@ -1,241 +1,145 @@
 # Content Pipeline
 
-Every page on ooligo is AI-generated and (for non-English locales) AI-translated. **No human review** is in the critical path. This document defines the gates that make that workable: prompts, structured outputs, validators, automated QA, and the transparency contract with readers.
+Content on ooligo is authored directly by LLMs (Claude, primarily) operating on this repo. There is no separate content-generator service, no scheduled CI job that synthesizes pages, and no human-review gate. An LLM authors a page; validators check it; CI builds and deploys it.
 
-## Principles
+This document is the contract that any LLM working on this repo follows when adding or updating content.
 
-1. **Canonical English source of truth.** All content originates in English from canonical inputs. Locale variants are translated, never independently authored.
-2. **Structured outputs only.** Every generation step uses JSON-mode / structured outputs against a schema. No free-form blob → page.
-3. **Validators are the review.** Schema validation, link-budget enforcement, broken-link checks, schema.org validity, and back-translation similarity are gates. PRs that fail any gate don't merge.
-4. **Refresh, not regenerate.** Tool entries refresh from source weekly; content never goes stale silently.
-5. **Machine-readable transparency.** Every page declares `ai_generated: true` and (where applicable) `ai_translated: true` in frontmatter, surfaced via JSON-LD/meta tags. No visible disclaimer in the page chrome — readers shouldn't have to wade through a notice on every page; the metadata is there for crawlers, AI assistants, and anyone who looks.
+## The rule
 
-## The pipeline
+> **Whenever an LLM adds a page to the site, it adds the localized versions in the same change.**
 
-```
-                ┌────────────────────────────────────────────┐
-                │   Sources (per entity type)                │
-                │   ─ Official tool docs / sitemaps          │
-                │   ─ Public APIs (G2, Capterra, ProductHunt)│
-                │   ─ Reddit / HN / Twitter mentions         │
-                │   ─ Github (for OSS tools / agents / MCPs) │
-                │   ─ Pricing pages, integration pages       │
-                └────────────────┬───────────────────────────┘
-                                 │
-                                 ▼
-                ┌────────────────────────────────────────────┐
-                │   Generator (Claude, structured outputs)   │
-                │   Prompt + Schema + Source bundle          │
-                └────────────────┬───────────────────────────┘
-                                 │
-                                 ▼
-                ┌────────────────────────────────────────────┐
-                │   MDX writer → content/[type]/[slug].en.mdx│
-                └────────────────┬───────────────────────────┘
-                                 │
-                                 ▼
-                ┌────────────────────────────────────────────┐
-                │   Validators                               │
-                │   ─ JSON Schema (frontmatter)              │
-                │   ─ Link-budget rules                      │
-                │   ─ Schema.org JSON-LD validity            │
-                │   ─ Internal link integrity                │
-                │   ─ External link reachability (sample)    │
-                └────────────────┬───────────────────────────┘
-                                 │
-                                 ▼
-                ┌────────────────────────────────────────────┐
-                │   Translator (Claude per non-en locale)    │
-                │   ─ Structured output                      │
-                │   ─ Glossary enforcement                   │
-                │   ─ Domain-term protection                 │
-                └────────────────┬───────────────────────────┘
-                                 │
-                                 ▼
-                ┌────────────────────────────────────────────┐
-                │   QA gates                                 │
-                │   ─ Back-translation similarity ≥ 0.85     │
-                │   ─ Frontmatter parity                     │
-                │   ─ Cross-locale link integrity            │
-                └────────────────┬───────────────────────────┘
-                                 │
-                                 ▼
-                ┌────────────────────────────────────────────┐
-                │   Auto-PR opened by bot                    │
-                │   ─ CI re-runs all validators              │
-                │   ─ Auto-merge if green                    │
-                │   ─ Stays open if any gate fails           │
-                └────────────────────────────────────────────┘
-```
+Concretely: a new tool entry means three files — `tools/en/<slug>.mdx`, `tools/es/<slug>.mdx`, `tools/pt-BR/<slug>.mdx`. A new comparison, workflow, or learn entry: same per-locale subdirectory layout. EN is canonical (authored first), ES and PT-BR are translated from it during the same authoring session.
 
-## Generators
+The same rule applies to updates. Editing the EN entry without re-translating the ES and PT-BR siblings produces drift between locales — don't.
 
-One generator per entity type. Each lives in `packages/pipeline/src/generators/`:
-
-- `tool.ts` — given a tool URL + slug, fetches official docs/pricing/integrations and emits a complete tool MDX
-- `comparison.ts` — given two tool slugs, reads both tool MDX entries and emits a structured comparison
-- `workflow.ts` — given a use case + tool stack, drafts the workflow doc and (optionally) the artifact (Skill, n8n flow, Cursor rule)
-- `learn.ts` — given a target question or term, drafts an AEO-optimized definition/how-to/framework
-- `stack.ts` — given a vertical + use case, assembles a curated multi-tool stack from the catalog
-
-Each generator returns:
-
-```ts
-{
-  frontmatter: ToolFrontmatter,   // typed against JSON Schema
-  body: string,                    // MDX body
-  sources: SourceRef[],            // citations for refresh tracking
-  generated_at: ISODateString,
-  model: string                    // e.g. "claude-sonnet-4-6"
-}
-```
-
-## Translator
-
-`packages/pipeline/src/translators/translate.ts`. Single entry point used for every non-`en` locale.
-
-### Inputs
-
-- Source MDX file (canonical, locale `en`)
-- Target locale code (`es`, `pt-BR`, ...)
-- Glossary for the target locale (`packages/pipeline/glossaries/[locale].json`)
-
-### Glossary (critical for AI-only translation quality)
-
-A locked term map. Some terms are **never translated** (proper nouns: Clay, Apollo, HubSpot, Salesforce, Claude). Some have **fixed translations** (e.g., "lead" → "lead" in es, never "pista"; "pipeline" → "pipeline" in pt-BR, never "tubulação"). Industry jargon stays English where the target-language industry uses English.
-
-Glossary file:
-
-```json
-{
-  "do_not_translate": [
-    "Clay", "Apollo", "HubSpot", "Salesforce", "Claude", "GPT",
-    "Cursor", "n8n", "MCP", "RevOps", "TA", "SDR", "BDR",
-    "AE", "CSM", "ICP", "TCV", "ARR", "MRR", "RAG", "API",
-    "ooligo"
-  ],
-  "fixed_translations": {
-    "lead": "lead",
-    "pipeline": "pipeline",
-    "outbound": "outbound",
-    "stack": "stack",
-    "workflow": "workflow"
-  },
-  "preferred_register": "professional",
-  "regional_notes": "Use rioplatense Spanish only when context demands; default to neutral LATAM Spanish."
-}
-```
-
-### Translation prompt structure
+## Authoring model
 
 ```
-You are translating professional B2B operations content from English to {target_locale}.
-
-Hard rules:
-1. Preserve all MDX syntax exactly (frontmatter, components, code blocks).
-2. Do not translate any term in the do_not_translate list: [...]
-3. Use the fixed_translations map exactly: {...}
-4. Translate the body, but only update frontmatter fields explicitly listed: name (only if it's a description, not a brand), tagline, body text fields.
-5. Set frontmatter: ai_translated: true, translated_from: [source_path], translated_at: [now], translation_model: [model_id]
-6. Maintain heading structure, list structure, and link targets.
-7. Localize examples (currency, names) only when the example would be culturally jarring; otherwise leave intact.
-8. Output only the resulting MDX file content. No commentary.
-
-Source MDX:
-{source_mdx}
-
-Glossary:
-{glossary_json}
+LLM session (Claude Code, claude.ai with repo MCP, etc.)
+  │
+  ├─ Reads sources (official docs, pricing pages, public APIs, Reddit/HN signal)
+  ├─ Writes content/<entity>/<slug>.en.mdx
+  ├─ Writes content/<entity>/<slug>.es.mdx     (translated from EN)
+  ├─ Writes content/<entity>/<slug>.pt-BR.mdx  (translated from EN)
+  ├─ Commits the trio together
+  └─ Pushes
+       │
+       ▼
+  CI: validate config + typecheck + Astro build
+       │
+       ▼
+  CI: deploy to Cloudflare Pages
 ```
 
-Run with `temperature: 0.2` and structured-output validation against the same JSON Schema as the source.
+The authoring LLM is responsible for getting the content right. The validators catch structural mistakes (schema violations, broken links, mismatched frontmatter) but they don't substitute for editorial judgment.
 
-## Automated QA gates
+## Frontmatter discipline
 
-All gates run in CI. Any failure blocks merge.
+Every entity file has frontmatter validated against the JSON Schema in `content/.schema/`. Mirror schemas live in Astro content collections in `apps/web/src/content.config.ts` so the build fails fast on drift.
 
-### 1. Schema validation
+Required fields on every page:
 
-Every MDX file's frontmatter is validated against `content/.schema/[entity].schema.json`.
+- `slug` (must match filename)
+- `canonical_slug` (shared across locale variants — this is how hreflang clusters are computed)
+- `locale` (one of `en`, `es`, `pt-BR`)
+- `verticals` (array of vertical IDs from `content/verticals.json`)
+- `ai_generated: true` (always — this is an AI-authored site, transparently labeled in metadata)
 
-### 2. Link-budget validation
+For non-`en` locale variants, also set:
 
-Per ARCHITECTURE.md cross-linking rules. Implemented as an Astro content collection lint script.
+- `ai_translated: true`
+- `translated_from: <source-filename>` (e.g. `clay.en.mdx`)
+- `translated_at: <ISO timestamp>`
+- `translation_model: <model-id>` (e.g. `claude-opus-4-7`)
 
-### 3. Schema.org JSON-LD validity
+These five fields make the translation lineage queryable — you can ask "which pages were translated by which model on which date" without scraping.
 
-After build, every page's JSON-LD is validated against schema.org definitions. Use `schema-dts` for typing + a runtime validator.
+## Translation glossary
 
-### 4. Internal link integrity
+When translating EN → ES or EN → PT-BR, follow this glossary:
 
-Every internal link must resolve. Broken internal link = build fail.
-
-### 5. External link reachability (sample)
-
-10% sample of external links are HEAD-checked weekly. Persistent 4xx/5xx flags the tool entry for refresh.
-
-### 6. Back-translation similarity (translation gate)
-
-For each `[locale]` translation:
+### Never translate (proper nouns + industry English)
 
 ```
-en_source → translate(target=es) → es_translation → translate(target=en) → en_back
+Clay, Apollo, HubSpot, Salesforce, Claude, GPT, Cursor, n8n, MCP,
+Anthropic, OpenAI, Google, Microsoft, GitHub, Slack, Zapier, Outreach,
+Salesloft, Gong, Chorus, Default, ZoomInfo, Apollo, Lemlist, Smartlead,
+Instantly, Lusha, RegieAI, Common Room, Pavilion, Gainsight, Reforge,
+Maven, MasterClass, AppSumo, Levels.fyi, Wirecutter,
 
-similarity(en_source, en_back) ≥ 0.85   # cosine similarity over embeddings
+RevOps, GTM, ICP, TCV, ARR, MRR, NRR, GRR, SDR, BDR, AE, CSM, TA, RAG,
+LLM, API, SaaS, CRM, MCP, RPA, ETL, ELT, BI, KPI, OKR, NPS, CSAT, QBR,
+
+ooligo
 ```
 
-Below threshold → gate fails, PR opens with a `translation-quality` label, page does not deploy until re-run produces a passing translation. (Up to 3 auto-retries with adjusted temperature/prompt before the page is held.)
+### Fixed translations (industry English stays English)
 
-Embeddings model: same provider as inference (Anthropic embeddings or OpenAI `text-embedding-3-large`).
+```
+lead       → lead         (es, pt-BR)
+pipeline   → pipeline     (es, pt-BR)
+outbound   → outbound     (es, pt-BR)
+inbound    → inbound      (es, pt-BR)
+stack      → stack        (es, pt-BR)
+workflow   → workflow     (es, pt-BR)
+prompt     → prompt       (es, pt-BR)
+agent      → agente / agente
+skill      → skill        (es, pt-BR — when referring to Claude Skills specifically)
+```
 
-### 7. Frontmatter parity
+### Regional register
 
-Translated files must have identical frontmatter structure to source, with only translation-marker fields differing (`locale`, `ai_translated`, `translated_from`, `translated_at`, `translation_model`).
+- **`es`** — neutral LATAM Spanish. Avoid distinctly Iberian (e.g. "vosotros") or rioplatense ("vos") forms. Default to "tú" with professional register. The audience is B2B operators across Mexico, Colombia, Argentina, Chile, Peru, Spain (when reading neutral Spanish).
+- **`pt-BR`** — Brazilian Portuguese, not European. Use "você", colloquial-but-professional B2B register. Anglicisms are normal in tech/B2B Brazilian Portuguese — don't fight them.
 
-### 8. Cross-locale link integrity
+## Quality bar (the LLM's responsibility)
 
-Every internal link in a translated file must resolve in the target locale (i.e. `/es/tools/clay` must exist if `/en/tools/clay` is linked from `clay.es.mdx`). Translations of pages that link to not-yet-translated pages stay queued until siblings translate.
+The authoring LLM is on the hook for:
 
-### 9. Toxicity / safety check
+1. **Factual accuracy** — pricing, integrations, capabilities. If the LLM isn't sure, it says so or omits the claim. Never invent integrations or pricing tiers.
+2. **Currency** — `last_reviewed` date matches when sources were actually checked. Don't backdate.
+3. **Cross-linking** — every entity links to related entities per ARCHITECTURE.md's link-budget rules. Validators check structural existence; the LLM checks relevance.
+4. **Voice consistency** — confident, opinionated, structured. We rank, we recommend, we say what's bad. We don't G2-hedge.
+5. **Translation parity** — ES and PT-BR variants say the same things as EN. Translate; don't re-author with different opinions.
 
-Every generated page passes a content-safety classifier (Anthropic moderation endpoint or equivalent). Failure flags for human review (the only manual gate, and only on flagged content).
+## What the validators actually catch
 
-## Transparency
+In CI (`npm run validate:config` and `npm run build`):
 
-Every page declares its provenance via frontmatter (`ai_generated`, `ai_translated`, `translated_from`, `translated_at`, `translation_model`, `last_refreshed`) which is surfaced to crawlers and AI assistants via JSON-LD and meta tags. There is no visible footer disclaimer — readers don't need it on every page, and the source-of-truth MDX in this repo is openly browsable on GitHub.
+- **Frontmatter schema** — every file's frontmatter is validated against its JSON Schema. Missing required fields, invalid enums, malformed types → build fails.
+- **Content collection schema** — Astro re-validates the same shape via Zod schemas in `content.config.ts`. Two checks for the price of one.
+- **Link integrity** — internal links that resolve to no page break the build (Astro raises on broken `<a href>` to a non-existent route).
+- **hreflang correctness** — `BaseLayout` only emits hreflang for locale variants that actually exist (computed from `canonical_slug` matches in the collection). Never points at 404s.
+- **Markup validity** — JSON-LD blocks must parse as JSON. Astro's MDX compiler enforces.
 
-If a reader wants to verify or correct a page, the source file's GitHub URL is part of every page's machine-readable metadata.
+Validators do **not** check:
+- Whether the content is true
+- Whether the translation captures the original meaning
+- Whether the recommendation is sound
+
+Those are the LLM author's job.
 
 ## Refresh cadence
 
-| Entity | Refresh trigger | Cadence |
-|---|---|---|
-| Tool | Pricing-page or feature-page change detected; or stale > 30d | Weekly cron |
-| Comparison | Either tool's entry refreshed → comparison flagged for refresh | Weekly cron |
-| Workflow | Quarterly review or tool-API breakage | Quarterly + on integration break |
-| Learn | Quarterly review or referenced tool refreshed | Quarterly |
-| Stack | Quarterly review | Quarterly |
+When a tool's pricing/features change, an LLM session refreshes the entry — including all locale variants. Refresh triggers (typical):
 
-Refresh = generator runs again, output diffed against existing file, PR opened only if material change.
+- A user mentions a tool's pricing changed
+- A scheduled "weekly refresh" Claude Code session checks the top 50 tools
+- A reader opens a GitHub issue with corrections
 
-## Cost ceiling
+Refresh = re-author from current sources. Bump `last_reviewed`. Re-translate both locale variants. Open one PR with all three files updated. CI gates ensure no schema or link regression.
 
-The pipeline has a monthly inference budget cap (configurable env var). Once 80% of cap is hit, refresh frequency degrades from weekly to monthly automatically. This protects against runaway costs from a misbehaving generator.
+## Adding a vertical or locale
 
-## What can go wrong (and how we catch it)
+- **Adding a vertical** — config update in `content/verticals.json` + tagging existing entries with the new vertical (multi-tag) + a few vertical-specific stack/workflow pages. See ARCHITECTURE.md.
+- **Adding a locale** — config update in `content/locales.json` + an LLM session translates the entire `content/` tree to the new locale. See ARCHITECTURE.md.
 
-| Failure mode | Detection | Remediation |
-|---|---|---|
-| Generator hallucinates pricing/features | Source-citation check; refresh diff vs. live page | Auto-retry with stricter prompt; page held until pass |
-| Translation drifts meaning | Back-translation similarity gate | Auto-retry; if 3 fails, page held |
-| Glossary violation (translated brand name) | Regex check post-translation | Auto-retry with explicit glossary inline |
-| Stale tool (pricing changed, sunset, acquired) | Weekly external-link + sample-page diff | Tool entry flagged; refresh runs |
-| Schema.org JSON-LD malformed | Schema validator in CI | Build fails |
-| Cross-locale link broken | Cross-locale integrity check | PR held until sibling translation lands |
-| Inference cost spike | Budget monitor on Anthropic dashboard + worker-side counter | Auto-degrade refresh frequency |
+Both are config + bulk authoring tasks; no separate tooling required.
 
-## Why this works without human review
+## Why no automated generator
 
-The bet: in 2026, **structured AI outputs + tight schemas + automated QA gates + transparent labeling** produces content that is good enough for professional ops audiences and survives Google's spam updates, *for the entity types we cover*. We're not generating opinion pieces or YMYL content — we're generating structured comparisons, factual tool data, and procedural workflow documentation. AI handles those formats well.
+Earlier drafts of this doc described a generator pipeline (TypeScript scripts using the Anthropic SDK, structured outputs, back-translation similarity gates, auto-PR bots). That model adds layers of indirection without improving quality, and decouples content authorship from review of source signal.
 
-If a vertical we add later starts to require judgment beyond what gates catch (e.g., legal advice, medical info), we either pull that content type or add a human review gate for it. We will not relax safety to expand scope.
+A Claude session reading the source URLs, considering the audience, writing the entry, and translating it in one pass produces better content than a script with a single canned prompt. The repo is the unit of versioning; the LLM is the unit of authoring.
+
+If we ever need scheduled refresh at scale beyond what manual sessions handle, that's a Claude Code cron, not a custom generator.
