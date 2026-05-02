@@ -28,7 +28,10 @@ export default defineConfig({
       redirectToDefaultLocale: false,
     },
   },
-  trailingSlash: "never",
+  // Cloudflare Pages serves /path/index.html at /path/ (with trailing slash)
+  // and 308-redirects /path → /path/. Keep "always" so canonical, hreflang,
+  // and internal hrefs all match the served URL with trailing slash.
+  trailingSlash: "always",
   build: {
     format: "directory",
   },
