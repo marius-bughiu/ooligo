@@ -8,7 +8,7 @@ Every page on ooligo is AI-generated and (for non-English locales) AI-translated
 2. **Structured outputs only.** Every generation step uses JSON-mode / structured outputs against a schema. No free-form blob → page.
 3. **Validators are the review.** Schema validation, link-budget enforcement, broken-link checks, schema.org validity, and back-translation similarity are gates. PRs that fail any gate don't merge.
 4. **Refresh, not regenerate.** Tool entries refresh from source weekly; content never goes stale silently.
-5. **Transparency contract.** Every page declares `ai_generated: true` and (where applicable) `ai_translated: true` in metadata, and renders an "AI-generated content" notice in the footer.
+5. **Machine-readable transparency.** Every page declares `ai_generated: true` and (where applicable) `ai_translated: true` in frontmatter, surfaced via JSON-LD/meta tags. No visible disclaimer in the page chrome — readers shouldn't have to wade through a notice on every page; the metadata is there for crawlers, AI assistants, and anyone who looks.
 
 ## The pipeline
 
@@ -202,11 +202,9 @@ Every generated page passes a content-safety classifier (Anthropic moderation en
 
 ## Transparency
 
-Every page renders, in the footer:
+Every page declares its provenance via frontmatter (`ai_generated`, `ai_translated`, `translated_from`, `translated_at`, `translation_model`, `last_refreshed`) which is surfaced to crawlers and AI assistants via JSON-LD and meta tags. There is no visible footer disclaimer — readers don't need it on every page, and the source-of-truth MDX in this repo is openly browsable on GitHub.
 
-> *This page was generated and (where applicable) translated by AI. Last refreshed: [date]. [Source list]. Spot an error? Open a PR or drop us a note.*
-
-The "open a PR" link goes directly to the source MDX file in this repo.
+If a reader wants to verify or correct a page, the source file's GitHub URL is part of every page's machine-readable metadata.
 
 ## Refresh cadence
 
