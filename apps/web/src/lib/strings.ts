@@ -17,6 +17,7 @@ export type ChromeStrings = {
     comparisons: string;
     workflows: string;
     learn: string;
+    stacks: string;
     verticals: string;
   };
   cta: {
@@ -56,6 +57,7 @@ export type ChromeStrings = {
     add_learn: string;
     add_comparison: string;
     add_workflow: string;
+    add_stack: string;
   };
 };
 
@@ -65,6 +67,7 @@ const en: ChromeStrings = {
     comparisons: "Comparisons",
     workflows: "Workflows",
     learn: "Learn",
+    stacks: "Stacks",
     verticals: "Verticals",
   },
   cta: {
@@ -105,6 +108,7 @@ const en: ChromeStrings = {
     add_learn: "Topic missing? Add an entry on GitHub",
     add_comparison: "Comparison missing? Add it on GitHub",
     add_workflow: "Workflow missing? Add it on GitHub",
+    add_stack: "Stack missing? Add it on GitHub",
   },
 };
 
@@ -114,6 +118,7 @@ const es: ChromeStrings = {
     comparisons: "Comparaciones",
     workflows: "Workflows",
     learn: "Aprender",
+    stacks: "Stacks",
     verticals: "Verticales",
   },
   cta: {
@@ -154,6 +159,7 @@ const es: ChromeStrings = {
     add_learn: "¿Falta un tema? Añade una entrada en GitHub",
     add_comparison: "¿Falta una comparación? Añádela en GitHub",
     add_workflow: "¿Falta un workflow? Añádelo en GitHub",
+    add_stack: "¿Falta un stack? Añádelo en GitHub",
   },
 };
 
@@ -163,6 +169,7 @@ const ptBR: ChromeStrings = {
     comparisons: "Comparações",
     workflows: "Workflows",
     learn: "Aprender",
+    stacks: "Stacks",
     verticals: "Verticais",
   },
   cta: {
@@ -203,6 +210,7 @@ const ptBR: ChromeStrings = {
     add_learn: "Falta um tópico? Adicione uma entrada no GitHub",
     add_comparison: "Falta uma comparação? Adicione no GitHub",
     add_workflow: "Falta um workflow? Adicione no GitHub",
+    add_stack: "Falta uma stack? Adicione no GitHub",
   },
 };
 

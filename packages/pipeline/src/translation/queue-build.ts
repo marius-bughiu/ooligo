@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..", "..", "..");
 const contentDir = resolve(repoRoot, "content");
 
-const COLLECTIONS = ["tools", "comparisons", "workflows", "learn"] as const;
+const COLLECTIONS = ["tools", "comparisons", "workflows", "learn", "stacks"] as const;
 type Collection = (typeof COLLECTIONS)[number];
 
 type LocaleEntry = {

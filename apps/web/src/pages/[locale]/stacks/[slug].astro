@@ -1,0 +1,388 @@
+---
+import { getCollection, getEntry, render } from "astro:content";
+import type { CollectionEntry } from "astro:content";
+import BaseLayout from "~/layouts/BaseLayout.astro";
+import JsonLd from "~/components/JsonLd.astro";
+import Breadcrumbs from "~/components/Breadcrumbs.astro";
+import Container from "~/components/Container.astro";
+import Section from "~/components/Section.astro";
+import Prose from "~/components/Prose.astro";
+import StackBadgeRow from "~/components/StackBadgeRow.astro";
+import VerticalTag from "~/components/VerticalTag.astro";
+import CrossLinkRail from "~/components/CrossLinkRail.astro";
+import EditOnGitHub from "~/components/EditOnGitHub.astro";
+import { localeText, type LocaleCode } from "~/lib/config";
+import { chromeStrings } from "~/lib/strings";
+
+export async function getStaticPaths() {
+  const stacks = await getCollection("stacks");
+  return stacks.map((entry) => ({
+    params: { locale: entry.data.locale, slug: entry.data.slug },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { locale } = Astro.params as { locale: LocaleCode };
+const { Content } = await render(entry);
+const data = entry.data;
+
+type ToolEntry = CollectionEntry<"tools">;
+type WorkflowEntry = CollectionEntry<"workflows">;
+type StackEntry = CollectionEntry<"stacks">;
+
+const allStacks = await getCollection("stacks");
+const allWorkflows = await getCollection("workflows");
+
+const availableLocales = allStacks
+  .filter((s) => s.data.canonical_slug === data.canonical_slug)
+  .map((s) => s.data.locale);
+
+async function resolveTools(slugs: string[]): Promise<ToolEntry[]> {
+  const resolved = await Promise.all(
+    slugs.map((slug) =>
+      getEntry("tools", `${locale}/${slug}`).catch(() => undefined)
+    )
+  );
+  return resolved.filter((tt): tt is ToolEntry => tt !== undefined);
+}
+
+const tools = await resolveTools(data.tools);
+const chrome = chromeStrings(locale);
+
+// ----- Localized labels -----
+const labels = {
+  en: {
+    meta_difficulty: "Difficulty",
+    meta_tools: "Tools",
+    meta_use_case: "Use case",
+    meta_for: "Built for",
+    section_stack: "The stack",
+    rail_workflows: "Related workflows",
+    rail_stacks: "Other stacks",
+  },
+  es: {
+    meta_difficulty: "Dificultad",
+    meta_tools: "Herramientas",
+    meta_use_case: "Caso de uso",
+    meta_for: "Construido para",
+    section_stack: "El stack",
+    rail_workflows: "Workflows relacionados",
+    rail_stacks: "Otros stacks",
+  },
+  "pt-BR": {
+    meta_difficulty: "Dificuldade",
+    meta_tools: "Ferramentas",
+    meta_use_case: "Caso de uso",
+    meta_for: "Feito para",
+    section_stack: "A stack",
+    rail_workflows: "Workflows relacionados",
+    rail_stacks: "Outras stacks",
+  },
+} as const;
+
+const t = localeText(labels, locale);
+
+// ----- Cross-link computation -----
+const localeWorkflows = allWorkflows.filter((w) => w.data.locale === locale);
+const localeStacks = allStacks.filter((s) => s.data.locale === locale);
+
+// Related workflows: explicit related_workflows OR sharing >=1 tool with the stack.
+const relatedWorkflows: WorkflowEntry[] = localeWorkflows
+  .map((w) => {
+    const explicit = (data.related_workflows ?? []).includes(w.data.slug)
+      ? 5
+      : 0;
+    const sharedTools = w.data.tools_used.filter((slug) =>
+      data.tools.includes(slug)
+    ).length;
+    const sharedVerticals = w.data.verticals.filter((v) =>
+      data.verticals.includes(v)
+    ).length;
+    return {
+      entry: w,
+      score: explicit + sharedTools * 2 + sharedVerticals,
+    };
+  })
+  .filter((r) => r.score > 0)
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 4)
+  .map((r) => r.entry);
+
+// Other stacks in the same vertical (excluding self).
+const relatedStacks: StackEntry[] = localeStacks
+  .filter(
+    (s) =>
+      s.data.slug !== data.slug &&
+      s.data.verticals.some((v) => data.verticals.includes(v))
+  )
+  .slice(0, 3);
+
+// Tool-name lookup for breadcrumbs and badge row
+const toolNamesLookup: Record<string, string> = Object.fromEntries(
+  tools.map((tt) => [tt.data.slug, tt.data.name])
+);
+
+// ----- JSON-LD -----
+const jsonLd: Record<string, unknown> = {
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  name: data.title,
+  description: data.use_case,
+  numberOfItems: tools.length,
+  itemListElement: tools.map((tt, i) => ({
+    "@type": "ListItem",
+    position: i + 1,
+    item: {
+      "@type": "SoftwareApplication",
+      name: tt.data.name,
+      url: `https://ooligo.com/${locale}/tools/${tt.data.slug}/`,
+    },
+  })),
+};
+---
+
+<BaseLayout
+  title={`${data.title} — ooligo`}
+  description={data.use_case}
+  locale={locale}
+  pagePath={`/stacks/${data.slug}`}
+  availableLocales={availableLocales}
+  ogImagePath={`/og/${locale}/stacks/${data.slug}.svg`}
+>
+  <JsonLd slot="head" data={jsonLd} />
+  <main id="main">
+    <Section density="md">
+      <Container>
+        <Breadcrumbs
+          items={[
+            { label: "ooligo", href: `/${locale}/` },
+            { label: chrome.nav.stacks, href: `/${locale}/stacks/` },
+            { label: data.title },
+          ]}
+        />
+
+        <!-- ============ HEADER BAND ============ -->
+        <header class="stk-header">
+          <div class="stk-header-type">
+            <span class="stk-header-mark" aria-hidden="true"></span>
+            <span class="stk-artifact-type">STACK</span>
+          </div>
+
+          <h1 class="stk-title">{data.title}</h1>
+
+          <p class="stk-use-case">{data.use_case}</p>
+
+          <div class="stk-meta-grid">
+            <div class="stk-meta-item">
+              <div class="stk-meta-label">{t.meta_difficulty}</div>
+              <div class="stk-meta-value stk-meta-value-mono">
+                {chrome.difficulty[data.difficulty]}
+              </div>
+            </div>
+            <div class="stk-meta-item">
+              <div class="stk-meta-label">{t.meta_tools}</div>
+              <div class="stk-meta-value stk-meta-value-mono">
+                {tools.length}
+              </div>
+            </div>
+          </div>
+
+          <div class="stk-vtags">
+            {data.verticals.map((vSlug) => (
+              <VerticalTag slug={vSlug} locale={locale} size="sm" />
+            ))}
+          </div>
+        </header>
+
+        <!-- ============ STACK ROW ============ -->
+        {tools.length > 0 && (
+          <section class="stk-stack-section">
+            <h2 class="stk-section-title">{t.section_stack}</h2>
+            <StackBadgeRow
+              tools={tools.map((tt) => ({
+                slug: tt.data.slug,
+                name: tt.data.name,
+              }))}
+              locale={locale}
+            />
+          </section>
+        )}
+
+        <!-- ============ MDX BODY ============ -->
+        <div class="stk-body">
+          <Prose width="prose">
+            <Content />
+            <div class="edit-on-github-wrap">
+              <EditOnGitHub
+                mode="edit"
+                collection="stacks"
+                locale={locale}
+                slug={data.slug}
+                label={chrome.contribute.edit_page}
+              />
+            </div>
+          </Prose>
+        </div>
+      </Container>
+    </Section>
+
+    <!-- ============ CROSS-LINK RAILS ============ -->
+    {(relatedWorkflows.length > 0 || relatedStacks.length > 0) && (
+      <Section density="md" divided surface="surface-1">
+        <Container>
+          <div class="rails-grid">
+            {relatedWorkflows.length > 0 && (
+              <CrossLinkRail
+                heading={t.rail_workflows}
+                variant="compact"
+                links={relatedWorkflows.map((w) => ({
+                  label: w.data.title,
+                  href: `/${locale}/workflows/${w.data.slug}/`,
+                  meta: w.data.artifact_type,
+                }))}
+              />
+            )}
+            {relatedStacks.length > 0 && (
+              <CrossLinkRail
+                heading={t.rail_stacks}
+                variant="compact"
+                links={relatedStacks.map((s) => ({
+                  label: s.data.title,
+                  href: `/${locale}/stacks/${s.data.slug}/`,
+                  meta: `${s.data.tools.length} tools`,
+                }))}
+              />
+            )}
+          </div>
+        </Container>
+      </Section>
+    )}
+  </main>
+</BaseLayout>
+
+<style>
+  /* ============ HEADER ============ */
+  .stk-header {
+    margin-top: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .stk-header-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.875rem;
+    color: var(--color-text-tertiary);
+  }
+  .stk-header-mark {
+    width: 8px;
+    height: 8px;
+    background-color: var(--color-accent);
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
+  .stk-artifact-type {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+
+  .stk-title {
+    margin: 0 0 0.875rem;
+    font-size: var(--text-3xl);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+  }
+
+  .stk-use-case {
+    margin: 0 0 1.5rem;
+    color: var(--color-text-secondary);
+    font-size: var(--text-lg);
+    line-height: 1.5;
+    max-width: 60ch;
+  }
+
+  .stk-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem 1.5rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border-subtle);
+    margin-bottom: 1rem;
+  }
+  @media (min-width: 768px) {
+    .stk-meta-grid {
+      grid-template-columns: repeat(4, auto);
+      column-gap: 3rem;
+    }
+  }
+
+  .stk-meta-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-tertiary);
+    margin-bottom: 0.25rem;
+  }
+
+  .stk-meta-value {
+    font-size: var(--text-sm);
+    color: var(--color-text-primary);
+  }
+  .stk-meta-value-mono {
+    font-family: var(--font-mono);
+    text-transform: capitalize;
+  }
+
+  .stk-vtags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+  }
+
+  /* ============ STACK SECTION ============ */
+  .stk-section-title {
+    margin: 0 0 1rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-tertiary);
+    font-weight: 600;
+  }
+
+  .stk-stack-section {
+    margin: 2.5rem 0;
+  }
+
+  /* ============ BODY ============ */
+  .stk-body {
+    margin-top: 1.5rem;
+  }
+
+  .edit-on-github-wrap {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  /* ============ RAILS ============ */
+  .rails-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  @media (min-width: 768px) {
+    .rails-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2.5rem;
+    }
+  }
+</style>

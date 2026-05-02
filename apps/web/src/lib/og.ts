@@ -267,6 +267,34 @@ export function renderLearnOg(l: LearnOgInput): string {
   })}${close}`;
 }
 
+/* ============ Stack ============ */
+
+interface StackOgInput {
+  title: string;
+  use_case?: string;
+  difficulty?: string;
+  toolCount?: number;
+}
+
+export function renderStackOg(s: StackOgInput): string {
+  const { open, close } = chrome({
+    entityLabel: "Stack",
+    metaTopRight: s.difficulty,
+  });
+
+  const subtitle = s.use_case;
+  const bottomLeft =
+    s.toolCount != null
+      ? `ooligo.com · stacks · ${s.toolCount} tools`
+      : "ooligo.com · stacks";
+
+  return `${open}${bodyText({
+    title: s.title,
+    subtitle,
+    bottomLeft,
+  })}${close}`;
+}
+
 /* ============ Vertical landing ============ */
 
 interface VerticalOgInput {
