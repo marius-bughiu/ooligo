@@ -39,7 +39,9 @@ Cloudflare Dashboard → **My Profile** → **API Tokens** → **Create Token** 
 
 ### 4. Create the Pages project
 
-Optional — Wrangler will create it on first deploy if it doesn't exist. To pre-create:
+The deploy workflow now bootstraps the project automatically on first run via a `pages project create` step (with `continue-on-error: true` so subsequent runs skip past it benignly). You don't need to pre-create.
+
+If you'd rather pre-create manually:
 
 ```bash
 npx wrangler pages project create ooligo --production-branch=main
