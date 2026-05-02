@@ -25,19 +25,19 @@ Execute these steps in order. Stop at the first failure (don't push broken build
 
 4. **Translate the body** into Spanish, applying the rules in this skill (glossary + register sections below). Translate the markdown body only. Frontmatter values are not translated except where noted in step 5.
 
-5. **Write the target MDX** at `target`. Frontmatter rules:
+5. **Compute the EN body hash.** Run `npm run hash:en --workspace=packages/pipeline -- <source>` and capture stdout. The single line printed is the SHA-256 of the EN file's body. You will paste this into the target's frontmatter in the next step.
+
+6. **Write the target MDX** at `target`. Frontmatter rules:
    - Copy these fields verbatim from EN: `slug`, `canonical_slug`, `verticals`, and **all entity-specific fields** (`name`, `category`, `subcategories`, `pricing_model`, `pricing_starts_at`, `pricing_url`, `website`, `ai_native`, `mcp_available`, `api_available`, `integrations`, `ooligo_score`, `ooligo_score_breakdown`, `last_reviewed`, `last_refreshed`, `affiliate_link`, etc.). These are structural data, not translatable display strings.
    - Set `locale: es`.
    - Set `ai_generated: true`, `ai_translated: true`.
    - Set `translated_from: en/<basename of source>.mdx`.
    - Set `translated_at` to now in ISO-8601 UTC with seconds precision (e.g. `"2026-05-02T22:58:47Z"`).
    - Set `translation_model: claude-opus-4-7`.
-   - Leave `source_sha256` out — step 7 stamps it.
+   - Set `source_sha256: "<hash from step 5>"`.
    - If the target already exists (stale case), overwrite it.
 
-6. **Validate the build.** Run `npm run validate` and `npm run build`. If either fails, fix the translation file and retry. Never proceed to step 8 with a failing build.
-
-7. **Stamp the hash.** Run `npm run queue:backfill-hashes`. This walks every translated file and stamps `source_sha256` from the EN sibling's body hash. It's idempotent — only the file you just wrote will actually change.
+7. **Validate the build.** Run `npm run validate` and `npm run build`. If either fails, fix the translation file and retry. Never proceed with a failing build.
 
 8. **Regenerate the queue.** Run `npm run queue:translations --workspace=packages/pipeline -- --locale=es` (the workspace form is required — npm doesn't forward `--` args through the root passthrough). Confirm the item you just translated no longer appears in `es_TRANSLATION_QUEUE.md`.
 

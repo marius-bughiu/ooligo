@@ -55,7 +55,7 @@ Translation-specific frontmatter (`ai_translated`, `translated_from`, `translate
 Translation parity is enforced by tooling, not authoring discipline:
 
 - **`npm run queue:translations`** — scans every collection × non-canonical locale and writes `es_TRANSLATION_QUEUE.md` and `pt-BR_TRANSLATION_QUEUE.md` at the repo root. An item appears as `missing` if no translated file exists, or `stale` if the SHA-256 of the EN body no longer matches the `source_sha256` stored on the translated file's frontmatter.
-- **`npm run queue:backfill-hashes`** — one-time / repair tool. Stamps every translated file's `source_sha256` from its EN sibling's body hash. Used when adding `source_sha256` to a corpus that doesn't yet have it, or after manual edits where the hash drifted out of sync with the actual content.
+- **`npm run hash:en -- <path>`** — prints the SHA-256 of an EN file's body. The translation skills use this to compute the value for `source_sha256` when writing a translated file.
 - **`/translate-es` and `/translate-pt-br`** — project-scoped skills under `.claude/skills/`. Each invocation translates the next item in the queue, validates the build, regenerates the queue, and commits + pushes to `main`. Translation glossary (never-translate proper nouns, fixed industry terms) and regional register live in those skill bodies, not here.
 
 ## Quality bar (the LLM author's responsibility)
