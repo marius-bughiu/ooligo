@@ -1,6 +1,6 @@
-# Design
+# Design system
 
-Single-theme, on-brand visual system for every entity in [ARCHITECTURE.md](./ARCHITECTURE.md), every locale in `content/locales.json`, every page under `apps/web/src/pages/[locale]/`. Phased to ship in lockstep with [ROADMAP.md](./ROADMAP.md).
+The single, on-brand visual system that every entity in [ARCHITECTURE.md](./ARCHITECTURE.md), every locale in `content/locales.json`, and every page under `apps/web/src/pages/[locale]/` is rendered through. One palette, one accent, one type stack — across three verticals, three locales, five entity types.
 
 ## Brand north star
 
@@ -20,6 +20,8 @@ Visual identity carried by:
 - **Restraint.** Almost no shadow, almost no motion, no illustration, no gradient.
 
 ## Design tokens
+
+All values live in the Tailwind v4 `@theme` block at [apps/web/src/styles/global.css](apps/web/src/styles/global.css) — the single source of truth. The tables below mirror that block.
 
 ### Color
 
@@ -45,14 +47,14 @@ Elevation in monochrome steps, not drop shadow.
 - **Mono.** Geist Mono — used for `slug`, `9.2/10`, `$149/mo`, version tags, breadcrumbs.
 - **Scale.** 12 / 14 / 16 / 20 / 24 / 32 / 48 / 64.
 - **Subsetting.** Latin Extended (EN + ES + PT-BR diacritics).
-- **Self-hosted** via `@fontsource-variable/*` — no Google Fonts hot-link.
+- **Hosting.** Self-hosted via `@fontsource-variable/*` — no Google Fonts hot-link.
 
 ### Spacing, radii, motion
 
 - **Spacing** 4px base: `4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 / 96 / 128`.
 - **Radii.** `4` (chips), `8` (cards), `12` (modals), `999` (pills).
 - **Motion.** 150ms hover, 200ms state. No page transitions, no parallax. `prefers-reduced-motion` respected.
-- **Shadows.** Avoid; elevation is border + bg.
+- **Shadows.** Avoided; elevation is border + bg.
 
 ## Layout system
 
@@ -63,119 +65,112 @@ Elevation in monochrome steps, not drop shadow.
 
 ## Global chrome
 
-### Header
+### Header — [Header.astro](apps/web/src/components/Header.astro)
 
 Wordmark (left) → nav (Tools / Comparisons / Workflows / Learn / Verticals mega-menu) → locale switcher · GitHub · newsletter CTA (right). Mobile: full-screen sheet.
 
-### Footer
+### Footer — [Footer.astro](apps/web/src/components/Footer.astro)
 
-Four columns: **Catalog** · **Verticals** · **Build** (GitHub, public roadmap, public metrics, status) · **Subscribe** (inline beehiiv form). Bottom strip: copyright · AI-generated transparency badge · build hash.
+Four columns: **Catalog** · **Verticals** · **Build** (GitHub, public roadmap, architecture) · **Subscribe** (inline beehiiv form). Bottom strip: copyright · license.
 
 ### Locale switcher
 
-Native names (English / Español / Português). Sets cookie. Honors `availableLocales` already wired in `BaseLayout.astro`.
+Native names (English / Español / Português). Sets cookie. Honors `availableLocales` wired in `BaseLayout.astro`.
 
-### Breadcrumbs
+### Breadcrumbs — [Breadcrumbs.astro](apps/web/src/components/Breadcrumbs.astro)
 
-Component on every detail page. Mono, secondary text. Already covered by `BreadcrumbList` JSON-LD per architecture.
+Renders on every detail page. Mono, secondary text. Emits the `BreadcrumbList` JSON-LD required by [ARCHITECTURE.md](./ARCHITECTURE.md) inline alongside the visual list.
+
+### Wordmark — [Wordmark.astro](apps/web/src/components/Wordmark.astro)
+
+Typographic mark + geometric glyph; reused across header, OG images, and favicons.
 
 ## Component library
 
-Primitives that all 10 page templates compose. Build once, render everywhere.
+Primitives composed by every page template — build once, render everywhere.
 
-1. **Score pill** — `9.2 / 10`, mono, color-graded by band.
-2. **Capability chips** — `AI-NATIVE`, `MCP`, `API`, `FREE-TIER`. Outlined, monochrome.
-3. **Pricing label** — `$149/mo · usage-based`, mono.
-4. **Vertical tag** — geometric mark + label, monochrome (no per-vertical hue).
-5. **AI-generated / AI-translated badge** — pinned to every page; treated as brand asset, not disclosure.
-6. **Tool card** — index list cell.
-7. **Comparison strip** — `A vs B` with marks + category.
-8. **Workflow card** — artifact-type icon + stack logos + difficulty + time.
-9. **Stack badge row** — horizontal logos with hover names; for workflows + stacks.
-10. **Spec table** — replaces the raw `<dl>` on tool detail; sticky, dense, mono numerics.
-11. **AEO answer block** — for `/learn`: `target_questions[]` rendered as a "this page answers" panel. Brand asset *and* citation signal.
-12. **Score breakdown bars** — for `ooligo_score_breakdown`. Bars, not radar (ops people mistrust radar).
-13. **Cross-link rail** — closes the link budget enforced by the validator (3 alt tools, 1 comparison, 2 workflows, 2 learn — per `ARCHITECTURE.md`).
-14. **Empty state** — `/tools`, `/vs`, `/workflows`, `/learn` are mostly empty pre-launch; empty states are ⅓ of the live surface area right now.
-15. **Inline artifact preview** — for workflow `preview_lang`: syntax-highlighted code/markdown.
-16. **Tool monogram fallback** — when a vendor logo is missing, render a typographic mark (first letter, mono, accent) so the catalog grid stays rhythmic.
+1. **Score pill** — `9.2 / 10`, mono, color-graded by band. [ScorePill.astro](apps/web/src/components/ScorePill.astro)
+2. **Capability chips** — `AI-NATIVE`, `MCP`, `API`, `FREE-TIER`. Outlined, monochrome. [CapabilityChip.astro](apps/web/src/components/CapabilityChip.astro)
+3. **Pricing label** — `$149/mo · usage-based`, mono. [PricingLabel.astro](apps/web/src/components/PricingLabel.astro)
+4. **Vertical tag** — geometric mark + label, monochrome (no per-vertical hue). [VerticalTag.astro](apps/web/src/components/VerticalTag.astro)
+5. **AI-generated / AI-translated badge** — pinned to every page; treated as brand asset, not disclosure. [AiGeneratedBadge.astro](apps/web/src/components/AiGeneratedBadge.astro)
+6. **Tool card** — index list cell. [ToolCard.astro](apps/web/src/components/ToolCard.astro)
+7. **Comparison strip** — `A vs B` with marks + category. [ComparisonStrip.astro](apps/web/src/components/ComparisonStrip.astro)
+8. **Workflow card** — artifact-type icon + stack logos + difficulty + time. [WorkflowCard.astro](apps/web/src/components/WorkflowCard.astro) (icon glyph: [ArtifactTypeIcon.astro](apps/web/src/components/ArtifactTypeIcon.astro))
+9. **Stack badge row** — horizontal logos with hover names; for workflows + stacks. [StackBadgeRow.astro](apps/web/src/components/StackBadgeRow.astro)
+10. **Spec table** — replaces the raw `<dl>` on tool detail; sticky, dense, mono numerics. [SpecTable.astro](apps/web/src/components/SpecTable.astro) (+ row primitive [SpecRow.astro](apps/web/src/components/SpecRow.astro))
+11. **AEO answer block** — for `/learn`: `target_questions[]` rendered as a "this page answers" panel. Brand asset *and* citation signal. [AeoAnswerBlock.astro](apps/web/src/components/AeoAnswerBlock.astro)
+12. **Score breakdown bars** — for `ooligo_score_breakdown`. Bars, not radar (ops people mistrust radar). [ScoreBreakdownBars.astro](apps/web/src/components/ScoreBreakdownBars.astro)
+13. **Cross-link rail** — closes the link budget enforced by the validator (3 alt tools, 1 comparison, 2 workflows, 2 learn — per [ARCHITECTURE.md](./ARCHITECTURE.md)). [CrossLinkRail.astro](apps/web/src/components/CrossLinkRail.astro)
+14. **Empty state** — `/tools`, `/vs`, `/workflows`, `/learn` are mostly empty pre-launch; empty states are a first-class surface. [EmptyState.astro](apps/web/src/components/EmptyState.astro)
+15. **Inline artifact preview** — for workflow `preview_lang`: syntax-highlighted code/markdown. [InlineArtifactPreview.astro](apps/web/src/components/InlineArtifactPreview.astro)
+16. **Tool monogram fallback** — when a vendor logo is missing, renders a typographic mark (first letter, mono, accent) so the catalog grid stays rhythmic. [ToolMonogram.astro](apps/web/src/components/ToolMonogram.astro)
 
-## Page-by-page plan
+Layout primitives — [Container.astro](apps/web/src/components/Container.astro), [Section.astro](apps/web/src/components/Section.astro), [Prose.astro](apps/web/src/components/Prose.astro), [JsonLd.astro](apps/web/src/components/JsonLd.astro), [LearnCard.astro](apps/web/src/components/LearnCard.astro) — round out the system.
 
-Matches `apps/web/src/pages/[locale]/`.
+An internal preview surface at [pages/design.astro](apps/web/src/pages/design.astro) renders every primitive in isolation for QA.
 
-### Home — `index.astro`
+## Page templates
 
-Hero (mono headline, sub, primary CTA → `/tools`, secondary → newsletter) · live counters strip (indexed pages, verticals, locales — from `ROADMAP.md` public metrics) · 3 vertical cards (RevOps flagship larger), each shows starter stack as logo row · featured rails (top tools / new comparisons / new workflows) · AEO block ("What ooligo is") · build-in-public strip · newsletter block.
+Mirrors `apps/web/src/pages/[locale]/`.
 
-### Tools index — `tools/index.astro`
+### Home — [index.astro](apps/web/src/pages/[locale]/index.astro)
 
-Filter rail (sticky on desktop, drawer on mobile): vertical · category · AI-native · MCP · API · pricing model · score range. Result count + sort (alpha / score / recent). 2–3 col card grid + dense-list toggle. Category section headers stay (per current template), restyled as sticky sub-headers.
+Hero (mono headline, sub, primary CTA → `/tools`, secondary → newsletter) · live counters strip (indexed pages, verticals, locales — sourced from [ROADMAP.md](./ROADMAP.md) public metrics) · 3 vertical cards (RevOps flagship larger), each shows starter stack as logo row · featured rails (top tools / new comparisons / new workflows) · AEO block ("What ooligo is") · build-in-public strip · newsletter block.
 
-### Tool detail — `tools/[slug].astro`
+### Tools index — [tools/index.astro](apps/web/src/pages/[locale]/tools/index.astro)
+
+Filter rail (sticky on desktop, drawer on mobile): vertical · category · AI-native · MCP · API · pricing model · score range. Result count + sort (alpha / score / recent). 2–3 col card grid + dense-list toggle. Category section headers stay (per current template), styled as sticky sub-headers.
+
+### Tool detail — [tools/[slug].astro](apps/web/src/pages/[locale]/tools/[slug].astro)
 
 Header band (name + category + capability chips + score pill). 8/4 split: MDX article + sticky **spec card** (pricing, integrations, score breakdown bars, last reviewed, AI-generated badge, affiliate CTA). Below body: alternatives rail · "featured in comparisons" · "workflows using" · "learn about category". Closes the cross-link budget.
 
-### Comparisons index — `vs/index.astro`
+### Comparisons index — [vs/index.astro](apps/web/src/pages/[locale]/vs/index.astro)
 
 Tabs: Pairwise / Roundup / Alternatives. Pairwise: `A vs B` cards. Roundup: "Best X tools" with first-3 logos. Filters: vertical, category.
 
-### Comparison detail — `vs/[slug].astro`
+### Comparison detail — [vs/[slug].astro](apps/web/src/pages/[locale]/vs/[slug].astro)
 
 Pairwise: two-column hero (logos + score pills + category). Roundup / alternatives: ranked list with score-bars. **Compare table** with sticky header row, mono numerics, integration-overlap highlight, score-bar cells. MDX commentary below; "View tool" CTA per column.
 
-### Workflows index — `workflows/index.astro`
+### Workflows index — [workflows/index.astro](apps/web/src/pages/[locale]/workflows/index.astro)
 
 Cards (artifact-type icon + title + stack logos + difficulty + time). Filter rail: artifact_type · vertical · role · difficulty.
 
-### Workflow detail — `workflows/[slug].astro`
+### Workflow detail — [workflows/[slug].astro](apps/web/src/pages/[locale]/workflows/[slug].astro)
 
 Header (title + artifact-type chip + difficulty + time + roles) · stack row (logos linked to tool pages) · **Download** CTA card (filename, size, format) · inline artifact preview (`preview_lang`) · "How to install" from MDX · related workflows + related learn.
 
-### Learn index — `learn/index.astro`
+### Learn index — [learn/index.astro](apps/web/src/pages/[locale]/learn/index.astro)
 
 Two views: **Glossary** (alphabetical, letter-jumped) / **By topic** toggle. Cards: title + type chip + 1-line `target_questions[0]`. Filter: type · vertical.
 
-### Learn detail — `learn/[slug].astro`
+### Learn detail — [learn/[slug].astro](apps/web/src/pages/[locale]/learn/[slug].astro)
 
 Reading-width container (720). Top: `target_questions[]` rendered as the AEO answer block. Sticky right-rail TOC (auto from h2/h3). Type-specific layouts: definition (def-box top), faq (Q&A list), how-to (numbered steps with anchor links). Bottom cross-link rail.
 
-### Vertical landing — `r/[vertical].astro`
+### Vertical landing — [r/[vertical].astro](apps/web/src/pages/[locale]/r/[vertical].astro)
 
 Hero (name + tagline + ICP) · "the starter stack" (visual grid of `starter_tools`) · curated stack cards · three rails (top workflows / top comparisons / top tools) · glossary essentials · vertical-scoped newsletter CTA (uses `newsletter_id`).
 
-### Stack detail — `stacks/[slug]` *(in arch, not yet routed)*
+### Stack detail
 
-Static SVG end-to-end stack diagram (boxes + arrows) · tool list with role-in-stack · workflows that operate this stack · "Build this" CTA → workflow library.
+Defined in [ARCHITECTURE.md](./ARCHITECTURE.md) but not yet routed under `pages/[locale]/`. Target layout: static SVG end-to-end stack diagram (boxes + arrows) · tool list with role-in-stack · workflows that operate this stack · "Build this" CTA → workflow library.
 
-## Programmatic assets
+## Programmatic surfaces
 
-- **OG image generator** — Astro endpoint emitting per-page OG images: tool, comparison, workflow, learn, vertical templates. Critical for share traffic; reuses tokens.
-- **Logo system** — wordmark + glyph mark + 3 vertical mini-marks (geometric, monochrome).
-- **Sitemap / robots / 404** — styled to brand, not browser default.
+- **OG image generator.** [og.svg.ts](apps/web/src/pages/og.svg.ts) for the home OG; per-entity endpoints under [pages/og/[locale]/](apps/web/src/pages/og/) cover tool, comparison, workflow, learn, and vertical templates — all sharing the same tokens.
+- **Logo system.** Wordmark + glyph mark in [Wordmark.astro](apps/web/src/components/Wordmark.astro); the glyph reappears as favicon source and vertical mini-marks.
+- **Sitemap / robots / 404.** Sitemap and robots ship via standard Astro config; the [404.astro](apps/web/src/pages/404.astro) page is styled to brand, not browser default.
 
 ## Tech execution
 
-- **CSS.** Tailwind v4 with single-file `@theme` block holding all tokens. Zero runtime, fits Astro static-first, single source of truth.
+- **CSS.** Tailwind v4 with a single-file `@theme` block holding all tokens. Zero runtime, fits Astro static-first, single source of truth.
 - **Icons.** Lucide for UI; Simple Icons for vendor marks where MIT-licensed, self-hosted SVG otherwise.
-- **No light theme.** Single-theme is the brief; revisit only if research shows dark hurts.
+- **No light theme.** Single-theme is the brief; revisited only if research shows dark hurts.
 - **Performance budget.** HTML <30 KB, CSS <30 KB, fonts <80 KB total (woff2, subset). Lighthouse Perf ≥95 mobile.
 - **Accessibility.** Contrast ≥4.5:1 body, ≥3:1 large; focus rings on every interactive; skip-to-content; reduced-motion; ARIA for chips/pills; cross-locale audit (ES/PT-BR strings run 20–30% longer — layouts must not break).
-
-## Phased implementation
-
-| Phase | Scope | Output |
-|---|---|---|
-| **D0 — Foundation** (1–2d) | Tailwind v4 + `@theme` tokens, self-hosted variable fonts, wordmark + favicon, BaseLayout adopts theme | Visible "before/after" baseline |
-| **D1 — Chrome** (2–3d) | Header, footer, container/section primitives, breadcrumbs, locale switcher, GitHub + newsletter CTA | All 10 templates framed |
-| **D2 — Component library** (3–4d) | All 16 primitives, exposed at private `/_design` route | Reusable building blocks |
-| **D3 — Index pages** (3–4d) | `/tools`, `/vs`, `/workflows`, `/learn` filter rails + grids + empty states | Browsing surface usable |
-| **D4 — Detail pages** (4–5d) | Tool 8/4 split + spec card; comparison hero + table; workflow download/preview; learn TOC + type variants; cross-link rails | Money pages on-brand |
-| **D5 — Vertical pages** (1–2d) | `/r/[vertical]` full layout | Vertical landings live |
-| **D6 — Programmatic assets** (2–3d) | OG image generator, monogram fallback, styled sitemap/robots/404 | Off-site brand consistent |
-| **D7 — Polish + perf** (2–3d) | Lighthouse, a11y, cross-locale, print stylesheet for `/learn` | Ship-ready |
-
-Total ≈ 18–26 working days for the full surface to be on-brand.
 
 ## What we're NOT designing (and why)
 
@@ -184,7 +179,7 @@ Total ≈ 18–26 working days for the full surface to be on-brand.
 - **Custom illustrations** — wrong register for ops audience.
 - **Animated hero** — costs JS, fights static-first, ages fast.
 - **Mega marketing landing** — home is just another content page with a slightly bigger hero.
-- **Vertical-specific page templates** — engine remixes the universal catalog (per architecture); design must stay universal too.
+- **Vertical-specific page templates** — engine remixes the universal catalog (per architecture); design stays universal too.
 
 ## Locked decisions
 
