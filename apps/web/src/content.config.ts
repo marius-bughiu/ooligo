@@ -15,8 +15,6 @@ const baseFrontmatter = {
   slug: SLUG,
   canonical_slug: SLUG,
   locale: LOCALE,
-  ai_generated: z.boolean(),
-  ai_translated: z.boolean().optional(),
   translated_from: z.string().optional(),
   translated_at: z.string().optional(),
   translation_model: z.string().optional(),

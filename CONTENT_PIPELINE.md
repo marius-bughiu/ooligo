@@ -46,9 +46,8 @@ Required fields on every EN page:
 - `canonical_slug` (shared across locale variants — this is how hreflang clusters are computed)
 - `locale: en`
 - `verticals` (array of vertical IDs from `content/verticals.json`)
-- `ai_generated: true` (always — used by the content pipeline for provenance tracking)
 
-Translation-specific frontmatter (`ai_translated`, `translated_from`, `translated_at`, `translation_model`, `source_sha256`) is the responsibility of the translation skills — see `.claude/skills/translate-<locale>/SKILL.md`.
+Translation-specific frontmatter (`translated_from`, `translated_at`, `translation_model`, `source_sha256`) is the responsibility of the translation skills — see `.claude/skills/translate-<locale>/SKILL.md`.
 
 ## Translation queue and skills
 

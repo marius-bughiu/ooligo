@@ -85,8 +85,6 @@ ooligo_score_breakdown:
 last_reviewed: 2026-05-02
 last_refreshed: 2026-05-02              # auto-updated by refresh pipeline
 affiliate_link: https://clay.com?ref=ooligo
-ai_generated: true                      # transparency flag
-ai_translated: false                    # set true on non-canonical locale variants
 ---
 
 # (MDX body: overview, pros, cons, alternatives, screenshots, use cases)
@@ -105,8 +103,6 @@ tool_b: apollo                          # required for pairwise
 tools: [clay, apollo, lemlist]          # required for roundup/alternatives
 verticals: [revops, sales]
 last_updated: 2026-05-02
-ai_generated: true
-ai_translated: false
 ---
 ```
 
@@ -125,8 +121,6 @@ difficulty: intermediate                # one of: beginner, intermediate, advanc
 time_to_setup: 30min
 download_url: /downloads/lead-enrichment-clay-claude.zip
 preview_lang: markdown                  # for the inline preview block
-ai_generated: true
-ai_translated: false
 human_tested: true                      # workflows must be tested before publishing
 ---
 ```
@@ -147,8 +141,6 @@ target_questions:                       # the AEO queries this page answers
   - "What does a RevOps team do?"
   - "RevOps vs Sales Ops"
 last_updated: 2026-05-02
-ai_generated: true
-ai_translated: false
 ---
 ```
 
@@ -163,8 +155,6 @@ verticals: [revops, sales]
 tools: [clay, apollo, claude, gong, default]
 use_case: outbound-sdr-team
 difficulty: intermediate
-ai_generated: true
-ai_translated: false
 ---
 ```
 
@@ -200,7 +190,6 @@ Validator runs in CI; PRs failing the link budget are blocked.
 Every non-`en` content file is generated from its `en` sibling and tagged:
 
 ```yaml
-ai_translated: true
 translated_from: en/clay.mdx
 translated_at: 2026-05-15T12:00:00Z
 translation_model: claude-sonnet-4-6

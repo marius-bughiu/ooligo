@@ -30,7 +30,6 @@ Execute these steps in order. Stop at the first failure (don't push broken build
 6. **Write the target MDX** at `target`. Frontmatter rules:
    - Copy these fields verbatim from EN: `slug`, `canonical_slug`, `verticals`, and **all entity-specific fields** (`name`, `category`, `subcategories`, `pricing_model`, `pricing_starts_at`, `pricing_url`, `website`, `ai_native`, `mcp_available`, `api_available`, `integrations`, `ooligo_score`, `ooligo_score_breakdown`, `last_reviewed`, `last_refreshed`, `affiliate_link`, etc.). These are structural data, not translatable display strings.
    - Set `locale: de`.
-   - Set `ai_generated: true`, `ai_translated: true`.
    - Set `translated_from: en/<basename of source>.mdx`.
    - Set `translated_at` to now in ISO-8601 UTC with seconds precision (e.g. `"2026-05-02T22:58:47Z"`).
    - Set `translation_model: claude-opus-4-7`.
