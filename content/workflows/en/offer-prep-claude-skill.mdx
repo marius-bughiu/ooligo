@@ -13,81 +13,256 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that takes a candidate's full interview history plus the role's compensation parameters and produces an offer-prep brief — recommended offer composition, anticipated negotiation points, candidate-specific closing strategy, and competing-offer-handling considerations. Replaces the typical "we'll figure out the offer when we get there" approach with a 15-minute structured prep that materially improves [offer acceptance rate](/en/learn/offer-acceptance-rate/).
+A Claude Skill that takes a candidate's full interview record plus the role's
+internal compensation band and produces an offer-prep brief — recommended
+offer composition, anticipated negotiation, candidate-specific closing
+strategy, and an explicit escalation flag when the recommendation needs
+comp-committee review. Replaces the typical "we'll figure out the offer when
+we get there" approach with a 15-minute structured prep that materially
+improves [offer acceptance rate](/en/learn/offer-acceptance-rate/) on senior
+hires without training the team to chase unverified competing-offer claims.
 
-## What you'll need
+The Skill is designed to be the recruiter's pre-call brief, not the offer
+itself. It produces a recommendation the recruiter and hiring manager review;
+where the recommendation falls outside band, posted-range, or internal-equity
+guardrails, the brief sets `escalation: comp-committee` and stops. That
+escalation behaviour is the point — a comp tool that always returns a number
+trains the team to ignore it the first time the number is wrong.
 
-- Claude Code or Claude.ai with custom Skills enabled
-- Candidate's interview record from [Ashby](/en/tools/ashby/), [Greenhouse](/en/tools/greenhouse/), or [Lever](/en/tools/lever/) — scorecards, debrief notes, candidate's stated motivations
-- Role compensation parameters — salary range, equity range, bonus structure, level mapping
-- Optional: market-data benchmarks (Levels.fyi, Pave, Carta market data)
+## When to use
+
+Use the Skill before the recruiter opens the offer conversation, once the
+hiring manager has signed off "yes, we want to make an offer to this person."
+Typical triggers:
+
+- Senior+ IC roles, all manager+ roles.
+- Any role where the band has more than 15 percent spread between floor and
+  ceiling.
+- Any role where competing-offer signal has surfaced during the loop.
+- Any hire in a posted-pay-range jurisdiction (CA, CO, NY, WA, IL, and
+  others), where mis-placing the offer outside the posted range creates
+  legal exposure.
+
+The Skill loads the role's comp band, the candidate's interview record, and
+any competing-offer evidence the recruiter has captured. It returns a
+markdown brief covering composition, rationale, anticipated pushback,
+closing strategy, and either a within-band recommendation or a comp-committee
+escalation with the triggering criteria named.
+
+## When NOT to use
+
+- **Auto-extending offers without human review.** The output is a brief.
+  The recruiter and hiring manager — and where required, the comp
+  committee — approve before any number reaches the candidate. The Skill
+  never produces send-ready offer-letter language.
+- **Customer-facing or candidate-facing comms about competing offers.**
+  The Skill reasons about competing-offer signal internally to size the
+  recommendation. It does not draft messages to the candidate that
+  reference, validate, or counter a competing offer — that is a
+  recruiter judgment call, often a legal one.
+- **Replacing the comp committee on above-band recommendations.** Any
+  recommendation that lands above the published band, outside posted
+  pay-range jurisdictions, or that creates a new internal-equity
+  exception triggers comp-committee escalation. The Skill does not
+  pre-decide what the committee should approve.
+- **Reasoning over current-salary anchors.** Asking for or anchoring
+  against the candidate's current employer salary is illegal in many US
+  states and several EU jurisdictions. The Skill's method does not
+  request or accept a current-salary input.
+- **Junior, in-band, single-component offers.** A new-grad role at the
+  band midpoint with no competing-offer signal does not need this prep.
+  The Skill is overkill for offers where the recruiter's standard
+  template already does the job.
 
 ## Setup
 
-1. **Drop the Skill.** Place `offer-prep.skill` into your Claude Code skills directory. The Skill exposes one callable function: `prep_offer`.
-2. **Configure compensation parameters.** Edit `comp_framework.yaml` with: levels, salary bands per level, equity bands per level, bonus structure, geographic adjustments.
-3. **Test on closed candidates.** Run on candidates whose offer prep already happened; compare the Skill's recommendations to what the team actually did. Tune the framework.
+1. **Drop the Skill.** Place the contents of the artifact bundle into your
+   Claude Code skills directory at `.claude/skills/offer-prep/`. The bundle
+   contains `SKILL.md` plus three reference files under `references/`.
+2. **Replace the template references with your real bands and rules.** The
+   Skill is unbounded without them.
+   - `references/1-comp-band-template.md` — split into one file per role
+     family (Engineering, GTM, Product, etc.) and document floor /
+     midpoint / ceiling per level for base, bonus, equity, and signing.
+     Document your geographic adjustment table and your signing-bonus
+     policy. Document the internal-equity guardrail percentage.
+   - `references/2-competing-offer-evidence.md` — keep the format as the
+     recruiter-facing template. The recruiter fills it in per candidate
+     before invoking the Skill.
+   - `references/3-escalation-criteria.md` — replace the `REPLACE %`
+     placeholders with your actual thresholds (above-band, equity stretch,
+     internal-equity breach, pay-equity-pattern lookback window) and
+     document who sits on the comp committee, what the SLA is, and where
+     decisions are logged.
+3. **Test on closed offers.** Run the Skill on five recent offers whose
+   prep already happened (extended, accepted or declined, far enough in
+   the past that you have outcome data). Compare the Skill's
+   recommendation to what the team actually offered. The point is not
+   "the Skill matched" — it is identifying the cases where the Skill
+   would have flagged a comp-committee escalation that the team skipped,
+   or recommended a different placement than the team chose. Tune the
+   bands and thresholds based on what you find.
 
-## How it works
+## What the Skill actually does
 
-The Skill takes the candidate context and:
+The method runs six sub-tasks in fixed order. The order matters — the
+comp-band check in step 1 gates whether steps 2-5 produce a recommendation
+at all.
 
-1. **Reviews the candidate's stated motivations.** From recruiter screen and HM screen notes — what the candidate said matters to them about the role, compensation, location, growth.
-2. **Identifies competing-offer signals.** From candidate interactions — mentioned other processes, mentioned competing offers, time pressure on decision.
-3. **Maps to comp framework.** Recommends offer composition (base, bonus, equity, signing) within the role's bands, calibrated to the candidate's seniority signal from interviews.
-4. **Drafts negotiation anticipation.** What the candidate is likely to push back on; recommended responses; walk-away thresholds.
-5. **Drafts closing strategy.** Specific to this candidate — what to emphasize, what to address proactively, what timing pressure to apply (or relieve).
+1. **Pull the comp band first.** Loading the band before reading anything
+   about the candidate avoids anchoring bias toward whatever the candidate
+   said they wanted. If the loop signal points outside the band, the
+   brief escalates rather than fitting a story to a predetermined number.
+2. **Read the interview signal.** The Skill extracts level calibration
+   from the debrief, stated motivations from the recruiter and HM
+   screens, and risk signals (commute, equity-vs-cash preference, role
+   scope ambiguity, manager-fit anxiety). If the loop did not calibrate
+   level — fewer than four interviewers, mixed signal — the Skill
+   surfaces that as a blocker rather than guessing midpoint.
+3. **Factor competing offers explicitly.** Each competing offer is
+   classified as `verified` (offer letter seen or third-party
+   confirmation), `claimed-credible` (specifics match seniority and the
+   named company's known band), or `claimed-unverified` (vague mention,
+   no specifics). Unverified claims never drive a recommendation
+   outside the band. The classification is visible in the rationale so
+   the team decides how much weight to give it.
+4. **Recommend offer composition.** Place base within the band based on
+   level calibration and competing-offer weight. Place equity using the
+   company's standard grant for the level unless the loop or competing
+   offer justifies a stretch. Place signing only if there is a specific
+   reason (relocation, unvested-equity bridging, comp gap that base
+   cannot close without breaking internal equity). Compute Year-1 cash,
+   Year-1 plus annualized equity, and equity at the most-recent 409a or
+   last-round price.
+5. **Draft anticipated negotiation and closing.** For each likely
+   pushback (drawn from interview signal plus competing offers), name
+   the specific likely push, the recommended response, and the
+   walk-away threshold. The closing strategy names what to lead with,
+   what to address proactively, what timing pressure to apply or
+   relieve, and what role the hiring manager plays in the call.
+6. **Set escalation flag.** Run the recommendation through the
+   escalation criteria. If any hard trigger fires (above-band base,
+   above-band equity, above-policy signing, internal-equity breach,
+   outside posted pay range, pay-equity pattern risk), set
+   `escalation: comp-committee`, list the triggered criteria, and
+   stop. Soft triggers (split level calibration, claimed-credible
+   competing offer, comp-priority candidate at midpoint) flag but do
+   not block.
 
-## Output
+The full method, output template, and watch-outs live in
+[`apps/web/public/artifacts/offer-prep-claude-skill/SKILL.md`](/artifacts/offer-prep-claude-skill/SKILL.md).
+The reference templates the recruiter adapts live in
+[`apps/web/public/artifacts/offer-prep-claude-skill/references/1-comp-band-template.md`](/artifacts/offer-prep-claude-skill/references/1-comp-band-template.md),
+[`apps/web/public/artifacts/offer-prep-claude-skill/references/2-competing-offer-evidence.md`](/artifacts/offer-prep-claude-skill/references/2-competing-offer-evidence.md),
+and
+[`apps/web/public/artifacts/offer-prep-claude-skill/references/3-escalation-criteria.md`](/artifacts/offer-prep-claude-skill/references/3-escalation-criteria.md).
 
-A complete offer-prep brief with:
+## Cost reality
 
-```markdown
-# Offer Prep: [Candidate] — [Role]
+A single offer-prep run reads the candidate's interview record (typically
+5K-15K tokens of debrief notes and screen transcripts), the comp band file
+for the role family (1K-3K tokens), and the two evidence/escalation
+templates (1K tokens combined). Output is a 1K-2K-token brief. With
+[Claude Sonnet 4.6](/en/tools/claude-code/) at current pricing, a single
+prep lands in the 3-8 cent range — measurably less than one minute of a
+senior recruiter's loaded cost.
 
-## Recommended offer
-- Base: $X
-- Bonus: Y% target
-- Equity: Z RSUs / options vesting over 4 years
-- Signing: $W (one-time)
-- Start date: [target date]
-- Total Year 1 cash: $X+Y
-- Year 1 + equity: $X+Y+(Z/4)
+Time saved per recruiter is the larger number. Recruiters running the
+Skill before senior offers report cutting offer-prep time from 45-60
+minutes (gathering debrief notes, building a comp recommendation in a
+spreadsheet, drafting negotiation scenarios in a doc) to 15-20 minutes
+(reviewing the brief, validating the competing-offer evidence,
+deciding whether to escalate). On a recruiter carrying 8-12 senior
+requisitions, that is roughly 4-6 hours per week reclaimed.
 
-## Why this composition
-[Reasoning — interview signal, level mapping, market context]
+The bands and thresholds in the reference files are the load-bearing
+investment, not the Skill itself. Plan on 3-5 hours from a comp
+partner to do the initial fill, and 30 minutes per quarter to refresh.
 
-## Candidate's stated motivations
-- [What they said matters to them, with source notes]
+## Success metric
 
-## Anticipated negotiation
-- Likely push: [specific to candidate]
-  - Recommended response: [specific]
-  - Walk-away: [threshold]
+Watch [offer acceptance rate](/en/learn/offer-acceptance-rate/) at senior
+levels (L5+ IC, M4+ manager) over a rolling 90-day window. Mature
+programs report a 10-20 percentage-point improvement at senior levels
+once structured offer prep replaces ad-hoc prep, with most of the gain
+coming from candidates who would have declined over a closeable
+objection (commute, equity preference, comp-committee approval timing)
+that the brief surfaced and addressed.
 
-## Competing offer signals
-- [What we know about other processes the candidate is in]
+A second metric to watch: the share of offers that triggered
+comp-committee escalation but were declined by committee. Above roughly
+20-30 percent decline rate, the bands or thresholds in the reference
+files are mis-calibrated — recruiters are spending committee time on
+cases that should never have escalated, or the bands need to widen.
 
-## Closing strategy
-- Lead with: [what to emphasize]
-- Address proactively: [concerns from interviews]
-- Decision timeline: [recommended approach]
-- Hiring manager involvement: [what role they should play]
+## vs alternatives
 
-## Open questions for the team
-- [Anything the prep can't resolve and needs the team to decide]
-```
-
-## Where it fits
-
-Use this Skill before extending every offer above a certain seniority threshold (typically all senior+ roles, all hires above a comp band). The recruiter and hiring manager both review the brief, then the recruiter extends the offer with the strategy in mind.
-
-The compounding benefit: well-prepped offers convert at materially higher rates than ad-hoc offers. Mature programs report 10-20 percentage point improvement in [offer acceptance rate](/en/learn/offer-acceptance-rate/) at senior levels.
+- **Manual recruiter math.** A spreadsheet plus the comp band PDF works.
+  It scales poorly: every recruiter builds a slightly different
+  recommendation logic, competing-offer claims drift into anchors
+  without verification classification, and pay-equity patterns are
+  invisible until an audit surfaces them. The Skill makes the logic
+  explicit and the escalation behaviour consistent across recruiters.
+- **Ashby and Greenhouse comp tools.** [Ashby](/en/tools/ashby/) and
+  [Greenhouse](/en/tools/greenhouse/) both ship offer-management
+  modules with band enforcement and approval workflows. They handle the
+  approval-routing layer well — they do not produce a candidate-specific
+  brief that reasons over interview signal, competing-offer evidence,
+  and closing strategy. Use the ATS module for routing and audit; use
+  the Skill for the brief that feeds the routing.
+- **Comp committee deliberation on every senior offer.** Sending every
+  senior offer to comp committee burns the committee's time on
+  in-band cases that do not need their attention. The Skill's
+  escalation logic routes only the cases that genuinely need
+  committee judgment, leaving the rest to recruiter-and-HM approval
+  on the brief alone.
+- **Pave or Carta market-data tools alone.** Market data is an input
+  to the band, not a substitute for a candidate-specific brief.
+  Loading market data without a structured method to combine it with
+  interview signal and competing-offer classification produces the
+  failure mode this Skill is designed to prevent — recruiters
+  citing market percentiles to justify above-band offers that the
+  internal band does not support.
 
 ## Watch-outs
 
-- **Comp framework quality determines recommendation quality.** A vague comp framework produces vague recommendations. Invest in the framework before deploying the Skill.
-- **Don't auto-send offers.** AI-prepped offer terms still require leadership approval. The Skill produces the recommendation; humans approve and extend.
-- **Sample-validate the recommendations.** Periodically compare Skill recommendations to what the team actually offers; identify drift in either direction.
-- **Don't surface protected-class signals.** Negotiation strategy should not consider candidate demographics; verify the prompt explicitly excludes protected-class proxies from its reasoning.
-- **Pay-transparency compliance.** Some jurisdictions require posted pay ranges; verify the offer recommendation is within the posted range to avoid legal exposure.
+- **Pay-equity drift.** Repeated above-midpoint offers concentrated in
+  one demographic pattern accumulate into pay-equity exposure even when
+  each individual offer is defensible. Guard: the brief includes a
+  pay-equity-check block listing the last five offers at the same level
+  plus geo and their band-position. If the new recommendation would
+  extend a pattern, the brief sets `escalation: comp-committee`
+  regardless of size.
+- **Jurisdictional pay-disclosure laws.** Posted-pay-range laws
+  require the offer to fall within the posted range. Guard: the
+  `posted_range` input is required for those jurisdictions. If
+  missing, the Skill refuses to produce a number and asks the
+  recruiter to confirm the posted range first.
+- **Unverified competing-offer claims.** Candidates sometimes inflate
+  or invent competing offers; recruiters sometimes let those claims
+  drive escalation. Guard: every competing-offer entry is classified
+  per the verification rules in
+  [`references/2-competing-offer-evidence.md`](/artifacts/offer-prep-claude-skill/references/2-competing-offer-evidence.md),
+  and unverified claims never drive a recommendation outside band.
+- **Stale comp bands.** A Skill bounded by 18-month-old bands
+  produces 18-month-old recommendations. Guard: refresh the
+  reference files quarterly; the templates include a
+  `last reviewed` field the brief surfaces if it is older than the
+  refresh cadence.
+- **Don't surface protected-class signals.** Negotiation strategy
+  must not consider candidate demographics or current-employer pay
+  history. Guard: the method reads only the interview record, the
+  comp band, and the explicit competing-offer evidence — it does not
+  request or accept current-salary or demographic fields.
+
+## Stack
+
+This workflow sits in the [recruiting](/en/r/recruiting/) vertical,
+typically alongside [Ashby](/en/tools/ashby/) or
+[Greenhouse](/en/tools/greenhouse/) as the system of record for the
+interview loop and offer-approval routing,
+[Claude Code](/en/tools/claude-code/) as the runtime for the Skill, and
+optionally Pave or Carta as the market-data feed for the
+quarterly band refresh. See the
+[recruiting workflows](/en/r/recruiting/) index for related prep
+artefacts.

@@ -13,52 +13,300 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that takes a batch of documents from an [eDiscovery](/en/learn/ediscovery/) review platform and runs first-pass [privilege review](/en/learn/privilege-review/) — flagging each document as `privileged`, `not-privileged`, or `borderline-needs-attorney`, plus drafting the [privilege log](/en/learn/privilege-log-format/) entry for each privileged document. Designed to plug into an existing review workflow rather than replace the review platform.
+A Claude Skill that takes a batch of documents — typically a folder of email
+and attachments exported from an [eDiscovery](/en/learn/ediscovery/) review
+platform, or a directory of contracts pulled from CLM — and runs a first-pass
+[privilege review](/en/learn/privilege-review/). For each document it emits
+one of `privileged`, `not-privileged`, or `borderline-needs-attorney`,
+backed by citation-grounded evidence spans, plus a draft
+[privilege log](/en/learn/privilege-log-format/) entry for every document
+classified `privileged`.
 
-## What you'll need
+This is a triage layer, not a determination layer. The skill compresses an
+attorney's first pass over a five-figure document universe into a routing
+decision: 70-80% obviously not privileged, 10-15% obviously privileged
+with draft log entries pre-written, 10-20% in a borderline queue with the
+specific concern (attorney role unclear, third-party present, partial
+privilege, waiver indicator) named so the reviewing attorney spends time
+on the records that actually need judgment. Final calls remain attorney
+work.
 
-- Claude Code or Claude.ai with custom Skills enabled and Tier-A authorization for privileged content per [AI policy](/en/learn/ai-policy-for-legal-teams/)
-- Document export from your review platform ([Relativity](/en/tools/relativity/), [Everlaw](/en/tools/everlaw/), [DISCO](/en/tools/disco/)) as a folder of files plus metadata `.csv`
-- Privilege determination criteria documented for the matter (which attorneys, which subject matters, jurisdiction-specific rules)
-- Sample of attorney-pre-tagged documents for calibration (50-100 documents recommended)
+The bundle at `apps/web/public/artifacts/privilege-review-batch-skill/`
+contains `SKILL.md`, plus three reference templates the matter team
+populates before running on production documents:
+`references/1-privilege-rubric.md`,
+`references/2-privilege-log-format.md`, and
+`references/3-jurisdictional-tests.md`.
+
+## When to use
+
+- **eDiscovery first pass.** A 5,000-50,000 document review universe lands
+  on the team's plate after collection and dedupe. Attorney-only review
+  costs 10-30 minutes per document at $400-700/hour for contract attorneys
+  and far more for associate time. Running this skill first means
+  attorneys touch the borderline queue and a sample of the high-confidence
+  set, not every document.
+- **CLM privilege audit.** A regulator request, M&A diligence, or
+  internal audit needs the contract repository swept for documents
+  mistakenly tagged "privileged" (over-claim) or missing the tag where
+  it should apply (under-claim). The skill batches the corpus and
+  surfaces the discrepancies for attorney review.
+- **Investigation triage.** Before a custodian's mailbox is handed to
+  outside counsel for production, the skill classifies in-house so
+  privileged content is routed through counsel rather than included in
+  a bulk hand-off.
+- **Calibrating a new rubric.** When the matter is new and the team
+  has not yet locked the privilege rubric, run the skill on a 200-500
+  document sample, compare its calls to attorney decisions, tune the
+  rubric in `references/1-privilege-rubric.md`, repeat. The
+  calibration mode (step 4 in `SKILL.md`) is built for this loop.
+
+## When NOT to use
+
+- **Final privilege calls.** The output is a recommendation. A document
+  marked `privileged` here still needs attorney sign-off before being
+  withheld from production; a document marked `not-privileged` still
+  needs attorney spot-check before release. Producing privileged
+  material because the skill said it was clean is a malpractice
+  exposure no confidence score insulates against.
+- **Non-Tier-A AI vendors.** Privileged content cannot be routed
+  through consumer-tier Claude, a general-purpose chatbot, a browser
+  plugin, or an unvetted SaaS wrapper. The skill hard-checks the
+  configured endpoint against the allowlist in
+  `references/3-jurisdictional-tests.md` at startup and refuses to run
+  if the endpoint is off-list. See [AI policy for legal teams](/en/learn/ai-policy-for-legal-teams/)
+  for the underlying framework.
+- **Automated production decisions.** No document should be released
+  to a requesting party based on the skill's output alone. Production
+  is an attorney decision against the full record.
+- **In-flight negotiation drafts with outside counsel.** Most firm AI
+  policies exclude live drafts from AI tooling. Run on executed and
+  inbound documents, not on what is currently being red-lined.
+- **Scanned-image PDFs without an OCR layer.** The skill aborts with
+  `error: "ocr_required"` rather than producing empty text and
+  silently classifying the document as not-privileged. OCR is a
+  separate upstream concern.
 
 ## Setup
 
-1. **Drop the Skill.** Place `privilege-review-batch.skill` into your Claude Code skills directory. The Skill exposes two callable functions: `classify_batch` and `draft_log_entries`.
-2. **Configure matter parameters.** Edit `matter_config.yaml` with: list of attorney custodians (in-house and outside), the matter's relevant subject-matter scope, applicable jurisdictional rules, the privilege standard (attorney-client only, attorney-client + work product, etc.).
-3. **Calibrate against attorney-tagged sample.** Run the Skill on the 50-100 sample documents; compare AI tags to attorney tags; adjust matter config if the Skill systematically over- or under-flags.
-4. **Run on the full batch.** Process the document export folder; produce per-document classification + draft log entries for privileged documents.
+1. **Drop the Skill.** Place `privilege-review-batch.skill` into your
+   Claude Code skills directory or your enterprise Claude tenant. The
+   skill exposes one entry point that runs the full batch:
+   `process_batch(batch_path, metadata_csv, rubric_path, jurisdiction,
+   prior_decisions_csv?, borderline_threshold?)`.
+2. **Populate the rubric.** Edit
+   `references/1-privilege-rubric.md` with: the matter ID, the
+   privilege standard in force (`attorney-client`, `work-product`,
+   or `both`), the in-house and outside attorney custodian list with
+   email addresses (lowercased, matching production metadata), the
+   subject-matter scope, the privilege circle (which internal personnel
+   can be on the recipient line without breaking privilege), waiver
+   indicators specific to the matter, and the work-product
+   anticipation-of-litigation date if applicable.
+3. **Pick the log format.** Edit `references/2-privilege-log-format.md`
+   to match the venue's required schema (Federal Rule 26(b)(5)(A) is
+   the default; Delaware Court of Chancery and SDNY/EDNY have
+   variations the file documents). The skill drafts entries in
+   Markdown; the matter's production tool exports to the venue's
+   required format.
+4. **Pin the jurisdiction.** Edit
+   `references/3-jurisdictional-tests.md` to confirm the matter's
+   jurisdiction is on the approved list (`us-federal`, `us-state-CA`,
+   `uk`, `eu` are pre-defined; add others with attorney sign-off).
+   Populate the `ALLOWED_ENDPOINTS` allowlist with the Tier-A endpoints
+   the firm has approved.
+5. **Calibrate against an attorney-tagged sample.** Pull 50-100
+   documents previously reviewed by an attorney on this matter or a
+   similar one. Pass the prior decisions as `prior_decisions_csv`.
+   Run the skill. Inspect the calibration report (step 4 of the
+   method): agreement should be at least 90% before relying on the
+   broader output. If lower, tune the rubric — typically the
+   attorney-custodian list, subject scope, or privilege circle is the
+   gap — and repeat.
+6. **Run the full batch.** Process the export directory; review the
+   borderline queue first, the sampled high-confidence calls second,
+   then finalize the draft log entries.
 
-## How it works
+## What the skill actually does
 
-For each document, the Skill:
+For each document in the batch, four ordered steps:
 
-1. **Extracts metadata.** From the platform export — author, recipients, date, document type, custodian, prior review tags.
-2. **Reads the document content.** Plain-text extraction from `.docx`, `.pdf`, `.eml`, `.txt`.
-3. **Applies privilege criteria.** Tests against the matter's privilege determination rules: was the communication between attorney and client; was the purpose legal advice; does the work-product doctrine apply; are any waiver indicators present.
-4. **Outputs classification + log entry.** Returns `privileged` / `not-privileged` / `borderline` plus a confidence score; for `privileged`, drafts a [privilege log](/en/learn/privilege-log-format/) entry following the matter's log format.
+1. **Two-pass extraction.** Pass A extracts text, preserving paragraph
+   indices; for `.eml` and `.msg` it parses the MIME tree and emits one
+   record per part so attachment privilege can be evaluated independently
+   of the cover email. Pass B joins the document to its row in the
+   metadata CSV and resolves every party against the rubric's attorney
+   custodian list (`is_attorney: true | false | unknown`). Surfacing
+   metadata-driven attorney flags as explicit pre-classification context
+   prevents the model from re-deriving them noisily from the body and
+   means a metadata-only fallback path exists if text extraction fails.
+2. **Citation-grounded classification, one pass per document.** The
+   per-document prompt encodes the rubric's privilege standard, the
+   jurisdiction's test from
+   `references/3-jurisdictional-tests.md`, the resolved party list,
+   and the document text. Claude returns: classification, basis (which
+   test prong fired), evidence (one to three verbatim spans with
+   citation coordinates), confidence, and an optional `concern` field
+   for borderline calls naming the doubt. Per-document prompts (rather
+   than one mega-prompt) let you retry only failures, cap each call's
+   tokens, and isolate hallucinations to a single record.
+3. **Borderline routing.** First-match-wins rules: confidence below
+   threshold; any party flagged `is_attorney: unknown`; third-party
+   recipient outside the privilege circle; or document type matching a
+   configured always-route pattern. A well-tuned rubric produces
+   10-20% borderline rate.
+4. **Draft log entries for the privileged set.** For each `privileged`
+   document, draft a log entry from the schema in
+   `references/2-privilege-log-format.md`, with the
+   `attorney_review_status` field hard-coded to
+   `draft — pending attorney review`.
 
-## Output
+The hallucination guard sits in step 2: any evidence span returned by the
+model that is not byte-identical to a substring of the document parts is
+rejected, and the document is forced into the borderline queue with
+`concern: "evidence_not_grounded"` rather than emitting a
+confident-but-fictional record.
 
-- **Classification CSV** — one row per document with: document ID, classification, confidence score, basis, suggested log entry text
-- **Borderline queue** — separate CSV of documents flagged for attorney review with the specific concern noted (attorney involvement unclear, subject matter borderline, potential waiver indicator)
-- **Draft privilege log** — formatted log entries for all `privileged` classifications, ready for attorney review and finalization
+## Cost reality
 
-## Where it fits
+At Anthropic API list pricing for Claude Sonnet 4.5, the per-document
+token spend is roughly:
 
-This Skill is the **first pass** in a [Stage 6 EDRM](/en/learn/edrm-model/) review workflow. The expected workflow:
+- Input: 3,000-15,000 tokens per document (text + parts + rubric +
+  jurisdiction test). Long contracts and multi-attachment emails sit at
+  the high end. At about $3 per million input tokens, that is
+  $0.009-$0.045 per document.
+- Output: 200-600 tokens per document (classification record +
+  evidence + draft log entry where applicable). At about $15 per
+  million output tokens, that is $0.003-$0.009 per document.
 
-1. AI runs first-pass on the full review universe → classifies 80% with high confidence, flags 20% borderline
-2. Attorneys review borderline documents and a sample of high-confidence classifications (10-20%) for validation
-3. AI-generated log entries are reviewed and edited by attorneys before production
-4. Final attorney sign-off on every withheld document and every log entry before production goes out
+Total: roughly $0.012-$0.054 per document, before prompt caching.
+Prompt caching the rubric and jurisdictional test (which are constant
+across the batch) typically reduces input cost by 60-80% — the
+rubric alone is 1,500-3,000 tokens that would otherwise re-bill on
+every document.
 
-AI is the speed multiplier; attorneys remain accountable for every privilege call.
+At eDiscovery scale, with caching:
+
+- 5,000 documents: $30-$120
+- 20,000 documents: $120-$480
+- 100,000 documents: $600-$2,400
+
+Compare that to attorney-only first pass at $400-700/hour for contract
+attorneys reviewing 30-60 documents per hour: 20,000 documents is
+roughly 333-667 attorney hours, or $133,000-$467,000 in pure review
+labor. The skill does not eliminate attorney hours — borderline
+review and finalization remain — but it concentrates them on
+records that need judgment, with realized review-throughput
+improvements typically 4-8x on first-pass-eligible batches.
+
+## Success metric
+
+A single number to watch over time: **borderline-queue agreement rate**
+— the fraction of documents the skill routed to borderline that the
+attorney ultimately decided was privileged or not-privileged with high
+confidence. The target is roughly 60-80%. A queue where attorneys
+flip 95% of documents to `privileged` (or 95% to `not-privileged`)
+with little hesitation is a queue the skill should have classified
+itself; tune the rubric or thresholds. A queue where every document
+needs lengthy deliberation is correctly tuned.
+
+Secondary metrics, tracked per batch:
+
+- **False-not-privileged rate** (skill said `not-privileged`, attorney
+  said `privileged` — the production-risk error). Target under 1%.
+  Above 2% is a halt-and-tune signal.
+- **False-privileged rate** (over-claim risk, sanctions exposure if a
+  court compels). Target under 5%. Above 10% is a halt-and-tune signal.
+- **Throughput** — documents per attorney hour after the skill runs,
+  including borderline review and log finalization. Pre-skill baseline
+  is typically 30-60 docs/hour; post-skill should land at 150-300
+  docs/hour for the borderline queue plus finalization work.
+
+## vs alternatives
+
+- **vs. Relativity Active Learning.** Relativity's continuous active
+  learning ranks documents by likely responsiveness or privilege using
+  a model trained on attorney coding decisions on the matter. It is
+  excellent at ranking and prioritization; it is weaker at producing
+  defensible per-document explanations and at drafting the log entry.
+  This skill produces a citation-grounded record per document and a
+  draft log entry — useful when the team needs an audit trail or when
+  the log is the bottleneck rather than the review queue. The two are
+  complementary, not substitutes: Active Learning ranks the queue, the
+  skill drafts the records and log.
+- **vs. Everlaw's privilege-detection ML.** Everlaw and similar
+  platforms ship in-product privilege detectors trained on broad
+  litigation corpora. They work without the matter-specific rubric
+  this skill requires, which is faster to start but less precise on
+  matter-specific facts (the General Counsel's email handle, this
+  matter's privilege circle, the specific subjects in scope). For a
+  one-off small matter with no rubric work appetite, the in-product
+  detector is the right call. For matters where the rubric exists and
+  the team needs the log entries drafted, this skill produces a more
+  matter-fit output.
+- **vs. manual contract-attorney first pass.** The historical baseline.
+  Reliable, defensible, and roughly 100-1000x more expensive at the
+  scales above. The skill does not replace the contract attorney; it
+  shifts the contract attorney's hours from "look at every document"
+  to "decide on the borderline queue and finalize the log," which is
+  the work that actually requires legal judgment.
 
 ## Watch-outs
 
-- **Borderline rate matters.** A well-tuned config produces 10-20% borderline rate. Higher means the Skill is hedging; lower means over-confidence (validate by sampling high-confidence calls).
-- **Sample-validate every batch.** Even a well-tuned Skill makes errors. Sample 5-10% of high-confidence classifications per batch for attorney validation.
-- **Court-acceptable workflow.** AI-assisted privilege review is increasingly accepted by courts but disclosure norms vary. Verify the production-side disclosure obligations for the matter.
-- **Privilege log finalization is attorney-only.** The Skill drafts log entries; attorneys finalize. Producing AI-drafted log entries without attorney review is professional malpractice.
-- **Tier-A AI authorization required.** Privilege content cannot be processed by non-enterprise AI tiers. Confirm vendor data terms before use.
+- **Privilege over-claim.** Inflated logs draw motions to compel and
+  sanctions risk. Guard: when `prior_decisions_csv` is supplied, the
+  skill computes `false_privileged_rate` against attorney decisions and
+  warns when it exceeds 5%; without prior decisions, it samples 10% of
+  `privileged` calls into the borderline queue for attorney
+  spot-check before the batch closes.
+- **Partial-privilege documents.** A single email can be privileged in
+  part (legal advice paragraph) and non-privileged in part (forwarded
+  business update). Treating the document as one call is the failure
+  mode. Guard: extraction emits one record per MIME part; classification
+  runs per part; documents with mixed-classification parts route to
+  borderline with `concern: "partial_privilege"` and
+  `redaction_required: true`. Redaction itself is attorney work.
+- **Work-product vs. attorney-client confusion.** Work-product doctrine
+  protects different things (litigation anticipation, attorney mental
+  impressions) than attorney-client privilege (confidential
+  attorney-client legal advice), and the work-product test does not
+  require an attorney on the communication. Guard: the rubric names
+  which standard is in force; the `basis` field on the output names
+  the prong that fired; if the skill cannot resolve which standard
+  applies, it routes to borderline with
+  `concern: "standard_resolution_required"`.
+- **Waiver via third-party recipient.** A privileged communication
+  cc'ing a non-client third party generally waives privilege.
+  Guard: the borderline router checks every recipient against the
+  rubric's privilege circle and routes any document with an outside
+  recipient to borderline with the third-party named in the
+  `concern` field, so the attorney can apply the
+  common-interest exception or a like doctrine on review.
+- **Tier-A vendor enforcement.** Routing privileged documents through
+  a non-approved AI endpoint can waive privilege. Guard: the skill's
+  startup hook reads the `ALLOWED_ENDPOINTS` allowlist from
+  `references/3-jurisdictional-tests.md` and refuses to run if the
+  configured endpoint is not on the list. The allowlist owner is named
+  in the AI policy; changes require sign-off.
+- **Court disclosure norms vary.** AI-assisted privilege review is
+  increasingly accepted, but venue-specific disclosure obligations
+  exist (some judges expect a description of the AI methodology in
+  the production protocol). Verify with local counsel before relying
+  on the skill in a contested matter.
+
+## Stack
+
+- [Claude](/en/tools/claude/) — Tier-A endpoint only (Anthropic API
+  enterprise tier or your enterprise Claude tenant)
+- [Relativity](/en/tools/relativity/), [Everlaw](/en/tools/everlaw/),
+  or [DISCO](/en/tools/disco/) — source of the document export and
+  metadata CSV
+- The skill bundle at
+  `apps/web/public/artifacts/privilege-review-batch-skill/`
+- Related reading:
+  [eDiscovery](/en/learn/ediscovery/),
+  [privilege review](/en/learn/privilege-review/),
+  [privilege log format](/en/learn/privilege-log-format/),
+  [EDRM model](/en/learn/edrm-model/),
+  [AI policy for legal teams](/en/learn/ai-policy-for-legal-teams/)

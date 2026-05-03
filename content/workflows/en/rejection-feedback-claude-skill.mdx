@@ -13,49 +13,337 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that takes a rejected candidate's interview scorecards and (where available) interview transcripts, drafts a specific, useful rejection email or recruiter-call talking points, and produces the recruiter-side notes for the call. Replaces the form-letter rejection that damages [candidate experience](/en/learn/candidate-experience/) with personalized feedback the candidate can actually use.
+A Claude Skill that takes a rejected candidate's interview scorecards
+(and, when available, [BrightHire](/en/tools/brighthire/) or
+[Metaview](/en/tools/metaview/) transcripts), drafts an
+evidence-grounded rejection email or recruiter-call talking-point
+notes, and produces the recruiter-side notes for the call. Replaces
+the form-letter rejection that damages
+[candidate experience](/en/learn/candidate-experience/) with
+personalized feedback the candidate can actually use — and refuses
+to draft when the rubric is missing, the loop did not converge, or
+the case is jurisdiction-flagged.
 
-## What you'll need
+## When to use
 
-- Claude Code or Claude.ai with custom Skills enabled and Tier-A authorization for candidate data per [AI policy](/en/learn/ai-policy-for-legal-teams/)
-- Scorecard data export from the [ATS](/en/learn/ats-vs-recruiting-crm/) — [Ashby](/en/tools/ashby/), [Greenhouse](/en/tools/greenhouse/), or [Lever](/en/tools/lever/)
-- Optional: interview transcripts from [BrightHire](/en/tools/brighthire/) or [Metaview](/en/tools/metaview/) for richer feedback grounding
-- The role's structured-interview rubric
+- The candidate reached at least an onsite or final-stage loop, where
+  per [recruiting funnel](/en/learn/recruiting-funnel-metrics/) cost
+  the candidate has invested enough time to deserve a real answer.
+- The team has at least two signed-off scorecards on the candidate
+  ([Ashby](/en/tools/ashby/) `submitted: true`, [Greenhouse](/en/tools/greenhouse/)
+  `status: complete`, [Lever](/en/tools/lever/) `state: completed`).
+  One scorecard is one interviewer's view; the skill refuses to
+  synthesize feedback from a single perspective because that exposes
+  the firm to selective-evidence claims.
+- A role rubric exists at `rubrics/<role_id>.yaml` with behavioral
+  anchors per dimension (the same source the
+  [interview debrief skill](/en/workflows/interview-debrief-summary-skill/)
+  reads). The skill scores against rubric anchors, not against
+  free-text scorecard prose.
+- The candidate explicitly requested feedback (captured in writing in
+  the ATS), OR the candidate's residency jurisdiction is one where
+  unsolicited specifics carry no documented risk per the user's
+  HR-counsel guidance.
+- A recruiter reviews and edits every draft before sending. The skill
+  writes drafts to disk and stops; it defines no `send` action.
+
+## When NOT to use
+
+- **Auto-sending without recruiter review.** AI-drafted-and-sent
+  rejection feedback is the single most reliable way to produce an
+  EEOC, ADA, or state-employment-law incident. The recruiter is the
+  gate. If your goal is to remove the human from the loop, this is
+  the wrong workflow.
+- **Candidates who have not requested feedback in deny-jurisdictions.**
+  France (Code du travail risk on documented rejection reasons),
+  Germany (AGG paragraph 22 evidentiary shift), and any jurisdiction
+  the user's HR counsel has marked `unsolicited_feedback: deny` in
+  the policy file. The skill refuses specifics in those cases and
+  writes the generic-decline template instead. Do not edit the
+  policy file to make a deny-jurisdiction case pass.
+- **Cases legal has flagged.** Active dispute, unaddressed
+  accommodation request, or a complaint on record. The skill returns
+  a generic-decline draft and surfaces the flag to the recruiter.
+  Specifics on a flagged case become evidence in the dispute.
+- **Earlier-stage rejections** (resume screen, recruiter screen).
+  Templated decline is the right tool there; the per-candidate model
+  cost and the recruiter review time do not pay back at top-of-funnel
+  scale. The skill is for candidates who reached at least an onsite.
+- **Comparative ranking** (`you were our second choice`, `we had
+  stronger candidates`). The skill will refuse to draft this — the
+  rubric-to-feedback mapping does not contain the language and the
+  banned-phrase blocklist greps it out. Comparative ranking is what
+  turns a constructive rejection into a Glassdoor post.
+- **Process-improvement asks** (asking the candidate for feedback on
+  the interview, a referral, or a testimonial). Reverse asks in a
+  rejection email are an EEOC-witness-statement risk and a
+  candidate-experience harm. The blocklist catches them.
 
 ## Setup
 
-1. **Drop the Skill.** Place `rejection-feedback.skill` into your Claude Code skills directory. The Skill exposes two callable functions: `draft_email` and `draft_call_notes`.
-2. **Configure the rubric.** The Skill reads role rubrics from `rubrics/{role_id}.yaml` — same source the [interview debrief Skill](/en/workflows/interview-debrief-summary-skill/) uses.
-3. **Configure the legal/HR review.** Some jurisdictions limit what feedback can be shared with rejected candidates; verify your firm's HR-counsel guidance and configure the Skill's content rules accordingly.
-4. **Test on closed candidates.** Run on candidates already rejected; compare drafts to what the team actually sent. Tune the prompt for tone and specificity.
+1. **Drop the bundle.** Place
+   `apps/web/public/artifacts/rejection-feedback-claude-skill/SKILL.md`
+   into your Claude Code skills directory (or claude.ai custom Skills,
+   with Tier-A authorization for candidate data per
+   [AI policy](/en/learn/ai-policy-for-legal-teams/)).
+2. **Configure the rubric source.** The skill reads role rubrics from
+   `rubrics/<role_id>.yaml` — same path the interview debrief skill
+   uses. If the rubric does not exist, the skill refuses to run.
+   [Structured interviewing](/en/learn/structured-interviewing/) is
+   the prerequisite, not this skill.
+3. **Fill in the rubric-to-feedback mapping.** Copy
+   `references/1-rubric-to-feedback-mapping.md` and replace the
+   template phrasing with your team's approved candidate-facing
+   language per rubric dimension. Get HR counsel sign-off on the
+   approved phrasing once; the audit log captures the mapping's
+   SHA-256 per run, so revisions are visible in retro.
+4. **Write the jurisdiction-policy file.** A YAML file with one block
+   per jurisdiction your firm hires in. Each block sets
+   `unsolicited_feedback: allow` or `deny` and references the
+   relevant HR-counsel guidance memo. The bundle ships a template;
+   the deny defaults are France, Germany, and any jurisdiction with
+   active employment-law guidance against documented rejection
+   reasons.
+5. **Configure the ATS API.** Ashby, Greenhouse, or Lever API token
+   with read scope on scorecards and candidates. The skill pulls
+   scorecards by `candidate_id`; it does not accept pasted scorecard
+   text because pasted text cannot be audited back to the source
+   interviewer.
+6. **Optional: configure the transcript bundle.** BrightHire or
+   Metaview API access. When a `transcript_id` is provided, the
+   skill cross-references scorecard claims against transcript turns
+   in step 4.
+7. **Dry-run on a closed candidate.** Run on a candidate who was
+   already rejected last quarter. Compare the skill's draft to what
+   the recruiter actually sent. Tune the rubric-to-feedback mapping
+   if the calibration drifts — the mapping, not the model, is
+   usually the lever.
 
-## How it works
+## What the skill actually does
 
-For each rejected candidate, the Skill:
+Six steps, in order. The order matters: jurisdiction gating and
+scorecard validation come before the LLM ever reads candidate
+content, because letting the model loose on scorecard text in a
+deny-jurisdiction case leaves a model-call log entry with
+candidate-identifying data that the firm did not need to retain.
 
-1. **Reviews the interview record.** Pulls scorecards across all interviewers, identifies the dimensions where the candidate scored highest and lowest, identifies the specific evidence that supported the rejection.
-2. **Filters for safely-sharable feedback.** Excludes feedback that's protected under the firm's HR-counsel guidance (legal-risk areas, protected-class proxies, irrelevant personal observations).
-3. **Drafts the candidate-facing message.** Specific to the candidate, grounded in interview evidence, framed constructively. Distinct from generic rejection templates.
-4. **Drafts recruiter-call notes** (for senior or high-potential candidates getting a call rather than email). Bullet points with specific observations and suggested phrasing.
+1. **Validate jurisdiction policy and consent.** Look up the
+   candidate's jurisdiction in the policy file. If the policy is
+   `unsolicited_feedback: deny` and the candidate did not request
+   feedback in writing, halt specifics and switch to the
+   generic-decline template. The choice to gate on consent before
+   pulling scorecards keeps the data-minimization story clean for
+   GDPR Art. 5(1)(c).
+2. **Pull scorecards (and optional transcript).** Fetch via the ATS
+   API. Drop drafts. If the loop has under two signed-off scorecards,
+   halt — feedback synthesized from one interviewer's view is an
+   opinion, not feedback, and exposes the firm to selective-evidence
+   claims.
+3. **Identify dimensions and evidence.** Compute the
+   cross-interviewer mean and standard deviation per rubric
+   dimension. Surface dimensions where mean ≥ 4 (strength, warm
+   opening) and mean ≤ 2 (gap candidate). Refuse to surface any
+   dimension with cross-interviewer standard deviation ≥ 1.5 — the
+   loop did not converge, and feedback on a non-converged dimension
+   would not survive a "but interviewer X scored me 5" challenge.
+   For every surfaced dimension, pull verbatim evidence quotes from
+   the scorecards (or transcript, when available). No verbatim
+   string → the dimension is not surfaced.
+4. **Draft against the rubric-to-feedback mapping.** Translate at
+   most one strength and one gap into candidate-facing language
+   using `references/1-rubric-to-feedback-mapping.md`. Cap at one
+   each so the draft does not read as a defensive list. The mapping's
+   substitution slots are filled from structured fields (scorecard,
+   rubric anchor) or the approved-topics list — the LLM never
+   free-texts a substitution value, which is the guard against
+   false specifics.
+5. **Bias and false-specifics screening.** Grep the draft against
+   `references/2-banned-phrase-blocklist.md`. Any hit halts the run
+   with the offending string surfaced. Verify every specific claim
+   maps back to a verbatim evidence string from step 3 — claims
+   without source halt. This is a separate pass from step 4 by
+   design; the screening pass sees only the draft text, with no
+   awareness of the underlying scorecards, so it cannot rationalize
+   a banned phrase as "but the interviewer meant X".
+6. **Write to disk and audit log.** Write `drafts/<candidate-id>.md`
+   and (for `route: call`) `drafts/<candidate-id>-call-notes.md` per
+   the format in `references/3-output-format.md`. Append one JSONL
+   line to `audit/<YYYY-MM>.jsonl` with `candidate_id_hash`
+   (SHA-256, not raw ID), `rubric_sha256`, `blocklist_sha256`,
+   `mapping_sha256`, dimensions surfaced, blocklist hits, model ID,
+   timestamp. No candidate-identifying free text in the audit line.
 
-## Output
+The literal email format, generic-decline fallback, and call-notes
+template live in `references/3-output-format.md`. The format is
+fixed because downstream consumers — recruiter, candidate, and any
+future audit reviewer — need predictable language with no
+recruiter-specific drift.
 
-Per candidate:
+## Cost reality
 
-- **Rejection email draft** — opens with appreciation, summarizes what went well, identifies the specific factors that drove the decision, encourages future application where appropriate. ~150-250 words.
-- **Recruiter call notes** (for tier-2+ candidates) — bullet points the recruiter uses on the call, including suggested responses to likely candidate questions
-- **Routing recommendation** — email vs call vs no-response, based on candidate seniority, interview-stage reached, and pipeline-fit signal
+Per rejection draft, on Claude Sonnet 4.5:
 
-## Where it fits
+- **LLM tokens** — typically 12-25k input tokens (rubric YAML +
+  scorecards + skill instructions + reference files) and 0.5-1.5k
+  output tokens (the draft plus call notes). On Sonnet 4.5 that is
+  roughly 5-10 cents per draft. A recruiter team running 200
+  rejection drafts a month spends 10-20 dollars in model cost.
+- **ATS API cost** — zero on Ashby (free API), Greenhouse (included
+  in tier), Lever (included). Transcript fetches against BrightHire
+  or Metaview count against the per-seat plan; rejection-feedback
+  fetches are read-only and do not consume new transcript credits.
+- **Recruiter time** — the win is here. Manual drafting of a
+  thoughtful, evidence-grounded rejection email from scorecards is
+  20-30 minutes per candidate when the recruiter does it well, or
+  3 minutes when they paste a form letter (which is what most teams
+  end up doing at scale). The skill produces the 20-minute draft in
+  under 30 seconds; the recruiter reviews and edits in 4-7 minutes.
+  Net saving is roughly 15-20 minutes per rejection at the
+  thoughtful-draft quality bar — call it 50-60 hours a month on a
+  team running 200 rejections.
+- **Setup time** — 30 minutes for the rubric-to-feedback mapping
+  and jurisdiction policy if your team already has approved
+  candidate-facing phrasing somewhere; longer if HR counsel has not
+  yet weighed in on rejection-feedback language (in which case that
+  conversation is the prerequisite, not this skill).
+- **The candidate-experience compounding return.** Candidates
+  rejected with specific, evidence-grounded feedback are more likely
+  to re-apply, more likely to refer others, and substantially less
+  likely to leave damaging Glassdoor reviews — claims commonly cited
+  in the recruiting literature are in the 30-50% range for re-apply
+  intent, though we do not have a primary source for those numbers
+  and treat them as directional. The compounding return shows up in
+  pipeline density a year out, not in the month the draft was sent.
 
-Use this Skill specifically for candidates who reached [Stage 3+ interviews](/en/learn/recruiting-funnel-metrics/) — candidates who invested significant time in the process and deserve real feedback. Earlier-stage rejections (resume screen, recruiter screen) typically get appropriately-handled by templated rejection.
+## Success metric
 
-The compounding benefit: candidates rejected with real feedback are 30-50% more likely to apply again to the company in the future, more likely to refer others, and meaningfully less likely to leave damaging Glassdoor reviews.
+Track three numbers per month, in the ATS:
+
+- **Recruiter edit-distance per draft.** The number of characters
+  the recruiter changes between the skill's draft and the sent
+  message. If edit distance trends to zero, the recruiter is
+  rubber-stamping — surface this in retro and revisit the
+  rubric-to-feedback mapping. If edit distance is consistently
+  high, the mapping is miscalibrated.
+- **Candidate response rate to the rejection.** Replies to a
+  rejection email are usually thanks-and-future-application notes
+  (good signal) or escalation notes (bad signal). Track the
+  escalation rate as a percentage of rejections sent. A baseline
+  team running form letters typically sees under 1% escalation;
+  the goal with this skill is to stay at or below that baseline,
+  not above. If escalation rate climbs, the rubric-to-feedback
+  mapping is producing language that lands wrong — re-tune.
+- **Re-application rate within 12 months.** Candidates rejected
+  through this skill versus candidates rejected through the legacy
+  form letter, measured over the next 12 months. The compounding
+  benefit shows up here, not in model spend or even in the rejection
+  thread itself.
+
+## vs alternatives
+
+- **vs Ashby's built-in rejection templates.** Ashby (and Greenhouse,
+  Lever) ship rejection templates with merge fields for candidate
+  name and role. They are templates, not feedback — the merge fields
+  do not pull scorecard evidence and there is no rubric-grounded
+  language layer. Use Ashby templates for top-of-funnel rejections
+  where templated is honest. Use this skill for late-stage
+  rejections where templated reads as dismissive of the time the
+  candidate invested.
+- **vs generic decline emails.** Generic decline is the right answer
+  in deny-jurisdiction cases, when consent was not given, and when
+  the rubric did not surface a defensible specific. The skill writes
+  the generic-decline template byte-for-byte in those cases. The
+  difference is the skill makes the choice deterministically per
+  jurisdiction policy and rubric output, rather than the recruiter
+  defaulting to generic out of fatigue.
+- **vs manual recruiter-written notes.** Manual notes are the gold
+  standard for senior or VIP-referred candidates where the
+  recruiter has the relationship context and the time. The skill
+  earns its keep on volume — the 80% of late-stage rejections where
+  the recruiter would otherwise paste a form letter because manual
+  drafting at scale does not fit the day. For the senior tier, the
+  call-notes file gives the recruiter a structured starting point
+  for the call, and the recruiter improvises from there.
+- **vs an LLM with no rubric file and no blocklist.** This is the
+  failure mode the skill is built against. An LLM drafting from
+  scorecards alone, with no rubric grounding, no banned-phrase
+  blocklist, and no audit log, produces fast, confident, plausible-
+  sounding rejection text — and roughly one in twenty drafts will
+  contain a hallucinated quote, a comparative ranking, or a
+  protected-class proxy. The bundle's checklist files are what move
+  the failure rate to near zero.
 
 ## Watch-outs
 
-- **Legal review on what feedback is shareable.** Specific feedback can become evidence in employment-law claims if framed wrong. HR-counsel sign-off on the Skill's content guardrails matters.
-- **Don't auto-send.** Recruiter reviews and edits every email before sending. Auto-sent rejection feedback produces inappropriate-content incidents.
-- **Don't feedback on protected-class proxies.** "Cultural fit" rejections, age-related rejections, family-status considerations — these damage candidates and create legal risk. The Skill's content rules should explicitly exclude these.
-- **Calibrate per role and seniority.** Senior-leadership rejections need different framing than entry-level rejections; configure rubric-by-role.
-- **Privacy.** Interview content is sensitive; verify the Skill operates within Tier A enterprise AI per [AI policy](/en/learn/ai-policy-for-legal-teams/).
+- **EEOC-implicating language.** Guarded by the banned-phrase
+  blocklist in `references/2-banned-phrase-blocklist.md`, which runs
+  as a separate pass in step 5 with no awareness of the underlying
+  scorecards. Hits halt the run with the offending string surfaced.
+  Do not edit the blocklist to make a draft pass — fix the rubric or
+  the scorecard language instead.
+- **False specifics from the LLM.** Guarded by the "no synthesis
+  without verbatim citation" rule in step 3. Every claim in the
+  draft must trace to a verbatim string from a signed-off scorecard
+  or transcript. No verbatim string → the dimension is not surfaced.
+  This is the guard against the most common failure mode of
+  LLM-drafted feedback — plausible-sounding quotes that no
+  interviewer actually wrote, cited back to the candidate as fact.
+- **Comparative ranking language.** Guarded by the rubric-to-feedback
+  mapping in `references/1-rubric-to-feedback-mapping.md`, which
+  does not contain comparative phrasing, and by the blocklist in
+  step 5 which catches it if it slips in. Comparative ranking is
+  what turns a constructive rejection into a Glassdoor post.
+- **Selective-evidence risk.** Guarded by step 2 (halt if the loop
+  has under two signed-off scorecards) and step 3 (refuse to
+  surface dimensions with cross-interviewer standard deviation at
+  or above 1.5). Interviewer disagreement does not become candidate
+  feedback.
+- **Auto-send drift.** Guarded by the absence of any `send` action
+  in the skill. Drafts are written to `drafts/<candidate-id>.md` for
+  the recruiter to review, edit, and send from the ATS outbox. The
+  recruiter is the gate.
+- **Generic-boilerplate harm.** Guarded by step 3's refusal to
+  surface a dimension without verbatim evidence — when the rubric
+  surfaces nothing safe to share, the skill writes the generic
+  decline template rather than synthesizing weak specifics.
+  Generic decline is honest; weak specifics are worse than no
+  specifics.
+- **PII in the audit log.** Guarded by step 6 writing only
+  `candidate_id_hash` (SHA-256), never the raw candidate ID, name,
+  or scorecard text. The audit log is for run reproducibility, not
+  candidate data retention. Candidate-facing drafts live in
+  `drafts/` under the recruiter's own retention policy.
+- **Calibration drift across roles and seniority.** Guarded by
+  per-role rubric YAMLs and by the rubric-to-feedback mapping being
+  versioned per team. Senior-leadership rejections need different
+  framing than entry-level; the mapping file is where that lives,
+  not the skill code.
+- **Privacy and data residency.** Verify the skill operates within
+  Tier A enterprise AI per [AI policy](/en/learn/ai-policy-for-legal-teams/).
+  Interview content is sensitive; the candidate did not consent to
+  it being processed by a third-party model unless your AI policy
+  and your scorecard-collection consent language explicitly cover it.
+
+## Stack
+
+The skill bundle lives at
+`apps/web/public/artifacts/rejection-feedback-claude-skill/` and
+contains:
+
+- `SKILL.md` — the skill definition
+- `references/1-rubric-to-feedback-mapping.md` — fill in per team,
+  HR-counsel approved phrasing per rubric dimension
+- `references/2-banned-phrase-blocklist.md` — pre-flight checks
+  on the draft (do not edit to make biased drafts pass)
+- `references/3-output-format.md` — the literal email, generic-
+  decline, and call-notes formats
+
+Tools the workflow assumes you already use:
+[Claude](/en/tools/claude/) (the model),
+[Ashby](/en/tools/ashby/) or [Greenhouse](/en/tools/greenhouse/) or
+[Lever](/en/tools/lever/) (the [ATS](/en/learn/ats-vs-recruiting-crm/)
+the scorecards live in), and optionally
+[BrightHire](/en/tools/brighthire/) or
+[Metaview](/en/tools/metaview/) (interview transcripts for richer
+evidence grounding). Sibling workflow that shares the rubric source:
+the [interview debrief skill](/en/workflows/interview-debrief-summary-skill/).

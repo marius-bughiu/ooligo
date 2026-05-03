@@ -13,72 +13,85 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that pulls matter activity from the [matter management](/en/learn/matter-management/) system every Monday morning and produces a one-page digest for the GC: what's open, what changed last week, what's at risk, what needs the GC's attention this week. Replaces the Friday-afternoon attorney status updates that nobody enjoys writing or reading.
+A Claude Skill that turns a weekly export from your [matter management](/en/learn/matter-management/) system into a one-page digest for the General Counsel: portfolio shape by phase, what changed since last week, deadline clusters, escalation candidates, and outside-counsel spend deviations. The skill replaces the Friday-afternoon "every attorney sends a status update" thread that nobody enjoys writing or reading. The artifact bundle at `apps/web/public/artifacts/matter-status-digest-claude/` ships the SKILL.md plus three fillable reference templates the legal-ops team adapts to the firm's phase taxonomy, the GC's preferred layout, and the firm's escalation rules.
 
-## What you'll need
+## When to use
 
-- Claude Code or Claude.ai with custom Skills enabled
-- Export from your matter management system — typically a CSV or JSON dump of active matters with status, owner, recent activity, and budget data
-- Optional: integration with your matter management system's API for live pulls instead of CSV export
-- Email or Slack channel for delivering the digest to the GC
+Use this skill when the GC currently spends Monday morning either reading attorney status emails one by one, or asking the Legal Ops Manager for a verbal portfolio summary, or making decisions on stale information because Friday's status thread did not surface what mattered. Specifically, this fits when the firm has between 15 and 200 active matters (small enough that a single digest stays scannable, large enough that the portfolio shape is not memorisable), when the matter management system is the system of record (not a spreadsheet that drifts from the matter data), and when the GC is willing to spend 30 minutes a week tuning the layout in `references/2-sample-digest-format.md` for the first month before the digest stabilises.
+
+It also fits as a monthly cadence for boutique firms where 8-12 matters do not justify weekly reporting but the GC still wants a structured monthly view alongside the in-flight conversations.
+
+## When NOT to use
+
+Do not use this skill on a Claude deployment that has not been cleared by your privilege-and-vendor review. Matter exports contain attorney work product, settlement strategy, and investigation summaries — running them through consumer Claude.ai violates the privilege expectations of most in-house teams. Use Claude on Bedrock, Vertex, or a contracted Anthropic enterprise endpoint with an executed BAA and DPA, and confirm the deployment appears on your firm's Tier-A vendor list before scheduling the cron.
+
+Do not use this skill to draft customer-facing communications, opposing-counsel correspondence, or board memos. Those audiences require a different tone, a different evidence threshold, and an attorney signoff. The digest is for the GC's office only.
+
+Do not use this skill as a real-time alerting layer. A weekly snapshot is the wrong tool for TRO filings, regulatory subpoenas, breach-notification triggers, or any matter where hours matter. Use the matter management system's native alerting for those — the digest is for steady-state portfolio awareness.
+
+Do not deploy on portfolios that lack a discipline of keeping the `phase`, `last_activity_date`, and `next_deadline_date` fields current. A digest derived from stale fields is worse than no digest, because the GC will act on it. Fix matter-status hygiene first; ship the digest second.
 
 ## Setup
 
-1. **Drop the Skill.** Place `matter-status-digest.skill` into your Claude Code skills directory or Claude.ai project. The Skill exposes one callable function: `generate_digest`.
-2. **Configure the data source.** Edit `data_source.yaml` to point at either: (a) the path of the latest matter export CSV, or (b) the matter system API endpoint for live data.
-3. **Configure the GC's preferences.** Edit `digest_template.md` to match what the GC wants — some GCs prefer narrative summaries, some prefer structured tables, some want only matters above a dollar threshold or risk tier.
-4. **Schedule weekly execution.** Either:
-   - Manual: Legal Ops Manager runs the Skill Monday morning, sends the output
-   - Automated: cron + email script that runs the Skill, formats output, and emails the GC
+1. Drop the bundle from `apps/web/public/artifacts/matter-status-digest-claude/` into your Claude Code skills directory (or the equivalent project location for your enterprise Claude deployment). The bundle contains `SKILL.md` and a `references/` folder.
+2. Adapt `references/1-matter-phase-taxonomy.md` to the phase names your matter management system actually uses. The shipped template uses generic litigation-and-transactional buckets; your firm's taxonomy will differ. Map every raw phase value attorneys type into a canonical bucket — unmapped values surface in a "Mapping gaps" footer in the digest until you add them.
+3. Edit `references/2-sample-digest-format.md` with the GC. This is the literal Markdown the skill renders. Negotiate the layout in this file, not in the skill body — keep the engineering choices and the editorial choices separable.
+4. Edit `references/3-escalation-criteria.md` to your firm's risk profile. The shipped defaults (90 percent budget utilisation, 25 percent spend spike vs prior month, 14-day status staleness) work for mid-size in-house teams; transactional-heavy and regulated portfolios usually want different thresholds.
+5. Configure the export. Either point the skill at a CSV / JSON dump path that a nightly job refreshes, or wire the matter system's API directly. Required columns are listed in `SKILL.md` under "Inputs" — `matter_id`, `matter_name`, `phase`, `owner`, `last_activity_date`, `next_deadline`, `next_deadline_date`, `outside_counsel_firm`, `mtd_spend`, `budget`, `risk_tier`.
+6. Schedule. Run the skill on a Monday-morning cron (07:00 local) and write the digest to `outbox/digest-YYYY-MM-DD.md`. Have the Legal Ops Manager review the first eight digests before they go to the GC; the manual review window catches taxonomy drift, escalation false positives, and tone mis-calibration during the calibration period.
 
-## How it works
+## What the skill actually does
 
-The Skill pulls the matter data and:
+The skill runs five sub-tasks in order, with engineering choices that are deliberate rather than incidental.
 
-1. **Identifies materially-changed matters since last digest.** New matters opened, status changes, budget overruns, deadline approaches.
-2. **Categorizes by attention need.** "Needs GC action this week" / "GC FYI" / "Routine — no action needed".
-3. **Drafts the digest.** One-page Markdown following the configured template, with sections for action items, status changes, financial flags, and forward look (deadlines and matters approaching status changes).
-4. **Includes drill-down paths.** Each matter mentioned includes a link to its matter management record so the GC can dig in if needed.
+It loads and validates the export, aborting on missing columns or malformed dates. The reason: a digest derived from a half-broken export is worse than no digest, because the GC will treat it as ground truth.
 
-## Output format
+It aggregates by phase before summarising — using the canonical taxonomy in `references/1-matter-phase-taxonomy.md`. The reason aggregation precedes summarisation: the GC's first question on Monday is "what's the shape of the portfolio." A flat list of matters does not answer that; a bucketed view (e.g. "12 in discovery, 4 in mediation, 3 in trial prep") does. Aggregation also lets the digest report deltas, which a flat list cannot.
 
-```markdown
-# Matter Status Digest — Week of [date]
+It computes deadline clusters, surfacing weeks where three or more deadlines fall in the same seven-day window. Single-deadline weeks are FYI. The cluster signal is what matters for resource decisions — the GC needs to know when the team is over-committed before the Friday before, not after.
 
-## This week's actions
-- **[Matter X]** — [Description]. [Action needed]. Owner: [name]. Due: [date].
-- **[Matter Y]** — [Description]. [Action needed]. Owner: [name]. Due: [date].
+It applies escalation rules from `references/3-escalation-criteria.md` and surfaces a maximum of five "Needs GC attention" items, ranked by risk tier then spend impact then deadline proximity. The cap is deliberate: an unbounded escalation section stops being a triage tool. Items ranked sixth and lower drop into the FYI section.
 
-## Status changes since last digest
-- [Matter Z] — Stage moved from [A] to [B]. [What this means].
-- [Matter Q] — Closed. [Outcome and key terms].
+It renders the digest using the literal layout in `references/2-sample-digest-format.md`, then writes a metadata-only log line: timestamp, matter count, escalation count, generation seconds, model, and the digest's SHA-256. The reason metadata-only: the digest body contains privileged content; the log goes to operational telemetry that may have wider audit access than the digest itself. Logging the SHA proves digest provenance without storing the privileged text in the log store.
 
-## Financial flags
-- [Matter R] — Budget at 80% utilization with 4 weeks of work remaining.
-- [Matter S] — Outside-counsel invoice anomaly flagged (see invoice review).
+## Cost reality
 
-## Forward look (next 30 days)
-- [Date]: [Matter T] discovery deadline.
-- [Date]: [Matter U] settlement conference.
-- [Date]: [Matter V] contract renewal — non-standard terms, requires decision.
+A typical 30-matter weekly digest runs roughly 6k-12k input tokens (matter export plus three reference files plus last week's digest) and 1.5k-3k output tokens (the rendered digest). At Claude Sonnet pricing on an enterprise endpoint that lands at around 5 to 10 cents per digest run — call it under 5 dollars per year per portfolio for the model spend. The dominant cost is the Legal Ops Manager's calibration time in weeks one through four (roughly two hours per week reviewing the digest with the GC and editing the reference files), and the integration time to wire the matter export into the cron environment (typically a half-day for a CSV path, one to two days for an API integration).
 
-## Portfolio summary
-- Active matters: [N] (was [N-1] last week)
-- Open litigation: [N]
-- Active transactions: [N]
-- Outside-counsel run-rate: $[X] this quarter ([+/- vs last quarter])
-```
+The time saved is what matters. A Friday status thread costs every attorney 15-30 minutes per week to write and the GC roughly 45-60 minutes on Monday to read and synthesise. For a 12-attorney legal department that is 6-12 attorney-hours per week of writing plus an hour of GC reading, replaced by a single 10-minute GC read on Monday and a near-zero attorney write cost (the matter system stays the source of truth). The ROI is the GC's Monday morning back, not the model bill.
 
-## Where it fits
+## Success metric
 
-This Skill is the operational alternative to the "every attorney sends a status update by Friday at 5pm" pattern that produces inconsistent, low-signal updates. The digest distills attorney-side activity into the form the GC actually needs — synthesized, prioritized, action-oriented.
+Track three numbers from week eight onward — once the calibration window has closed.
 
-Pair with quarterly portfolio reviews where the GC and Legal Ops Director look at trends across matters; the weekly digest is the operational view, the quarterly review is the strategic view.
+GC Monday-morning time on portfolio review, before and after deployment. The target is under 15 minutes of reading the digest plus targeted follow-ups, replacing the unbounded "asking around" pattern.
+
+Escalation precision: of the items the digest surfaces under "Needs GC attention this week," what percentage actually triggered a GC action. Target above 70 percent. Below 50 percent means the escalation rules are too sensitive; tighten thresholds in `references/3-escalation-criteria.md`. Above 90 percent means rules may be too tight and important items may be silently dropping into FYI; widen thresholds.
+
+Stale-status incidents per quarter: how often a matter the digest reported as "active and on track" turned out to be stalled or in trouble. The target is zero, with the understanding that the staleness footer (matters whose `last_activity_date` is more than 14 days old) is the safety net catching the cases where the discipline slips.
+
+## vs alternatives
+
+Compared to Ironclad's matter-management dashboards (or the equivalent native dashboard in Brightflag, SimpleLegal, Onit, or your matter system of record): native dashboards show the data but do not synthesise it. The GC still has to look at six tiles and infer the story. The digest tells the story in plain English and surfaces the three-to-five things that need a decision this week. Use the dashboard for ad-hoc drill-down; use the digest for the weekly synthesis layer the dashboard does not provide.
+
+Compared to manual GC-written or Legal-Ops-Manager-written status reports: a human author produces a better narrative on the matters they remember and a worse narrative on the matters they forgot. The skill is exhaustive across the export — it cannot forget a matter that has not been touched in two weeks, because the staleness rule surfaces it. The trade-off is voice: a human report has the GC's framing baked in. Mitigate by editing `references/2-sample-digest-format.md` to match the GC's preferred phrasing, and by keeping the Legal Ops Manager in the loop as editor for the first calibration window.
+
+Compared to a BI tool report (Tableau, Looker, Power BI on top of the matter system): BI tools answer pre-defined questions on a schedule and produce charts. They do not produce a Markdown brief, do not handle the unstructured "what changed and why does it matter" layer, and do not adapt to the firm's escalation rules without significant authoring work. Use BI for trend analysis over quarters; use the skill for the weekly operational digest.
 
 ## Watch-outs
 
-- **Data quality matters.** A digest is only as good as the matter management data underneath. If status fields aren't kept current, the digest reflects stale state. Make matter status hygiene a discipline before deploying the digest.
-- **GC tone calibration.** Different GCs want different digest styles. Iterate on the template with the GC's feedback in the first 4-8 weeks.
-- **Don't auto-send without review.** Legal Ops Manager reviews each digest before it goes to the GC for the first 60-90 days. After calibration, automation can take over.
-- **Keep the digest short.** A two-page digest doesn't get read. Force triage at the digest level — if everything is in the digest, nothing gets attention.
-- **Privileged matter handling.** Some matter activity is privileged or sensitive (board investigations, M&A in flight). Confirm the digest distribution list is appropriate for the most sensitive content included.
+Privileged content handling. Run the skill only on a Claude deployment cleared by your privilege review. Guard: the skill refuses to run if the environment variable `OOLIGO_DIGEST_DEPLOYMENT_TIER` is not set to `tier-a`. Set it explicitly in the cron environment after privilege review signs off; never default it on.
+
+Stale matter status producing false confidence. Guard: any matter whose `last_activity_date` is more than 14 days old surfaces in a dedicated "Stale status — verify" footer section, regardless of whether other escalation rules fired. The GC sees the staleness explicitly rather than acting on stale signal.
+
+Deadline-miss risk hidden by phase aggregation. Guard: any deadline within five business days surfaces in the deadline cluster section regardless of phase or risk tier — the cluster section is the safety net that catches what the escalation rules miss.
+
+Escalation false positives drowning the GC in noise. Guard: the "Needs GC attention" section is hard-capped at five items. If more than five matters match, the skill ranks by risk tier then spend impact then deadline proximity; the rest drop into FYI. If you find yourself wanting to remove the cap, tighten the rules in `references/3-escalation-criteria.md` instead.
+
+Tone calibration. Different GCs read different digests. Guard: iterate on the reference files weekly for the first four weeks, with the GC in the room. Treat the format as a living artifact — the skill body should not need to change once the references stabilise.
+
+Auto-send before review. Guard: the skill writes to `outbox/digest-YYYY-MM-DD.md`; sending the digest to the GC is a separate, manually triggered step until the calibration window closes (eight digests minimum). After that, automate the send only if the precision metric above 70 percent has held for three consecutive weeks.
+
+## Stack
+
+This workflow pairs naturally with [matter management](/en/learn/matter-management/) systems as the source of truth, with [legal-ops automation](/en/stacks/legal-ops/) stacks for the cron and delivery layer, and with downstream workflows that operate on the same export — for example outside-counsel invoice review, deadline-tracking automations, or quarterly portfolio analysis. Build the digest after the matter system is clean, not before.

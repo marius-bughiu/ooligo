@@ -13,39 +13,208 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that generates a 30/60/90 onboarding plan tailored to a new rep's prior background and your specific sales motion. Pulls a curated set of best-rep Gong calls, your messaging docs, and a competency matrix, and outputs a Notion-ready plan with weekly checkpoints, recommended call recordings, and graded exercises.
+A Claude Skill that produces a personalized 30/60/90-day onboarding plan for one
+new sales rep at a time. It reads the rep's prior background, the segment they
+will sell into, and your team's actual ramp data, then outputs a Notion-ready
+markdown file with week-by-week milestones, named Gong call references, named
+certifications, named role-play scenarios, and a manager check-in cadence
+calibrated to your historical median time-to-first-deal — not to a generic
+30/60/90 template lifted from a sales blog.
 
-## What you'll need
+The downloadable bundle at `apps/web/public/artifacts/rep-onboarding-skill/`
+contains `SKILL.md` and three fillable reference templates: segment milestones,
+a resource library schema, and a manager check-in framework. None of them work
+out of the box — that is the point. The skill exists to remove the
+mechanical work of weaving together your motion's specifics into a per-rep
+plan, not to replace the work of writing down what your motion's specifics
+actually are.
 
-- Claude Code or Claude.ai with the Skill installed
-- Gong access and a tagged library of best-rep calls (discovery, demo, negotiation)
-- Notion API token and a template page
-- A competency matrix doc (what a ramped rep can do)
-- The new rep's resume or LinkedIn URL
+## When to use
+
+Use this skill when a new AE or BDR has signed an offer and you want a draft
+plan ready before their first day. The skill produces the plan in roughly two
+minutes; the hiring manager spends 10-15 minutes editing it; total time-to-plan
+is under half an hour, versus the 2-4 hours a manager typically spends writing
+one from scratch and then never updating it.
+
+It is also useful for tenured reps moving segments — for example an SMB AE
+promoted to mid-market, which is a re-ramp problem managers routinely
+underestimate. The skill's classification step (`up-market-from-smb`) keys the
+plan to the multi-threading and procurement quirks that segment change
+introduces.
+
+## When NOT to use
+
+- **Performance management of a ramped rep.** A ramping rep missing milestones is
+  a coaching problem; this skill writes the plan, not the PIP. Using milestone
+  weeks as the basis for performance management is the third failure mode listed
+  below.
+- **Replacing the manager-rep conversation.** The plan is a scaffold the manager
+  edits before day one. Day-one alignment, expectations on culture, and personal
+  context belong to a real conversation, not a generated document.
+- **Comp, quota, or territory decisions.** Quota carry, ramp draws, and
+  territory carve-outs are policy choices that belong to RevOps and Finance. The
+  skill assumes those are set and reads `comp_plan_summary` as a verbatim input
+  to embed in the plan.
+- **Curriculum design for the whole team.** This skill produces one plan for
+  one rep. If you need a class-of-2026-Q3 onboarding cohort program, that's a
+  different artifact and probably belongs in an LMS.
 
 ## Setup
 
-1. **Tag a Gong library.** In Gong, build a folder of "gold standard" calls per stage of your motion. Aim for 10-15 calls covering different segments, deal sizes, and buyer types.
-2. **Install the Skill.** Drop `rep-onboarding.skill` into `~/.claude/skills/`. Set `GONG_API_KEY` and `NOTION_TOKEN`. Point `references/competency-matrix.md` and `references/sales-motion.md` at your docs.
-3. **Generate.** `build_onboarding_plan(rep_name="...", linkedin_url="...", segment="mid-market")`. The Skill produces a Notion page with weeks 1-12 broken into daily tasks: shadowing, certifications, role plays, and self-paced reading.
-4. **Manager review.** The hiring manager spends 15 minutes editing — adjusting based on what they know about the rep — and shares the page on day one.
+1. **Drop the bundle into your skills directory.** Copy
+   `apps/web/public/artifacts/rep-onboarding-skill/` into `~/.claude/skills/rep-onboarding/`. The skill loads `SKILL.md` plus everything in `references/`.
+2. **Fill in `references/1-segment-milestones-template.md`.** For each segment
+   you sell into, replace the placeholders with your real definitions of
+   "ramped," your default milestone weeks, and — most importantly — your
+   non-obvious motion quirks. The skill embeds the quirks verbatim into the
+   week-6 and week-9 plan sections, which is where ramping reps usually get
+   blindsided.
+3. **Fill in `references/2-resource-library-template.md`.** Every resource needs
+   a stable ID (Gong call ID, Notion slug, certification code), a tag, a
+   `last_reviewed` date, and a classification fit list. The skill skips any
+   resource older than 12 months and surfaces a TODO; this forces the
+   enablement owner to keep the library fresh rather than letting it rot
+   silently.
+4. **Fill in `references/3-manager-check-in-template.md`.** The defaults are
+   reasonable as a starting point but will not match your team's coaching
+   style. Replace at least the week-1 and week-12 question blocks before first
+   use.
+5. **Optional: point `prior_ramp_data_path` at a CSV.** Five or more prior reps
+   in the same segment is enough to compute a useful median time-to-first-deal.
+   Without it, the skill falls back to defaults and notes that the milestone
+   weeks are uncalibrated.
+6. **Optional: install the Gong and Notion MCP servers.** The skill works
+   without them — it produces the markdown file locally and you paste it into
+   Notion — but with them it can fetch live Gong call URLs and write the plan
+   directly into a Notion template page.
 
-## How it works
+## What the skill actually does
 
-The Skill reads the rep's prior background and asks: where do they need most reinforcement? A rep coming from a competitor needs less product training and more positioning differentiation. A rep moving up-market from SMB needs more multi-threading and procurement training. A rep who's never sold needs more fundamentals.
+The skill runs five sub-tasks in order; later steps depend on earlier ones, so
+nothing parallelizes. The full method lives in `SKILL.md` under "Method"; the
+short version is:
 
-It then maps weeks to a structured progression: week 1 product fundamentals plus shadowing, week 2 internal certifications, week 3 supervised live calls, weeks 4-8 ramp to first independent deals, weeks 9-12 full quota. Each week ends with a manager checkpoint and a measurable artifact: a recorded role play, a passed certification, a first-call writeup.
+1. **Classify the rep into one of five buckets.** A fixed classifier
+   (`needs-fundamentals`, `needs-positioning`, `needs-product`,
+   `needs-multi-threading`, `needs-velocity`) drives every later step. Free-form
+   classification drifts across runs; a fixed bucket means the plan stays
+   comparable across reps.
+2. **Calibrate milestone weeks against your historical ramp data.** Median, not
+   mean, over the last N reps in the same segment. One rep who closed in week 3
+   should not pull every future plan's milestones to week 3.
+3. **Pick named resources from the library.** Every resource is referenced by
+   stable ID and title — never as "a good discovery call." A rep who reads a
+   plan that says "watch a good discovery call" cannot self-serve; a rep who
+   reads "watch Gong call gc_4821" can.
+4. **Set named-deal targets, not activity targets.** By week 8, the rep produces
+   a list of 5-10 named target accounts with brief writeups. The plan
+   deliberately avoids activity targets like "50 calls per week" because they
+   reward motion without progress and let struggling reps hide behind the
+   dialer.
+5. **Embed manager check-in questions inline.** Each week has 3-5 specific
+   questions (e.g. "what would you do differently in the disco call you ran
+   Tuesday?"), pulled from the check-in template. Generic check-ins get
+   skipped; named questions force the conversation to specifics.
 
-The Gong calls are not generic — they're chosen to match the segment the rep will work and the gaps the Skill identified.
+## Cost reality
+
+The skill is a single Claude Sonnet invocation per plan. A typical run reads
+the three reference files (roughly 3-4k tokens combined), the rep's
+`linkedin_url` if provided, and optionally the prior-ramp CSV. Output is
+roughly 4-6k tokens of markdown. End-to-end cost per onboarding plan is
+under five cents on Sonnet pricing, and the run completes in roughly 90
+seconds.
+
+The time savings are larger than the dollar savings. A hiring manager
+writing a personalized 30/60/90 from scratch typically spends 2-4 hours, then
+ships a generic doc because the time pressure won. With the skill, the
+manager spends 10-15 minutes editing a draft that already names the right
+calls, the right segment quirks, and the right milestone weeks. Across a team
+hiring 8-12 reps a year, that is roughly 20-40 hours of manager time
+recovered, and — more importantly — a plan that was actually personalized
+rather than a copy-pasted template.
+
+There is a hidden cost: keeping `references/2-resource-library-template.md`
+fresh requires roughly 2 hours of enablement-owner time per quarter to retag
+calls and add new ones. The skill makes that cost visible by surfacing TODOs
+for stale resources rather than silently degrading.
+
+## Success metric
+
+Median time-to-first-closed-deal in the segment, measured monthly across the
+last 5 reps. The metric should trend down over the first year of using the
+skill (because plans now reference the actual segment quirks that used to
+ambush ramping reps) and then plateau at your motion's natural floor. If the
+metric is not trending down after 3 hires, the bottleneck is not the plan —
+it is upstream (hiring profile, territory quality, manager coaching capacity)
+and a better plan will not fix it.
+
+Avoid the seductive metric "percentage of reps who hit week-10 milestone on
+time." That metric will improve if you make the milestone easier or if reps
+game it by closing trivial deals in week 10 — see the milestone-as-performance-metric watch-out below.
+
+## vs alternatives
+
+**vs Spekit / Seismic Learning / Lessonly LMS courses.** An LMS is the right
+home for content that is the same for every rep (product fundamentals,
+compliance training, security basics). It is the wrong home for the per-rep
+plan, because every plan is different and an LMS course is by definition the
+same. Use both: the LMS for the certifications and self-paced reading the
+plan references, the skill for the plan itself.
+
+**vs Spekit-style "just-in-time enablement."** Spekit and similar tools push
+contextual content into the rep's workflow as they hit specific moments
+(opening a Salesforce opp, drafting an email). That is genuinely useful and
+complementary. It does not produce a 12-week plan with milestones. The two
+solve different problems.
+
+**vs a generic 30/60/90 template the manager fills in.** This is the actual
+status quo on most teams, and it loses on three counts: it does not
+incorporate your team's actual ramp data, it forgets the segment quirks until
+the rep gets blindsided by them, and the manager either spends 4 hours on it
+or 30 minutes on it — neither outcome is good. The skill produces the
+4-hour version in 90 seconds.
+
+**vs the manager writing the plan from scratch in a Notion template.** Same
+cost-versus-quality bind as the generic template, plus higher variance
+between managers. A new manager writes a worse plan than a senior manager;
+the skill flattens that variance by always pulling from the same library and
+the same milestone calibration.
 
 ## Watch-outs
 
-- **Resume-driven assumptions.** Resumes lie. The plan is a starting point, not a contract. Manager edits are mandatory.
-- **Stale Gong library.** Update the tagged library quarterly or it ages out of usefulness fast.
-- **Plan vs. execution.** The plan is worthless if the manager doesn't run the checkpoints. Pair this with a manager-side weekly review automation.
+- **Over-prescriptive plans don't survive contact with reality.** A day-by-day
+  plan for week 5 is fantasy — the rep is in live deals on their own
+  schedule by then. Guard: the skill writes day-by-day detail only for
+  weeks 1-4; weeks 5-12 are weekly themes with milestone gates, not daily
+  task lists.
+- **Missing context-specific deal patterns.** A generic mid-market plan
+  ignores that your motion has a specific procurement quirk (e.g. always a
+  security review above a certain ACV, always a 30-day legal cycle). Guard:
+  `references/1-segment-milestones-template.md` includes a "non-obvious motion
+  quirks" section the skill embeds verbatim into the week-6 and week-9 plan
+  sections.
+- **Milestone-as-performance-metric drift.** Once a milestone like "first deal
+  by week 10" becomes a number the rep is graded on, managers stop using it
+  as a coaching signal and reps game it (closing a tiny deal to clear the
+  bar). Guard: the plan labels each milestone "calibration signal, not
+  performance metric" and the week-10 manager check-in question is "if the
+  rep didn't hit the milestone, what's the coaching action?" — not "is the
+  rep on track?"
+- **Stale resource library.** A Gong library tagged 18 months ago references
+  reps who have left, deals that lost, and a competitive landscape that no
+  longer applies. Guard: every resource carries a `last_reviewed` date and
+  the skill skips anything older than 12 months, surfacing a TODO for the
+  enablement owner.
+- **Resume-driven assumptions.** The 5-bucket classifier is a starting
+  hypothesis, not ground truth. Guard: the week-1 manager check-in
+  explicitly asks "did the classification match what you're seeing?" and the
+  plan can be regenerated with a corrected `rep_background` after week 2.
 
 ## Stack
 
-- **Gong** — source of best-rep call examples
-- **Notion** — destination plan and checkpoint tracker
-- **Claude** — plan synthesis tailored to the rep's background
+- **Claude (Sonnet)** — plan synthesis tailored to the rep's background and
+  segment
+- **Gong** — source of best-rep call examples referenced by stable call ID
+- **Notion** — destination plan and weekly check-in tracker

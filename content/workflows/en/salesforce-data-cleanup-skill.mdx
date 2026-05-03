@@ -13,40 +13,213 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that finds and proposes fixes for the data garbage that quietly destroys your reporting: duplicate accounts, orphan contacts, junk leads, malformed phone numbers, mismatched account-contact relationships, and stage values that violate your funnel definition. Proposes changes; never writes without explicit approval.
+A Claude Skill that scans Salesforce for the data garbage quietly distorting your
+reporting — duplicate accounts, orphan contacts, junk leads, malformed phones,
+account-contact mismatches, and stage values that violate the funnel definition —
+then proposes fixes as a CSV the operator approves before any write lands.
+The Skill never writes without an explicit dry-run plus human approval, and
+every applied change is logged to a custom audit object so it can be reverted.
 
-## What you'll need
+The full bundle lives at `apps/web/public/artifacts/salesforce-data-cleanup-skill/`.
+The `SKILL.md` carries the inputs, method, and output format the Skill follows.
+Three reference files act as the operator's fillable scaffolding: `dedup-rules.md`
+for match keys and similarity thresholds, `stage-definitions.md` for the per-stage
+required-field set, and `survivor-ranking.md` for the weights used to pick which
+record wins a merge.
 
-- Salesforce with API access and a sandbox for safe testing
-- Claude Code with the Skill installed
-- A duplicate-detection ruleset (your existing matching rules or a fresh one)
-- A stage definition doc (which stages allow which fields populated)
-- Read-only credentials for first runs; write credentials only after you trust output
+## When to use
+
+Reach for this Skill when reporting has stopped being trustworthy because the
+underlying object data has decayed faster than the team can clean it. Specific
+triggers: a board ARR number disagrees with the CRO's pipeline view by more than
+a couple of percent; the SDR team complains about hitting the same prospect
+under three different Account records; a marketing-attribution dashboard is
+double-counting because contacts exist on the wrong accounts; an annual ICP
+re-segmentation is blocked because firmographic fields are missing on a quarter
+of accounts. In all of these the bottleneck is data hygiene, not strategy.
+
+The Skill is also the right call when an incumbent dedup tool has produced a
+shelfware effect — RevOps has a license but nobody trusts the proposals enough
+to act on them. The Skill's discriminator is that every proposed merge ships
+with a per-pair rationale line citing the deterministic key that fired and the
+survivor-selection signals that drove the choice. That auditability is what
+unblocks the human approval the cleanup needs.
+
+## When NOT to use
+
+Do not use this Skill if any of the following holds.
+
+You need a real-time dedup-on-create gate at the point of lead capture. The
+Skill is a batch tool that scans in chunks, not a synchronous validation rule.
+For point-of-create dedup, configure Salesforce's native Duplicate Rules.
+
+You need the Skill to auto-apply writes. There is no auto mode by design. Every
+fix passes through a dry-run CSV the operator must mark `Approve=Y` on before
+`apply_fix` will touch a row. If the operating model requires unsupervised
+writes, the Skill is the wrong shape and the right answer is a deterministic
+ETL job with explicit owner sign-off in the change-management process.
+
+You are responding to a GDPR or CCPA right-to-erasure request. Use the
+platform's documented PII purge flow, which routes through legal and produces
+the right paper trail. Do not improvise around it with a cleanup tool.
+
+You want hard-deletes that bypass the recycle bin. The Skill has no
+hard-delete code path. Recycle-bin discipline is non-negotiable; permanent
+purges are a deliberate manual platform action.
+
+The first run is against production with a write-scoped token. Two read-only
+scan cycles are required before the Skill will accept write credentials, and
+even then the first write run should be a sandbox rehearsal of an account
+merge.
 
 ## Setup
 
-1. **Install the Skill.** Drop `sfdc-cleanup.skill` into `~/.claude/skills/`. Set `SFDC_TOKEN` (start with read-only).
-2. **Run a discovery scan.** `scan_data_health(scope="full")`. The Skill samples each major object and reports counts of suspected duplicates, missing required fields, format violations, and stage-rule violations. Output is a one-page report with line-item counts.
-3. **Pick one issue and dry-run.** `dry_run_fix(issue_id="duplicates-account")`. The Skill produces a CSV of every proposed change with the exact field-level diff. Review with a human.
-4. **Apply with approval.** `apply_fix(issue_id="duplicates-account", csv_path="approved.csv")`. The Skill writes only the rows present in the approved CSV. Every write is logged with a reversible audit record.
-5. **Schedule recurring scans.** Run weekly; fixes monthly after review.
+1. Drop the bundle at `apps/web/public/artifacts/salesforce-data-cleanup-skill/`
+   into `~/.claude/skills/salesforce-data-cleanup/`. The Skill loader picks
+   up `SKILL.md` and the `references/` directory automatically.
+2. Set `SFDC_TOKEN` to a read-only Connected App token. Set `SFDC_INSTANCE_URL`
+   to the sandbox endpoint, not production. The Skill defaults `sandbox=true`
+   and refuses to flip without an explicit override flag.
+3. Replace the contents of `references/dedup-rules.md`,
+   `references/stage-definitions.md`, and `references/survivor-ranking.md`
+   with the team's real rules. The templates are scaffolding; running against
+   them on a live org will produce a high false-positive rate by design.
+4. Provision the `Cleanup_Audit__c` custom SObject in the sandbox and
+   production orgs using the field shape documented in `SKILL.md` under
+   "Method, step 5". The audit log is what makes runs reversible — without
+   it, do not run `apply_fix`.
+5. Run the first discovery scan. `scan_data_health(scope="Account,Contact,Lead,Opportunity")`.
+   Expect the scan to surface flaws in the dedup ruleset on the first pass —
+   that is the point of the read-only cycles.
 
-## How it works
+## What the Skill actually does
 
-The Skill uses the Salesforce Bulk API to pull objects in chunks, then runs Claude on each chunk against the rules you provided. For duplicates, it uses a hybrid: deterministic rules (exact domain match, normalized phone) plus a Claude semantic-similarity pass for fuzzy cases (different capitalizations, suffixes, branch offices). For format issues, it's pure regex and validation.
+The Skill runs five steps in order, documented in full in `SKILL.md`.
+Discovery scan pulls each in-scope SObject via the Bulk API in chunks, because
+a single REST query against a 100k-Account org will hit governor limits and
+chunked Bulk avoids the timeout ceiling on large pulls.
 
-The hard part is the proposed merge target. For two duplicate accounts, which one survives? The Skill ranks by activity recency, contact count, and opportunity history, and proposes a survivor. RevOps reviews and overrides as needed.
+Dedup uses a two-pass hybrid. Pass one is deterministic — lowercased domain,
+E.164-normalized phone, NFKD-normalized name with corporate suffixes stripped.
+Exact matches on a single strong key go to the proposal CSV at `high`
+confidence. Pass two is a Claude semantic-similarity comparison, but only on
+candidate pairs that already share a weak deterministic signal (same first
+six phone digits, same first name token, same parent-domain TLD). The
+narrow-then-rank approach is what holds per-scan token cost to under five
+dollars on a 100k-Account org; pure-pairwise semantic over N^2 records is
+both expensive and noisy on common names.
 
-Every action is logged to a custom Salesforce object (`Cleanup_Audit__c`) so you can revert.
+Survivor selection for merges uses a composite score: 0.4 weight on activity
+recency in the last 90 days of Tasks and Events, 0.3 weight on attached
+contact count, 0.2 weight on Opportunity history (count plus log of Amount),
+0.1 weight on whether `LastModifiedById` is the integration user. No single
+signal is reliable on its own — most-recent-modification often points at a
+backfill, contact count favors crusty old records, and Opportunity Amount
+alone discards the active relationship. The composite tracks where the team
+is actually working today.
+
+Dry-run emits a CSV with `Operation`, `Field`, `Old_Value`, `New_Value`,
+`Confidence`, `Survivor_Id`, `Rationale`, and an `Approve` column the
+operator must set. Apply reads the approved CSV and writes via Bulk API,
+logging every change to `Cleanup_Audit__c` with both the prior and new
+JSON values so a `revert(run_id)` companion can re-apply the originals.
+
+## Cost reality
+
+A discovery scan against a 100k-Account, 500k-Contact org runs in roughly
+twenty minutes wall-clock and consumes about 3-5 dollars of Claude API tokens
+for the semantic-similarity pass. Bulk API call quota usage is in the low
+hundreds of calls per scan; well under any standard org's daily ceiling.
+The applied write run is itself the smaller cost — Bulk API writes do not
+consume Claude tokens, they only burn a few additional API calls per chunk
+of approved rows.
+
+The headcount math is the real story. A typical RevOps cleanup sprint at the
+sizes above runs two or three weeks of one analyst's time per quarter, plus
+a couple of days from a Salesforce admin. The Skill collapses that to
+roughly two days per quarter — a discovery scan, a half-day reviewing the
+dry-run CSVs, a sandbox rehearsal of any account merges, and an apply run.
+On a fully-loaded RevOps salary, that is a meaningful saving across a year.
+
+The cost the Skill does not eliminate is the rep-communication overhead.
+A merge run with no comms still burns trust faster than the bad data did,
+and the `change_brief.md` the Skill emits alongside every applied run is a
+template the operator still has to send.
+
+## Success metric
+
+Watch one number per scan: the share of `high` confidence proposals the
+operator approves on first review. On the first run that number is typically
+under fifty percent — that is the dedup ruleset getting tuned, not the Skill
+underperforming. Within three or four scan cycles, with the rules adjusted,
+that number should land above eighty percent. Below that floor at cycle four,
+the dedup rules in `references/dedup-rules.md` are still mismatched to the
+data and need another pass before any further write runs.
+
+A secondary metric: stage-violation count over time. A healthy org with a
+real funnel definition should see this number trend down month over month
+as RevOps fixes the upstream causes — required-field validation rules,
+stage-transition automations, lead-routing logic. If stage-violation count
+is flat across cleanup cycles, the dirty-data problem is process not data.
+
+## vs alternatives
+
+DemandTools is the incumbent in this space. It is a mature, deterministic,
+GUI-driven tool that RevOps teams have used for a decade. It is excellent
+at high-volume deterministic dedup; it is weaker on the survivor-rationale
+audit trail this Skill emits, and it cannot do the semantic-similarity pass
+for fuzzy company names without a separate scripting layer. If the team is
+already paying for DemandTools and the dedup ruleset is mature, stay there
+and consider this Skill only for the semantic dedup edge cases and the
+audit-log discipline.
+
+Cloudingo is the closer point comparison — it has fuzzy matching and a
+review-then-apply workflow that resembles what the Skill produces. Cloudingo
+is more user-friendly for a non-technical RevOps lead. The Skill's edge is
+the per-pair rationale line and the reference-file model that lets the team
+version-control its dedup rules in git alongside the rest of the RevOps
+config. If RevOps is allergic to git, Cloudingo wins.
+
+A manual RevOps-led cleanup sprint is the status-quo alternative for teams
+without a dedup tool. It works, but it consumes the analyst time documented
+above and produces no reusable artifact — the next sprint starts from
+scratch. The Skill's discovery scan is the same artifact every time, which
+makes the work compoundable.
 
 ## Watch-outs
 
-- **Never grant write access on day one.** Run read-only for at least two cycles. The first run will surface false positives in your matching rules.
-- **Merge in sandbox first.** Account merges cascade to opportunities and activities. Test in sandbox, validate the cascades, then move to production.
-- **Soft delete, not hard delete.** Use Salesforce's recycle bin discipline. Never bypass it.
-- **Communicate the cleanup.** If reps wake up to merged accounts, they'll panic. Announce ahead and provide an undo path.
+Granting write access on the first run is the most common failure. The first
+scan surfaces flaws in the dedup ruleset as much as in the data; if the Skill
+applies them, the false positives turn into real, audited writes. The guard:
+the Skill refuses `apply_fix` when the configured token has write scope and
+the audit log shows zero prior dry-run rows for the run's scope. Two
+read-only cycles minimum, regardless of how confident the rules look.
+
+Account merges cascading to the wrong records is the most expensive failure.
+A wrong survivor takes the wrong Opportunities, Tasks, Events, and Contact
+Roles with it. The guard: `apply_fix` for any `dedup_account` row refuses to
+run unless a sandbox rehearsal with the same `Run_Id` prefix has happened in
+the last fourteen days, and the operator has set `--rehearsed=true`. The
+sandbox rehearsal is not optional ceremony — it is where the cascading
+side-effects of any given merge actually get observed.
+
+Reps waking up to merged accounts they never heard about is the cultural
+failure that kills future cleanup runs. The guard: the Skill emits a
+`change_brief.md` alongside every applied run, listing the merge map, owner
+emails, and count of moved Opportunities, ready to paste into a Slack
+channel before reps log in. Send it. Skipping the comms step burns trust
+faster than the bad data ever did.
+
+Hard-deletes bypassing the recycle bin is a request that comes up but should
+be refused. The guard: the Skill has no hard-delete code path. `soft_delete`
+is the only delete operation; anyone wanting a permanent purge does it
+through the platform's manual workflow with the appropriate sign-off.
 
 ## Stack
 
-- **Salesforce** — source of truth and target of writes
-- **Claude** — semantic dedup and fix proposals
+- **Salesforce** — source of truth and target of writes; `Cleanup_Audit__c`
+  custom object holds the reversible audit log
+- **Claude** — runs the semantic-similarity pass and emits the per-pair
+  rationale lines that make merges auditable
+- **Bulk API** — used for both reads (chunked discovery) and writes
+  (chunked apply); never the synchronous REST query API for full scans
