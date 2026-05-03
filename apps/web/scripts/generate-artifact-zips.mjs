@@ -119,12 +119,36 @@ function buildZip(entries) {
   return Buffer.concat([...localChunks, centralBuf, eocd]);
 }
 
+// Files/dirs that may exist in artifact source dirs but should never ship in
+// bundle zips: build caches (Python bytecode, swap files), OS junk, vendored
+// deps. Same list lives in src/pages/[locale]/workflows/[slug].astro for the
+// on-page file viewer — keep them in sync.
+const IGNORED_DIRS = new Set([
+  "__pycache__",
+  "node_modules",
+  ".git",
+  ".venv",
+  "__MACOSX",
+]);
+const IGNORED_FILE_BASENAMES = new Set([".DS_Store", "Thumbs.db"]);
+const IGNORED_FILE_EXTS = new Set([".pyc", ".pyo", ".swp", ".swo"]);
+
+function isIgnoredFile(name) {
+  if (IGNORED_FILE_BASENAMES.has(name)) return true;
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 && IGNORED_FILE_EXTS.has(name.slice(dot));
+}
+
 function walkFiles(dir) {
   const out = [];
   for (const ent of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, ent.name);
-    if (ent.isDirectory()) out.push(...walkFiles(full));
-    else if (ent.isFile()) out.push(full);
+    if (ent.isDirectory()) {
+      if (IGNORED_DIRS.has(ent.name)) continue;
+      out.push(...walkFiles(join(dir, ent.name)));
+    } else if (ent.isFile()) {
+      if (isIgnoredFile(ent.name)) continue;
+      out.push(join(dir, ent.name));
+    }
   }
   return out;
 }
