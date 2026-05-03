@@ -1,0 +1,175 @@
+{
+  "name": "Evidence collection ediscovery (skeleton)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "collection-request",
+        "responseMode": "lastNode",
+        "options": { "rawBody": false }
+      },
+      "id": "7a7a7a7a-0001-0000-0000-000000000001",
+      "name": "Collection Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 400],
+      "webhookId": "collection-request",
+      "notesInFlow": true,
+      "notes": "Webhook from legal-ops platform: {matter_id, collection_plan_id}. The collection plan is the counsel-approved scope; this flow executes against it, doesn't author it."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH plan AS (\n  SELECT collection_plan_id, plan_sha, custodian_id, source, scope_json\n  FROM collection_plans\n  WHERE collection_plan_id = $1 AND status = 'approved'\n)\nSELECT * FROM plan;",
+        "options": { "queryReplacement": "={{ $json.collection_plan_id }}" }
+      },
+      "id": "7a7a7a7a-0001-0000-0000-000000000002",
+      "name": "Load Collection Plan",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 400],
+      "credentials": {
+        "postgres": { "id": "PLACEHOLDER_PLAN_DB_CRED_ID", "name": "Postgres — collection plans" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// For each (custodian, source) pair, prepare a per-source dispatch payload.\n// The flow's per-source nodes receive these payloads.\nconst rows = $input.all().map(r => r.json);\nconst trigger = $('Collection Request').item.json;\n\nif (rows.length === 0) {\n  return [{ json: { status: 'halted', reason: 'no_approved_plan_rows', collection_plan_id: trigger.collection_plan_id } }];\n}\n\nconst out = rows.map(row => ({\n  json: {\n    matter_id: trigger.matter_id,\n    collection_plan_id: trigger.collection_plan_id,\n    plan_sha: row.plan_sha,\n    custodian_id: row.custodian_id,\n    source: row.source,\n    scope: typeof row.scope_json === 'string' ? JSON.parse(row.scope_json) : row.scope_json,\n    requested_at: new Date().toISOString(),\n    collection_id: `coll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,\n  }\n}));\n\nreturn out;"
+      },
+      "id": "7a7a7a7a-0001-0000-0000-000000000003",
+      "name": "Per-Source Dispatch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400],
+      "notesInFlow": true,
+      "notes": "Fans out one item per (custodian, source) pair. The downstream switch routes by source."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  { "leftValue": "={{ $json.source }}", "rightValue": "google-vault", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "google"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  { "leftValue": "={{ $json.source }}", "rightValue": "m365-compliance", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "m365"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true },
+                "conditions": [
+                  { "leftValue": "={{ $json.source }}", "rightValue": "slack-discovery", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "slack"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "7a7a7a7a-0001-0000-0000-000000000004",
+      "name": "Source Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vault.googleapis.com/v1/matters/{{ $env.GOOGLE_VAULT_MATTER_ID }}/savedQueries",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"displayName\": \"{{ $json.collection_id }}\",\n  \"query\": {\n    \"corpus\": \"MAIL\",\n    \"dataScope\": \"ALL_DATA\",\n    \"searchMethod\": \"ACCOUNT\",\n    \"accountInfo\": { \"emails\": [\"{{ $json.scope.email }}\"] },\n    \"mailOptions\": { \"excludeDrafts\": false },\n    \"startTime\": \"{{ $json.scope.start_time }}\",\n    \"endTime\": \"{{ $json.scope.end_time }}\",\n    \"terms\": \"{{ $json.scope.terms }}\"\n  }\n}",
+        "options": {
+          "response": { "response": { "responseFormat": "json", "neverError": false } },
+          "timeout": 60000
+        }
+      },
+      "id": "7a7a7a7a-0001-0000-0000-000000000005",
+      "name": "Google Vault: Saved Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 280],
+      "credentials": {
+        "googleApi": { "id": "PLACEHOLDER_GOOGLE_VAULT_CRED_ID", "name": "Google Vault service account" }
+      },
+      "notesInFlow": true,
+      "notes": "Creates a saved query in the matter; an export job is the next step (separate API call). Real production flow needs the full create-query → poll-export sequence; skeleton shown."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute SHA-256 of the export, append chain-of-custody record.\n// Skeleton — production flow includes the actual export-fetch step.\nconst crypto = require('crypto');\nconst input = $input.first().json;\nconst dispatch = $('Per-Source Dispatch').item.json;\n\n// In production: fetch the actual export bytes here, hash them.\n// Skeleton uses a deterministic placeholder so the audit record shape is correct.\nconst placeholderHash = crypto.createHash('sha256').update(`${dispatch.collection_id}-${dispatch.source}`).digest('hex');\n\nreturn [{\n  json: {\n    matter_id: dispatch.matter_id,\n    collection_id: dispatch.collection_id,\n    custodian_id: dispatch.custodian_id,\n    source: dispatch.source,\n    plan_sha: dispatch.plan_sha,\n    collected_at: new Date().toISOString(),\n    collected_by_service_account: $env.COLLECTION_SERVICE_ACCOUNT || 'ediscovery-bot@firm',\n    hash: placeholderHash,\n    file_count: input.fileCount || 0,\n    byte_count: input.byteCount || 0,\n    scope_summary: JSON.stringify(dispatch.scope).slice(0, 500),\n    skeleton_warning: 'This skeleton flow does not fetch and hash actual export bytes. Production: replace with fetch + bytewise hash.',\n  }\n}];"
+      },
+      "id": "7a7a7a7a-0001-0000-0000-000000000006",
+      "name": "Hash + Chain-of-Custody",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "collection_audit",
+        "columns": "matter_id, collection_id, custodian_id, source, plan_sha, collected_at, collected_by_service_account, hash, file_count, byte_count, scope_summary",
+        "additionalFields": {}
+      },
+      "id": "7a7a7a7a-0001-0000-0000-000000000007",
+      "name": "Audit: Collection Complete",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 400],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_AUDIT_DB_CRED_ID",
+          "name": "Postgres — chain-of-custody (append-only)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Collection Request": { "main": [[{ "node": "Load Collection Plan", "type": "main", "index": 0 }]] },
+    "Load Collection Plan": { "main": [[{ "node": "Per-Source Dispatch", "type": "main", "index": 0 }]] },
+    "Per-Source Dispatch": { "main": [[{ "node": "Source Switch", "type": "main", "index": 0 }]] },
+    "Source Switch": {
+      "main": [
+        [{ "node": "Google Vault: Saved Query", "type": "main", "index": 0 }],
+        [],
+        []
+      ]
+    },
+    "Google Vault: Saved Query": { "main": [[{ "node": "Hash + Chain-of-Custody", "type": "main", "index": 0 }]] },
+    "Hash + Chain-of-Custody": { "main": [[{ "node": "Audit: Collection Complete", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "versionId": "1"
+}

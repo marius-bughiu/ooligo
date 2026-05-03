@@ -1,0 +1,88 @@
+---
+slug: regulatory-change-monitor-n8n
+canonical_slug: regulatory-change-monitor-n8n
+locale: en
+verticals: [legal-ops]
+title: Regulatory change monitor with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops, in-house-counsel, compliance, dpo]
+difficulty: intermediate
+time_to_setup: 90min
+ai_generated: true
+human_tested: false
+---
+
+An n8n flow that watches a curated set of regulatory feeds (EU AI Act updates, GDPR enforcement decisions, US state privacy laws, SEC rule proposals, NYC LL 144 and other AI-employment laws, sector-specific rules), classifies each item by relevance to the firm's specific exposure profile, scores urgency, and posts a structured digest to the legal team's Slack channel — daily aggregate, plus immediate alerts for `high_urgency` items. Replaces the in-house counsel's "RSS-feed-and-newsletter graveyard" with a filtered queue that surfaces only what the firm actually needs to act on.
+
+## When to use
+
+- The firm operates across multiple regulatory regimes (privacy, employment, sector-specific) and the in-house team can't manually read every regulator's updates.
+- Compliance work is event-driven enough that "we missed this rule change because nobody saw it" is a real failure mode.
+- The firm has documented its regulatory exposure profile (which jurisdictions, which sectors, which data types) — the relevance filter requires that profile.
+
+## When NOT to use
+
+- **Replacing the firm's general counsel reading.** The flow is decision support; the counsel still reads the high-urgency items and sets the firm's response. The flow filters; counsel acts.
+- **Producing legal advice on the rule changes.** The flow summarizes. Counsel interprets and decides response.
+- **Highly specialized practice areas** that need dedicated practitioner-tier monitoring (M&A regulatory clearance work, complex tax). Specialized practice has bespoke sources beyond what a feed-monitor catches.
+- **Geographies the exposure profile doesn't cover.** Adding a geography requires the profile to be updated; the flow doesn't auto-discover what the firm cares about.
+
+## Setup
+
+1. **Import the flow** from `apps/web/public/artifacts/regulatory-change-monitor-n8n/regulatory-change-monitor-n8n.json`.
+2. **Wire credentials.** Anthropic (Claude classification), Slack (digest destination), HTTP fetcher (no auth needed for public RSS / API feeds).
+3. **Author the firm's exposure profile.** Per regulatory area, document: applicable jurisdictions, sectors, data types, penalty exposure, named counsel owner. Template in `_README.md`.
+4. **Configure the feed sources.** The bundled flow polls 8 default feeds (EU Commission AI Act page, NYC consumer affairs LL 144 page, EDPB guidelines, SEC rule proposals, ICO enforcement, EDPS guidelines, FTC press releases, state-AG privacy enforcement aggregator). Add or remove per the firm's exposure.
+5. **Tune the urgency thresholds.** Defaults: enforcement decision against a peer firm → `high`; rule proposal in scope-jurisdiction → `medium`; consultation paper → `low`. Tune per the counsel's preference for noise vs miss.
+6. **Dry-run for two weeks.** Compare the flow's classifications to the counsel's manual read of the same period. Tune the relevance filter and urgency rules.
+
+## What the flow does
+
+Six nodes. Per-feed polling, then per-item classification, then digest assembly.
+
+1. **Cron Hourly** — fires every hour to poll feeds (the daily digest assembles at 8am office TZ).
+2. **Fetch Feeds** — HTTP requests to each configured feed URL. Parse RSS / Atom / JSON per feed format. Dedupe by item GUID against the prior 30 days of seen items.
+3. **Classify** — Claude call per new item. Returns `{relevant_to_profile, jurisdictions_implicated, regulatory_areas, urgency, summary, recommended_owner}`. Items with `relevant_to_profile: false` are dropped from the digest but logged to the audit table.
+4. **Store** — write each classified item to the `regulatory_items` table.
+5. **Immediate Alert** — for `urgency: high` items, post immediately to `#legal-alerts` with the classification + link.
+6. **Daily Digest** — at 8am office TZ, assemble the 24-hour items into a digest grouped by regulatory area, posted to `#legal-team`.
+
+## Cost reality
+
+- **LLM tokens** — typically 1-2k input + 0.5k output per classified item. With ~20-50 new items per day across feeds, ~$0.20-0.60/day in model cost.
+- **n8n executions** — hourly cron + per-item processing. Within Starter plan for most firms.
+- **Counsel time** — the win. Hand-monitoring is 30-60 minutes/day per counsel for thorough coverage; reviewing the daily digest is 5-10 minutes plus immediate-alert response time.
+- **Setup time** — 90 minutes including the exposure profile authoring (45 minutes is the profile).
+
+## Success metric
+
+- **Counsel's "missed-it" incidents per quarter** — incidents where a regulator-led inquiry surfaces a rule change the firm should have known about. Should drop to zero on monitored areas.
+- **Digest signal-to-noise ratio** — share of digest items the counsel marks as "relevant" vs "ignore." Should be 70-85% relevant; below 50% means the relevance filter or exposure profile needs tuning.
+- **Time from rule publication to counsel response posture** — for monitored areas, should drop from "weeks" (passive newsletter monitoring) to under 24 hours (the digest catches it on first poll).
+
+## vs alternatives
+
+- **vs commercial regulatory-monitoring services** (LexisNexis State Net, Bloomberg Government, FiscalNote, Thomson Reuters Regulatory Intelligence). Pick those if budget supports the platform play and you want managed coverage with practitioner-grade summaries. The flow is the lightweight middle ground at lower cost and with the relevance filter calibrated to your profile.
+- **vs in-house counsel reading newsletters.** The default and the source of misses.
+- **vs no monitoring.** Predictable failure mode at smaller firms; works until it doesn't.
+
+## Watch-outs
+
+- **Feed source drift.** *Guard:* feed health-check on every hourly poll. Failed-fetch items surface as "feed source X has been down for N hours" warnings on the daily digest, not silently dropped.
+- **Relevance filter false negatives.** *Guard:* the audit table logs ALL classified items, including `relevant_to_profile: false`. Counsel reviews the false-negative bucket weekly; misses are signal to update the profile or the classifier prompt.
+- **Urgency over-flagging.** *Guard:* immediate-alert posts to `#legal-alerts` only; the daily digest absorbs medium and low urgency. Tuning the urgency thresholds is the lever if alerts overwhelm.
+- **Jurisdiction-mapping miss.** *Guard:* each item is annotated with `jurisdictions_implicated` based on the regulator's authority + the rule's stated scope. Items where jurisdiction is ambiguous get tagged "ambiguous — counsel to confirm" rather than guessed.
+- **Stale exposure profile.** *Guard:* the profile carries `last_updated` and triggers a "profile review reminder" on the digest if older than 6 months.
+- **Feed-content staleness vs publication date.** *Guard:* the digest sorts by publication date, not fetch date. Old items in the feed re-pop if the feed itself was down for a stretch.
+
+## Stack
+
+The bundle lives at `apps/web/public/artifacts/regulatory-change-monitor-n8n/`:
+
+- `regulatory-change-monitor-n8n.json` — the flow export
+- `_README.md` — credentials, exposure profile schema, default feed list, dry-run procedure
+
+Tools: [n8n](/en/tools/n8n/), [Claude](/en/tools/claude/), [Slack](/en/tools/slack/).
+
+Related: [legal knowledge management](/en/learn/legal-knowledge-management/), [EU AI Act for legal teams](/en/learn/eu-ai-act-for-legal-teams/), [GDPR for legal teams](/en/learn/gdpr-for-legal-teams/), [AI policy for legal teams](/en/learn/ai-policy-for-legal-teams/).

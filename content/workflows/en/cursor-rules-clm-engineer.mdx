@@ -1,0 +1,105 @@
+---
+slug: cursor-rules-clm-engineer
+canonical_slug: cursor-rules-clm-engineer
+locale: en
+verticals: [legal-ops]
+title: CLM engineer Cursor rules
+artifact_type: cursor-rule
+tools_used: [cursor, claude]
+roles: [legal-ops-engineer, contracts-engineer]
+difficulty: advanced
+time_to_setup: 20min
+ai_generated: true
+human_tested: false
+---
+
+A `.cursorrules` file for engineers building integrations against contract-lifecycle-management platforms ([Ironclad](/en/tools/ironclad/), [Juro](/en/tools/juro/), [LinkSquares](/en/tools/linksquares/), [ContractPodAi](/en/tools/contractpodai/), [Agiloft](/en/tools/agiloft/)) — the Python or TypeScript glue between CLM, the data warehouse, the firm's CMRR / cash-pacing dashboards, and the legal-ops admin surfaces. CLM engineering has the same shape as recruiting engineering ([recruiting engineer cursor rule](/en/workflows/cursor-rules-recruiting-engineer/)): every line touches commercial-confidential data; audit logging and change-control are the only things between a CLM engineer and a counsel asking "show me what changed and when."
+
+## When to use
+
+- A legal-ops or contracts engineer is building integrations against a CLM platform and wants Cursor to push back when the code drifts toward the standard CLM-engineering anti-patterns (silent writes, swallowed errors, weak audit, broken idempotence).
+- The team has a written CLM data-flow architecture and is enforcing it in code; the rules surface the architecture's defaults at code-generation time.
+- New engineer onboarding — the rules read like a CLM-engineering primer with the firm's defaults baked in.
+
+## When NOT to use
+
+- **CLM admin work that doesn't involve code.** Configuring workflow templates in the CLM UI, building approval matrices, etc. — this rule is about the integration code, not the platform's own configuration.
+- **General contracts work** — the rules assume engineering work; commercial counsel's prompts are a different category.
+- **Migration projects from one CLM to another.** Different concerns (data fidelity, historical-record preservation, downtime); a one-time engagement that needs counsel-led planning rather than ongoing rule-of-thumb.
+
+## Setup
+
+1. **Drop the bundle.** Copy `apps/web/public/artifacts/cursor-rules-clm-engineer/.cursorrules` to your CLM-engineering repo's root (Cursor reads `.cursorrules` automatically).
+2. **Customize the tool-specific section.** The bundled rules cover Ironclad, Juro, and LinkSquares APIs. Add or remove based on the firm's CLM stack.
+3. **Customize the audit destination.** The default rule says "audit log lands in the firm's Postgres `clm_audit` table." Edit per the firm's audit infrastructure (Datadog / Splunk / Snowflake).
+4. **Use it.** Cursor reads the rules automatically when generating code in the repo. Engineer prompts Cursor; rules nudge toward the firm's defaults.
+
+## What the rules enforce
+
+The rules push back at code-generation time on these patterns:
+
+### Before-writing-code questions
+
+- What contract data is involved? (Executed contracts are records of legal obligation; drafts may be privileged.)
+- What jurisdictions touch the data? (US contracts ≠ EU contracts under GDPR.)
+- Read or write? (Default is read; writes need written rationale and audit attribution.)
+- What happens on retry? (Idempotence on every webhook handler.)
+- Where does the audit log entry land?
+
+### Tool-specific guidance
+
+- **Ironclad**: Workflow API specifics — workflow IDs are GUIDs not integers; pagination is cursor-based; webhook signatures are HMAC-SHA256.
+- **Juro**: Document-templating API — Liquid templates require sandboxing; do not eval template strings.
+- **LinkSquares**: Records search API — pagination is offset-based with a hard 10K offset cap.
+- **ContractPodAi / Agiloft**: per-tool quirks documented when the firm uses them.
+
+### Defaults to enforce
+
+- **Audit trail** — every read and every write produces an entry with `timestamp, user_identity, system, action, contract_id, fields_changed`.
+- **Idempotence** — webhook handlers key on `(event_type, contract_id, source_event_id)` and skip on second arrival.
+- **Schema validation** — parse every API response into a Pydantic / Zod schema before use.
+- **Secrets** — API keys live in a secret manager; separate keys for read vs write scope.
+- **Privacy / consent** — counterparty PII has its own retention policy; data-subject-access requests have a defined response path.
+- **Testing** — staging only; no live API calls in CI.
+
+### Anti-patterns to refuse
+
+- Writes without an `On-Behalf-Of` header equivalent (CLM systems vary on the header, but the principle is the same — every mutation attributable to a named user).
+- Mutating contract fields in production without dual-control (some firms require a second approver for fields like execution date, expiration, renewal terms).
+- Auto-approving workflow steps based on inbound data — the firm's approval matrix is the source of truth, not the integration code.
+- Hard-coded contract IDs in production code — those drift; load from config.
+
+## Cost reality
+
+- **LLM tokens** — none direct. Cursor reads the rules locally; no token cost beyond Cursor's own per-completion cost.
+- **Engineer onboarding time** — the win. New CLM engineers without the rules drift toward the same anti-patterns; with the rules, Cursor pushes back at code-generation time.
+- **Setup time** — 20 minutes to drop the file and customize tool-specific sections.
+
+## Success metric
+
+- **Code-review revert rate** — share of CLM-integration PRs that get reverted or substantially refactored post-merge for an audit / idempotence / schema issue. Should drop after the rules are in place.
+- **Audit-log gap incidents** — incidents where counsel can't reproduce a contract-state change. Should drop to zero.
+- **New-engineer ramp time** — qualitative; how quickly a new CLM engineer ships a production-safe integration. The rules are the most-shareable part of "how we build CLM at this firm."
+
+## vs alternatives
+
+- **vs internal engineering wiki.** The wiki has the same content but is read on demand. Rules in `.cursorrules` are read at code-generation time, which is when they matter.
+- **vs code-review enforcement.** Code review catches the issues but late. The rules surface the standard at draft time, which is cheaper.
+- **vs no defaults.** The default and the source of inconsistent integration code across team members.
+
+## Watch-outs
+
+- **Rules drift from actual practice.** *Guard:* the rules carry a `last_reviewed` date in the file header. Engineers on the team revisit quarterly.
+- **Cursor not reading the rules.** *Guard:* the file must be at the repo root and named `.cursorrules` exactly. The README in the bundle calls this out.
+- **Over-restrictive defaults blocking legitimate work.** *Guard:* the rules say "if you need to break this rule, document why in the PR description and ping the legal-ops engineer lead." Hard rules with explicit escape valves work better than soft rules without.
+- **Tool-API drift.** *Guard:* the tool-specific sections include the API doc URL and a `last_verified` date. Quarterly check.
+
+## Stack
+
+The bundle lives at `apps/web/public/artifacts/cursor-rules-clm-engineer/`:
+
+- `.cursorrules` — the rules file
+
+Tools: [Cursor](/en/tools/cursor/) (the consumer of the rules), [Claude](/en/tools/claude/) (Cursor's underlying model in many configurations). Plus whichever CLM the team integrates against: [Ironclad](/en/tools/ironclad/), [Juro](/en/tools/juro/), [LinkSquares](/en/tools/linksquares/), [ContractPodAi](/en/tools/contractpodai/), [Agiloft](/en/tools/agiloft/).
+
+Related: [contract lifecycle management](/en/learn/contract-lifecycle-management/), [clm vs cms](/en/learn/clm-vs-cms/), [clause library design](/en/learn/clause-library-design/).

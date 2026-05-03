@@ -1,0 +1,148 @@
+{
+  "name": "Litigation hold orchestration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "issue-hold",
+        "responseMode": "lastNode",
+        "options": { "rawBody": false }
+      },
+      "id": "4a4a4a4a-0001-0000-0000-000000000001",
+      "name": "Issue Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "issue-hold",
+      "notesInFlow": true,
+      "notes": "Receives `{matter_id, hold_id, custodian_list_source, notice_template_path}` from the legal-ops platform when counsel marks a hold ready to issue. Manual trigger via curl is also acceptable for first-issue workflows."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT custodian_id, full_name, email, slack_user_id, manager_email, last_updated_at\nFROM custodian_registry\nWHERE matter_id = $1\n  AND active = true\n  AND deleted_at IS NULL;",
+        "options": {
+          "queryReplacement": "={{ $json.matter_id }}"
+        }
+      },
+      "id": "4a4a4a4a-0001-0000-0000-000000000002",
+      "name": "Load Custodian List",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_CUSTODIAN_DB_CRED_ID",
+          "name": "Postgres — custodian registry"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Pulls active custodians for the matter. Replace with HTTP node if your custodian source is in Relativity / Everlaw / Logikcull. Schema returned must match: custodian_id, full_name, email, slack_user_id (optional), manager_email."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Load notice template, hash it, and prepare per-custodian email payloads.\nconst fs = require('fs');\nconst crypto = require('crypto');\n\nconst trigger = $('Issue Trigger').item.json;\nconst custodians = $input.all().map(r => r.json);\nconst templatePath = trigger.notice_template_path;\nconst template = fs.readFileSync(templatePath, 'utf8');\nconst templateSha = crypto.createHash('sha256').update(template).digest('hex').slice(0, 16);\n\nconst out = custodians.map(c => {\n  const ackToken = crypto.randomBytes(16).toString('hex');\n  const ackUrl = `${$env.ACK_BASE_URL}/ack/${trigger.hold_id}/${c.custodian_id}/${ackToken}`;\n  const personalized = template\n    .replace(/\\{\\{custodian_name\\}\\}/g, c.full_name)\n    .replace(/\\{\\{matter_id\\}\\}/g, trigger.matter_id)\n    .replace(/\\{\\{hold_id\\}\\}/g, trigger.hold_id)\n    .replace(/\\{\\{ack_url\\}\\}/g, ackUrl);\n\n  return {\n    json: {\n      hold_id: trigger.hold_id,\n      matter_id: trigger.matter_id,\n      custodian_id: c.custodian_id,\n      custodian_email: c.email,\n      custodian_slack_id: c.slack_user_id,\n      manager_email: c.manager_email,\n      template_sha: templateSha,\n      ack_token: ackToken,\n      ack_url: ackUrl,\n      personalized_text: personalized,\n      issued_at: new Date().toISOString(),\n    }\n  };\n});\n\nreturn out;"
+      },
+      "id": "4a4a4a4a-0001-0000-0000-000000000003",
+      "name": "Personalize Notice",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "notesInFlow": true,
+      "notes": "Loads the per-matter notice template, computes SHA for the audit log, generates a unique acknowledgement token + URL per custodian. The token is what makes acknowledgements custodian-specific."
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.LEGAL_OPS_FROM_EMAIL }}",
+        "toEmail": "={{ $json.custodian_email }}",
+        "subject": "LEGAL HOLD: Action Required — Matter {{ $json.matter_id }}",
+        "emailFormat": "html",
+        "html": "={{ $json.personalized_text }}<br><br><a href=\"{{ $json.ack_url }}\">Click here to acknowledge receipt of this hold notice</a>",
+        "options": {}
+      },
+      "id": "4a4a4a4a-0001-0000-0000-000000000004",
+      "name": "Send Hold Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [900, 240],
+      "credentials": {
+        "smtp": {
+          "id": "PLACEHOLDER_SMTP_CRED_ID",
+          "name": "SMTP — firm mail relay (not third-party)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Hold notices may flag the existence of a litigation matter. Use the firm's own mail relay (not a third-party SaaS like SendGrid) for confidentiality."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $json.custodian_slack_id }}\",\n  \"text\": \"You have received a litigation hold notice for Matter {{ $json.matter_id }}. Please check your email for details and acknowledgement instructions.\",\n  \"unfurl_links\": false\n}",
+        "options": {}
+      },
+      "id": "4a4a4a4a-0001-0000-0000-000000000005",
+      "name": "Send Hold Slack DM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 360],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack bot token (chat:write)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Slack DM is intentionally vague — does not name the matter. Custodian gets details from email. The DM exists to ensure the email isn't missed in inbox-overflow scenarios."
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "hold_audit",
+        "columns": "hold_id, custodian_id, action, template_sha, payload_json, created_at",
+        "additionalFields": {}
+      },
+      "id": "4a4a4a4a-0001-0000-0000-000000000006",
+      "name": "Audit: Notice Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 300],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_AUDIT_DB_CRED_ID",
+          "name": "Postgres — immutable audit table (append-only)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Append-only by DB constraint (REVOKE UPDATE, DELETE on this table). Counsel's defensibility depends on this; do not work around the constraint."
+    }
+  ],
+  "connections": {
+    "Issue Trigger": { "main": [[{ "node": "Load Custodian List", "type": "main", "index": 0 }]] },
+    "Load Custodian List": { "main": [[{ "node": "Personalize Notice", "type": "main", "index": 0 }]] },
+    "Personalize Notice": {
+      "main": [
+        [
+          { "node": "Send Hold Email", "type": "main", "index": 0 },
+          { "node": "Send Hold Slack DM", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Hold Email": { "main": [[{ "node": "Audit: Notice Sent", "type": "main", "index": 0 }]] },
+    "Send Hold Slack DM": { "main": [[{ "node": "Audit: Notice Sent", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false,
+  "versionId": "1"
+}

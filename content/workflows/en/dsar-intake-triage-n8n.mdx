@@ -1,0 +1,87 @@
+---
+slug: dsar-intake-triage-n8n
+canonical_slug: dsar-intake-triage-n8n
+locale: en
+verticals: [legal-ops]
+title: DSAR / data-subject-request intake triage with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops, privacy-counsel, dpo]
+difficulty: intermediate
+time_to_setup: 90min
+ai_generated: true
+human_tested: false
+---
+
+An n8n flow that receives data-subject requests (GDPR Art. 15-22, CCPA-CPRA §1798.100-105, equivalent under UK GDPR / LGPD / VCDPA) into a dedicated `privacy@` inbox or web form, classifies them by type (access / deletion / rectification / portability / objection / restriction / automated-decision), routes them by jurisdiction to the right counsel, opens a tracking record with the response-deadline clock running, and dispatches a verification request to the data subject. Replaces the manual DSAR-intake spreadsheet that quietly misses the GDPR's 1-month / CCPA's 45-day deadlines.
+
+## When to use
+
+- The firm processes EU/UK personal data (GDPR / UK GDPR triggers) OR California personal information at the CCPA-CPRA threshold OR is subject to LGPD / VCDPA / CPA / CDPA equivalents.
+- Inbound DSARs are at a frequency where manual tracking starts slipping (usually >5 per month).
+- The firm has a [data-subject-rights workflow](/en/learn/gdpr-for-legal-teams/) defined — what counts as verification, who responds, what data sources to pull from. The flow is the orchestration; the workflow is the substance.
+
+## When NOT to use
+
+- **Auto-responding to DSARs without counsel review.** The flow opens the tracking record and verifies identity. The substantive response (data extracted, decision on scope, communication to the subject) is counsel's call.
+- **Bypassing the verification step.** Auto-acting on an unverified DSAR is the most common DSAR failure mode — the request might be from someone other than the data subject, or might be a malicious request to extract another person's data. The flow's verification step is non-optional.
+- **Replacing the underlying data-extraction work.** The flow tracks; it does not extract data from systems. Each system the firm uses needs its own extraction path (manual or automated); the flow surfaces what to pull from where.
+- **DSARs subject to specific industry rules** (HIPAA medical-record requests, FERPA student-record requests, financial-record GLBA requests). Different verification and response procedures apply; this flow's defaults are GDPR + CCPA-CPRA.
+
+## Setup
+
+1. **Import the flow** from `apps/web/public/artifacts/dsar-intake-triage-n8n/dsar-intake-triage-n8n.json`.
+2. **Wire credentials.** Five required: IMAP / Gmail (privacy@ inbox), Anthropic (Claude classification), Postgres (DSAR tracking table), SMTP (verification send), Slack (counsel notification).
+3. **Provision the tracking table.** Schema in `_README.md` — keyed on `dsar_id`, capturing receipt timestamp, jurisdiction, request type, deadline, status.
+4. **Author the verification template.** Per jurisdiction (GDPR vs CCPA-CPRA have different verification standards), write a template under `n8n/data/verification/<jurisdiction>.md`.
+5. **Configure routing.** Per-jurisdiction counsel routing (EU → DPO, US → privacy counsel, etc.) and per-request-type routing (access vs deletion goes to different paths).
+6. **Dry-run on closed DSARs.** Replay last quarter's DSARs (with subject identities anonymized). Confirm classification and routing match what the privacy counsel actually did.
+
+## What the flow does
+
+Six nodes. Classification before routing because routing depends on the classification.
+
+1. **Inbox Poll / Webhook** — polls the `privacy@` inbox every 5 minutes OR receives webhooks from a privacy-rights web form. Pulls subject, body, sender, timestamp.
+2. **Classify** — Claude call. Returns `{request_type, jurisdiction, subject_email, urgency_signal, malicious_signal}`. The malicious_signal is non-zero on patterns like "I am the lawyer for X" or "this is for litigation discovery" — those route differently and don't follow the consumer DSAR path.
+3. **Open Tracking Record** — INSERT into the DSAR table with deadline computed from jurisdiction (GDPR: 1 month from receipt; CCPA-CPRA: 45 days from receipt; etc.).
+4. **Send Verification Request** — sends a verification email to the data subject with the per-jurisdiction template. The verification asks for proof of identity sufficient to act on a DSAR — what counts varies by jurisdiction (GDPR is "necessary and proportionate"; CCPA-CPRA requires verifying to a "reasonable degree of certainty").
+5. **Notify Counsel** — Slack DM to the routed counsel with: classification, jurisdiction, deadline countdown, link to the tracking record. The counsel's job from here is to oversee data-extraction and the substantive response.
+6. **Audit Append** — one row per DSAR per intake to the audit table.
+
+## Cost reality
+
+- **LLM tokens** — typically 2-4k input + 0.5-1k output per DSAR. ~$0.02-0.04 per request. Negligible.
+- **n8n execution count** — ~5-15/day on average mid-size firm; well within Starter plan.
+- **Counsel time** — the win is on the tracking-and-deadline burden, not the substantive work. Manual deadline tracking costs ~30 minutes per DSAR weekly; flow operation surfaces issues at intake and frees the counsel time for the response.
+
+## Success metric
+
+- **Deadline hit rate** — share of DSARs responded to within the legal deadline. Should be 100%; below that the firm is exposed to GDPR Art. 83 fines (4% global revenue ceiling for systematic failure) and CCPA-CPRA enforcement.
+- **Verification round-trip time** — should drop to under 24 hours from intake (verification email goes immediately on receipt).
+- **Misclassification rate at counsel review** — share of DSARs the counsel reclassifies. Should be under 10%; above that, the classification prompt or the routing table needs tuning.
+
+## vs alternatives
+
+- **vs OneTrust / TrustArc / Securiti DSAR modules.** Those products handle DSAR end-to-end including system-extraction integrations. Pick them for high-volume firms or firms needing the full privacy-program platform. The flow is the lightweight middle ground.
+- **vs Excel + Outlook rules.** The default and the source of missed deadlines.
+- **vs counsel reviews every intake email.** Workable at very low volume; the flow earns its setup cost beyond ~5 DSARs/month.
+
+## Watch-outs
+
+- **Classification on borderline requests.** *Guard:* `urgency_signal` and `malicious_signal` are surfaced as confidence bands; ambiguous classifications route to the privacy counsel for re-classification rather than guessing.
+- **Verification standard drift.** *Guard:* per-jurisdiction templates pin the verification standard. EU verification asks less than CCPA-CPRA verification.
+- **Identity-spoofing as the requester.** *Guard:* the verification email goes to the email on file (where applicable) — not to the email the request came from. If the request comes from `attacker@example.com` claiming to be `victim@firm.com`, the verification reaches victim@firm.com.
+- **Cross-jurisdiction routing miss.** *Guard:* requests with multiple plausible jurisdictions route to ALL applicable counsel, not the first match. The substantive response selects the controlling jurisdiction.
+- **Deadline calendar miscalculation.** *Guard:* deadline math runs in the workflow's timezone; the audit log captures the deadline timestamp explicitly so a counsel can verify against the firm's calendar.
+- **Storage of unverified DSAR data.** *Guard:* the tracking record stores subject-email and request type only until verification clears; full request body is not propagated to systems beyond the audit log until verification confirms.
+
+## Stack
+
+The bundle lives at `apps/web/public/artifacts/dsar-intake-triage-n8n/`:
+
+- `dsar-intake-triage-n8n.json` — the flow export
+- `_README.md` — schema, credentials, jurisdiction templates
+
+Tools: [n8n](/en/tools/n8n/), [Claude](/en/tools/claude/), [Slack](/en/tools/slack/).
+
+Related: [GDPR for legal teams](/en/learn/gdpr-for-legal-teams/), [legal intake](/en/learn/legal-intake/), [legal knowledge management](/en/learn/legal-knowledge-management/).

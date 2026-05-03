@@ -1,0 +1,157 @@
+{
+  "name": "DSAR intake triage",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute", "minute": 5 }] },
+        "filters": {
+          "labelIds": ["INBOX"],
+          "q": "in:inbox -from:me -label:dsar-processed newer_than:1d"
+        },
+        "options": { "downloadAttachments": false }
+      },
+      "id": "5a5a5a5a-0001-0000-0000-000000000001",
+      "name": "Privacy Inbox Poll",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 400],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_PRIVACY_CRED_ID",
+          "name": "Gmail — privacy@ inbox"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Polls the dedicated privacy@ inbox every 5 minutes. Replace with IMAP / Outlook node if mail lives elsewhere. Web-form intake adds a parallel webhook node feeding the same Classify step."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $credentials.anthropicApi.apiKey }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 700,\n  \"system\": \"You are a DSAR classifier. Take the email subject and body. Return ONLY valid JSON with these keys: request_type (one of: access, deletion, rectification, portability, objection, restriction, automated_decision, unclear), jurisdiction (one of: EU-GDPR, UK-GDPR, CCPA-CPRA, LGPD, VCDPA, CDPA, CPA, other, unclear), subject_email (the email address of the data subject — usually the sender, but check the body for an explicit identification), urgency_signal (low, medium, high — high if the request mentions a regulatory complaint, lawyer, or specific deadline), malicious_signal (low, medium, high — high if the request claims to be from a lawyer, mentions litigation discovery, or asks for another person's data). Do NOT return prose; only the JSON object.\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Subject: {{ $json.subject }}\\nFrom: {{ $json.from }}\\n\\nBody:\\n{{ $json.snippet }}\" }\n  ]\n}",
+        "options": {
+          "response": { "response": { "responseFormat": "json" } },
+          "timeout": 30000
+        }
+      },
+      "id": "5a5a5a5a-0001-0000-0000-000000000002",
+      "name": "Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 400],
+      "credentials": {
+        "anthropicApi": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude classification, compute deadline, prepare DB insert.\nconst llm = $input.first().json;\nconst inbox = $('Privacy Inbox Poll').item.json;\nconst text = llm.content?.[0]?.text || '';\n\nlet cls;\ntry {\n  cls = JSON.parse(text.match(/\\{[\\s\\S]*\\}/)[0]);\n} catch (e) {\n  cls = { request_type: 'unclear', jurisdiction: 'unclear', subject_email: inbox.from, urgency_signal: 'medium', malicious_signal: 'medium' };\n}\n\n// Deadline math per jurisdiction.\nconst DEADLINE_DAYS = {\n  'EU-GDPR': 30,\n  'UK-GDPR': 30,\n  'CCPA-CPRA': 45,\n  'LGPD': 15,\n  'VCDPA': 45,\n  'CDPA': 45,\n  'CPA': 45,\n  'other': 30,  // conservative default\n  'unclear': 30,\n};\nconst days = DEADLINE_DAYS[cls.jurisdiction] || 30;\nconst now = new Date();\nconst deadline = new Date(now.getTime() + days * 86400 * 1000);\n\nreturn [{\n  json: {\n    dsar_id: `dsar-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,\n    received_at: now.toISOString(),\n    request_type: cls.request_type,\n    jurisdiction: cls.jurisdiction,\n    subject_email_claimed: cls.subject_email,\n    sender_email: inbox.from,\n    urgency_signal: cls.urgency_signal,\n    malicious_signal: cls.malicious_signal,\n    deadline: deadline.toISOString(),\n    deadline_days: days,\n    raw_subject: inbox.subject,\n    raw_snippet: (inbox.snippet || '').slice(0, 1000),\n    status: 'pending_verification',\n  }\n}];"
+      },
+      "id": "5a5a5a5a-0001-0000-0000-000000000003",
+      "name": "Compute Deadline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "dsar_tracking",
+        "columns": "dsar_id, received_at, request_type, jurisdiction, subject_email_claimed, sender_email, urgency_signal, malicious_signal, deadline, status, raw_subject",
+        "additionalFields": {}
+      },
+      "id": "5a5a5a5a-0001-0000-0000-000000000004",
+      "name": "Open Tracking Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [900, 400],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_DSAR_DB_CRED_ID",
+          "name": "Postgres — DSAR tracking"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.PRIVACY_FROM_EMAIL }}",
+        "toEmail": "={{ $('Compute Deadline').item.json.subject_email_claimed }}",
+        "subject": "Verification required for your data-subject request — Ref {{ $('Compute Deadline').item.json.dsar_id }}",
+        "emailFormat": "text",
+        "text": "Hello,\n\nWe received a data-subject request from your email address (or from someone claiming to act on your behalf). To act on this request, applicable law requires us to verify your identity.\n\nReference: {{ $('Compute Deadline').item.json.dsar_id }}\nReceived: {{ $('Compute Deadline').item.json.received_at }}\nDeadline for our response (assuming verification clears within 7 days): {{ $('Compute Deadline').item.json.deadline }}\n\nTo verify, please reply to this email with [jurisdiction-appropriate verification — e.g. for CCPA-CPRA: confirmation of three pieces of personal information we hold on you; for GDPR: a description of the data you are requesting access to and confirmation of your residency status]. See attached template for jurisdiction details.\n\nIf you did not make this request, please reply to this email with 'Not me' and we will close the request without taking action.\n\nThe firm's privacy team",
+        "options": {}
+      },
+      "id": "5a5a5a5a-0001-0000-0000-000000000005",
+      "name": "Send Verification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1120, 320],
+      "credentials": {
+        "smtp": {
+          "id": "PLACEHOLDER_SMTP_CRED_ID",
+          "name": "SMTP — firm mail relay"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Verification goes to the CLAIMED subject email (which classify pulled from the body OR defaulted to sender). If sender ≠ claimed-subject, the verification reaches the alleged subject — protecting against spoofing."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#privacy-counsel\",\n  \"text\": \"DSAR intake — {{ $('Compute Deadline').item.json.dsar_id }}\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*New DSAR — {{ $('Compute Deadline').item.json.dsar_id }}*\\n*Type:* {{ $('Compute Deadline').item.json.request_type }} · *Jurisdiction:* {{ $('Compute Deadline').item.json.jurisdiction }}\\n*Deadline:* {{ $('Compute Deadline').item.json.deadline }} ({{ $('Compute Deadline').item.json.deadline_days }} days from receipt)\\n*Urgency:* {{ $('Compute Deadline').item.json.urgency_signal }} · *Malicious-signal:* {{ $('Compute Deadline').item.json.malicious_signal }}\\n*Status:* pending_verification — verification email sent\" } }\n  ]\n}",
+        "options": {}
+      },
+      "id": "5a5a5a5a-0001-0000-0000-000000000006",
+      "name": "Notify Counsel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 480],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack bot token (chat:write)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Privacy Inbox Poll": { "main": [[{ "node": "Classify", "type": "main", "index": 0 }]] },
+    "Classify": { "main": [[{ "node": "Compute Deadline", "type": "main", "index": 0 }]] },
+    "Compute Deadline": { "main": [[{ "node": "Open Tracking Record", "type": "main", "index": 0 }]] },
+    "Open Tracking Record": {
+      "main": [
+        [
+          { "node": "Send Verification", "type": "main", "index": 0 },
+          { "node": "Notify Counsel", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "versionId": "1"
+}

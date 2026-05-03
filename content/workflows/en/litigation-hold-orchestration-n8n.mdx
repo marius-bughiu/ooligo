@@ -1,0 +1,93 @@
+---
+slug: litigation-hold-orchestration-n8n
+canonical_slug: litigation-hold-orchestration-n8n
+locale: en
+verticals: [legal-ops]
+title: Litigation hold orchestration with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, slack, claude]
+roles: [legal-ops, in-house-counsel, ediscovery-lead]
+difficulty: advanced
+time_to_setup: 120min
+ai_generated: true
+human_tested: false
+---
+
+An n8n flow that orchestrates a litigation-hold issue cycle — issuing the hold notice via email and Slack to named custodians, tracking acknowledgements with reminders on a configurable cadence, escalating non-acknowledgers to the legal-ops lead and the custodian's manager, logging every action to an immutable audit table the firm uses if the hold's adequacy is later questioned. Replaces the legal-ops admin's spreadsheet-and-Outlook-rules manual cycle (typically a 2-4 hour-per-week ongoing burden once a few holds are active) with a deterministic flow that can't drop a custodian.
+
+## When to use
+
+- The firm issues litigation holds at a frequency where manual tracking starts to slip — usually >3 active holds at any time.
+- You have a custodian-of-record source: a custodian-management table in the e-discovery platform ([Relativity](/en/tools/relativity/), [Everlaw](/en/tools/everlaw/), [Logikcull](/en/tools/logikcull/)) or in a maintained legal-ops CSV.
+- The firm needs a defensible audit trail for hold adequacy. The flow's audit table is the answer to "show us you acted reasonably to preserve."
+- The legal-ops lead and outside counsel sign off on hold issuance; the flow handles the ongoing tracking, not the decision to issue.
+
+## When NOT to use
+
+- **Single-hold engagements where manual tracking is fine.** The setup cost (120 minutes, plus integration with custodian source) earns back at the ~3-active-holds mark, not at one.
+- **Auto-escalation that bypasses counsel.** The flow's escalation paths are configurable, but the default sends to the legal-ops lead, NOT directly to the GC or outside counsel. The lead applies judgment about which non-acknowledgements warrant counsel attention.
+- **Hold notices that need bespoke language per custodian.** The flow templates per matter; if every notice needs hand-crafted language, the bottleneck isn't the orchestration.
+- **Replacing counsel's judgment on hold scope.** The flow tracks the hold to the custodians counsel named. Adding or removing custodians is a counsel decision, not a flow decision.
+
+## Setup
+
+1. **Import the flow.** Drop `apps/web/public/artifacts/litigation-hold-orchestration-n8n/litigation-hold-orchestration-n8n.json` into your n8n instance.
+2. **Wire credentials.** Four required: `PLACEHOLDER_CUSTODIAN_DB_CRED_ID` (read access to custodian source), `PLACEHOLDER_SMTP_CRED_ID` (SMTP for hold notice email), `PLACEHOLDER_SLACK_CRED_ID` (Slack for in-channel notification), `PLACEHOLDER_AUDIT_DB_CRED_ID` (write access to immutable audit table).
+3. **Author the hold-notice template.** Per matter, write a Markdown template under `n8n/data/hold-notices/<matter-id>.md`. The template includes counsel-approved language about preservation scope, prohibited actions (deletion, alteration), and acknowledgement instructions.
+4. **Configure escalation paths.** The flow's default: reminder at +3, +7, +14 days; escalation to legal-ops lead at +14; escalation to custodian's manager at +21. Tune per the firm's risk posture.
+5. **Set up the audit table.** A Postgres / Snowflake table keyed on `(hold_id, custodian_id, action, timestamp)` with an append-only constraint enforced at the DB level (immutable; counsel needs to demonstrate the audit log can't be retroactively edited).
+6. **Dry-run on a closed hold.** Replay a closed hold's custodian list. Confirm the notification, reminder, and escalation timings match what the legal-ops admin previously did manually.
+
+## What the flow does
+
+Seven nodes, in two phases. Phase 1 (issuance) fires once per hold. Phase 2 (tracking) is a daily cron checking for non-acknowledgers and dispatching reminders / escalations.
+
+1. **Issue Trigger** — manual or webhook trigger from the legal-ops platform when counsel marks a hold ready to issue.
+2. **Load Custodian List** — pulls the custodian list from the configured source for the matter.
+3. **Send Hold Notice** — email + Slack to each custodian. The email includes the hold-notice template and a unique acknowledgement link per custodian. Audit log: one row per custodian per `notice_sent`.
+4. **Daily Cron Tracker** (separate workflow trigger) — Mondays-Fridays at 9am office TZ. Checks the audit table for custodians who have not acknowledged within the configured window.
+5. **Determine Action** — Code node. For each non-acknowledger, determines: send reminder (at +3, +7), escalate to legal-ops lead (at +14), escalate to manager (at +21).
+6. **Dispatch Reminder / Escalation** — sends reminder email or escalation, depending on the determined action. Audit log entry per dispatch.
+7. **Acknowledgement Webhook** — separate webhook that receives the custodian's acknowledgement click. Records to audit table; stops further reminders for that custodian.
+
+## Cost reality
+
+- **n8n cost** — self-hosted free; n8n Cloud at the workflow execution count this generates (~3-5/day per active hold) is comfortably in the Starter plan.
+- **LLM tokens** — none. The flow is deterministic.
+- **SMTP / Slack** — within standard quotas.
+- **Legal-ops admin time** — the win. Manual tracking of 5-10 active holds is 4-8 hours/week. Flow operation is monitoring the audit table for true exceptions, ~30 min/week.
+- **Setup time** — 120 minutes including the audit table provisioning, plus 30-60 minutes per matter for the hold-notice template authoring.
+
+## Success metric
+
+- **Time-to-issue from counsel's "issue" decision** — should drop to under 1 hour (manual is often a day for large custodian lists).
+- **Acknowledgement rate at +14 days** — should exceed 95% on routine holds. Below that, the notice template needs reworking or the custodian list has stale records.
+- **Audit-completeness on counsel review** — share of holds where counsel can produce a complete defensible audit chain on demand. Should be 100%; the audit table is the source.
+
+## vs alternatives
+
+- **vs e-discovery platform's built-in hold module** ([Relativity](/en/tools/relativity/) Legal Hold, [Logikcull](/en/tools/logikcull/), [Everlaw](/en/tools/everlaw/)). Pick the platform module if you live in the e-discovery tool. Pick the flow if your custodians span Slack, email, and HR systems and you need notification surfaces beyond the platform's defaults.
+- **vs SaaS hold-management tools** (Onna, Exterro Legal Hold). Pick those for advanced custodian-self-service and integrated preservation. Pick the flow if you want the orchestration in your own infrastructure with the audit log in your own DB.
+- **vs spreadsheet + Outlook rules.** The default and the source of dropped custodians at scale. The flow is the deterministic replacement.
+
+## Watch-outs
+
+- **Custodian list drift.** *Guard:* the flow re-pulls the custodian list per check, with the source's `last_updated_at` checked. If the list has drifted (custodian added/removed) without counsel approval, the flow surfaces the diff to the legal-ops lead rather than silently acting on the new list.
+- **Audit-table mutability.** *Guard:* the audit table must be append-only at the DB level (Postgres: `REVOKE UPDATE, DELETE FROM ALL`). The flow does not enforce this — the DB does. The README documents the schema with the constraint inline.
+- **Notice-text drift.** *Guard:* per-matter notice templates are SHA'd at issuance time; the audit log captures the SHA. If counsel wants to amend the notice, the amendment is a separate action in the flow, not a silent re-issue.
+- **Custodian opt-out / silent ignore.** *Guard:* escalation to the manager at +21 days converts the issue from a custodian problem to a management problem. Beyond that, the legal-ops lead may need to involve outside counsel — the flow surfaces but does not act.
+- **Cross-jurisdiction hold differences.** *Guard:* the flow assumes US-style litigation hold semantics. EU-style "duty to preserve" under the upcoming AI Act and GDPR has different scope; the per-matter notice template handles those.
+- **Privacy posture on custodian email.** *Guard:* hold notices may flag the existence of a litigation matter to the custodian; the SMTP path uses the firm's mail relay (not a third-party SaaS) for confidentiality.
+
+## Stack
+
+The bundle lives at `apps/web/public/artifacts/litigation-hold-orchestration-n8n/`:
+
+- `litigation-hold-orchestration-n8n.json` — the flow export
+- `_README.md` — credential setup, audit-table schema, dry-run procedure
+- `audit-table-schema.sql` — DDL for the immutable audit table
+- `hold-notice-template.md` — fillable hold-notice template per matter
+
+Tools: [n8n](/en/tools/n8n/) (orchestration), [Slack](/en/tools/slack/) (in-channel notification), [Claude](/en/tools/claude/) (optional — for the daily summary of audit-log activity to the legal-ops lead, not for any decision step).
+
+Related: [ediscovery](/en/learn/ediscovery/), [EDRM model](/en/learn/edrm-model/), [matter management](/en/learn/matter-management/).

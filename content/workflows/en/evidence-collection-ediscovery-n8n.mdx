@@ -1,0 +1,92 @@
+---
+slug: evidence-collection-ediscovery-n8n
+canonical_slug: evidence-collection-ediscovery-n8n
+locale: en
+verticals: [legal-ops]
+title: Evidence collection orchestration for ediscovery with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, relativity, slack]
+roles: [legal-ops, ediscovery-lead, in-house-counsel]
+difficulty: advanced
+time_to_setup: 180min
+ai_generated: true
+human_tested: false
+---
+
+An n8n flow that orchestrates the collection-phase of [ediscovery](/en/learn/ediscovery/) (the EDRM "Collection" stage) — pulls custodian-list data from the firm's HRIS, generates per-custodian collection requests against the firm's data sources (Google Workspace, Microsoft 365, Slack, file shares, custom SaaS), tracks collection completion and chain-of-custody, dispatches collected data to the [Relativity](/en/tools/relativity/) workspace (or [Everlaw](/en/tools/everlaw/) / [Logikcull](/en/tools/logikcull/)) for processing. Every step writes to an immutable audit log counsel uses to defend collection adequacy. Replaces the legal-ops admin's spreadsheet-and-screenshot manual collection with a deterministic flow.
+
+## When to use
+
+- Firms with regular ediscovery — typically those with active litigation portfolios where collection is happening multiple times per year.
+- Custodian count per matter is large enough that manual collection is operationally infeasible (typically >5 custodians per matter).
+- The firm has IT-engineering capacity to wire the connector layer (Google Workspace Vault, M365 eDiscovery, Slack Discovery API, etc.). The flow is the orchestration; the connectors are per-system.
+- Counsel signs off on collection scope per custodian; the flow executes against the approved scope.
+
+## When NOT to use
+
+- **Single-custodian collections** — manual is fine; the flow's setup cost (180 minutes plus connector wiring) doesn't earn back.
+- **Replacing chain-of-custody documentation expertise.** The flow generates audit records; the ediscovery lead validates that the records meet the jurisdiction's chain-of-custody standard. Different jurisdictions have different requirements.
+- **Auto-defining collection scope.** Counsel defines scope per the matter; the flow executes against the scope, doesn't author it.
+- **First-of-firm matters** without an established collection-procedure baseline. The flow encodes a procedure; if there's no procedure to encode, define it first.
+
+## Setup
+
+1. **Import the flow.** Drop `apps/web/public/artifacts/evidence-collection-ediscovery-n8n/evidence-collection-ediscovery-n8n.json` into your n8n instance.
+2. **Wire credentials.** Per source: Google Workspace (Vault API; service account with delegated authority), Microsoft 365 (Compliance Center API; per-tenant app registration), Slack (Discovery API — only available on Enterprise Grid), HRIS (custodian source). Plus Relativity / Everlaw / Logikcull (the e-discovery platform) and Postgres (audit log).
+3. **Author the per-source collection-scope template.** Per data source, document: what scopes are collectible (date range, search terms, custodian-specific filters), what the per-source rate limits are, what the expected output format is.
+4. **Configure the chain-of-custody template.** Per matter and per custodian: who collected (service account name + human reviewer), when, what was collected, hash of the collection at completion. Template in `_README.md`.
+5. **Set up the e-discovery platform integration.** Relativity Processing API or equivalent for Everlaw / Logikcull. The flow uploads to a per-matter workspace; processing pipeline (deduplication, OCR, etc.) runs in the platform.
+6. **Dry-run on a closed matter.** Replay collection for a matter completed last quarter. Confirm the collected volume matches what was originally produced and that the chain-of-custody records match what counsel certified.
+
+## What the flow does
+
+Eight nodes. Per-custodian-per-source orchestration, with chain-of-custody at every step.
+
+1. **Collection Request Trigger** — webhook from the legal-ops platform when counsel marks collection scope approved.
+2. **Load Custodian + Scope** — pulls custodian list + per-custodian per-source scope from the matter's collection plan.
+3. **Per-Source Dispatch** — fans out one branch per data source per custodian. The flow's most complex part — each source has its own API and its own rate-limit constraints.
+4. **Source: Google Workspace Vault** — Vault matter created (or reused), hold issued, search executed against custodian's Gmail / Drive / Calendar within scope, results exported.
+5. **Source: M365 Compliance** — Content search executed against custodian's mailbox / OneDrive / Teams within scope, results exported via the Compliance Center.
+6. **Source: Slack Discovery** — Slack Enterprise Grid Discovery API; per-custodian per-channel export within scope.
+7. **Hash + Chain-of-Custody Append** — each per-source export is hashed (SHA-256), and a chain-of-custody record is appended to the audit table: `{matter_id, custodian_id, source, scope_summary, collected_at, collected_by_service_account, hash, file_count, byte_count}`.
+8. **Upload to E-Discovery Platform** — push exports to the per-matter Relativity workspace; trigger processing job; record platform-side load ID in the audit log for traceability.
+
+## Cost reality
+
+- **Connector / source-platform costs** — Google Vault, M365 E5 with Advanced eDiscovery, Slack Enterprise Grid all carry per-seat costs. The flow doesn't reduce those; it makes them used effectively.
+- **n8n executions** — long-running (large exports take hours); use n8n's queue mode for production.
+- **E-discovery platform processing cost** — Relativity / Everlaw / Logikcull all charge per-GB-processed; the flow doesn't change that math.
+- **Legal-ops admin time** — the win. Manual orchestration of a 10-custodian collection across 4 sources is days of work; the flow runs in hours unattended.
+- **Setup time** — 180 minutes for the flow itself + significant per-source connector wiring (the connectors are the bulk of the actual setup).
+
+## Success metric
+
+- **Time-from-counsel-approval to collection-complete** — should drop from days/weeks (manual) to hours (flow), modulo source-platform export-job duration.
+- **Chain-of-custody completeness** — should be 100% per matter. Any gap is a defensibility risk.
+- **Volume drift** — flow's collected volume vs counsel's expected scope. Within 10% is normal (filter calibration); >25% triggers re-scope review.
+
+## vs alternatives
+
+- **vs e-discovery platform's native collection modules** ([Relativity](/en/tools/relativity/) Collect, [Everlaw](/en/tools/everlaw/) Collections). Pick those if your team lives in the platform and the platform's connectors cover your sources. The flow is for custom-source matters or matters spanning more sources than any single platform covers natively.
+- **vs commercial collection-orchestration tools** (Reveal Brainspace, OpenText EnCase, Cellebrite, Onna). Pick those for the highest-end matters with forensic-grade requirements. The flow is the lightweight middle ground for routine corporate ediscovery.
+- **vs manual collection.** Workable at small scale; doesn't scale to multi-custodian matters.
+
+## Watch-outs
+
+- **Chain-of-custody integrity.** *Guard:* every per-source export is hashed at collection time and again before upload to the e-discovery platform. Hash mismatches halt the upload and alert the e-discovery lead.
+- **Scope creep on automated collection.** *Guard:* the flow's scope is read from the counsel-approved collection plan; widening scope mid-run requires plan amendment, not a flow tweak. The audit log captures the plan SHA per run.
+- **Source-platform rate-limit exhaustion.** *Guard:* per-source rate limiters in the flow's per-source nodes. Slack Discovery API in particular has aggressive rate limits — the flow paces accordingly.
+- **Privilege exposure during collection.** *Guard:* collection captures everything in scope; privilege review happens downstream in the e-discovery platform (the [privilege review batch skill](/en/workflows/privilege-review-batch-skill/) is the next stage). The flow does NOT pre-filter privileged content — that's a downstream decision.
+- **Custodian privacy concerns.** *Guard:* the flow operates against the systems the custodian uses for work; personal accounts (personal Gmail, personal Slack) are out of scope unless counsel explicitly named them. The collection plan documents the boundary.
+- **Cross-jurisdiction data-localization.** *Guard:* EU-resident custodian data may be subject to GDPR data-localization considerations; the flow's per-custodian scope flags EU-resident custodians for data-handling review before export to a non-EU e-discovery workspace.
+
+## Stack
+
+The bundle lives at `apps/web/public/artifacts/evidence-collection-ediscovery-n8n/`:
+
+- `evidence-collection-ediscovery-n8n.json` — the flow export (skeleton — actual per-source connectors are firm-specific)
+- `_README.md` — credentials, audit-table schema, per-source connector notes, chain-of-custody template
+
+Tools: [n8n](/en/tools/n8n/), [Relativity](/en/tools/relativity/) (or [Everlaw](/en/tools/everlaw/) / [Logikcull](/en/tools/logikcull/)), [Slack](/en/tools/slack/) (notification only). Source-platform connectors: Google Workspace Vault, Microsoft 365 Compliance, Slack Discovery, custom SaaS per the firm's stack.
+
+Related: [ediscovery](/en/learn/ediscovery/), [EDRM model](/en/learn/edrm-model/), [matter management](/en/learn/matter-management/), [privilege review](/en/learn/privilege-review/).
