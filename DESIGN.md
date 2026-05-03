@@ -93,18 +93,17 @@ Primitives composed by every page template — build once, render everywhere.
 2. **Capability chips** — `AI-NATIVE`, `MCP`, `API`, `FREE-TIER`. Outlined, monochrome. [CapabilityChip.astro](apps/web/src/components/CapabilityChip.astro)
 3. **Pricing label** — `$149/mo · usage-based`, mono. [PricingLabel.astro](apps/web/src/components/PricingLabel.astro)
 4. **Vertical tag** — geometric mark + label, monochrome (no per-vertical hue). [VerticalTag.astro](apps/web/src/components/VerticalTag.astro)
-5. **AI-generated / AI-translated badge** — pinned to every page; treated as brand asset, not disclosure. [AiGeneratedBadge.astro](apps/web/src/components/AiGeneratedBadge.astro)
-6. **Tool card** — index list cell. [ToolCard.astro](apps/web/src/components/ToolCard.astro)
-7. **Comparison strip** — `A vs B` with marks + category. [ComparisonStrip.astro](apps/web/src/components/ComparisonStrip.astro)
-8. **Workflow card** — artifact-type icon + stack logos + difficulty + time. [WorkflowCard.astro](apps/web/src/components/WorkflowCard.astro) (icon glyph: [ArtifactTypeIcon.astro](apps/web/src/components/ArtifactTypeIcon.astro))
-9. **Stack badge row** — horizontal logos with hover names; for workflows + stacks. [StackBadgeRow.astro](apps/web/src/components/StackBadgeRow.astro)
-10. **Spec table** — replaces the raw `<dl>` on tool detail; sticky, dense, mono numerics. [SpecTable.astro](apps/web/src/components/SpecTable.astro) (+ row primitive [SpecRow.astro](apps/web/src/components/SpecRow.astro))
-11. **AEO answer block** — for `/learn`: `target_questions[]` rendered as a "this page answers" panel. Brand asset *and* citation signal. [AeoAnswerBlock.astro](apps/web/src/components/AeoAnswerBlock.astro)
-12. **Score breakdown bars** — for `ooligo_score_breakdown`. Bars, not radar (ops people mistrust radar). [ScoreBreakdownBars.astro](apps/web/src/components/ScoreBreakdownBars.astro)
-13. **Cross-link rail** — closes the link budget enforced by the validator (3 alt tools, 1 comparison, 2 workflows, 2 learn — per [ARCHITECTURE.md](./ARCHITECTURE.md)). [CrossLinkRail.astro](apps/web/src/components/CrossLinkRail.astro)
-14. **Empty state** — `/tools`, `/vs`, `/workflows`, `/learn` are mostly empty pre-launch; empty states are a first-class surface. [EmptyState.astro](apps/web/src/components/EmptyState.astro)
-15. **Inline artifact preview** — for workflow `preview_lang`: syntax-highlighted code/markdown. [InlineArtifactPreview.astro](apps/web/src/components/InlineArtifactPreview.astro)
-16. **Tool monogram fallback** — when a vendor logo is missing, renders a typographic mark (first letter, mono, accent) so the catalog grid stays rhythmic. [ToolMonogram.astro](apps/web/src/components/ToolMonogram.astro)
+5. **Tool card** — index list cell. [ToolCard.astro](apps/web/src/components/ToolCard.astro)
+6. **Comparison strip** — `A vs B` with marks + category. [ComparisonStrip.astro](apps/web/src/components/ComparisonStrip.astro)
+7. **Workflow card** — artifact-type icon + stack logos + difficulty + time. [WorkflowCard.astro](apps/web/src/components/WorkflowCard.astro) (icon glyph: [ArtifactTypeIcon.astro](apps/web/src/components/ArtifactTypeIcon.astro))
+8. **Stack badge row** — horizontal logos with hover names; for workflows + stacks. [StackBadgeRow.astro](apps/web/src/components/StackBadgeRow.astro)
+9. **Spec table** — replaces the raw `<dl>` on tool detail; sticky, dense, mono numerics. [SpecTable.astro](apps/web/src/components/SpecTable.astro) (+ row primitive [SpecRow.astro](apps/web/src/components/SpecRow.astro))
+10. **AEO answer block** — for `/learn`: `target_questions[]` rendered as a "this page answers" panel. Brand asset *and* citation signal. [AeoAnswerBlock.astro](apps/web/src/components/AeoAnswerBlock.astro)
+11. **Score breakdown bars** — for `ooligo_score_breakdown`. Bars, not radar (ops people mistrust radar). [ScoreBreakdownBars.astro](apps/web/src/components/ScoreBreakdownBars.astro)
+12. **Cross-link rail** — closes the link budget enforced by the validator (3 alt tools, 1 comparison, 2 workflows, 2 learn — per [ARCHITECTURE.md](./ARCHITECTURE.md)). [CrossLinkRail.astro](apps/web/src/components/CrossLinkRail.astro)
+13. **Empty state** — `/tools`, `/vs`, `/workflows`, `/learn` are mostly empty pre-launch; empty states are a first-class surface. [EmptyState.astro](apps/web/src/components/EmptyState.astro)
+14. **Inline artifact preview** — for workflow `preview_lang`: syntax-highlighted code/markdown. [InlineArtifactPreview.astro](apps/web/src/components/InlineArtifactPreview.astro)
+15. **Tool monogram fallback** — when a vendor logo is missing, renders a typographic mark (first letter, mono, accent) so the catalog grid stays rhythmic. [ToolMonogram.astro](apps/web/src/components/ToolMonogram.astro)
 
 Layout primitives — [Container.astro](apps/web/src/components/Container.astro), [Section.astro](apps/web/src/components/Section.astro), [Prose.astro](apps/web/src/components/Prose.astro), [JsonLd.astro](apps/web/src/components/JsonLd.astro), [LearnCard.astro](apps/web/src/components/LearnCard.astro) — round out the system.
 
@@ -124,7 +123,7 @@ Filter rail (sticky on desktop, drawer on mobile): vertical · category · AI-na
 
 ### Tool detail — [tools/[slug].astro](apps/web/src/pages/[locale]/tools/[slug].astro)
 
-Header band (name + category + capability chips + score pill). 8/4 split: MDX article + sticky **spec card** (pricing, integrations, score breakdown bars, last reviewed, AI-generated badge, affiliate CTA). Below body: alternatives rail · "featured in comparisons" · "workflows using" · "learn about category". Closes the cross-link budget.
+Header band (name + category + capability chips + score pill). 8/4 split: MDX article + sticky **spec card** (pricing, integrations, score breakdown bars, last reviewed, affiliate CTA). Below body: alternatives rail · "featured in comparisons" · "workflows using" · "learn about category". Closes the cross-link budget.
 
 ### Comparisons index — [vs/index.astro](apps/web/src/pages/[locale]/vs/index.astro)
 
