@@ -1,17 +1,12 @@
 # Pipeline Review — Twelve Prompts for Claude
 
-Twelve battle-tested prompts for the questions a pipeline review actually
-needs to answer. Paste a deal export, paste a prompt, get a structured
-answer in your team's vocabulary.
+Twelve battle-tested prompts for the questions a pipeline review actually needs to answer. Paste a deal export, paste a prompt, get a structured answer in your team's vocabulary.
 
 ## How to use this pack
 
 1. Create a Claude project named "pipeline-review."
-2. Drop your sales-methodology cheat sheet in as project knowledge —
-   MEDDPICC, BANT, SPICED, whichever you train on. Every prompt below
-   assumes that doc is loaded.
-3. Save each prompt below as a saved prompt in the project, tagged by
-   tier (portfolio, single-deal, meeting-prep).
+2. Drop your sales-methodology cheat sheet in as project knowledge — MEDDPICC, BANT, SPICED, whichever you train on. Every prompt below assumes that doc is loaded.
+3. Save each prompt below as a saved prompt in the project, tagged by tier (portfolio, single-deal, meeting-prep).
 4. Paste your pipeline export (or single-deal history) when invoking.
 
 ## Pipeline input shape
@@ -22,8 +17,7 @@ Most portfolio prompts expect a markdown table or CSV with these columns:
 deal_name | account | amount | stage | days_in_stage | owner | next_step | last_activity_at | close_date | confidence
 ```
 
-Single-deal prompts expect that row plus the deal's activity history
-(emails, meetings, notes — chronological).
+Single-deal prompts expect that row plus the deal's activity history (emails, meetings, notes — chronological).
 
 ---
 
@@ -316,8 +310,6 @@ Things to avoid:
 
 ## Maintenance
 
-- Reset the Claude conversation between deals — output drifts long
-  with follow-ups.
+- Reset the Claude conversation between deals — output drifts long with follow-ups.
 - Re-paste the methodology doc when project knowledge gets updated.
-- If you add a column to your pipeline export, update the input shape
-  in P1 and P4 — the rest infer from those.
+- If you add a column to your pipeline export, update the input shape in P1 and P4 — the rest infer from those.

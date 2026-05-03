@@ -29,8 +29,7 @@ Tools that signal misfit (we lose to or against these):
 
 ## Buying committee — minimum viable
 
-The roles that must exist for a deal to be qualified. The skill uses
-this in the persona-map section.
+The roles that must exist for a deal to be qualified. The skill uses this in the persona-map section.
 
 - **Economic buyer**: {title pattern}
 - **Technical evaluator**: {title pattern}
@@ -39,8 +38,7 @@ this in the persona-map section.
 
 ## Pain ranking
 
-When the skill ranks the three pain hypotheses, it weighs against
-this priority order. Higher = more important to surface first.
+When the skill ranks the three pain hypotheses, it weighs against this priority order. Higher = more important to surface first.
 
 1. {Pain category — e.g. "data quality blocking outbound"} — weight 5
 2. {Pain category — e.g. "manual reporting eating ops time"} — weight 4
@@ -50,13 +48,10 @@ this priority order. Higher = more important to surface first.
 
 ## Disqualifiers
 
-Single signals that drop an account out of ICP regardless of other
-fit. The skill should flag these prominently in the brief if found.
+Single signals that drop an account out of ICP regardless of other fit. The skill should flag these prominently in the brief if found.
 
-- {Disqualifier 1 — e.g. "uses Tool X as system of record" if we
-  cannot integrate}
-- {Disqualifier 2 — e.g. "regulated industry without our
-  compliance certifications"}
+- {Disqualifier 1 — e.g. "uses Tool X as system of record" if we cannot integrate}
+- {Disqualifier 2 — e.g. "regulated industry without our compliance certifications"}
 
 ## Last edited
 

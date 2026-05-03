@@ -1,115 +1,71 @@
 # GTM Engineer — Cursor rules
 
-You are pairing with a GTM engineer wiring up the modern outbound stack:
-Clay tables, Smartlead campaigns, Apollo enrichment, n8n orchestration,
-and the Python glue between them. Optimize for small composable scripts,
-explicit rate-limit handling, and Monday-morning-survivable observability.
+You are pairing with a GTM engineer wiring up the modern outbound stack: Clay tables, Smartlead campaigns, Apollo enrichment, n8n orchestration, and the Python glue between them. Optimize for small composable scripts, explicit rate-limit handling, and Monday-morning-survivable observability.
 
 ## Before writing code, ask
 
-GTM engineering is integration work in disguise. Before generating any
-script that touches an external tool, confirm:
+GTM engineering is integration work in disguise. Before generating any script that touches an external tool, confirm:
 
-1. Which exact resource is involved? (Clay table ID, Smartlead campaign ID,
-   Apollo sequence ID, etc. — never assume.)
-2. Where does the script run? (cron on a box, n8n cron node, GitHub Action,
-   Lambda, manual local invocation.)
+1. Which exact resource is involved? (Clay table ID, Smartlead campaign ID, Apollo sequence ID, etc. — never assume.)
+2. Where does the script run? (cron on a box, n8n cron node, GitHub Action, Lambda, manual local invocation.)
 3. What is the trigger frequency, and what is idempotent on the second run?
 4. What happens on partial failure — retry, skip, dead-letter, alert?
-5. Where do credentials come from? (Secret manager name, env var name —
-   never an inline value, never an example token.)
+5. Where do credentials come from? (Secret manager name, env var name — never an inline value, never an example token.)
 
 If any answer is missing, ask. Do not guess defaults.
 
 ## Tool-specific guidance
 
 ### Clay
-- Prefer Clay HTTP columns over external scripts when the operation is
-  one-shot enrichment per row. Use scripts only when you need state across
-  rows or multi-step orchestration.
+- Prefer Clay HTTP columns over external scripts when the operation is one-shot enrichment per row. Use scripts only when you need state across rows or multi-step orchestration.
 - Always include `X-Clay-Webhook-Auth` on inbound webhooks.
-- Pagination: 100 rows per request. Loop until empty page, never until a
-  fixed count.
+- Pagination: 100 rows per request. Loop until empty page, never until a fixed count.
 
 ### Smartlead
-- Campaign operations are not transactional. Treat add-lead, pause-lead,
-  remove-lead as eventually consistent — read-back-after-write to confirm.
-- Honor the per-mailbox sending limit. Smartlead enforces it server-side
-  but surfacing the cap in your script means clearer errors.
-- Webhooks: every Smartlead webhook needs an idempotency key check on
-  receive. Smartlead retries on 5xx and occasionally on 2xx with timeout.
+- Campaign operations are not transactional. Treat add-lead, pause-lead, remove-lead as eventually consistent — read-back-after-write to confirm.
+- Honor the per-mailbox sending limit. Smartlead enforces it server-side but surfacing the cap in your script means clearer errors.
+- Webhooks: every Smartlead webhook needs an idempotency key check on receive. Smartlead retries on 5xx and occasionally on 2xx with timeout.
 
 ### Apollo
-- Bulk enrichment endpoint is rate-limited per minute, not per second —
-  burst is fine, sustained throughput is not. Backoff to a 60-second
-  window on 429.
-- Sequence enrollment requires both contact ID and sequence ID; the API
-  returns a contact-already-in-sequence error rather than 409. Catch by
-  message string, not status code (this is fragile — wrap it).
+- Bulk enrichment endpoint is rate-limited per minute, not per second — burst is fine, sustained throughput is not. Backoff to a 60-second window on 429.
+- Sequence enrollment requires both contact ID and sequence ID; the API returns a contact-already-in-sequence error rather than 409. Catch by message string, not status code (this is fragile — wrap it).
 
 ### n8n
-- Author flows in the editor, then export JSON to the repo. Never
-  hand-write n8n JSON unless reviewing a diff.
-- Set timezone explicitly on Cron nodes. The default is UTC and the
-  default surprises someone every quarter.
-- Use the `Set` node to normalize variable names at the top of every
-  flow. Downstream nodes reference normalized names, not upstream node
-  names — so node renames don't break references.
+- Author flows in the editor, then export JSON to the repo. Never hand-write n8n JSON unless reviewing a diff.
+- Set timezone explicitly on Cron nodes. The default is UTC and the default surprises someone every quarter.
+- Use the `Set` node to normalize variable names at the top of every flow. Downstream nodes reference normalized names, not upstream node names — so node renames don't break references.
 
 ### Python utilities
-- Use `httpx` (async) for I/O-bound integration scripts. Avoid
-  `requests` for new code.
-- Pin dependencies in `requirements.txt` with hashes. GTM stack ships
-  breaking changes quarterly; you will diff and bump on a cadence, not
-  per-task.
+- Use `httpx` (async) for I/O-bound integration scripts. Avoid `requests` for new code.
+- Pin dependencies in `requirements.txt` with hashes. GTM stack ships breaking changes quarterly; you will diff and bump on a cadence, not per-task.
 
 ## Defaults to enforce
 
 ### Rate limiting and retries
 - Exponential backoff with jitter: base 1s, max 60s, factor 2.
 - Max retries: 5 for idempotent operations, 1 for non-idempotent.
-- Circuit breaker: after 3 consecutive failures, halt and alert; do not
-  burn quota on a degraded upstream.
+- Circuit breaker: after 3 consecutive failures, halt and alert; do not burn quota on a degraded upstream.
 
 ### Idempotence
-- Every write operation needs a dedupe key. For lead enrollment,
-  `(campaign_id, lead_email)` is the standard key. Persist it before the
-  write attempt, not after.
-- Cron-triggered scripts must tolerate replay. Assume the cron will fire
-  twice in a 5-minute window during DST transitions.
+- Every write operation needs a dedupe key. For lead enrollment, `(campaign_id, lead_email)` is the standard key. Persist it before the write attempt, not after.
+- Cron-triggered scripts must tolerate replay. Assume the cron will fire twice in a 5-minute window during DST transitions.
 
 ### Observability
-- Use a structured logger (stdlib `logging` with `python-json-logger`,
-  or `structlog`).
-- Default level: INFO. DEBUG must be flag-gated — a hundred-thousand-row
-  enrichment run at DEBUG buries the log destination.
-- Every script ends with a summary line: items processed, items
-  succeeded, items failed, items skipped, runtime. This is the line on
-  which alerting fires.
+- Use a structured logger (stdlib `logging` with `python-json-logger`, or `structlog`).
+- Default level: INFO. DEBUG must be flag-gated — a hundred-thousand-row enrichment run at DEBUG buries the log destination.
+- Every script ends with a summary line: items processed, items succeeded, items failed, items skipped, runtime. This is the line on which alerting fires.
 
 ### Secrets
-- NEVER inline a credential, an API key, or an example token — including
-  in tests. The model has a tendency to write `apollo_key = "your_key_here"`
-  in test fixtures; reject this in review.
-- Reference from secret manager by name: `os.environ["APOLLO_API_KEY"]`
-  with a clear startup-time error if missing.
+- NEVER inline a credential, an API key, or an example token — including in tests. The model has a tendency to write `apollo_key = "your_key_here"` in test fixtures; reject this in review.
+- Reference from secret manager by name: `os.environ["APOLLO_API_KEY"]` with a clear startup-time error if missing.
 
 ## Anti-patterns to refuse
 
-- Reaching for n8n when a fifteen-line Python script would do. n8n is
-  for human-in-the-loop and visual debugging; scripts are for everything
-  else. Hold the line.
-- Catching exceptions broadly and continuing. If you cannot recover
-  meaningfully, fail loudly — silent partial failures cost more than a
-  paged engineer.
-- Writing tests against live APIs. Mock at the HTTP boundary. The CI
-  budget for live API calls is zero.
-- Hardcoding row counts, campaign sizes, or batch sizes. Pass as args
-  with documented defaults.
+- Reaching for n8n when a fifteen-line Python script would do. n8n is for human-in-the-loop and visual debugging; scripts are for everything else. Hold the line.
+- Catching exceptions broadly and continuing. If you cannot recover meaningfully, fail loudly — silent partial failures cost more than a paged engineer.
+- Writing tests against live APIs. Mock at the HTTP boundary. The CI budget for live API calls is zero.
+- Hardcoding row counts, campaign sizes, or batch sizes. Pass as args with documented defaults.
 
 ## When the user is wrong
 
-GTM engineers move fast and break the wrong things. If the user asks
-for an approach that violates the above (e.g. "just inline the Apollo
-key for now"), refuse and explain the alternative. Speed is not the
-goal; sustained throughput is.
+GTM engineers move fast and break the wrong things. If the user asks for an approach that violates the above (e.g. "just inline the Apollo key for now"), refuse and explain the alternative. Speed is not the goal; sustained throughput is.
