@@ -136,13 +136,16 @@ A tool entry is a buying-decision aid for an ops leader who has 40-100 tools to 
 - ≥1 alternative is named with the rule for picking it instead.
 - "Watch-outs" name implementation gotchas (long ramp, vendor support quality, integration debt), not generic "be sure to evaluate carefully."
 
-**Suggested body shape (~250-400 words):**
+**Suggested body shape — floor 400, typical 500-800 words:**
 
 - *What it is* (1 paragraph: category, what it does, what category leader it most resembles)
 - *Why it shows up in [vertical] stacks* (the concrete reason — "only one with native MCP support," "lowest-cost tier that has API access")
-- *Pricing reality* (MSRP, typical-paid, the tier you need for the use case)
-- *Best for* (role + scoped use case)
-- *Watch-outs* (each paired with a guard)
+- *Pricing reality* (MSRP, typical-paid, the tier you need for the use case, what the next tier up unlocks)
+- *Best for* (role + scoped use case + the segment band where ROI is best)
+- *Versus the alternative* (≥1 named competitor, the rule for picking each, pricing/scope tradeoff)
+- *Watch-outs* (each paired with a guard — implementation gotchas, vendor-support quality, integration debt, ramp time)
+
+A tool page under 400 words is almost always skipping a decision. The exceptions: very narrow point-tools (one feature, one segment) genuinely don't need more, and a glossary-style entry is allowed to land at 200-300. Both are rare.
 
 **Anti-patterns to refuse:**
 
@@ -154,7 +157,7 @@ A tool entry is a buying-decision aid for an ops leader who has 40-100 tools to 
 
 **Pre-commit checklist:**
 
-- [ ] Body ≥ 200 words (tools are tighter than workflows — under 200 usually means corners cut)
+- [ ] Body ≥ 400 words (typical authoritative depth: 500-800; under 400 almost always means a skipped decision)
 - [ ] Names ≥ 1 specific scoped use case where this tool is the right pick
 - [ ] Names the real-world price band, not just the MSRP from the pricing page
 - [ ] Names ≥ 1 alternative + the rule for picking it instead
@@ -177,9 +180,11 @@ A comparison entry is a routing rule. The reader has narrowed the field to 2-N o
 
 **Suggested body shape varies by `type`:**
 
-- **Pairwise** (~250-400 words): *Where X wins* / *Where Y wins* / *Pricing reality* / *Verdict — pick X when…, pick Y when…*
-- **Roundup** (~300-500 words): One section per option (use-case the option wins at) / *What's not on this list* (and why) / *Minimum viable choice* (the default if you can't justify going deeper)
-- **Alternatives** (~300-500 words): *What you're leaving (status-quo)* / *Each alternative's shape* / *Match rules* / *When the status quo wins*
+- **Pairwise** — floor 600, typical 700-1100: *Where X wins* / *Where Y wins* / *Pricing reality* / *Implementation effort* / *Verdict — pick X when…, pick Y when…, pick neither when…*
+- **Roundup** — floor 700, typical 900-1500: One section per option (use-case the option wins at, with the specific scope where it pulls ahead) / *What's not on this list and why* / *Minimum viable choice* (default if you can't justify going deeper) / *When to revisit*
+- **Alternatives** — floor 700, typical 900-1400: *What you're leaving (status-quo or named tool)* / *Each alternative's shape and tradeoffs* / *Match rules — switch to X when Y* / *When the status quo wins (don't switch yet)* / *Migration cost* (the part most readers underestimate)
+
+A pairwise comparison under 600 words almost always punts on at least one of: pricing reality, implementation effort, or the "neither" verdict. A roundup under 700 is usually featurelist-with-headers, not a routing rule.
 
 **Anti-patterns to refuse:**
 
@@ -192,7 +197,7 @@ A comparison entry is a routing rule. The reader has narrowed the field to 2-N o
 
 **Pre-commit checklist:**
 
-- [ ] Body ≥ 300 words
+- [ ] Body ≥ 600 words for pairwise, ≥ 700 for roundup/alternatives (typical authoritative depth: 700-1500)
 - [ ] Each option has at least one specific category where it wins (no fence-sitting on every dimension)
 - [ ] Pricing comparison is quantified (ratio, band, or per-unit) — not "more expensive"
 - [ ] Has a "Verdict" / "Pick X when…" / "Match rules" section with routing logic
@@ -212,13 +217,15 @@ A learn entry is an answer to a specific question the reader has typed (or would
 - **Framework** — the framework is rendered explicitly: a formula, a decision tree, a table with calibrated values. Generic "consider these factors" is filler.
 - **Glossary** — short, definitional. Cross-links to longer learn entries or tools where the term is operative.
 
-**Suggested body shapes:**
+**Suggested body shapes (floor / typical authoritative depth):**
 
-- *Definition* (~400-700 words): lead-with-answer paragraph; what it is; what it isn't; who cares; related concepts; common pitfalls
-- *FAQ* (~300-500 words): direct answer; nuance; edge cases; related questions
-- *How-to* (~500-900 words): prerequisites; numbered steps; success criteria; common errors; troubleshooting
-- *Framework* (~500-900 words): when to use; the framework rendered explicitly with values; worked example; common pitfalls
-- *Glossary* (~150-300 words): definition; usage in context; related terms
+- *Definition* — floor 600, typical 700-1200 words: lead-with-answer paragraph; what it is; what it isn't; who cares; how it shows up in real ops work; related concepts; common pitfalls each paired with a guard
+- *FAQ* — floor 400, typical 500-900 words: direct answer in first 100 words; the nuance; edge cases; related questions; what to do if the answer doesn't apply
+- *How-to* — floor 800, typical 1000-1800 words: prerequisites; numbered steps with named tools/commands/files at every step; success criteria; common errors with their fixes; when to escalate
+- *Framework* — floor 800, typical 900-1500 words: when to use it; the framework rendered explicitly with calibrated values; worked example with real numbers; common pitfalls with paired guards; when the framework breaks down
+- *Glossary* — floor 200, typical 300-500 words: definition; usage in context; related terms; this is the only learn type allowed to stay short
+
+A definition under 600 words usually defines the concept but skips "how it shows up in real ops work" — the part that turns a definition into something the reader can use. A how-to under 800 usually skips the troubleshooting half.
 
 **Anti-patterns to refuse:**
 
@@ -231,7 +238,7 @@ A learn entry is an answer to a specific question the reader has typed (or would
 
 **Pre-commit checklist:**
 
-- [ ] Body ≥ 400 words (definitions can run shorter; frameworks/how-tos are denser)
+- [ ] Body meets the per-type floor (definition 600, FAQ 400, how-to 800, framework 800, glossary 200) — typical authoritative depth runs higher
 - [ ] First paragraph directly answers the primary `target_questions` entry — AEO snippet-worthy
 - [ ] For *definition* type: explicit "what it is NOT" content within the first 200 words
 - [ ] For *framework* type: specific values, calibrated bands, not placeholder generics
@@ -253,13 +260,16 @@ A stack entry is a copyable recipe — a curated tool combination with named rol
 - Common variations — the 2-3 ways teams actually swap tools, with the reason for each swap.
 - "What this stack does NOT solve" — the gaps. Sets reader expectations and prevents the stack from being misread as a complete answer.
 
-**Suggested body shape (~400-700 words):**
+**Suggested body shape — floor 700, typical 900-1500 words:**
 
-- *How the pieces fit* (per-tool role + handoffs)
-- *Why this combination* (the load-bearing reason — single source of truth, lowest integration debt, etc.)
-- *Cost reality* (annual stack cost band, per-seat or flat)
-- *Common variations* (2-3 swaps and why)
-- *What this stack does NOT replace* (the gaps)
+- *How the pieces fit* (per-tool role + handoffs — name the trigger event in tool A and the resulting action in tool B)
+- *Why this combination* (the load-bearing reason — single source of truth, lowest integration debt, the segment band where the per-seat math works)
+- *Cost reality* (annual stack cost band, per-seat or flat, plus the "hidden" costs — implementation, integration headcount, ramp time)
+- *Match rules* (the segment / motion / scale where this stack is the right pick, plus the band where it isn't)
+- *Common variations* (2-3 swaps and the rule for each — "swap Gong for Chorus when video-recording is required by compliance")
+- *What this stack does NOT replace* (the gaps — sets reader expectations, prevents over-buy)
+
+A stack under 700 words almost always lists tools without naming roles or handoffs. The "how the pieces fit" section alone needs ~50-80 words per tool to do the work; for a 5-tool stack that's already 250-400 words before any of the other sections.
 
 **Anti-patterns to refuse:**
 
@@ -271,7 +281,7 @@ A stack entry is a copyable recipe — a curated tool combination with named rol
 
 **Pre-commit checklist:**
 
-- [ ] Body ≥ 400 words
+- [ ] Body ≥ 700 words (typical authoritative depth: 900-1500)
 - [ ] Each tool in the `tools[]` array has a specifically-named role in the body (not just listed)
 - [ ] Handoffs between tools are named (which event in tool A triggers which action in tool B)
 - [ ] Cost baseline (annual range, per-seat band, or flat) — not adjectives
