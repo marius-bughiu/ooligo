@@ -34,6 +34,10 @@ export type ChromeStrings = {
     subscribe_heading: string;
     subscribe_blurb: string;
     subscribe_placeholder: string;
+    subscribe_loading: string;
+    subscribe_success: string;
+    subscribe_error: string;
+    subscribe_invalid_email: string;
     roadmap: string;
     architecture: string;
     public_metrics: string;
@@ -85,6 +89,10 @@ const en: ChromeStrings = {
     subscribe_blurb:
       "New tools, comparisons, and workflows for ops leaders. Free, weekly, vertical-tagged.",
     subscribe_placeholder: "you@company.com",
+    subscribe_loading: "Subscribing…",
+    subscribe_success: "Thanks for subscribing.",
+    subscribe_error: "Something went wrong. Please try again.",
+    subscribe_invalid_email: "Please enter a valid email address.",
     roadmap: "Roadmap",
     architecture: "Architecture",
     public_metrics: "Public metrics",
@@ -136,6 +144,10 @@ const es: ChromeStrings = {
     subscribe_blurb:
       "Nuevas herramientas, comparaciones y workflows para líderes de operaciones. Gratis, semanal, etiquetado por vertical.",
     subscribe_placeholder: "tu@empresa.com",
+    subscribe_loading: "Suscribiendo…",
+    subscribe_success: "Gracias por suscribirte.",
+    subscribe_error: "Algo salió mal. Inténtalo de nuevo.",
+    subscribe_invalid_email: "Ingresa un correo electrónico válido.",
     roadmap: "Hoja de ruta",
     architecture: "Arquitectura",
     public_metrics: "Métricas públicas",
@@ -187,6 +199,10 @@ const ptBR: ChromeStrings = {
     subscribe_blurb:
       "Novas ferramentas, comparações e workflows para líderes de operações. Grátis, semanal, com tag por vertical.",
     subscribe_placeholder: "voce@empresa.com",
+    subscribe_loading: "Assinando…",
+    subscribe_success: "Obrigado por assinar.",
+    subscribe_error: "Algo deu errado. Tente novamente.",
+    subscribe_invalid_email: "Insira um e-mail válido.",
     roadmap: "Roadmap",
     architecture: "Arquitetura",
     public_metrics: "Métricas públicas",
@@ -238,6 +254,10 @@ const ja: ChromeStrings = {
     subscribe_blurb:
       "オペレーションリーダー向けの新しいツール、比較、ワークフロー。無料、毎週、業種別タグ付き。",
     subscribe_placeholder: "you@company.com",
+    subscribe_loading: "登録中…",
+    subscribe_success: "ご登録ありがとうございます。",
+    subscribe_error: "問題が発生しました。もう一度お試しください。",
+    subscribe_invalid_email: "有効なメールアドレスを入力してください。",
     roadmap: "ロードマップ",
     architecture: "アーキテクチャ",
     public_metrics: "公開メトリクス",
@@ -289,6 +309,10 @@ const fr: ChromeStrings = {
     subscribe_blurb:
       "Nouveaux outils, comparaisons et workflows pour les responsables ops. Gratuit, hebdomadaire, balisé par secteur.",
     subscribe_placeholder: "vous@entreprise.com",
+    subscribe_loading: "Inscription…",
+    subscribe_success: "Merci pour votre abonnement.",
+    subscribe_error: "Une erreur est survenue. Veuillez réessayer.",
+    subscribe_invalid_email: "Veuillez saisir une adresse e-mail valide.",
     roadmap: "Roadmap",
     architecture: "Architecture",
     public_metrics: "Métriques publiques",
@@ -340,6 +364,10 @@ const de: ChromeStrings = {
     subscribe_blurb:
       "Neue Tools, Vergleiche und Workflows für Ops-Verantwortliche. Kostenlos, wöchentlich, branchenspezifisch getaggt.",
     subscribe_placeholder: "sie@firma.com",
+    subscribe_loading: "Wird abonniert…",
+    subscribe_success: "Danke fürs Abonnieren.",
+    subscribe_error: "Etwas ist schiefgelaufen. Bitte erneut versuchen.",
+    subscribe_invalid_email: "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
     roadmap: "Roadmap",
     architecture: "Architektur",
     public_metrics: "Öffentliche Metriken",

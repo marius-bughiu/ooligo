@@ -16,7 +16,7 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 - [x] Content schema + validators (JSON Schema → TypeScript types)
 - [x] Cloudflare Pages + domain wired up (Supabase not yet in use)
 - [ ] Plausible analytics installed
-- [ ] beehiiv newsletter set up (one publication, EN/RevOps)
+- [x] beehiiv newsletter set up (one publication, EN/RevOps)
 - [x] First commit pushed publicly
 
 ## Phase 1 — Engine + Flagship (Week 3-8)
@@ -33,7 +33,7 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 - [x] First 50 learn/glossary entries (`/learn/what-is-revops`, `/learn/pipeline-velocity`, etc.)
 - [x] RevOps vertical landing page + 5 curated stack pages
 - [x] Sitemap, hreflang, schema.org markup
-- [ ] Newsletter live, signup form on every page (form is in place; beehiiv backend pending)
+- [x] Newsletter live, signup form on every page (footer + per-vertical forms POST to `/api/subscribe` Cloudflare Pages Function → beehiiv; vertical-tagged via `custom_fields`)
 
 ## Phase 2 — Localization online (Week 9-12)
 
@@ -115,7 +115,7 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 | Content pages live | ~947 (EN: 467 / ES: 232 / pt-BR: 232 / 3 seeded locales: ~9; ES + pt-BR translation queue rebuilt — drain pending) |
 | Verticals live | 3 (RevOps, Legal Ops, Recruiting — all clearing per-phase floor) |
 | Locales live | 3 launched + 3 seeded |
-| Newsletter subscribers | 0 (beehiiv not wired) |
+| Newsletter subscribers | 0 (beehiiv live; signup wired) |
 | Discord members | 0 |
 | Paid library subscribers | 0 |
 | MRR | $0 |
