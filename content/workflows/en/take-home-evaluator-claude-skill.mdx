@@ -1,0 +1,94 @@
+---
+slug: take-home-evaluator-claude-skill
+canonical_slug: take-home-evaluator-claude-skill
+locale: en
+verticals: [recruiting]
+title: Take-home assessment evaluator with Claude
+artifact_type: claude-skill
+tools_used: [claude, codesignal, hackerrank, ashby]
+roles: [recruiter, hiring-manager, technical-screener]
+difficulty: intermediate
+time_to_setup: 40min
+ai_generated: true
+human_tested: false
+---
+
+A Claude Skill that scores a candidate's take-home submission against a rubric the hiring team wrote, with line-by-line citations from the submitted code or documents, and produces a structured evaluation report — never auto-passes or auto-fails. The hiring panel uses the report to anchor the live debrief; the actual hire/no-hire decision happens in the panel discussion, not in the report. Replaces the 60-90 minutes per panelist of disorganized "I read this on Saturday morning and I think it was OK?" with a structured 15-minute review per panelist plus a 30-minute calibrated debrief.
+
+## When to use
+
+- The role uses a take-home assessment as a step in the loop ([structured interviewing](/en/learn/structured-interviewing/) prerequisite — without a written rubric the skill has nothing to score against).
+- You want consistent scoring across panelists. Take-home reviews are notoriously inconsistent because each panelist reads at a different time with a different attention level; the rubric-anchored report is the leveling artifact.
+- The take-home is a coding exercise, system-design write-up, written exercise (PRD draft, sales-call mock-write-up), or an integration-build that produces inspectable artifacts.
+
+## When NOT to use
+
+- **Auto-pass / auto-fail in the loop.** The skill produces a scored report. The hire decision happens in the panel debrief. Wiring the report's aggregate score to a stage transition triggers the same NYC LL 144 / EU AI Act exposure as auto-rejection in screening.
+- **Live coding interviews.** Different workflow (live observation of process, not artifact evaluation). The interview-debrief workflow handles that case.
+- **Take-homes longer than 4 hours** of candidate work. Long take-homes are themselves a [candidate experience](/en/learn/candidate-experience/) anti-pattern; the skill won't fix that.
+- **Submissions where the candidate didn't sign the AI-use disclosure.** The rubric scoring is calibrated against a specific use-of-AI policy (e.g. "AI tools allowed for syntax help, not for solution generation"); without the disclosure, the skill can't calibrate the "AI-only signal" detection.
+- **Plagiarism detection as a primary use.** The skill flags suspicious patterns (verbatim public-repo matches, generic AI-generated boilerplate) but is not a forensic plagiarism tool. Use a dedicated tool for that if you need defensible plagiarism findings.
+
+## Setup
+
+1. **Drop the bundle.** Place `apps/web/public/artifacts/take-home-evaluator-claude-skill/SKILL.md` into your Claude Code skills directory.
+2. **Author the rubric.** Per take-home, write a JSON rubric with the dimensions you actually score on (correctness, code quality, decision-making documented in comments / README, error handling, test coverage). Anchors per dimension at 1-5. The template lives in `references/1-take-home-rubric-template.md`.
+3. **Configure AI-use policy.** The skill's prompt explicitly tells Claude what AI use was permitted ("syntax help only," "AI tools allowed throughout," "no AI tools," etc.). The setting maps to the disclosure language in the take-home brief — they must match.
+4. **Set the panelist-distribution mode.** Either single-panelist mode (one report per submission) or per-panelist mode (each panelist gets the same submission, generates their own evaluation, and the skill aggregates the cross-panelist deltas). Per-panelist mode catches scoring drift but doubles the model cost.
+5. **Dry-run on a closed take-home.** Score a take-home from a candidate hired (or not) last quarter. Compare the skill's per-dimension scores to the panel's actual scores. Tune the rubric anchors if the skill weighs dimensions differently.
+
+## What the skill actually does
+
+Six steps. The order matters: deterministic checks (compile, run, file structure) happen before the LLM scores anything, because letting the model score a non-running submission produces a confident report on a broken artifact.
+
+1. **Validate the submission shape.** Check that all the deliverables named in the take-home brief exist (e.g. `README.md`, source files, test files). Missing deliverables → flag in the report; do NOT score those dimensions.
+2. **Run deterministic checks.** Compile the code. Run the test suite the candidate wrote. Capture the output. These are the auditable, reproducible outcomes — the LLM does not re-litigate them.
+3. **Score per rubric dimension.** For each dimension in the rubric, score 1-5 with verbatim citations from the candidate's submission (file path + line range + the code or text). Citations are required; without a citation, the score defaults to the rubric's `1` anchor. The citation requirement keeps the model grounded in the actual submission rather than generic feedback.
+4. **Detect AI-use signal against the policy.** Run pattern checks against the disclosed AI-use policy. Verbatim matches with public AI-generated boilerplate, suspiciously consistent style across files of varying complexity, or generic comments without engagement with the problem-specific decisions all surface as `ai-use-signal` notes — not as a violation, just as a signal for the panel to discuss against the disclosed policy.
+5. **Compute aggregate WITHOUT a hire/no-hire recommendation.** Sum the per-dimension scores. Surface the aggregate as a number. Do NOT translate the aggregate into a recommendation. The skill explicitly returns "report; not a decision" rather than "pass / fail."
+6. **Emit per-panelist or aggregated report.** In single-panelist mode, the report goes to the calling panelist. In per-panelist mode, the skill aggregates across panelists, surfaces per-dimension cross-panelist deltas (and which panelist saw what differently), and emits a debrief-ready report.
+
+## Cost reality
+
+Per take-home submission, on Claude Sonnet 4.6:
+
+- **LLM tokens** — typically 15-30k input (rubric + submission code/text + skill instructions) and 3-5k output (per-dimension scored report). Roughly $0.15-0.25 per submission in single-panelist mode. Per-panelist mode (3-4 panelists) multiplies linearly.
+- **CI / sandbox cost** — running the candidate's test suite costs whatever your CI normally costs; usually negligible. Sandboxed execution (recommended — never run candidate code on the panel laptop) costs whatever your sandboxed-runner provider charges.
+- **Panelist time** — the win. A panelist's first-pass review of a take-home is 60-90 minutes when done well, less when done poorly. Reviewing the skill's report and noting agree/disagree per dimension is 15-25 minutes. Aggregate panel time saved per take-home: 2-3 panelist hours.
+- **Setup time** — 40 minutes once for the rubric and AI-use-policy mapping per take-home format. Reuse across roles in the same family is high.
+
+## Success metric
+
+Track three things per take-home cycle:
+
+- **Cross-panelist score variance** — variance across panelists' per-dimension scores. The skill should compress variance (panelists anchored on the same rubric and the same citations) without forcing artificial agreement. Variance below ~0.5 (on a 5-point scale) suggests panelists are rubber-stamping the skill's report; above ~1.5 suggests the rubric anchors are too vague for the take-home to discriminate.
+- **Hire-vs-no-hire correlation with skill aggregate** — over a quarter, does the panel's hire decision correlate with the skill's aggregate? Should be positive but NOT 1.0; if it's 1.0, the panel is auto-deferring (which is the failure mode the skill is designed against), and if it's 0, the rubric or the skill is misaligned with what the panel actually values.
+- **Take-home debrief duration** — wall-clock from "all panelists submitted reviews" to "decision recorded." Should drop from 1-2 days to under 4 hours, because the report is a shared anchor.
+
+## vs alternatives
+
+- **vs CodeSignal Coding Reports / HackerRank automated grading.** Those products run candidate code against the platform's test cases and emit a score. Pick them if your take-home is structured well-defined-input-to-well-defined-output (LeetCode-style). Pick the skill if the take-home is a build (write a small system, design an API, write a PRD), where the rubric is the score and the score is the rubric. The two are complementary; CodeSignal can be the input to the skill's run-tests step.
+- **vs hand-graded take-homes.** Hand-grading is right for the highest-stakes hires (founding engineer, principal IC) where the panel's narrative judgment is the deliverable. The skill earns its setup cost on the 80% of take-homes where consistent rubric application is what's missing.
+- **vs ChatGPT-style "review this code."** Generic chat returns generic feedback. The skill is structurally different: it requires verbatim citations, runs deterministic checks first, and refuses to author a hire/no-hire recommendation.
+- **vs no take-home (live-only loops).** A reasonable choice for senior roles where references and live rounds carry the load. The skill is irrelevant if the loop has no take-home.
+
+## Watch-outs
+
+- **Auto-pass / auto-fail drift.** *Guard:* the skill's output ends with the per-dimension scores and the aggregate. There is no "pass" or "fail" string. The schema explicitly omits a recommendation field.
+- **Generic feedback hallucination.** *Guard:* every dimension score requires a verbatim citation (file path + line range + content). Scores without citations default to 1.
+- **Bias inheritance from the rubric.** *Guard:* the rubric is upstream of this skill. Run the rubric through the [diversity slate auditor](/en/workflows/diversity-slate-auditor-skill/) framing — does the rubric score on dimensions that have known disparate impact (e.g. "uses obscure idioms," which often correlates with bootcamp vs. CS-program background)?
+- **AI-use detection false positive.** *Guard:* AI-use signals are surfaced as notes, not violations. The panel reviews against the disclosed policy. Auto-flagging as a violation would be the wrong reading; legitimate use of AI tools (within the policy) is increasingly the norm.
+- **Sandboxing failure on candidate code.** *Guard:* the skill explicitly recommends sandboxed execution and warns if the calling environment runs the test suite directly on the panel machine. Never run unreviewed candidate code on a machine with access to firm secrets.
+- **Submission-size blowup.** *Guard:* if the submission exceeds ~50K LOC, the skill warns that scoring will be partial and prompts the panelist to identify the parts to focus on. Take-homes that produce 50K LOC are themselves a sign the brief was wrong.
+
+## Stack
+
+The skill bundle lives at `apps/web/public/artifacts/take-home-evaluator-claude-skill/` and contains:
+
+- `SKILL.md` — the skill definition
+- `references/1-take-home-rubric-template.md` — fillable rubric template
+- `references/2-ai-use-policy-mapping.md` — how the disclosed policy maps to the skill's pattern checks
+
+Tools the workflow assumes you use: [Claude](/en/tools/claude/) (the model). Optional: [CodeSignal](/en/tools/codesignal/) or [HackerRank](/en/tools/hackerrank/) for the deterministic-check leg; [Ashby](/en/tools/ashby/) for the candidate record. Sandboxed execution is the recruiter / hiring-manager's choice (Docker containers, GitHub Actions, etc.).
+
+Related concepts: [structured interviewing](/en/learn/structured-interviewing/), [behavioral interviewing](/en/learn/behavioral-interviewing/), [candidate experience](/en/learn/candidate-experience/), [quality of hire](/en/learn/quality-of-hire/).

@@ -1,0 +1,90 @@
+---
+slug: boolean-search-builder-claude-skill
+canonical_slug: boolean-search-builder-claude-skill
+locale: en
+verticals: [recruiting]
+title: Boolean and X-ray search builder with Claude
+artifact_type: claude-skill
+tools_used: [claude, hireez, juicebox]
+roles: [sourcer, recruiter, talent-acquisition]
+difficulty: beginner
+time_to_setup: 20min
+ai_generated: true
+human_tested: false
+---
+
+A Claude Skill that turns a structured role intake (must-haves, nice-to-haves, anti-signals, location policy) into three calibrated search artifacts: a [hireEZ](/en/tools/hireez/) Boolean string, a Google X-ray query for LinkedIn / GitHub / Stack Overflow, and a [Juicebox](/en/tools/juicebox/) PeopleGPT prompt with structured filters. Each query is named with its expected pool size band and the dimensions it is and is not capturing, so the sourcer can pick the channel for the role rather than running the same query against three tools and getting three different shaped pools.
+
+## When to use
+
+- You are opening a new role and need to seed three sourcing channels in parallel without authoring three different queries by hand.
+- You are tuning a low-yield search — current query returns 4,000 results or 12 results, neither useful — and need to test whether the issue is synonym coverage, NOT clauses, or location filter.
+- You are calibrating a junior sourcer. The skill's structured output makes it visible *which* signal is doing the elimination work in each query, which is the part Boolean training usually skips.
+
+## When NOT to use
+
+- **Replacing the sourcer's judgment on what counts as a signal.** The skill turns the rubric into a query; it does not author the rubric. If the role intake is two bullet points, the queries will be three flavors of two bullet points and will not return better candidates than guessing.
+- **Scraping public LinkedIn at scale.** The X-ray query is for occasional use against the public-indexed surface, with rate limiting at the recruiter's hand. The skill warns and refuses to bulk-paginate. Production sourcing through public LinkedIn URLs is a ToS violation regardless of the *hiQ* settlement.
+- **Diversity slate construction.** Boolean queries can encode bias through proxy terms (school name, group affiliation). Use the [diversity slate auditor](/en/workflows/diversity-slate-auditor-skill/) on the resulting candidate pool, not the search query, to catch this.
+- **Confidential exec searches.** Queries leaving traces in shared search histories or browser caches are an exposure risk. Run those by hand with the search history disabled.
+
+## Setup
+
+1. **Drop the bundle.** Place `apps/web/public/artifacts/boolean-search-builder-claude-skill/SKILL.md` into your Claude Code skills directory or claude.ai custom Skills.
+2. **Author the role intake.** Copy `references/1-role-intake-template.md`, replace every placeholder. The intake distinguishes *must-haves* (binary, used as AND), *nice-to-haves* (additive, used to rank), *anti-signals* (used as NOT), and *location policy* (parsed into structured filters).
+3. **Configure synonym depth.** The skill's default is 5 synonyms per dimension. Bump to 7-8 for a niche role where the natural-language label is ambiguous (e.g. "platform engineer" means different things at different companies). Cap at 10 — beyond that the queries return false-positive pools.
+4. **Run on a closed role first.** Generate queries for a role you sourced last quarter. Compare the synonym sets the skill chose to the synonyms you actually used. Tune the role intake if the skill misses obvious adjacent titles or includes implausible ones.
+
+## What the skill actually does
+
+Five steps. The order matters: the rubric pre-flight runs first because a rubric containing protected-class proxies will produce queries that encode them.
+
+1. **Validate the intake** against `references/2-rubric-fairness-checklist.md`. Halts if the role intake includes school-tier scoring, name-pattern filtering, employment-gap penalties, or "culture fit" without behavioral anchors. The check runs at intake-parse time, not query-generation time, so a violating rubric never reaches the synonym-expansion step.
+2. **Expand synonyms per dimension.** For each must-have, generate 5-10 synonyms grounded in industry usage (titles, framework names, certifications). Cite the reasoning per synonym so the sourcer can drop the implausible ones before the query is built. Synonyms are not invented; if the model cannot ground a synonym in named usage, it is omitted.
+3. **Build three queries in parallel.** *hireEZ Boolean* — explicit AND/OR/NOT grouping with parentheses, 5-synonym cap, location parsed into hireEZ's structured filter rather than free text. *Google X-ray* — `site:linkedin.com/in` or `site:github.com` with title quoting and a `-` filter for anti-signals. *Juicebox PeopleGPT* — natural-language prompt with structured filters for level and location. Each query targets the channel's strengths; the same role is not described identically across all three.
+4. **Estimate pool size band.** For each query, return an expected pool-size band (e.g. "200-800 results on hireEZ for this geography") with the assumptions named. The band is calibrated against the synonym count and the location filter; sourcers can tighten or widen based on the band rather than running the query and being surprised.
+5. **Surface dimensional coverage gaps.** Each query is annotated with what it is *not* catching — usually response-likelihood (no recency filter), level (Boolean cannot easily encode "Senior IC scope"), or behavioral signals (no Boolean expression captures "led migration"). The output makes the gap visible so the sourcer plans the next step (rubric ranking on the returned pool, or a follow-up query for the missing dimension).
+
+## Cost reality
+
+Per role-intake-to-three-queries, on Claude Sonnet 4.6:
+
+- **LLM tokens** — typically 4-7k input (intake + skill instructions + examples) and 2-3k output (three queries + reasoning per synonym + pool-size estimate). At Sonnet 4.6 list pricing, roughly $0.04-0.07 per role. A sourcer running 30 roles per quarter spends $1-2 in model cost.
+- **Channel cost** — depends on what you do with the queries. Running them costs the channel quota you would have spent anyway. The skill itself runs against no sourcing API.
+- **Sourcer time** — the win. Authoring three calibrated queries by hand is 30-60 minutes per role; the skill is 5-10 minutes including reading the synonym reasoning and dropping implausible terms. The bigger time saver is on tuning low-yield searches, where the skill's pool-size estimate makes the diagnostic loop visible.
+- **Setup time** — 20 minutes once. The role intake template is the binding artifact; teams that already write structured intakes adopt the skill in one role-opening cycle.
+
+## Success metric
+
+Track two numbers per sourced role:
+
+- **First-pass yield** — share of candidates from the queried pool that pass the rubric ranking step (in the sourcer's process or via the [candidate sourcing skill](/en/workflows/candidate-sourcing-claude-skill/)). Should sit at 25-50% for a calibrated query; below 15% means the synonym expansion is too loose, above 60% means too narrow.
+- **Pool-size estimate accuracy** — actual pool size returned by the channel vs. the skill's estimate. Should land within ±50% of the band on a well-known geography. Larger drift means the synonym count is wrong for the role's specificity.
+
+## vs alternatives
+
+- **vs hireEZ's AI Match (built-in query suggestion)** — hireEZ's suggestions are good and the in-product UX is faster than copy-pasting from a Skill. Pick AI Match if you live in hireEZ. Pick the Skill if you need calibrated queries for *multiple* channels (so the same role hits hireEZ, Juicebox, and X-ray on consistent criteria), or if you want the synonym reasoning visible for training a junior sourcer.
+- **vs ChatGPT-style "write me a Boolean query"** — generic chat returns one Boolean string with no per-synonym reasoning, no pool-size estimate, no channel-specific tuning, and no fairness pre-flight. The Skill is structurally different: it forces the dimensions into separate fields, refuses biased rubrics, and surfaces the coverage gap.
+- **vs Boolean cheat-sheet templates** — templates work for the 80% of roles that match the template, and produce 4,000-result garbage queries on the 20% of roles where the template assumptions are wrong (niche stack, hybrid IC/manager scope, regulated industry). The Skill is the diagnostic for those edge cases.
+- **vs hand-authoring queries** — hand-authoring is the right call for roles with a stable, repeatable rubric where the sourcer's heuristics already encode the synonyms. The Skill earns its setup cost on net-new roles or on tuning low-yield searches.
+
+## Watch-outs
+
+- **Bias-encoding through proxy terms.** *Guard:* the fairness pre-flight in step 1 halts if the role intake names protected-class proxies. School-prestige in particular: do not list specific schools as `must_have`; list the technical depth signal those schools tend to correlate with, and let the synonym expansion catch graduates from non-target schools who have the depth.
+- **LinkedIn ToS exposure on X-ray.** *Guard:* the X-ray query output is annotated with a "manual use only" warning and a recommended max of 50 page-fetches per query before switching to the Recruiter API or Juicebox. The Skill does not generate scraping scripts.
+- **Synonym hallucination.** *Guard:* every synonym in the output cites the source reasoning ("commonly used at Stripe / Plaid / fintechs," "framework introduced 2022, name varies"). Synonyms without grounded reasoning are dropped before the query is built. If the sourcer sees a cited synonym that doesn't match real usage, that's the signal to tune the role intake.
+- **Pool-size estimate drift.** *Guard:* the estimate is a band, not a number, and is annotated with the geography and synonym count it assumes. If actual results diverge by >2× from the band, log the drift and re-tune; do not act on the estimate as if it were a measurement.
+- **Stale synonyms in fast-moving stacks.** *Guard:* the skill's synonym sources include a "last verified" check. For very new roles (e.g. AI infra positions where titles changed in 2025-2026), the skill flags synonyms as "post-2024 usage; verify in the channel" rather than asserting them.
+
+## Stack
+
+The skill bundle lives at `apps/web/public/artifacts/boolean-search-builder-claude-skill/` and contains:
+
+- `SKILL.md` — the skill definition (when to invoke, inputs, method, output format, watch-outs)
+- `references/1-role-intake-template.md` — fillable per-role template
+- `references/2-rubric-fairness-checklist.md` — pre-flight checks (do not edit to make biased intakes pass)
+- `references/3-channel-query-formats.md` — per-channel syntax notes (hireEZ, X-ray, Juicebox)
+
+Tools the workflow assumes you already use: [Claude](/en/tools/claude/) (the model), [hireEZ](/en/tools/hireez/) and [Juicebox](/en/tools/juicebox/) (the retrieval channels). For ranking the returned pool, see the [candidate sourcing skill](/en/workflows/candidate-sourcing-claude-skill/).
+
+Related concepts: [AI sourcing](/en/learn/ai-sourcing/), [passive candidate sourcing](/en/learn/passive-candidate-sourcing/), [recruiting funnel metrics](/en/learn/recruiting-funnel-metrics/).

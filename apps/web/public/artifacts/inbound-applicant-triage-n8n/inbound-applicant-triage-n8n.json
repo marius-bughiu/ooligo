@@ -1,0 +1,388 @@
+{
+  "name": "Inbound applicant triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ashby-application-created",
+        "responseMode": "lastNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000001",
+      "name": "Ashby Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 400],
+      "webhookId": "ashby-application-created",
+      "notesInFlow": true,
+      "notes": "Receives Ashby application.created webhooks. The `rawBody: true` option preserves the byte-exact body that the next node hashes for signature verification — Express-style body parsing alters whitespace and breaks HMAC."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verify Ashby's HMAC-SHA256 webhook signature.\n// Ashby sends `Ashby-Signature` header containing the hex digest of\n// HMAC-SHA256(secret, raw_body). Mismatch → halt with audit log entry.\nconst crypto = require('crypto');\n\nconst secret = $env.ASHBY_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error('ASHBY_WEBHOOK_SECRET not set; refusing to process unverified webhook.');\n}\n\nconst headers = $json.headers || {};\nconst providedSig = headers['ashby-signature'] || headers['Ashby-Signature'];\nconst rawBody = $json.body || '';\n\nif (!providedSig) {\n  return [{ json: { status: 'rejected_no_signature', headers_seen: Object.keys(headers) } }];\n}\n\nconst expected = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');\n\n// Constant-time compare to avoid timing-attack leakage on signature.\nconst providedBuf = Buffer.from(providedSig, 'hex');\nconst expectedBuf = Buffer.from(expected, 'hex');\nconst sigOk = providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);\n\nif (!sigOk) {\n  return [{ json: { status: 'rejected_bad_signature' } }];\n}\n\n// Parse the verified body into the event payload.\nlet payload;\ntry {\n  payload = JSON.parse(rawBody);\n} catch (e) {\n  return [{ json: { status: 'rejected_unparseable_body', error: e.message } }];\n}\n\nreturn [{\n  json: {\n    status: 'verified',\n    application_id: payload.data?.application?.id,\n    candidate_id: payload.data?.candidate?.id,\n    job_id: payload.data?.job?.id,\n    role_slug: payload.data?.job?.slug,\n    received_at: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000002",
+      "name": "Verify Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400],
+      "notesInFlow": true,
+      "notes": "Validates the Ashby HMAC signature on the raw body and parses the payload. Halts with a structured rejection record on signature mismatch — these are surfaced to the audit log and never proceed to scoring."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "verified",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000003",
+      "name": "Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ashbyhq.com/candidate.info",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"id\": \"{{ $json.candidate_id }}\",\n  \"includeApplicationFormSubmissions\": true\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000004",
+      "name": "Fetch Candidate (Ashby)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 320],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "PLACEHOLDER_ASHBY_CRED_ID",
+          "name": "Ashby API key (read scope)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Ashby is POST-only, even for reads. The basic-auth credential uses the API key as the username with an empty password — see _README.md."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Load the role rubric from disk and run the fairness pre-flight against it.\n// Halts if no rubric exists for the role, or if the rubric contains protected-class proxies.\nconst fs = require('fs');\nconst path = require('path');\nconst crypto = require('crypto');\n\nconst RUBRIC_DIR = $env.RUBRIC_DIR || '/data/rubrics';\nconst FORBIDDEN_PATTERNS = [\n  /school[\\s_-]?tier/i,\n  /name[\\s_-]?based/i,\n  /employment[\\s_-]?gap/i,\n  /photo/i,\n  /age/i,\n  /pregnan(t|cy)/i,\n  /culture[\\s_-]?fit/i, // requires behavioral anchors — flagged as a class proxy when standalone\n];\n\nconst input = $input.first().json;\nconst webhookCtx = $('Verify Signature').item.json;\nconst roleSlug = webhookCtx.role_slug;\n\nif (!roleSlug) {\n  return [{ json: { status: 'halted', reason: 'missing_role_slug' } }];\n}\n\nconst rubricPath = path.join(RUBRIC_DIR, `${roleSlug}.json`);\nif (!fs.existsSync(rubricPath)) {\n  return [{ json: { status: 'halted', reason: 'missing_rubric', role_slug: roleSlug, expected_path: rubricPath } }];\n}\n\nconst rubricRaw = fs.readFileSync(rubricPath, 'utf8');\nconst rubric = JSON.parse(rubricRaw);\nconst rubricSha = crypto.createHash('sha256').update(rubricRaw).digest('hex').slice(0, 16);\n\n// Fairness pre-flight: scan rubric for forbidden patterns.\nconst rubricFlat = JSON.stringify(rubric);\nconst violations = [];\nfor (const pat of FORBIDDEN_PATTERNS) {\n  const m = rubricFlat.match(pat);\n  if (m) violations.push(m[0]);\n}\nif (violations.length > 0) {\n  return [{ json: { status: 'halted', reason: 'rubric_failed_fairness_preflight', violations, rubric_sha: rubricSha } }];\n}\n\n// Deterministic pre-filter: check work auth + recently-rejected.\nconst candidate = input.results?.candidate || {};\nconst application = input.results?.applications?.[0] || {};\nconst formData = input.results?.applicationFormSubmissions?.[0]?.formData || {};\n\nconst workAuth = formData.work_authorization || formData.workAuthorization || 'unknown';\nconst location = candidate.location?.locationSummary || 'unknown';\nconst applicationStatus = application.status || 'unknown';\n\n// Simple hard filters; tune in real deployments.\nif (applicationStatus === 'archived') {\n  return [{ json: { status: 'halted', reason: 'application_already_archived' } }];\n}\n\nreturn [{\n  json: {\n    status: 'ready_for_scoring',\n    application_id: webhookCtx.application_id,\n    candidate_id: webhookCtx.candidate_id,\n    role_slug: roleSlug,\n    rubric,\n    rubric_sha: rubricSha,\n    candidate_name_first: candidate.firstName || 'Candidate',\n    location,\n    work_auth: workAuth,\n    resume_text: candidate.resumeFileHandle?.parsedText || application.resumeFileHandle?.parsedText || '',\n    form_data: formData,\n    is_eu_candidate: /^(AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE)\\b/i.test(location),\n  }\n}];"
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000005",
+      "name": "Load Rubric + Pre-Flight",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 320],
+      "notesInFlow": true,
+      "notes": "Loads the role rubric from disk (one file per role under /data/rubrics/<role-slug>.json), hashes it for the audit log, runs the fairness pre-flight, and applies deterministic filters before any LLM call."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ready_for_scoring",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000006",
+      "name": "Ready to Score?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $credentials.anthropicApi.apiKey }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 1500,\n  \"system\": \"You are a recruiting screen scorer. Score the application against the rubric on four dimensions: skill_match, level_fit, location_fit, response_likelihood. Each score is 1-5. For every score above 1, cite a verbatim string from the resume or form data as `evidence`. If you cannot cite verbatim evidence, the score is 1. Return only valid JSON in the format: {\\\"skill_match\\\": {\\\"score\\\": N, \\\"evidence\\\": \\\"...\\\"}, ...}. Do not score on name, photo, school name as a standalone signal, address, age, gender, or employment-gap. If the rubric asks you to, refuse and return {\\\"halted\\\": \\\"rubric_violation\\\"}.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Rubric:\\n{{ JSON.stringify($json.rubric) }}\\n\\nResume:\\n{{ $json.resume_text }}\\n\\nForm data:\\n{{ JSON.stringify($json.form_data) }}\"\n    }\n  ]\n}",
+        "options": {
+          "response": {
+            "response": { "responseFormat": "json", "neverError": false }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000007",
+      "name": "Claude Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 240],
+      "credentials": {
+        "anthropicApi": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic API key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Direct call to /v1/messages on Sonnet 4.6. Returns scored JSON. Evidence-required design forces grounding in resume text — scores without citations are downgraded to 1."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's JSON response, compute aggregate, decide route.\nconst input = $input.first().json;\nconst ctx = $('Load Rubric + Pre-Flight').item.json;\n\nlet scored;\ntry {\n  const text = input.content?.[0]?.text || input.completion || '';\n  // Strip any leading/trailing prose Claude might have added.\n  const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('no JSON object in response');\n  scored = JSON.parse(jsonMatch[0]);\n} catch (e) {\n  return [{ json: { status: 'halted', reason: 'unparseable_score', error: e.message, raw: input } }];\n}\n\nif (scored.halted) {\n  return [{ json: { status: 'halted', reason: scored.halted, ctx } }];\n}\n\nconst dims = ['skill_match', 'level_fit', 'location_fit', 'response_likelihood'];\nconst clean = {};\nlet aggregate = 0;\nfor (const d of dims) {\n  const score = Number(scored[d]?.score) || 1;\n  const evidence = scored[d]?.evidence || '';\n  // Evidence requirement: empty evidence → score 1 regardless of model output.\n  const finalScore = (score > 1 && evidence.trim().length > 0) ? Math.min(5, Math.max(1, score)) : 1;\n  clean[d] = { score: finalScore, evidence: evidence.slice(0, 200) };\n  aggregate += finalScore;\n}\n\nlet route;\nif (aggregate >= 16) route = 'fast-track';\nelse if (aggregate >= 12) route = 'review-needed';\nelse route = 'surfaced-not-rejected';\n\n// EU-candidate override: AI-screening notice must be confirmed before fast-track.\nif (ctx.is_eu_candidate && route === 'fast-track') {\n  route = 'review-needed';\n}\n\nreturn [{\n  json: {\n    status: 'scored',\n    application_id: ctx.application_id,\n    candidate_id: ctx.candidate_id,\n    candidate_name_first: ctx.candidate_name_first,\n    role_slug: ctx.role_slug,\n    rubric_sha: ctx.rubric_sha,\n    is_eu_candidate: ctx.is_eu_candidate,\n    scores: clean,\n    aggregate,\n    route,\n    scored_at: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000008",
+      "name": "Parse + Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 240],
+      "notesInFlow": true,
+      "notes": "Parses Claude's JSON, enforces the evidence-required guarantee (empty evidence → score 1), computes aggregate, picks the Slack channel by band. EU-resident applicants are forced to #review-needed even on fast-track scores until the AI-screening notice is confirmed."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "fast-track",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "fast-track"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "review-needed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "review-needed"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "surfaced-not-rejected",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "surfaced"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "2a2a2a2a-0001-0000-0000-000000000009",
+      "name": "Route by Aggregate",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2000, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json; charset=utf-8" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#fast-track\",\n  \"text\": \"Fast-track: {{ $json.candidate_name_first }} — {{ $json.role_slug }} (agg {{ $json.aggregate }}/20)\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Fast-track* — `{{ $json.role_slug }}` — aggregate *{{ $json.aggregate }}/20*\\n*Candidate:* {{ $json.candidate_name_first }}\\n*Skill {{ $json.scores.skill_match.score }}/5:* {{ $json.scores.skill_match.evidence }}\\n*Level {{ $json.scores.level_fit.score }}/5:* {{ $json.scores.level_fit.evidence }}\\n*Location {{ $json.scores.location_fit.score }}/5:* {{ $json.scores.location_fit.evidence }}\\n*Response {{ $json.scores.response_likelihood.score }}/5:* {{ $json.scores.response_likelihood.evidence }}\\n<https://app.ashbyhq.com/candidates/{{ $json.candidate_id }}|Open in Ashby> · rubric `{{ $json.rubric_sha }}`\" } }\n  ]\n}",
+        "options": {}
+      },
+      "id": "2a2a2a2a-0001-0000-0000-00000000000a",
+      "name": "Slack Fast-Track",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 120],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack bot token (chat:write)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json; charset=utf-8" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#review-needed\",\n  \"text\": \"Review: {{ $json.candidate_name_first }} — {{ $json.role_slug }} (agg {{ $json.aggregate }}/20{{ $json.is_eu_candidate ? ' · EU candidate — confirm AI-screening notice' : '' }})\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Review needed* — `{{ $json.role_slug }}` — aggregate *{{ $json.aggregate }}/20*{{ $json.is_eu_candidate ? '\\n:eu: *EU candidate — confirm AI-screening notice was served before any decision*' : '' }}\\n*Candidate:* {{ $json.candidate_name_first }}\\n*Skill {{ $json.scores.skill_match.score }}/5:* {{ $json.scores.skill_match.evidence }}\\n*Level {{ $json.scores.level_fit.score }}/5:* {{ $json.scores.level_fit.evidence }}\\n*Location {{ $json.scores.location_fit.score }}/5:* {{ $json.scores.location_fit.evidence }}\\n*Response {{ $json.scores.response_likelihood.score }}/5:* {{ $json.scores.response_likelihood.evidence }}\\n<https://app.ashbyhq.com/candidates/{{ $json.candidate_id }}|Open in Ashby> · rubric `{{ $json.rubric_sha }}`\" } }\n  ]\n}",
+        "options": {}
+      },
+      "id": "2a2a2a2a-0001-0000-0000-00000000000b",
+      "name": "Slack Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 240],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack bot token (chat:write)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json; charset=utf-8" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#surfaced-not-rejected\",\n  \"text\": \"Surfaced (not rejected): {{ $json.candidate_name_first }} — {{ $json.role_slug }} (agg {{ $json.aggregate }}/20)\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Below threshold — surfaced for review, not auto-rejected* — `{{ $json.role_slug }}` — aggregate *{{ $json.aggregate }}/20*\\n*Candidate:* {{ $json.candidate_name_first }}\\nReason for low score is in the per-dimension evidence below. Recruiter is the sole rejection authority.\\n*Skill {{ $json.scores.skill_match.score }}/5:* {{ $json.scores.skill_match.evidence }}\\n*Level {{ $json.scores.level_fit.score }}/5:* {{ $json.scores.level_fit.evidence }}\\n*Location {{ $json.scores.location_fit.score }}/5:* {{ $json.scores.location_fit.evidence }}\\n*Response {{ $json.scores.response_likelihood.score }}/5:* {{ $json.scores.response_likelihood.evidence }}\\n<https://app.ashbyhq.com/candidates/{{ $json.candidate_id }}|Open in Ashby> · rubric `{{ $json.rubric_sha }}`\" } },\n    { \"type\": \"actions\", \"elements\": [ { \"type\": \"button\", \"text\": { \"type\": \"plain_text\", \"text\": \"Promote to #review-needed\" }, \"url\": \"https://app.ashbyhq.com/candidates/{{ $json.candidate_id }}\" } ] }\n  ]\n}",
+        "options": {}
+      },
+      "id": "2a2a2a2a-0001-0000-0000-00000000000c",
+      "name": "Slack Surfaced",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 360],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack bot token (chat:write)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Append one JSONL audit-log line per scored application.\n// No PII (no candidate name, no resume content). Just the route + scores + rubric hash.\nconst fs = require('fs');\nconst path = require('path');\n\nconst AUDIT_DIR = $env.AUDIT_DIR || '/data/audit';\nfs.mkdirSync(AUDIT_DIR, { recursive: true });\n\nconst input = $input.first().json;\nconst yyyymm = new Date().toISOString().slice(0, 7);\nconst auditPath = path.join(AUDIT_DIR, `${yyyymm}.jsonl`);\n\nconst entry = {\n  ts: new Date().toISOString(),\n  application_id: input.application_id,\n  role_slug: input.role_slug,\n  rubric_sha: input.rubric_sha,\n  scores: {\n    skill: input.scores.skill_match.score,\n    level: input.scores.level_fit.score,\n    location: input.scores.location_fit.score,\n    response: input.scores.response_likelihood.score,\n  },\n  aggregate: input.aggregate,\n  route: input.route,\n  is_eu_candidate: !!input.is_eu_candidate,\n  model: 'claude-sonnet-4-6',\n};\n\nfs.appendFileSync(auditPath, JSON.stringify(entry) + '\\n', 'utf8');\n\nreturn [{ json: { audit_appended: auditPath, entry } }];"
+      },
+      "id": "2a2a2a2a-0001-0000-0000-00000000000d",
+      "name": "Audit Append",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2480, 240],
+      "notesInFlow": true,
+      "notes": "One JSONL line per scored application. No PII. Retention should match the firm's audit policy (typically 2-7 years for hiring records)."
+    }
+  ],
+  "connections": {
+    "Ashby Webhook": {
+      "main": [[{ "node": "Verify Signature", "type": "main", "index": 0 }]]
+    },
+    "Verify Signature": {
+      "main": [[{ "node": "Verified?", "type": "main", "index": 0 }]]
+    },
+    "Verified?": {
+      "main": [
+        [{ "node": "Fetch Candidate (Ashby)", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Fetch Candidate (Ashby)": {
+      "main": [[{ "node": "Load Rubric + Pre-Flight", "type": "main", "index": 0 }]]
+    },
+    "Load Rubric + Pre-Flight": {
+      "main": [[{ "node": "Ready to Score?", "type": "main", "index": 0 }]]
+    },
+    "Ready to Score?": {
+      "main": [
+        [{ "node": "Claude Score", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Claude Score": {
+      "main": [[{ "node": "Parse + Route", "type": "main", "index": 0 }]]
+    },
+    "Parse + Route": {
+      "main": [[{ "node": "Route by Aggregate", "type": "main", "index": 0 }]]
+    },
+    "Route by Aggregate": {
+      "main": [
+        [{ "node": "Slack Fast-Track", "type": "main", "index": 0 }],
+        [{ "node": "Slack Review", "type": "main", "index": 0 }],
+        [{ "node": "Slack Surfaced", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack Fast-Track": {
+      "main": [[{ "node": "Audit Append", "type": "main", "index": 0 }]]
+    },
+    "Slack Review": {
+      "main": [[{ "node": "Audit Append", "type": "main", "index": 0 }]]
+    },
+    "Slack Surfaced": {
+      "main": [[{ "node": "Audit Append", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false,
+  "versionId": "1"
+}

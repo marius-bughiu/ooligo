@@ -1,0 +1,102 @@
+---
+slug: headcount-plan-reconciliation-n8n
+canonical_slug: headcount-plan-reconciliation-n8n
+locale: en
+verticals: [recruiting]
+title: Headcount plan reconciliation with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, slack]
+roles: [recruiter, talent-acquisition, finance-business-partner]
+difficulty: intermediate
+time_to_setup: 90min
+ai_generated: true
+human_tested: false
+---
+
+An n8n flow that reconciles the firm's headcount plan (the approved hires per quarter, by team, by level, with start dates) against the open requisitions in the ATS and the actual hires recorded in HRIS — and posts a weekly drift report to Slack with line-by-line variances. Replaces the recruiter-leader's Friday "what's the gap?" spreadsheet with a structured digest that finance can sign off on. Catches the failure modes that quietly cost a quarter — reqs opened against teams that were already at plan, hires booked under the wrong team, contractor conversions counted as new hires.
+
+## When to use
+
+- The firm has a written headcount plan with team / level / start-date granularity (not "we'll hire 50 in Q3" — "12 in eng, of which 4 senior IC, 2 mid IC, with 6 starting by week 6").
+- You have at least two of: the headcount plan in a structured source (Carta, BambooHR plan module, finance spreadsheet), open reqs in [Ashby](/en/tools/ashby/) or another ATS, and hires recorded in HRIS.
+- You're closing a quarter and need to see the forecast variance early enough to do something about it (not the day before the board meeting).
+- The plan has team labels that match the ATS team labels, OR you have a mapping table you can maintain.
+
+## When NOT to use
+
+- **No structured plan.** A plan that lives in a slide deck or a meeting notes doc is not reconcilable. Get the plan into a structured source first; the flow doesn't read PowerPoint.
+- **The hiring manager is the source of truth.** If hires are recorded in informal manager-by-manager spreadsheets, reconciliation is meaningless because the "actual" is whatever each manager says it is. The flow's value depends on the HRIS being the actual.
+- **Pre-Series-B firms with fewer than 30 hires per year.** Reconciliation overhead exceeds the value at small scale; a recruiter-leader and the CEO can hold the plan in their head.
+- **The plan changes weekly.** If the plan is constantly being revised mid-quarter, the variance signal is dominated by plan-revision noise. Stabilize plan-change cadence first.
+
+## Setup
+
+1. **Import the flow.** Drop `apps/web/public/artifacts/headcount-plan-reconciliation-n8n/headcount-plan-reconciliation-n8n.json` into your n8n instance. Each node carries `notesInFlow: true` so the in-canvas notes explain the reconciliation logic.
+2. **Wire the credentials.** Three required: `PLACEHOLDER_PLAN_DB_CRED_ID` (read access to wherever the plan lives — Postgres, Snowflake, or a Sheets connector), `PLACEHOLDER_ASHBY_CRED_ID` (Ashby read scope), `PLACEHOLDER_HRIS_CRED_ID` (HRIS read scope; BambooHR / Workday / Rippling are pre-shaped, others need a connector).
+3. **Author the team mapping.** A YAML file under `n8n/data/team_mapping.yml` maps plan-team-labels to ATS-team-labels and HRIS-team-labels. Without this, the flow can't reconcile cross-system. Mapping authoring is the one-time cost; ongoing maintenance is low (only when teams are created or merged).
+4. **Configure the Slack destination.** Per-team variance reports to per-team channels, plus an aggregate report to a recruiting-leadership channel. The flow's `Compose Variance Report` node templates the message; adjust per your team's preference for terse vs. detailed.
+5. **Schedule it.** The default is weekly Monday 8am local time. The Cron node has `timezone` set explicitly — adjust to your office timezone.
+6. **Dry-run on last quarter.** Replay against last quarter's plan and actuals. Confirm the flow's variance numbers match what your finance partner had at quarter-end. If they don't, the team mapping or the contractor-vs-FTE classification is off.
+
+## What the flow does
+
+Eight nodes. The reconciliation logic is deterministic; the LLM only enters at the variance-narrative step (5), and only to compose a human-readable summary of the deterministic findings.
+
+1. **Cron Trigger** — Mondays 8am office-timezone (timezone set explicitly in node settings).
+2. **Fetch Plan** — pulls the current quarter's headcount plan from the plan source. Schema: `team`, `level`, `count`, `target_start_date`, `req_status` (`approved` / `pending`).
+3. **Fetch Open Reqs (Ashby)** — pulls all open reqs from Ashby. Schema: `req_id`, `team`, `level`, `opened_at`, `target_start_date`.
+4. **Fetch Hires (HRIS)** — pulls hires made this quarter from the HRIS. Schema: `hire_id`, `team`, `level`, `start_date`, `employment_type` (`fte` / `contractor` / `intern`).
+5. **Reconcile** — Code node. Joins plan + reqs + hires by team/level. For each (team, level) cell:
+   - **Open against plan** — count of open reqs vs. plan target.
+   - **Hired against plan** — count of FTE hires vs. plan target. Contractors and interns are NOT counted (the flow's contractor-conversion bucket is separate).
+   - **Variance** — `(plan - hires - open_reqs)`. Negative = over plan. Positive = gap.
+   - **Drift signal** — flag cells where variance has changed >3 since last run, suggesting an unplanned approval or a missed hire.
+   - **Anomaly cells**: reqs open with no plan entry (rogue req?), hires booked against teams not in plan (mis-classified?), contractor conversions reported as new hires (double-counted?).
+6. **Claude Compose Narrative** — takes the structured reconciliation output and writes a 200-word variance summary per team channel + a 400-word aggregate summary for leadership. The LLM does NOT compute variances; it narrates the deterministic findings. The prompt explicitly forbids the model from inferring causes ("the team is behind because…") because that's the reader's job.
+7. **Post Per-Team** — Slack message per team channel with that team's variance only. Privacy posture: each team sees only its own numbers.
+8. **Post Aggregate** — Slack message to recruiting-leadership channel with the cross-team table. Includes anomaly cells with a link back to the source records.
+
+## Cost reality
+
+Per weekly run, on Claude Sonnet 4.6:
+
+- **LLM tokens** — narrative composition is the only LLM step. Typically 2-4k input (structured reconciliation table + skill instructions) and 1-2k output (per-team summaries + aggregate). Roughly $0.02-0.04 per run. Negligible at weekly cadence.
+- **Plan-source / ATS / HRIS API costs** — read calls only. Within free quotas for Ashby and most HRIS providers.
+- **Recruiter-leader time** — the win. Friday afternoon spreadsheet rebuild is 60-120 minutes weekly when done thoroughly; reading the Monday digest is 5-10 minutes. The bigger time saver is on the anomaly cells, which often go unnoticed in manual reconciliation until quarter-end.
+- **Setup time** — 90 minutes including the team mapping authoring. The team mapping is the binding setup cost.
+
+## Success metric
+
+Track three things, monthly:
+
+- **Quarter-end plan accuracy** — at quarter-end, what was the difference between projected hires (week 8 of quarter) and actual hires (week 13)? Should drop from the firm's historical drift to within 5%. The early-warning is what makes the variance actionable.
+- **Anomaly resolution time** — time from "anomaly cell flagged" to "anomaly resolved" (correctly classified, plan updated, or hire re-attributed). Should drop from "discovered at quarter-end" to under 5 days.
+- **Plan-revision frequency** — how often the plan itself changes mid-quarter. The flow surfaces this; if revisions are weekly, the plan stability is itself the problem and the variance signal is noise.
+
+## vs alternatives
+
+- **vs ATS-native dashboards (Ashby Hiring Plan, Greenhouse Headcount Planning).** ATS-native dashboards work if the ATS is the plan source AND the actual source. Pick them if you can consolidate. Pick the flow if your plan lives in finance's system, your reqs are in the ATS, and your hires are in HRIS — three systems that need joining and that no single ATS dashboard sees.
+- **vs Carta / Pave / Lattice headcount-planning modules.** Same as above; if the platform is your single source, use it. The flow is for the multi-system case.
+- **vs a finance-built dashboard.** Finance-built BI dashboards (Looker, Mode, Hex) handle the joins fine. Pick BI if you have analyst capacity. Pick the flow if you don't, or if you want the variance Slack-pushed rather than dashboard-pulled.
+- **vs the manual Friday spreadsheet.** The default. Predictable failure mode: the spreadsheet author leaves, the methodology drifts, and quarter-end variances surprise the board. The flow is the lightweight fix.
+
+## Watch-outs
+
+- **Team-mapping drift.** *Guard:* the flow's first reconciliation step checks that every plan-team and every ATS-team and every HRIS-team appears in the mapping file. Unmapped entities surface as anomaly cells; the report explicitly flags them rather than silently dropping.
+- **Contractor-conversion double-count.** *Guard:* HRIS query filters by `employment_type = 'fte'`. Conversions of existing contractors to FTEs surface in a separate "conversions this quarter" section, not in the new-hires count.
+- **Mid-quarter plan revision washing out variance.** *Guard:* the report shows current-plan numbers AND the original-quarter-start plan numbers, with the delta surfaced. Reader sees both signals.
+- **Off-cycle hires (acquired teams, intern-to-FTE).** *Guard:* the flow flags any hire with `start_date` before the quarter start as "off-cycle" and surfaces separately. These are common (acqui-hire, late close) and need different reading than regular plan hires.
+- **Privacy: per-team channels seeing other teams' numbers.** *Guard:* the per-team Slack post template references only that team's variance row. The aggregate post (cross-team) goes only to the recruiting-leadership channel, not to per-team channels.
+- **Stale plan source.** *Guard:* the flow checks the plan source's `last_updated_at`. If older than 14 days, emit a warning header on the report ("Plan last updated >14 days ago — variance may reflect plan staleness, not actual gap").
+
+## Stack
+
+The artifact bundle lives at `apps/web/public/artifacts/headcount-plan-reconciliation-n8n/` and contains:
+
+- `headcount-plan-reconciliation-n8n.json` — the n8n flow export with all nodes configured
+- `_README.md` — credential setup, team-mapping format, dry-run procedure
+- `team-mapping-template.yml` — the team-mapping YAML to copy and fill
+
+Tools the workflow assumes you use: [n8n](/en/tools/n8n/) (the orchestration), [Ashby](/en/tools/ashby/) (the ATS — swap to [Greenhouse](/en/tools/greenhouse/) by replacing the fetch-reqs node), [Claude](/en/tools/claude/) (narrative composition), [Slack](/en/tools/slack/) (the report destination). HRIS connector is per-firm.
+
+Related concepts: [workforce planning](/en/learn/workforce-planning/), [recruiting funnel metrics](/en/learn/recruiting-funnel-metrics/), [cost per hire](/en/learn/cost-per-hire/).
