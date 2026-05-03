@@ -1,0 +1,345 @@
+{
+  "name": "Candidate engagement sequence",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000001",
+      "name": "Daily Cron — 9am Mon-Fri",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notesInFlow": true,
+      "notes": "Set the timezone explicitly in workflow Settings — default is UTC."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  candidate_id,\n  sequence_name,\n  current_step,\n  candidate_email,\n  recruiter_owner,\n  context_payload\nFROM candidate_sequence_state\nWHERE next_due_at <= now()\n  AND status = 'active'\n  AND opted_out_at IS NULL\nLIMIT 100;",
+        "options": {}
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000002",
+      "name": "Pull Due Candidates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — sequence-state"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.ashbyhq.com/candidate.info?id={{ $json.candidate_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendQuery": false,
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000003",
+      "name": "Ashby — Candidate Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "PLACEHOLDER_ASHBY_CRED_ID",
+          "name": "Ashby — API"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Returns latest candidate state, recent activity, applicationCount."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip-recent-reply",
+              "leftValue": "={{ $json.results.recentReplyAt }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists"
+              }
+            },
+            {
+              "id": "skip-recent-app",
+              "leftValue": "={{ $json.results.lastApplicationAt }}",
+              "rightValue": "={{ $now.minus({days: 30}).toISO() }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "before"
+              }
+            },
+            {
+              "id": "skip-opted-out",
+              "leftValue": "={{ $json.results.optedOut }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000004",
+      "name": "Skip-Condition Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 1024,\n  \"system\": \"You are writing the next outreach message in a multi-touch recruiting sequence. The candidate has been previously contacted and has not opted out. Your message must reference the candidate's actual context (recent role change, public talk, mentioned project) — never generic 'I came across your profile'. Length: 80-120 words. Tone: peer-to-peer, no marketing voice. End with a single specific question. Never claim a personal connection that does not exist.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Sequence: {{ $('Pull Due Candidates').item.json.sequence_name }}. Step: {{ $('Pull Due Candidates').item.json.current_step }}. Candidate snapshot: {{ JSON.stringify($json.results) }}. Context payload: {{ $('Pull Due Candidates').item.json.context_payload }}.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000005",
+      "name": "Claude — Personalize Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $('Pull Due Candidates').item.json.candidate_email }}",
+        "subject": "=Quick thought — {{ $('Pull Due Candidates').item.json.sequence_name }}",
+        "emailType": "text",
+        "message": "={{ $json.content[0].text }}\n\n—\nReply STOP to opt out: https://example.com/optout?token={{ $('Pull Due Candidates').item.json.candidate_id }}",
+        "options": {}
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000006",
+      "name": "Gmail — Send",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1340, 200],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — sender mailbox"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "For volume above ~50/day per mailbox, swap for a dedicated outreach platform (Smartlead/Instantly) with proper deliverability."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE candidate_sequence_state\nSET\n  current_step = current_step + 1,\n  last_touched_at = now(),\n  next_due_at = CASE\n    WHEN current_step + 1 >= total_steps THEN NULL\n    ELSE now() + interval_per_step\n  END,\n  status = CASE\n    WHEN current_step + 1 >= total_steps THEN 'completed'\n    ELSE 'active'\n  END\nWHERE candidate_id = $1\nRETURNING current_step, status, next_due_at;",
+        "options": {
+          "queryReplacement": "={{ $('Pull Due Candidates').item.json.candidate_id }}"
+        }
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000007",
+      "name": "Update Sequence State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 200],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — sequence-state"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "labelIds": ["INBOX"],
+          "q": "in:inbox -from:me -label:sequence-replied newer_than:1d"
+        },
+        "options": {
+          "downloadAttachments": false
+        }
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000008",
+      "name": "Reply Trigger — Gmail Inbox Poll",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 600],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — sender mailbox"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Independent trigger. Fires on every new inbound email and routes to Slack."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Match inbound message to a candidate by email address.\nconst sender = ($json.from || '').match(/<([^>]+)>/)?.[1]\n  || ($json.from || '').trim();\nconst subject = $json.subject || '';\nconst snippet = $json.snippet || '';\n\nreturn [{\n  json: {\n    candidate_email: sender,\n    subject,\n    snippet,\n    received_at: $json.internalDate ? new Date(Number($json.internalDate)).toISOString() : new Date().toISOString(),\n    gmail_thread_id: $json.threadId,\n  }\n}];"
+      },
+      "id": "1c1c1c1c-0001-0000-0000-000000000009",
+      "name": "Normalize Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE candidate_sequence_state\nSET status = 'replied', replied_at = now(), next_due_at = NULL\nWHERE candidate_email = $1 AND status = 'active'\nRETURNING candidate_id, recruiter_owner, sequence_name, current_step;",
+        "options": {
+          "queryReplacement": "={{ $json.candidate_email }}"
+        }
+      },
+      "id": "1c1c1c1c-0001-0000-0000-00000000000a",
+      "name": "Mark Replied + Lookup Owner",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 600],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — sequence-state"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"@{{ $json.recruiter_owner }}\",\n  \"text\": \"Reply from {{ $('Normalize Reply').item.json.candidate_email }} on sequence *{{ $json.sequence_name }}* (step {{ $json.current_step }}).\\n> {{ $('Normalize Reply').item.json.snippet }}\"\n}",
+        "options": {}
+      },
+      "id": "1c1c1c1c-0001-0000-0000-00000000000b",
+      "name": "Slack — Notify Recruiter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Cron — 9am Mon-Fri": {
+      "main": [
+        [{ "node": "Pull Due Candidates", "type": "main", "index": 0 }]
+      ]
+    },
+    "Pull Due Candidates": {
+      "main": [
+        [{ "node": "Ashby — Candidate Snapshot", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ashby — Candidate Snapshot": {
+      "main": [
+        [{ "node": "Skip-Condition Check", "type": "main", "index": 0 }]
+      ]
+    },
+    "Skip-Condition Check": {
+      "main": [
+        [{ "node": "Claude — Personalize Message", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Claude — Personalize Message": {
+      "main": [
+        [{ "node": "Gmail — Send", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gmail — Send": {
+      "main": [
+        [{ "node": "Update Sequence State", "type": "main", "index": 0 }]
+      ]
+    },
+    "Reply Trigger — Gmail Inbox Poll": {
+      "main": [
+        [{ "node": "Normalize Reply", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Reply": {
+      "main": [
+        [{ "node": "Mark Replied + Lookup Owner", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark Replied + Lookup Owner": {
+      "main": [
+        [{ "node": "Slack — Notify Recruiter", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "versionId": "1c1c1c1c-0001-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "candidate-engagement-sequence",
+  "tags": [
+    { "name": "recruiting" },
+    { "name": "outbound" }
+  ]
+}

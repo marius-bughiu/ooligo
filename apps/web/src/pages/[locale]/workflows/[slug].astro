@@ -1,6 +1,8 @@
 ---
 import { getCollection, getEntry, render } from "astro:content";
 import type { CollectionEntry } from "astro:content";
+import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
+import { join, relative, sep, posix } from "node:path";
 import BaseLayout from "~/layouts/BaseLayout.astro";
 import JsonLd from "~/components/JsonLd.astro";
 import Breadcrumbs from "~/components/Breadcrumbs.astro";
@@ -13,6 +15,8 @@ import CapabilityChip from "~/components/CapabilityChip.astro";
 import VerticalTag from "~/components/VerticalTag.astro";
 import CrossLinkRail from "~/components/CrossLinkRail.astro";
 import EditOnGitHub from "~/components/EditOnGitHub.astro";
+import ArtifactBrowser from "~/components/ArtifactBrowser.astro";
+import type { ArtifactFile } from "~/components/ArtifactBrowser.astro";
 import { localeText, type LocaleCode } from "~/lib/config";
 import { chromeStrings } from "~/lib/strings";
 
@@ -61,8 +65,6 @@ const labels = {
     meta_tested: "Human-tested",
     section_stack: "Stack",
     section_install: "Setup",
-    cta_download: "Download artifact",
-    cta_download_desc: "Plug it into your stack and run.",
     rail_workflows: "Related workflows",
     rail_learn: "Related learning",
   },
@@ -73,8 +75,6 @@ const labels = {
     meta_tested: "Probado por humanos",
     section_stack: "Stack",
     section_install: "Instalación",
-    cta_download: "Descargar artefacto",
-    cta_download_desc: "Conéctalo a tu stack y ejecuta.",
     rail_workflows: "Workflows relacionados",
     rail_learn: "Aprendizaje relacionado",
   },
@@ -85,8 +85,6 @@ const labels = {
     meta_tested: "Testado por humanos",
     section_stack: "Stack",
     section_install: "Instalação",
-    cta_download: "Baixar artefato",
-    cta_download_desc: "Plugue na sua stack e rode.",
     rail_workflows: "Workflows relacionados",
     rail_learn: "Aprendizado relacionado",
   },
@@ -145,14 +143,59 @@ const jsonLd: Record<string, unknown> = {
   })),
 };
 
-// File extension from download URL → preview lang fallback label
-function fileExt(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  const m = url.match(/\.([a-z0-9]{1,8})(?:\?|#|$)/i);
-  return m ? m[1]?.toUpperCase() : undefined;
+// ----- Artifact bundle (read at build time from public/artifacts/<slug>/) -----
+function langFromName(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".md") || lower === ".cursorrules" || lower.endsWith("/.cursorrules")) return "MARKDOWN";
+  if (lower.endsWith(".json")) return "JSON";
+  if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "TYPESCRIPT";
+  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "JAVASCRIPT";
+  if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return "YAML";
+  if (lower.endsWith(".html")) return "HTML";
+  if (lower.endsWith(".css")) return "CSS";
+  if (lower.endsWith(".sh")) return "SHELL";
+  return "TEXT";
 }
-const downloadExt = fileExt(data.download_url);
-const previewLangLabel = data.preview_lang ?? downloadExt;
+
+function walkArtifact(rootDir: string): ArtifactFile[] {
+  const out: ArtifactFile[] = [];
+  function visit(dir: string) {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, ent.name);
+      if (ent.isDirectory()) {
+        visit(full);
+      } else if (ent.isFile()) {
+        const rel = relative(rootDir, full).split(sep).join(posix.sep);
+        const stat = statSync(full);
+        out.push({
+          name: rel,
+          path: rel,
+          content: readFileSync(full, "utf8"),
+          lang: langFromName(rel),
+          sizeBytes: stat.size,
+        });
+      }
+    }
+  }
+  visit(rootDir);
+  // Sort: top-level first (alphabetical), then nested (alphabetical by full path).
+  return out.sort((a, b) => {
+    const aDepth = a.path.split("/").length;
+    const bDepth = b.path.split("/").length;
+    if (aDepth !== bDepth) return aDepth - bDepth;
+    return a.path.localeCompare(b.path);
+  });
+}
+
+const artifactDir = join(process.cwd(), "public", "artifacts", data.slug);
+const artifactFiles: ArtifactFile[] = existsSync(artifactDir)
+  ? walkArtifact(artifactDir)
+  : [];
+const downloadBase = `/artifacts/${data.slug}`;
+const artifactZipPath = join(process.cwd(), "public", "artifacts", `${data.slug}.zip`);
+const zipUrl: string | undefined = existsSync(artifactZipPath)
+  ? `/artifacts/${data.slug}.zip`
+  : undefined;
 ---
 
 <BaseLayout
@@ -234,40 +277,28 @@ const previewLangLabel = data.preview_lang ?? downloadExt;
           </section>
         )}
 
-        <!-- ============ DOWNLOAD CTA ============ -->
-        {data.download_url && (
-          <section class="wf-download-section">
-            <a class="wf-download" href={data.download_url} download>
-              <div class="wf-download-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M10 3v10m0 0l-4-4m4 4l4-4M3 17h14"/>
-                </svg>
-              </div>
-              <div class="wf-download-text">
-                <div class="wf-download-label">{t.cta_download}</div>
-                <div class="wf-download-desc">{t.cta_download_desc}</div>
-              </div>
-              {previewLangLabel && (
-                <div class="wf-download-lang">{previewLangLabel}</div>
-              )}
-            </a>
-          </section>
-        )}
-
-        <!-- ============ MDX BODY ============ -->
+        <!-- ============ BODY (with optional artifact sidebar) ============ -->
         <div class="wf-body">
-          <Prose width="prose">
-            <Content />
-            <div class="edit-on-github-wrap">
-              <EditOnGitHub
-                mode="edit"
-                collection="workflows"
-                locale={locale}
-                slug={data.slug}
-                label={chrome.contribute.edit_page}
-              />
-            </div>
-          </Prose>
+          <ArtifactBrowser
+            files={artifactFiles}
+            downloadBase={downloadBase}
+            zipUrl={zipUrl}
+            id={`ab-${data.slug}`}
+            locale={locale}
+          >
+            <Prose width="prose">
+              <Content />
+              <div class="edit-on-github-wrap">
+                <EditOnGitHub
+                  mode="edit"
+                  collection="workflows"
+                  locale={locale}
+                  slug={data.slug}
+                  label={chrome.contribute.edit_page}
+                />
+              </div>
+            </Prose>
+          </ArtifactBrowser>
         </div>
       </Container>
     </Section>
@@ -391,67 +422,6 @@ const previewLangLabel = data.preview_lang ?? downloadExt;
     margin: 2.5rem 0;
   }
 
-  /* ============ DOWNLOAD CTA ============ */
-  .wf-download-section {
-    margin: 2rem 0 2.5rem;
-  }
-
-  .wf-download {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 1rem;
-    padding: 1.125rem 1.25rem;
-    background-color: var(--color-bg-surface-1);
-    border: 1px solid var(--color-border);
-    border-left: 3px solid var(--color-accent);
-    border-radius: var(--radius-sm);
-    color: var(--color-text-primary);
-    transition: border-color 150ms var(--ease-out-soft),
-      background-color 150ms var(--ease-out-soft);
-  }
-  .wf-download:hover {
-    background-color: var(--color-bg-surface-2);
-    border-color: var(--color-accent);
-  }
-
-  .wf-download-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    background-color: color-mix(in oklab, var(--color-accent) 15%, transparent);
-    color: var(--color-accent);
-    border-radius: var(--radius-xs);
-  }
-
-  .wf-download-text {
-    min-width: 0;
-  }
-  .wf-download-label {
-    font-size: var(--text-base);
-    font-weight: 600;
-    color: var(--color-text-primary);
-    line-height: 1.2;
-  }
-  .wf-download-desc {
-    margin-top: 0.25rem;
-    font-size: var(--text-sm);
-    color: var(--color-text-secondary);
-  }
-
-  .wf-download-lang {
-    align-self: flex-start;
-    padding: 0.25rem 0.5rem;
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    color: var(--color-text-tertiary);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
 
   /* ============ BODY ============ */
   .wf-body {

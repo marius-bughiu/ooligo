@@ -2,6 +2,13 @@ import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
 import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
+import { generateAllZips } from "./scripts/generate-artifact-zips.mjs";
+
+// Generate per-bundle ZIP archives for every workflow artifact dir
+// under public/artifacts/. Runs at config-load (before Astro reads
+// public/), so zips ship as static assets via the normal pipeline.
+// No-op when zips are already up-to-date — cheap to run on every dev/build/preview.
+generateAllZips();
 
 // https://astro.build/config
 // site URL is overridable per-environment so the deploy workflow can target
