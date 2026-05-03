@@ -13,38 +13,224 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that ingests an AE's last ten calls from Gong and outputs a coaching note: three things working, two things to tighten, one specific exercise for next week. Built for managers who want consistent coaching but do not have ten hours a week to listen to calls.
+A Claude Skill that ingests an AE's last ten Gong calls and outputs a
+coaching note in a fixed three-things-working /
+two-things-to-tighten / one-specific-exercise shape. Built for
+managers who want consistent weekly coaching but do not have ten
+hours a week to listen back to calls. The skill writes the draft;
+the manager edits, contextualizes with off-call signal, and delivers
+in the next one-on-one. Auto-send is explicitly out of scope.
 
-## What you'll need
+## When to use
 
-- Gong with the call API enabled and call transcripts available
-- Claude.ai or Claude Code
-- Your team's call rubric (discovery, demo, negotiation) as project knowledge
-- A weekly delivery channel agreed with the AE: DM, email, or in the next one-on-one
+You are a sales manager with 4-10 direct AE reports. You want every
+rep to get the same depth of coaching every week, not just the loud
+ones with messy deals. You have Gong, your team has a call rubric,
+and you can carve thirty minutes a week per rep to review and edit
+the draft. The skill collapses the "listen to ten calls plus take
+notes plus structure feedback" loop from ~3 hours per rep to ~30
+minutes.
+
+Use it weekly. Daily is too much (no rep changes behavior in 24
+hours). Monthly is too rare (the calls being cited are stale and
+the patterns harder to remember). Friday afternoon delivery is the
+sweet spot — the AE has the weekend to absorb without it eating
+their selling day.
+
+## When NOT to use
+
+- **Performance Improvement Plans, formal HR processes, comp
+  decisions, or termination paperwork.** This is a coaching note,
+  not a personnel record. PIPs require HR involvement, signed
+  acknowledgment, and a defensibility bar this Skill is not
+  designed to meet. The artifact bundle's
+  `references/03-escalation-criteria.md` defines the binary signals
+  that route a rep out of the coaching path entirely.
+- **A rep you do not directly manage.** The Skill verifies
+  manager-of-record against Gong and refuses if there is no match.
+  Wrong-manager output would expose call content the invoker should
+  not see — the highest-impact failure mode this Skill could enable
+  if unguarded.
+- **Brand-new ramping reps in their first 30 days.** Ramp coaching
+  is its own conversation: shadowing, role-play, certification
+  scoring. A weekly rubric-scored note from ten thin calls produces
+  noise. Wait until the rep has three weeks of real-customer call
+  volume.
+- **A week with fewer than three usable calls.** The Skill returns
+  `Insufficient call data` rather than padding. Two calls do not
+  establish a pattern; pretending they do is hindsight bias
+  laundered through markdown.
 
 ## Setup
 
-1. **Install the Skill.** `ae-coaching.skill` exposes `pull_recent_calls`, `analyze_against_rubric`, and `render_coaching_note`.
-2. **Auth Gong.** API key with read access to the AE's calls and transcripts. The Skill respects Gong's permission model; if the AE's calls are restricted, the Skill cannot see them.
-3. **Drop in the call rubric.** Different rubrics for discovery, demo, and negotiation. The Skill auto-detects call type from the Gong stage tag or asks Claude to classify if untagged.
-4. **Set the rep ID and the date range.** Default is the last ten calls or the last fourteen days, whichever is shorter.
-5. **Decide the delivery cadence.** Weekly is realistic. Daily is too much. Monthly is too rare. Schedule for Friday afternoon so the AE has the weekend to absorb.
+1. **Drop the bundle in.** The full Skill is in
+   `apps/web/public/artifacts/ae-rep-coaching-skill/SKILL.md` along
+   with three reference templates. Copy the directory into
+   `~/.claude/skills/ae-rep-coaching/` (or your team's project-level
+   `.claude/skills/`) so Claude Code picks it up.
+2. **Auth Gong.** API key with read access to the AE's calls and
+   transcripts. The Skill respects Gong's permission model; if the
+   AE's calls are restricted, the Skill cannot see them, which is
+   the correct behavior.
+3. **Replace the templates with your real artifacts.** The bundle
+   ships three placeholder reference files. Each one is generic
+   until you fill it in with your team's actual content:
+   - `references/01-coaching-rubric-template.md` — your per-call-type
+     rubric (discovery, demo, negotiation, closing). The pilot
+     ships with five criteria per type as a starting shape.
+   - `references/02-coaching-note-format.md` — the exact Markdown
+     shape every weekly note uses. Fixed format is deliberate so
+     the AE scans for what changed week-over-week.
+   - `references/03-escalation-criteria.md` — the binary signals
+     that cause the Skill to refuse to write a coaching note and
+     surface a performance-conversation flag instead.
+4. **Set the rep ID and the date range.** Default is the last ten
+   calls or the last fourteen days, whichever is shorter. Cap the
+   window at thirty days; older calls reflect a different version
+   of the rep.
+5. **Decide the delivery cadence and channel.** Weekly, Friday
+   afternoon, in the next 1:1 or as a DM the rep can read before
+   the 1:1. Get the AE's buy-in on the channel before the first
+   note lands cold.
 
-## How it works
+## What the skill actually does
 
-The Skill pulls call transcripts and metadata, classifies each by call type, and runs the relevant rubric against the transcript. Claude scores each rubric criterion, citing specific moments from the call. Then it aggregates across the ten calls into the three-two-one structure: three patterns working, two patterns to tighten, one specific exercise.
+Six steps, in order, no parallelization:
 
-The exercise is the most important output. "Improve discovery" is useless. "On your next three discovery calls, ask the budget question before minute twenty" is actionable. The Skill is prompted hard to make the exercise concrete and measurable.
+1. **Verify manager-of-record.** Hard refusal if the invoking user
+   is not the rep's direct manager in Gong.
+2. **Pull recent calls** filtered for length (≥5 min), attendee
+   count (≤5 external), and audio quality. Stop at fewer than three
+   usable calls.
+3. **Classify each call** as discovery / demo / negotiation /
+   closing. Per-call classification (not a blanket assumption) is
+   the engineering choice that prevents the noisiest early failure
+   mode: applying a discovery rubric to a negotiation call.
+4. **Score against the matching rubric section** with a transcript
+   citation per score. No score without a citation — this guard
+   rules out gut-feel feedback dressed up as analysis.
+5. **Run the escalation check** against
+   `03-escalation-criteria.md`. If any criterion fires
+   (misrepresentation of pricing, hostile tone, side-deal promises,
+   etc.) the Skill stops and returns the escalation block instead
+   of the coaching note.
+6. **Aggregate into three / two / one** with a fixed-format render.
+   Patterns require ≥2 supporting calls each; the Skill returns one
+   "tighten" instead of two when only one is supported. Never pads.
+
+The exercise at the end is the most important output. "Improve
+discovery" is useless. "On your next three discovery calls, ask the
+budget question before minute twenty" is actionable, observable in
+Gong next week, and auditable. The Skill is prompted hard to make
+the exercise concrete and measurable.
+
+## Cost reality
+
+Per coaching note (one rep, ten calls, ~10k tokens of transcript per
+call after filtering, Claude Sonnet 4.5):
+
+- ~120k input tokens (transcripts + rubric + format + escalation
+  reference) → ~$0.36 at current Sonnet pricing.
+- ~2k output tokens (the note itself) → ~$0.03.
+- **~$0.40 per rep per week, $1.60 per rep per month.**
+
+For a manager of eight reps, that is ~$13/month in token cost.
+
+Time saved per manager per week: roughly 2.5 hours per rep collapses
+to 30 minutes (review + edit). For eight reps, that is ~16 hours
+back per week. The realistic floor is closer to ~10 hours back once
+you account for the additional 1:1 time spent talking through the
+note with each rep — which is the point.
+
+Gong cost is not incremental; if you have Gong already (the
+Skill's hard dependency) the API access is bundled.
+
+## Success metric
+
+Watch one number for one quarter: **percentage of weekly 1:1s where
+the AE references their previous week's exercise unprompted.** If
+that number is not above 50% by week 6, the exercises are not
+specific enough — go back and tighten the wording in
+`02-coaching-note-format.md` so "exercise" cannot collapse into
+"general advice."
+
+Secondary signals (slower, noisier): close-rate movement on the
+specific call type the rep is being coached on, ramp time for new
+reps once the loop is established, manager-rated 1:1 quality.
+
+## vs alternatives
+
+- **Manager-written notes from scratch.** Better fidelity if the
+  manager actually does it. The catch is consistency: under load,
+  manager-written notes either skip a week, get reduced to "good
+  job, keep going," or get written for the deal-in-trouble rep
+  while the steady performers go uncoached. The Skill does not
+  produce better notes than a great manager with infinite time; it
+  produces better notes than the same manager under realistic
+  load.
+- **Gong's built-in scorecards and coaching features.** Gong scores
+  individual calls against a rubric and surfaces aggregate trends.
+  Useful, complementary, and cheaper than this skill if you only
+  need scoring. What it does not do well is synthesize across calls
+  into the three / two / one shape with a specific exercise. You
+  can stack: use Gong scorecards for per-call grading, use this
+  Skill for the weekly synthesis.
+- **Membrain, Spekit, or other dedicated sales coaching
+  platforms.** Heavier setup, additional license, broader
+  capability (skill libraries, learning paths). Right answer for
+  large enterprise sales orgs with dedicated enablement headcount.
+  Wrong answer for a single sales manager who just wants weekly
+  notes that do not eat Friday.
+- **Status quo.** "I'll get to coaching after pipeline review."
+  Pipeline review is never done.
 
 ## Watch-outs
 
-- **Tone calibration.** Coaching notes that read like a performance review get ignored. The Skill is prompted toward "trusted peer" voice. Test the tone with one of your strongest AEs before rolling out.
-- **Transcript quality.** Calls under five minutes, calls with more than five attendees, and bad-audio calls produce noisy analysis. Filter aggressively.
-- **Rubric alignment.** A rubric written for outbound discovery applied to inbound demo calls produces irrelevant feedback. Make sure the rubric matches the call type.
-- **Manager-of-record dependency.** This is a tool for the manager, not a replacement. The output is a draft. The manager edits, contextualizes, and delivers.
+- **Bias amplification.** Rubric scoring against transcripts can
+  encode reviewer bias — verbose reps score higher on "rapport,"
+  non-native English speakers score lower on "discovery flow,"
+  reps with louder customers score higher on "asks for reaction"
+  even when the rep did nothing. Guard: every score requires a
+  transcript citation, not a vibe; the rubric is reviewed
+  quarterly with the full team rather than maintained by one
+  manager in isolation; the Skill warns when the rubric is older
+  than 90 days. See
+  `apps/web/public/artifacts/ae-rep-coaching-skill/references/01-coaching-rubric-template.md`.
+- **Wrong-manager data leakage.** A manager pulls a coaching note
+  on a rep they do not manage and ends up reading call content
+  they should not see. Guard: step 1 of the Skill verifies
+  manager-of-record against Gong's permission model before any
+  transcript loads. Hard refusal on mismatch — no partial output,
+  no workaround suggestion.
+- **Stale rubric.** A rubric written 18 months ago for cold
+  outbound discovery applied to today's product-led inbound demos
+  produces irrelevant feedback that the AE quietly stops reading.
+  Guard: each rubric file carries a `last_edited` date; the Skill
+  prepends a warning to the coaching note when the matching
+  rubric section is older than 90 days, and a quarterly rubric
+  review is part of the rollout plan, not optional.
+- **Tone calibration.** Coaching notes that read like a written
+  warning get ignored or escalate the relationship. Guard: the
+  Skill enforces "trusted peer" voice in
+  `02-coaching-note-format.md`, the escalation check in step 5
+  routes performance-conversation signals out of the coaching
+  path entirely, and the rollout plan calls for testing the tone
+  with one of your strongest AEs before sending one cold.
+- **Manager-of-record dependency.** This is a tool for the
+  manager, not a replacement. The output is a draft. The manager
+  edits, contextualizes with off-call observations (1:1 history,
+  ramp stage, deal context the call did not show), and delivers
+  in person. Auto-send is intentionally not in the bundle.
 
 ## Stack
 
-- **Gong** — call source, transcript layer, type classification
-- **Claude** — rubric scoring and synthesis
-- **Call rubric doc** — the lens that makes feedback specific
+- **Gong** — call source, transcript layer, manager-of-record
+  verification, optional per-call scorecards as a complementary
+  layer
+- **Claude (Sonnet 4.5 or higher)** — rubric scoring, escalation
+  check, synthesis into the three / two / one shape
+- **Coaching rubric, note format, escalation criteria** — the
+  three reference files in
+  `apps/web/public/artifacts/ae-rep-coaching-skill/references/`
+  that turn a generic "score this transcript" into a coaching
+  loop your team actually owns

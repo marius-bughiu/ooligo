@@ -13,41 +13,209 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that takes a counterparty's NDA or MSA in `.docx` form, compares it against your playbook, and produces a tracked-changes Word document with redlines plus a 1-page deviation summary. Drop the playbook into the Skill once; run it on every inbound contract from then on.
+A Claude Skill that takes a counterparty's NDA or MSA in `.docx` form,
+classifies every clause against your firm's red/yellow/green playbook, proposes
+redlines drawn from a pre-drafted fallback library, and flags anything outside
+the playbook for a human attorney. The skill produces a tracked-changes Word
+document plus a 1-page deviation summary the in-house team can paste into the
+deal channel. Drop the playbook in once; run it on every inbound contract from
+then on.
 
-## What you'll need
+## When to use
 
-- Claude Code or Claude.ai with custom Skills enabled
-- Your firm's playbook documented as one of: an `.md` file with clause-by-clause acceptable/fallback/walk-away positions, or a `.docx` of your standard MSA/NDA template
-- Microsoft Word installed (for opening the redlined output)
-- Optional: [Ironclad](/en/tools/ironclad/) or another [CLM](/en/learn/contract-lifecycle-management/) for storing the resulting redlined version
+Use this skill when an inbound NDA, MSA, DPA, order form, or vendor agreement
+lands and you want the first-pass redline grounded in policy before a lawyer
+opens the file. The economics work when contract volume is high enough that
+the per-deal time saving compounds — typically a legal-ops team handling 30+
+inbound contracts per month at the Tier 2-3 level of a
+[contract review SOP](/en/learn/contract-review-sop/). Below that volume, the
+playbook-maintenance overhead exceeds the saving.
+
+The skill assumes you already have a documented playbook (see the
+[NDA playbook](/en/learn/nda-playbook/) and
+[MSA redlining rubric](/en/learn/msa-redlining-rubric/) for the structure it
+expects). If the playbook does not exist yet, build it first — the skill amplifies
+the policy, it does not invent it.
+
+## When NOT to use
+
+- **Final approval or sending the redline back to the counterparty.** The skill
+  proposes; a named human attorney reviews every change before it leaves. The
+  output is a head start, not a sign-off.
+- **Edits to your own contract-as-source-of-truth template.** Template changes
+  are a playbook update — edit `references/1-playbook-template.md` directly so
+  every future run picks up the new position. Do not run the skill on your own
+  template "to refresh it."
+- **Highly bespoke instruments.** M&A definitive agreements, complex IP
+  assignments, regulated-industry side letters — the playbook cannot encode
+  these. The skill will flag every clause as out-of-policy and burn tokens
+  doing it.
+- **Final-round negotiation drafts.** By turn 3, the redlines are deal-specific
+  concessions the playbook cannot anticipate. The skill is for the opening
+  position only.
+- **Privileged work product routed through a non-Tier-A AI vendor.** If your
+  firm's AI policy excludes the model the skill would call, escalate to a human
+  attorney instead of relaxing the policy. Privilege is not worth the speed.
 
 ## Setup
 
-1. **Drop the Skill.** Place `contract-redline.skill` into your Claude Code skills directory (`~/.claude/skills/`) or upload to Claude.ai project. The Skill exposes two callable functions: `redline_against_playbook` and `summarize_deviations`.
-2. **Add your playbook.** The Skill reads `playbook/nda_playbook.md` and `playbook/msa_playbook.md` from the Skill directory. See the [NDA playbook](/en/learn/nda-playbook/) and [MSA redlining rubric](/en/learn/msa-redlining-rubric/) for structure.
-3. **Test on a known contract.** Run the Skill against a contract you've already redlined manually. Compare outputs. Tune the playbook if the Skill's positions feel off.
-4. **Wire to intake.** When a new contract arrives via [Ironclad](/en/tools/ironclad/) intake or email, the assigned reviewer drops the `.docx` into the Skill and gets the redlined output back in under 60 seconds.
+1. **Drop the bundle.** Place the contents of
+   `apps/web/public/artifacts/contract-redline-claude-skill/` into your Claude
+   Code skills directory (`~/.claude/skills/contract-redline/`) or upload the
+   folder to a Claude.ai project. The skill exposes one entry point that
+   classifies and redlines a passed contract.
+2. **Replace the templates.** The bundle ships with three template files in
+   `references/`. Replace each with your firm's actual content before the
+   first run:
+   - `references/1-playbook-template.md` — your red/yellow/green positions per
+     clause type.
+   - `references/2-fallback-positions.md` — counsel-approved drop-in paragraphs
+     the skill substitutes verbatim (no paraphrasing).
+   - `references/3-escalation-criteria.md` — the rules that decide when a
+     clause routes to a human instead of getting a proposed redline. Critically,
+     this is also where you list the AI vendors you authorize for legal work
+     product — the skill refuses to run otherwise.
+3. **Test on a known contract.** Run against a contract you have already
+   redlined manually and diff the outputs. Tune the playbook where the skill's
+   positions feel off; tune the fallback-position paragraphs where the wording
+   feels stilted. Two or three iterations gets to a good baseline.
+4. **Wire to intake.** When a new contract arrives via [Ironclad](/en/tools/ironclad/)
+   intake or email, the assigned reviewer drops the `.docx` into the skill and
+   gets the redlined output back in roughly 60 seconds. The reviewer opens the
+   `.docx` in Word, walks the tracked changes (each one carries a Word comment
+   citing the matched playbook section ID), and sends back to the counterparty
+   only after their own review.
 
-## How it works
+## What the skill actually does
 
-The Skill takes the contract `.docx` and runs three sub-tasks in sequence:
+The skill runs four sub-tasks in order; they are not parallelized because each
+step depends on context from the previous one. The full method, with engineering
+rationale, lives in
+`apps/web/public/artifacts/contract-redline-claude-skill/SKILL.md`. Briefly:
 
-1. **Classify the contract type.** Reads the document, identifies it as NDA, MSA, DPA, vendor agreement, or other.
-2. **Match each clause against the playbook.** Splits the contract into clauses, identifies the corresponding playbook position for each, and computes the deviation level (acceptable / fallback / walk-away).
-3. **Generate tracked changes.** For each fallback or walk-away clause, produces the redline language pulled from the playbook. Writes the redlined version as a Word `.docx` with native tracked changes plus comments explaining the rationale for each redline.
+1. **Classify the contract type.** NDA (mutual / one-way), MSA, DPA, order form,
+   vendor agreement, or "other." If "other," stop and emit a single escalation
+   block. The skill does not attempt redlines on contract types the playbook
+   does not address — that is the most common silent-drift failure mode.
+2. **Clause-by-clause classification.** Split the contract by heading (fall back
+   to numbered-section parsing). For each clause, match to a playbook entry by
+   clause-type heuristic and classify as `green` (acceptable), `yellow`
+   (fallback substitution), `red` (must-have rewrite), or `out-of-playbook`
+   (escalate). Every classification cites the matched playbook section ID in
+   the output so the reviewer can audit decisions in seconds.
+3. **Redline proposal.** For every yellow clause, paste the corresponding
+   fallback paragraph from `references/2-fallback-positions.md` verbatim. For
+   every red clause, paste the must-have paragraph. Why pre-drafted paragraphs
+   instead of free-form rewrites: counsel has already reviewed this language.
+   Free-form rewrites would introduce novel wording every run and force the
+   reviewer to re-read each fallback from scratch — defeating the time saving.
+4. **Escalation flagging.** Every out-of-playbook clause and every clause
+   matching a rule in `references/3-escalation-criteria.md` gets an escalation
+   block instead of a redline. The skill does not guess.
 
-## Output format
+## Cost reality
 
-- **`{contract}_redlined.docx`** — Word document with tracked changes
-- **`{contract}_summary.md`** — 1-page deviation summary listing every fallback or walk-away clause, the reviewer's required action, and the relevant playbook position
+Token cost per contract depends on length and clause count. Concrete numbers:
 
-## Where it fits
+- **Typical NDA (3-5 pages, ~2k words).** Input ~6k tokens (contract + playbook
+  + fallback library + escalation criteria), output ~4k tokens (rationale per
+  clause + summary). At Claude Sonnet 4.5 pricing ($3 / MTok input, $15 / MTok
+  output), that's roughly $0.08 per contract.
+- **Typical MSA (15-25 pages, ~10k words).** Input ~14k tokens, output ~10k
+  tokens. Roughly $0.20 per contract.
+- **Monthly run rate at 100 contracts (50 NDAs + 50 MSAs).** Roughly $14 in
+  token cost — order-of-magnitude smaller than the human-time saving (one
+  paralegal hour at $90/hr fully loaded covers ~640 contracts of skill cost).
 
-Use this Skill at the **Tier 2-3** level of your [contract review SOP](/en/learn/contract-review-sop/). For pure Tier 1 NDAs, [LawGeex](/en/tools/lawgeex/) or [BlackBoiler](/en/tools/blackboiler/) auto-approval is faster; for high-value strategic contracts (Tier 4), an attorney still reads end-to-end. The Claude Skill sweet spot is the high-volume mid-stakes contract where the lawyer wants AI to do the first pass but expects to review every redline.
+The real cost is playbook maintenance: counsel needs to keep
+`references/1-playbook-template.md` and `references/2-fallback-positions.md`
+current. Budget two hours of senior-counsel time per quarter to refresh both,
+plus an hour per quarter to triage escalation patterns and fold recurring
+out-of-playbook clauses back into the playbook.
+
+## Success metric
+
+Two metrics, watched together, tell you whether the skill is earning its keep:
+
+- **Cycle-time reduction on first-pass redlines.** Baseline: median time from
+  contract intake to "first-pass redline ready for human review." Target:
+  reduce the median by 60-75%. A team baselined at 90 minutes per first-pass
+  redline should land at 25-35 minutes (the skill produces in 60 seconds; the
+  human review takes the rest).
+- **% of clauses flagged for human review.** Target band: 15-25% of clauses
+  per contract. Below 10% means the playbook is too permissive (the skill is
+  rubber-stamping yellow-zone language as green) — tighten the rubric. Above
+  35% means the playbook does not cover enough clause types — extend it.
+
+If the cycle-time metric does not move within 30 days of go-live, the
+bottleneck is the human review step, not the redlining. Common cause: the
+reviewer does not trust the rationale strings and re-reads every clause from
+scratch. Fix by making the rationale strings cite playbook section IDs (which
+the skill does by default) and training reviewers to scan the IDs.
+
+## vs alternatives
+
+The decision is between this skill and a vendor-built specialist:
+
+- **vs [LawGeex](/en/tools/lawgeex/) or [BlackBoiler](/en/tools/blackboiler/).**
+  These are vendor SaaS products with pre-trained models on millions of
+  contracts. They win on Tier 1 NDAs (auto-approval against a standard
+  playbook) and on speed-of-deployment if you do not already have a
+  documented playbook. They lose when your playbook has unusual positions
+  the vendor has not seen, when token-level transparency matters (the skill
+  cites your playbook section IDs; vendors cite their own model's confidence),
+  and on price (vendor seats run $500-2k/seat/month vs the skill's ~$0.20/
+  contract token cost plus paralegal-time amortization).
+- **vs [Ironclad AI Assist](/en/tools/ironclad/) or
+  [Spellbook](/en/tools/spellbook/).** Embedded in CLM / Word respectively;
+  better UX inside the tool you already use; weaker on enforcing your specific
+  playbook because their grounding is partly the vendor's general training.
+  Pick these if you want zero deployment effort and do not need
+  citation-to-section-ID auditability.
+- **vs manual paralegal-driven redlines.** The status quo at most firms.
+  Higher quality on novel clauses (humans pattern-match better on
+  unusual language), much higher cost per contract, slower turnaround. The
+  skill is not a replacement for the paralegal — it shifts the paralegal's
+  time from typing to judgment.
+
+The Claude Skill sweet spot is the high-volume mid-stakes contract where the
+in-house team wants AI to do the first pass but expects human review on every
+output and demands every redline trace to a documented playbook position. If
+you cannot point at the playbook entry behind a redline, the redline does not
+ship.
 
 ## Watch-outs
 
-- **Playbook quality is everything.** A vague playbook produces vague redlines. Codify positions explicitly with example fallback language, not abstract principles.
-- **Not a substitute for legal review.** Every redline output is human-reviewed before it goes back to the counterparty. The Skill saves time on the first draft, not on the judgment call.
-- **Privileged information stays in.** Skills run inside your Claude session; document content does not leave your control. But verify your firm's AI-vendor policy ([AI policy for legal teams](/en/learn/ai-policy-for-legal-teams/) once published) authorizes Claude for this use case.
+- **Silent playbook drift.** A months-out-of-date playbook produces confident
+  redlines from stale positions. Guard: every output writes the playbook's
+  `last_reviewed` date in the summary header. Reviewer rejects any output
+  where that date is older than 90 days, and the playbook is refreshed before
+  re-running.
+- **Novel clause missed because of heuristic mismatch.** Headings rhyme:
+  "non-solicitation" vs "non-compete," "Limitation of Liability" vs "Cap on
+  Damages." Guard: every clause classification cites the matched playbook
+  section ID in the output. Reviewer scans the cited IDs and corrects
+  mismatches before the redline goes out. Without the cite, the reviewer
+  cannot tell the skill mis-matched.
+- **Privilege leakage via non-Tier-A vendors.** Counterparty drafts contain
+  attorney-client-privileged context, especially in DPAs and side letters.
+  Guard: the skill refuses to run unless the configured model appears in the
+  allowed-vendors list at the top of `references/3-escalation-criteria.md`.
+  Hard precondition; no CLI flag bypasses it.
+- **Playbook quality is everything.** A vague playbook produces vague redlines.
+  Codify positions explicitly, with example fallback language in
+  `references/2-fallback-positions.md`, not abstract principles in
+  `references/1-playbook-template.md` alone.
+- **Not a substitute for legal review.** Every redline output is human-reviewed
+  before it goes back to the counterparty. The skill saves time on the first
+  draft, not on the judgment call.
+
+## Stack
+
+- [Claude](/en/tools/claude/) — Skill runtime (Claude Code or Claude.ai with
+  custom Skills enabled).
+- [Ironclad](/en/tools/ironclad/) — CLM for intake and storing the resulting
+  redlined version. Optional but the typical pairing for a legal-ops team
+  running this at volume.
+- Microsoft Word — for opening the redlined `.docx`. Native tracked changes
+  carry the rationale strings as Word comments.

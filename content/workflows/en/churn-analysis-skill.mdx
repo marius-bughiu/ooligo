@@ -13,39 +13,205 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that takes a churned account and produces a structured root-cause analysis: triggering event, contributing factors, deviation from the success plan, missed signals, and a prevention recommendation. Output is consistent across CSMs so RevOps can aggregate root causes quarterly without recoding free-text notes.
+Most churn postmortems are written once, read by nobody, and aggregate to "champion left,
+product gap, pricing" because that is what free-text CSM notes always reduce to when you grep
+them at quarter-end. This workflow ships a Claude Skill that takes one churned account and
+produces a structured root-cause analysis: a 180-day timeline, a two-pass evidence-then-classify
+analysis, a categorization against a fixed taxonomy, and a prevention recommendation chosen
+from a fixed library. The output is consistent enough across CSMs that RevOps can aggregate it
+quarterly without recoding anything.
 
-## What you'll need
+The artifact bundle lives at
+[`apps/web/public/artifacts/churn-analysis-skill/`](https://github.com/marius-bughiu/ooligo/tree/main/apps/web/public/artifacts/churn-analysis-skill).
+It contains `SKILL.md` (the Claude Skill itself, soft-wrapped, with explicit when-to-invoke
+and watch-outs sections), `references/1-churn-taxonomy.md` (the 5-10 categories your team is
+allowed to assign), `references/2-prevention-action-library.md` (the menu of prevention actions
+the Skill is allowed to recommend), and `references/3-sample-output.md` (the literal markdown
+shape so reviewers know what they will receive).
 
-- Claude.ai or Claude Code
-- HubSpot or your CRM with the churn record (close-lost reason, churn date)
-- Gainsight or your CS platform for health scores and timeline events
-- Optional: Gong call snippets from the last 180 days
-- A churn taxonomy (5-10 root cause categories your team has agreed on)
+## When to use
+
+Run this Skill once per confirmed churn, after the close-lost or non-renewal event is recorded
+in the CRM and the CSM has had at least 24 hours to add their final notes. The output is a
+post-mortem document the CSM reviews, RevOps stores in a shared Notion or Drive folder, and
+leadership aggregates at quarter-end to spot patterns across categories.
+
+The right population is mid-market and enterprise accounts where the contract value is large
+enough to justify a 30-minute review cycle and where the timeline data is rich enough to
+analyze (CRM events, health scores, support cases, ideally Gong calls). Below ~$25k ARR, the
+ratio of analysis cost to learnings drops below the line.
+
+## When NOT to use
+
+Skip this Skill in four cases, each of which has a different right answer:
+
+- **Pre-emptive risk scoring on healthy accounts.** Use a health-score model or a separate
+  risk-scoring Skill. Running this post-mortem-shaped Skill forward — on a live account that
+  has not churned — anchors the CSM on a churn narrative and biases their next conversation.
+- **Real-time churn prediction during a renewal cycle.** Same problem. The two-pass timeline
+  analysis here assumes the outcome is fixed; using it forward generates false-confidence
+  signals.
+- **Win/loss analysis on closed-lost new logos.** Those need a different framing — deal
+  narrative, competitor displacement, ICP fit — and a different taxonomy. Use a separate
+  win-loss Skill rather than forcing churn categories onto a deal that never started.
+- **Single-event explanations the CSM already knows.** If you already know "the champion left
+  and there was no replacement," edit the CRM field directly. This Skill is for the cases
+  where the CSM cannot cleanly attribute the churn yet, or where the team needs a structured
+  shape for aggregation regardless.
 
 ## Setup
 
-1. **Define the taxonomy.** Edit `references/churn-taxonomy.md` with your top-level categories (e.g., `product-gap`, `champion-departure`, `pricing`, `consolidation`, `service-failure`). The Skill forces every analysis into one primary and up to two contributing categories from this list.
-2. **Install the Skill.** Drop `churn-analysis.skill` into `~/.claude/skills/`. Set `HUBSPOT_TOKEN` and `GAINSIGHT_TOKEN` in your environment.
-3. **Run on the churn.** `analyze_churn(account_id="...", churn_date="2026-04-15")`. The Skill pulls the timeline, calls, and notes, then produces a one-page analysis.
-4. **Review with the CSM.** The CSM owning the account corrects any factual errors and confirms the root-cause categorization. RevOps stores the final document in a shared Notion or Drive folder.
+1. **Define the taxonomy.** Edit
+   [`references/1-churn-taxonomy.md`](https://github.com/marius-bughiu/ooligo/blob/main/apps/web/public/artifacts/churn-analysis-skill/references/1-churn-taxonomy.md)
+   with your team's 5-10 root-cause categories. The template ships with `product-gap`,
+   `champion-departure`, `pricing`, `consolidation`, `service-failure`, `adoption-failure`,
+   `restructure`, and `competitive-displacement`. Tighten the evidence requirement on each
+   slug to match how strict your team wants the bar to be — these requirements are what the
+   classification pass enforces. Keep the list to 10 or fewer; the whole point is aggregation.
+2. **Populate the prevention library.** Edit
+   [`references/2-prevention-action-library.md`](https://github.com/marius-bughiu/ooligo/blob/main/apps/web/public/artifacts/churn-analysis-skill/references/2-prevention-action-library.md).
+   The Skill is constrained to choose one action from this file per analysis — it cannot
+   invent a new one. The template covers the common eight (sponsor-change detection, health
+   alerts, escalation on sev-1 patterns, etc.). Add your team's plays.
+3. **Install the Skill.** Drop the bundle into `~/.claude/skills/churn-analysis/`. Set
+   `HUBSPOT_TOKEN` and `GAINSIGHT_TOKEN` as environment variables. If you use Gong, set
+   `GONG_API_KEY` so the evidence pass can pull call transcripts; otherwise the Skill runs
+   without Gong evidence and notes that gap in the output.
+4. **Run on the churn.** From Claude Code: `analyze_churn(account_id="HUB-5523-ACME",
+   churn_date="2026-04-15", taxonomy="churn-taxonomy")`. The Skill pulls the 180-day
+   timeline, runs the two passes, and emits the structured analysis to stdout (or to
+   `./out/churn-{account_id}-{YYYY-MM-DD}.md` if you set `CHURN_OUT_DIR`).
+5. **Route to CSM review.** The output ends with a four-item checklist the CSM completes:
+   confirm the analysis is read, correct factual errors, confirm or override the
+   classification (CSM judgment wins), and accept/modify/reject the prevention recommendation
+   with a reason.
 
-## How it works
+## What the Skill actually does
 
-The Skill builds a 180-day timeline from CRM events, health-score changes, support cases, and Gong calls. It looks for inflection points — a sudden health drop, a sponsor change, a missed QBR — and ranks them by proximity to the churn date.
+Four steps, in this order, with the engineering choices the bundle commits to.
 
-Then it runs a two-pass Claude analysis. The first pass extracts evidence: quotes from Gong calls, support ticket patterns, usage drops. The second pass classifies the churn against your taxonomy and produces the structured output. Crucially, the Skill refuses to assign a root cause if evidence is thin — it returns "insufficient data" rather than guessing, which keeps the aggregated quarterly view honest.
+**Step 1 — build the 180-day timeline.** Pull health-score deltas, contact changes (with
+LinkedIn departure dates when CRM lags), support cases, Gong call summaries, product usage
+metrics, and QBR outcomes. Anchor at `churn_date - 180 days`. If fewer than 3 timeline events
+exist within the 30 days immediately before `churn_date`, the Skill returns the literal status
+`insufficient data — fewer than 3 timeline events in the 30-day pre-churn window; manual CSM
+postmortem required` and stops. Short, sparse timelines invite hindsight-bias narratives that
+read confident but cannot survive review.
 
-The prevention recommendation is the actionable part: what specific process change, alert, or playbook update would have caught this earlier.
+**Step 2 — evidence pass.** A first Claude pass that ONLY extracts evidence: verbatim quotes,
+ticket excerpts, metric deltas with their source (CRM, Gainsight, Zendesk, Gong) and date. No
+classification, no prevention recommendation. The output is a flat list of evidence rows held
+as an intermediate artifact.
+
+**Step 3 — classification pass.** A second Claude pass that receives the evidence list and the
+taxonomy and nothing else. Two-pass design is the explicit engineering choice: a single-pass
+model conflates "what happened" with "what category this belongs to," which biases the
+evidence selection toward whichever category the model already suspects. Forcing the
+classification pass to work from a frozen evidence list is the guard against that. The pass
+assigns one primary category and up to two contributing categories — strictly from the
+taxonomy, no novel labels — and cites the evidence rows that support each assignment. If no
+category clears 3 evidence rows, the primary becomes `insufficient-evidence`.
+
+**Step 4 — prevention recommendation.** Read the prevention-action library. Choose ONE action
+that, if it had been in place 60 days before the churn date, would have surfaced the primary
+root cause as a watchable signal. The Skill cannot invent a new action — if no library entry
+fits, it returns `no library match — prevention action requires human design` and a human
+extends the library deliberately.
+
+The two-pass shape and the library constraint are the parts that matter. Most ad-hoc churn
+analyses fail not because the model cannot reason about evidence — they fail because the model
+is allowed to reason about evidence and category and recommendation in one breath, which lets
+the most plausible-sounding narrative win regardless of how thin it is.
+
+## Cost reality
+
+A single analysis runs ~12k input tokens (180-day timeline plus reference files plus CSM
+notes) and ~3k output tokens. On Claude Sonnet that lands at roughly $0.05 per analysis. On
+Opus it lands at ~$0.30. A team running 40 churns per quarter is paying $2 to $12 per quarter
+in model costs.
+
+The time math is the more interesting number. A CSM-written postmortem takes 45-90 minutes for
+a meaningful account and gets skipped entirely on smaller accounts. The Skill produces a
+reviewable draft in ~3 minutes; CSM review takes ~15 minutes. Net: ~30 minutes saved per
+analysis, plus coverage extends to accounts that previously got no postmortem at all. For a
+team of 8 CSMs handling 40 churns per quarter, that is roughly 20 hours of CSM time per
+quarter freed up, plus ~2x the postmortem coverage.
+
+The cost that does not show up on the invoice is the taxonomy-and-library curation work:
+expect 4-6 hours up front to populate both reference files with team-specific entries, then
+~1 hour per quarter to review `insufficient-evidence` cases and decide whether to extend
+either file. Skip the curation and the Skill produces generic output that aggregates poorly.
+
+## Success metric
+
+The aggregate metric to watch quarterly: **percentage of churns with a defensible categorized
+root cause that the CSM did not override on review**. Target 70-80% in steady state. Above 90%
+suggests the taxonomy has become too forgiving (too many categories, too-loose evidence
+requirements) — Claude is finding a label for everything because the buckets are wide. Below
+60% suggests the timeline data is too thin or the taxonomy does not match the actual churn
+shapes the team sees.
+
+The diagnostic counter-metric: **percentage of `insufficient-evidence` and `no library match`
+returns**. These are not failures — they are the Skill being honest. Trending up means
+instrumentation gaps (more accounts with thin timelines) or library gaps (more churn shapes
+the team has not yet codified a prevention play for). Both are useful signals to act on
+deliberately.
+
+## vs alternatives
+
+- **vs. Gainsight Churn Dashboards.** Gainsight is excellent at the descriptive layer — health
+  scores, timeline events, what-happened-when. It is weak at the analytical layer: extracting
+  evidence from unstructured Gong calls and CSM notes, then classifying against a team
+  taxonomy. The Skill does not replace Gainsight; it consumes Gainsight data and adds the
+  structured-classification layer Gainsight does not natively produce.
+- **vs. manual CSM-written postmortems.** The current default for most teams. Higher quality
+  per postmortem when the CSM is invested, but inconsistent across CSMs, frequently skipped
+  on smaller accounts, and useless for quarterly aggregation because every CSM's free-text
+  shape is slightly different. The Skill produces a draft consistent enough to aggregate;
+  CSM review keeps the quality bar.
+- **vs. Catalyst, ChurnZero, and other CS platforms with built-in postmortem flows.** Those
+  ship structured templates the CSM fills in. They solve the consistency problem but not the
+  evidence-extraction problem — the CSM still has to read 180 days of calls and notes
+  themselves. The Skill does the reading; the CSM does the judgment.
+
+The Skill is best suited to teams that already have Gainsight or equivalent timeline
+instrumentation, want the structured-aggregation property, and have the discipline to curate
+the taxonomy and library files. Teams without timeline instrumentation should fix that first;
+the Skill is downstream of having the data.
 
 ## Watch-outs
 
-- **Hindsight bias.** It's easy to construct a clean narrative after the fact. Cross-check the Skill's output against the CSM's lived experience — if the CSM disagrees, their judgment wins.
-- **Taxonomy creep.** Don't let the taxonomy grow past 10 categories. The whole point is aggregation; if every churn is unique, you can't see patterns.
-- **Champion-departure attribution.** Easy to over-attribute to this category. Require evidence (a LinkedIn departure date or a CRM contact-change record) before the Skill assigns it.
+- **Hindsight bias.** It is trivial to construct a clean narrative after the fact, especially
+  with 180 days of timeline. Guard: the evidence pass (step 2) is structurally separated from
+  the classification pass (step 3), and the classification pass refuses to assign a category
+  without at least 3 evidence rows that explicitly cite dates and sources. The `insufficient
+  data` short-circuit at the end of step 1 (fewer than 3 timeline events in the 30-day
+  pre-churn window) is the second guard. CSM judgment wins on review and the override is
+  recorded.
+- **Taxonomy creep.** The temptation after every analysis is to add a new category that
+  captures the unique flavor of this churn. Guard: the classification pass is constrained to
+  the existing taxonomy file and refuses novel labels — the Skill returns
+  `insufficient-evidence` rather than minting a new category. New categories require a
+  deliberate edit of `references/1-churn-taxonomy.md` outside the Skill, with three historical
+  churns that would have fit, before they get added.
+- **Champion-departure over-attribution.** "Champion left" is the easiest narrative and the
+  most-overused category in unaided CSM postmortems. Guard: the `champion-departure` slug
+  requires either a LinkedIn departure date OR a CRM contact-change record dated within 90
+  days of the churn — the classification pass will not assign it on a Gong-only signal.
+- **Hallucinated attribution from sparse data.** Short timelines invite confident fiction.
+  Guard: the 30-day-window / 3-event minimum at the end of step 1 short-circuits the analysis
+  with `insufficient data` rather than producing a polished output that does not deserve to
+  exist. This guard intentionally fires more often than feels comfortable — that is the
+  signal that timeline instrumentation needs work, not that the guard is too strict.
+- **Prevention recommendation as creativity exercise.** Each bespoke recommendation makes the
+  quarterly aggregate useless. Guard: step 4 chooses from the fixed library file and refuses
+  to invent. If no entry fits, the Skill says so and a human designs the new entry
+  deliberately, with a mechanically detectable trigger and a single named owner.
 
 ## Stack
 
-- **HubSpot** — churn record and contact history
-- **Gainsight** — health scores, timeline events, success plans
-- **Claude** — timeline synthesis and root-cause classification
+- **HubSpot** — churn record, contact history, deal close-lost reasons
+- **Gainsight** — health scores, timeline events, success-plan milestones
+- **Gong** — call transcripts for the evidence pass (optional but materially improves output quality)
+- **Claude** — timeline synthesis, evidence extraction, classification against taxonomy
+- **Notion or Google Drive** — storage for the reviewed analyses, organized by quarter for the aggregate review

@@ -13,38 +13,84 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that ingests a rep's calls, emails, and Salesforce activity for the last seven days and outputs a six-bullet signal report: what is heating up, what is cooling, where the rep is stuck, and one suggestion for next week. Designed for Friday self-review, not surveillance.
+A Claude Skill that ingests one rep's calls, emails, and Salesforce activity for the last seven days and outputs a six-bullet signal report: what is heating up, what is cooling, where the rep is stuck, and one specific suggestion for next week. Designed for Friday self-review, not surveillance, and built so the rep — not the manager — receives the brief first. The bundle ships with a working SKILL.md plus three reference templates the team edits to match its own qualification framework, signal thresholds, and tone.
 
-## What you'll need
+## When to use
 
-- Salesforce with Activity History enabled and API access for the rep's user record
-- Gong access with the call transcript API turned on
-- Claude.ai or Claude Code
-- Your team's qualification framework, dropped in as a markdown reference doc
+The narrow case this is built for: an AE wants a five-minute scan of their own week before logging off Friday. They have ten to thirty open opportunities, a CRM that mostly tells them what they already know, and Gong calls they didn't have time to re-listen to. They don't need a dashboard; they need three things to act on Monday. The skill produces exactly that — three Heating, two Stuck (or Cooling), one specific suggestion — and the format is intentionally short so reps actually read it. Multi-thousand-row activity exports get skimmed and forgotten; six bullets get acted on.
+
+It also works as a managed weekly cadence run by RevOps on behalf of the team, but only if the output still lands in the rep's DM first and the rep controls whether to forward to a manager. The privacy posture is the load-bearing piece — if it flips to "manager auto-cc," reps start gaming the input data within a week and the signal collapses.
+
+## When NOT to use
+
+Do not use this skill for cross-team pipeline reviews. Twenty reps means twenty invocations and the cost compounds quickly; a Salesforce dashboard does this work cheaper and the manager's job is to look across, not into, individual weeks. Do not use it for forecast-call prep — Salesforce reports do numeric roll-ups better and the skill is not built to add up dollars. Do not use it as a surveillance tool ("show me what Bob did this week"); the moment the report goes to the manager without the rep running it, you lose the social contract that keeps reps honest about their own activity. And do not use it for account-level deep dives — that's a different problem solved by the `account-research` skill, which goes wide on one account rather than wide across one rep's portfolio.
+
+Don't run it on windows shorter than three days; there are too few datapoints for the bucketing rubric to fire cleanly and the output reads like noise. Don't run it on a rep with fewer than five open opportunities — there isn't enough signal to bucket.
 
 ## Setup
 
-1. **Install the Skill.** `activity-summarizer.skill` exposes three functions: `pull_week_activity`, `pull_call_signals`, and `render_signal_report`.
-2. **Auth Salesforce and Gong.** Two tokens. Scope Salesforce to read-only on Activities and Opportunities. Scope Gong to read calls and transcripts the rep was on.
-3. **Drop in the qualification framework.** MEDDPICC, BANT, your homegrown variant. The Skill uses it as the lens for "where is the deal stuck."
-4. **Set the rep ID and the date range.** The Skill defaults to the last seven days but you can pass a specific week.
-5. **Schedule for Friday at four.** Output goes to the rep's DM with a one-button "send to manager" follow-up.
+The artifact bundle is at `apps/web/public/artifacts/activity-summarizer-skill/`. It contains `SKILL.md` (the entry point Claude loads) and three fillable references under `references/`. Walk through these in order:
 
-## How it works
+1. Read `apps/web/public/artifacts/activity-summarizer-skill/SKILL.md` end-to-end. The "Method" section names the engineering choices (why parallel pulls, why the precedence rule, why a 300-second call filter); skim past those at your peril because they're where the false positives get caught.
+2. Edit `apps/web/public/artifacts/activity-summarizer-skill/references/qualification-framework.md`. Replace the MEDDPICC defaults with your team's actual framework — BANT, SPICED, your homegrown variant — and crucially, swap the Salesforce field names (`Opportunity.Economic_Buyer__c` and so on) for the ones your CRM actually uses. Pull your team's median time-in-stage from a Salesforce report and drop those numbers into the table; they feed the Stuck detection.
+3. Edit `apps/web/public/artifacts/activity-summarizer-skill/references/signal-rubric.md`. The defaults (≥ 2 multi-threaded touches for Heating, ≥ 10 days no-touch for Cooling, 1.5x median time-in-stage for Stuck) are sane starting points; tune them after a few weeks of running against your historical data. The `min_call_duration_seconds` knob defaults to 300 to filter Gong voicemails — leave it unless your team holds many sub-five-minute working sessions on real calls.
+4. Edit `apps/web/public/artifacts/activity-summarizer-skill/references/sample-output.md`. Drop in one or two of your best historical reports (anonymized) so the skill conditions on your team's tone. The reference also contains a "bad sample" the skill conditions away from — keep both.
+5. Wire up auth. Salesforce: read-only OAuth scoped to Activity, Opportunity, and OpportunityHistory on the rep's user. Gong: API key scoped to read calls and transcripts the rep was on. Both as MCP servers or direct API calls — the skill itself is transport-agnostic.
+6. Schedule the run. Friday at 16:00 local is the default; the output goes to the rep's DM via your team's Slack or email integration. Manager auto-cc is intentionally not a configurable option in the skill; if a manager wants visibility, the rep forwards.
 
-The Skill pulls three streams in parallel. From Salesforce: every Task and Event the rep logged, plus stage changes on their open deals. From Gong: call summaries, talk-listen ratios, and any flagged objections. Claude then joins these against the open opportunity list and asks one question per deal: "What changed this week, and is it good?"
+## What the skill actually does
 
-The output is intentionally short. Six bullets, max. Most weeks, three of them are accounts heating up, two are stuck deals, and one is a suggestion. Reps who get a forty-bullet activity dump will not read it.
+Two API calls run in parallel: Salesforce SOQL for `Task`, `Event`, and `OpportunityHistory` rows in the window, and Gong `/v2/calls` filtered by the rep's email (Gong indexes by email, not Salesforce user ID — translate first or the call list comes back empty). The Salesforce filter explicitly drops `Logged Email` Tasks with empty `Description` because those are CRM hygiene noise, not engagement; ten of those without a single reply does not mean the deal is hot.
+
+Each open opportunity then gets a record with stage, amount, time-in-stage, count of meaningful touches, and the qualification framework's required fields. Each opportunity is bucketed Heating, Cooling, or Stuck against the thresholds in `signal-rubric.md`. A precedence rule resolves overlaps — Cooling beats Stuck beats Heating — which kills the most common false positive (a deal whose stage moved forward for procedural reasons but where every other signal is dead). Closed Lost transitions are explicitly excluded from Heating; without that rule, a rep closing out dead deals on Friday afternoon would generate a glowing report.
+
+The render step picks the top three Heating, top two Stuck (or Cooling if no Stuck), and produces one suggestion. The suggestion has three guardrails — it must name an account, name a stage, and name a specific blocker. If the rubric cannot produce a suggestion meeting all three, the skill writes "No suggestion this week — pipeline is clean" rather than fabricating a generic "follow up with stale leads" line.
+
+## Cost reality
+
+A single weekly run on a rep with twenty open opportunities lands at roughly 6,000 input tokens and 800 output tokens on Sonnet — about $0.05 per run. Scaling math:
+
+- 1 rep, weekly: $0.20/month
+- 20 reps, weekly: $4/month
+- 100 reps, weekly: $20/month
+- 100 reps, daily: $140/month
+- 200 reps, daily: $280/month — at this point switch to Haiku ($0.04/run, $112/month) or batch the runs into one prompt with multiple rep contexts
+
+The hidden cost is the API quota on Salesforce and Gong, not Claude. Salesforce's REST API has a per-org daily limit (typically 15k calls for an Enterprise org); each rep run consumes 4-8 calls depending on activity volume. At 200 reps daily that's 1,600 calls/day on Salesforce — well within budget but worth checking your org's usage if you already run other automations heavily.
+
+Time cost: 30 minutes initial setup if your CRM field names are clean, an hour if you have to chase down the right custom field API names. Per-week ongoing: zero — it runs scheduled.
+
+## What success looks like
+
+A working installation produces output a rep reads in 90 seconds and that changes at least one Monday morning action. Concretely, after four weeks of running:
+
+- The rep's "stuck" deals show up in the report ≥ 1 week before they show up in the manager's stale-pipeline review. If not, the median time-in-stage thresholds in `qualification-framework.md` are too generous — tighten them.
+- The "one suggestion" line produces an action the rep actually takes ≥ 60% of weeks. If lower, the rubric is producing generic suggestions and the rendering guard isn't tight enough — check that the skill is rejecting suggestions without a named account, stage, and blocker.
+- The Cooling bucket flags a deal that subsequently goes Closed Lost ≥ 70% of the time. If the precision is much lower, the cooling thresholds are too sensitive (false positives drown the signal).
+
+These are not vanity metrics — they are the signal that the skill is doing the job it was built for. If they don't move, the skill is generating Friday reading material, not Friday decisions.
+
+## Versus the alternatives
+
+**vs. CRM-native digests (Salesforce Einstein Activity Capture, Gong's own weekly summary).** These give you raw activity counts and call summaries but don't synthesize across the two streams or apply your qualification framework. Einstein will tell you "47 emails this week"; this skill tells you "Acme moved to Proposal because the CTO joined and asked pricing." Different layer of abstraction.
+
+**vs. manual rep-written summaries.** A rep who writes their own Friday recap will produce better strategy than this skill — they know the deal context. But 80% of reps don't write the recap, and the ones who do skip it during quarter-end. This skill produces a 90% as-good summary 100% of weeks, which beats a 100% summary 30% of weeks.
+
+**vs. Gong's own weekly summary email.** Gong's summary is call-only; it misses the email and CRM activity that often carries the cooling signal. It also doesn't apply your qualification framework, so it can't surface "stuck because no Economic Buyer named." Useful complement, not a replacement.
+
+**vs. status quo (a manager 1:1 every other Friday).** Manager 1:1s catch problems two weeks late and at the manager's bandwidth. This skill catches them in the rep's hands the same week, which keeps the action where it belongs.
 
 ## Watch-outs
 
-- **Privacy posture.** This is rep-facing, not manager-facing. The output should land in the rep's inbox first. If a manager wants a copy, the rep forwards it. Do not auto-cc.
-- **Gong transcript quality.** International calls and bad audio produce noisy transcripts that lead to bad signals. Filter calls under five minutes and flag anything below the confidence threshold.
-- **Activity definition drift.** What counts as a "meaningful touch" varies. Use your CRM's task-type taxonomy and ignore the noise: ten "logged email" entries without a reply is not engagement.
-- **Suggestion fatigue.** The "one suggestion for next week" line drifts toward generic if the prompt is loose. Anchor it to an actual deal, an actual stage, an actual blocker.
+- **Privacy posture: rep-facing only.** The default `recipient` is `dm` and the skill refuses to send to a manager channel. Auto-cc would change the social contract from "weekly self-review" to "weekly snitch report" — and reps will game the input data within a week. Guard: the skill rejects manager channel IDs in the recipient parameter, and the bundle's `SKILL.md` documents this as non-configurable.
+- **Gong transcript quality drives signal quality.** International calls, bad audio, and short voicemails produce noisy summaries that feed bad bullets. Guard: `min_call_duration_seconds = 300` filters voicemails and test calls; the skill also reads Gong's per-call `transcriptionConfidence` field and drops anything below 0.6.
+- **Activity definition drift.** "Logged Email" with no body and no reply is not engagement; it's CRM hygiene theater. Ten of those entries does not mean the deal is hot. Guard: the SOQL filter requires non-empty `Description` on Tasks and explicitly ignores Tasks where `Subject` matches the team's auto-logged patterns (`/^(Email\: |Logged via )/`).
+- **Suggestion fatigue.** The "one suggestion for next week" line drifts toward generic ("follow up with stale leads") when the rubric is loose. Guard: the rendering step rejects any suggestion that does not name an Account, a Stage, and a specific Blocker. If the rubric cannot produce one, the skill writes "No suggestion this week — pipeline is clean" rather than padding.
+- **Stage-changes-as-signal can lie.** A rep moving a deal to Closed Lost shows up as a stage change but should not feed Heating. Guard: bucketing rules treat stage rollbacks and Closed Lost transitions explicitly under Cooling, never Heating.
+- **The skill does not replace a deal review.** It surfaces signals, not strategy. A Stuck flag tells the rep "Initech is past median time-in-stage with no Economic Buyer"; it does not tell the rep what to do about it beyond the one suggestion. Treat it as triage, not coaching.
 
 ## Stack
 
-- **Salesforce** — activity and opportunity state
-- **Gong** — call signal layer
-- **Claude** — signal extraction and ranking against the qualification framework
+- **Salesforce** — activity, opportunity, and stage-history source of truth
+- **Gong** — call transcripts, talk-listen ratios, flagged buying questions
+- **Claude** — signal extraction, framework-aware ranking, rendering against the bundle's tone reference

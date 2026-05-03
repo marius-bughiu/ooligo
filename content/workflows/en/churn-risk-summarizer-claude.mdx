@@ -13,38 +13,182 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that runs each morning, pulls every account that crossed a churn-risk threshold in the last 24 hours, and posts a one-page summary to a Slack channel: account, ARR at risk, what changed, owner, and the recommended first action. Replaces the noisy Gainsight digest no one reads.
+A Claude Skill that runs each morning, pulls every account that crossed a
+churn-risk threshold in the trailing 24 hours, and posts a one-page digest
+to a Slack channel: account name, ARR at risk, the event that drove the
+change, the owner, and one specific next action. It replaces the noisy
+Gainsight email digest most CSMs already filter to a folder, with
+something tight enough to read between the standup and the first
+customer call.
 
-## What you'll need
+The artifact bundle lives at
+`apps/web/public/artifacts/churn-risk-summarizer-claude/` — `SKILL.md`
+plus three reference files (`1-risk-signal-weights.md`,
+`2-sample-digest.md`, `3-escalation-criteria-thresholds.md`) that the
+Skill loads on every run.
 
-- Gainsight with risk-score history and a defined churn-risk threshold
-- Slack workspace and a destination channel
-- Claude Code or Claude.ai with the Skill installed
-- A daily run cadence (cron, n8n, or a Claude scheduled task)
+## When to use
+
+You have Gainsight (or a comparable CS platform) producing risk-score
+deltas you trust at the *direction* level, but the existing digest is
+too long to read or too generic to act on. You have a CSM team that
+already meets each morning and would benefit from a shared three-minute
+read on what changed overnight. You want the per-account "what changed
+and what to do about it" reasoning to be uniform across CSMs instead of
+each one inventing their own framing.
+
+The skill is a fit when the daily run lands at 5-15 accounts after
+filtering. Below 5, you don't need a skill — read the Gainsight view
+directly. Above 15, the thresholds in
+`references/3-escalation-criteria-thresholds.md` need raising before
+the digest is worth running at all.
+
+## When NOT to use
+
+- **You don't have risk scores you trust.** Garbage in, garbage out.
+  This skill summarizes the scores you give it; it does not compute
+  or correct them. If your Gainsight risk model is broken, fix that
+  first.
+- **You want an automated CSM-action trigger.** The skill is read-only
+  signal. Posting a digest to a channel is fine; auto-creating tasks,
+  sending playbook emails, or opening cases is out of scope and will
+  get you in trouble fast (see "alert fatigue" below).
+- **You want customer-facing copy.** Nothing the skill produces is
+  cleared to send to the customer. Treat all output as internal.
+- **You want longitudinal churn analysis.** The prompt is tuned for
+  the trailing 24-168 hours. For "what happened across Q3" use BI on
+  the Gainsight warehouse.
+- **Your CSM team is two people.** The cost of standing this up
+  outweighs the cost of one of you reading the Gainsight view at
+  7am. Worth it at four CSMs and up, where uniformity of framing
+  starts to compound.
 
 ## Setup
 
-1. **Define the threshold.** Decide what "crossed into risk" means — for example, health score dropped below 50, or risk-score moved from medium to high, or ARR-weighted risk exceeded a band.
-2. **Install the Skill.** Drop `churn-risk-summary.skill` into `~/.claude/skills/`. Set `GAINSIGHT_TOKEN` and `SLACK_WEBHOOK`.
-3. **Configure scope.** Edit `references/scope.md` with which segments to include (some teams only want enterprise; others want all). Define the reasonable stop-loss for "actionable" — accounts above $X ARR.
-4. **Schedule the run.** Run at 7am local time. Claude posts to `#csm-daily-risk`.
-5. **Iterate on signal-to-noise.** First two weeks, expect the digest to be noisy. Tune the threshold and segment scope until the digest contains only accounts a human should look at today.
+1. **Define the threshold.** Decide what "crossed into churn risk"
+   means concretely. The defaults in
+   `references/3-escalation-criteria-thresholds.md` use `signal_score >= 12`
+   for Red and a `health_score` drop of `-15` for Amber. Edit those
+   numbers against two weeks of historical data before going live.
+2. **Install the Skill.** Drop the bundle into `~/.claude/skills/churn-risk-summarizer/`.
+   Set `GAINSIGHT_TOKEN` and `SLACK_WEBHOOK_CHURN_DIGEST` in your env.
+3. **Configure scope.** Edit
+   `references/3-escalation-criteria-thresholds.md` with your `min_arr`
+   floor (most teams use $50k for a daily channel digest) and your
+   `segments` list (most teams run daily on enterprise + mid-market,
+   separate weekly on SMB).
+4. **Tune weights.** Edit `references/1-risk-signal-weights.md` to
+   match your team's opinion of what matters. The shipped weights
+   are reasonable defaults, not your defaults.
+5. **Schedule the run.** 7am local time on weekdays via cron, n8n, or
+   a Claude scheduled task. Posts to your CS channel.
+6. **Iterate on signal-to-noise.** The first two weeks will be noisy.
+   Tune one threshold at a time and watch two days of output before
+   editing again. Do not edit weights and thresholds in the same run
+   — you'll never know which change moved the needle.
 
-## How it works
+## What the skill actually does
 
-The Skill queries Gainsight for risk-score deltas in the last 24 hours and filters to accounts that crossed the threshold. For each, it pulls the most recent timeline events that explain the change: a usage drop, a support escalation, a sponsor change, a missed QBR.
+The Skill takes a JSON list of accounts plus a JSON list of trailing-window
+timeline events (the schemas are documented in `SKILL.md` under "Inputs").
+It runs five sequential steps: signal aggregation (sum of `severity * weight`
+per account, with a per-event cap of 5 to stop one escalation from
+dominating); threshold-based bucketing into Red, Amber, and Watch;
+per-account narrative grounded in the actual event summaries (no
+paraphrasing — "active seats fell from 142 to 89 over 7 days," not
+"engagement is declining"); prioritization by ARR descending then
+renewal date ascending; and rendering to the literal layout in
+`references/2-sample-digest.md`.
 
-Claude writes the digest in a tight format: one line per account, with ARR, owner, the change driver, and one suggested action. Accounts are sorted by ARR at risk descending. The digest is capped at 15 accounts; if more crossed, it links to the full list and shows a count.
+The engineering choice worth flagging: weights are explicit and editable
+rather than letting the model decide what's important per run. When a
+CSM lead disagrees with what got surfaced, they can edit one number in
+`references/1-risk-signal-weights.md` and see the effect on tomorrow's
+digest. A per-run model judgment cannot be edited; it can only be
+re-prompted, which is harder to audit.
 
-The recommended action is concrete: "Call the CFO this week before the renewal kickoff," not "engage stakeholder." Specificity is the value.
+The Action field has a hard guard: if the suggested action contains
+`engage`, `reach out`, `touch base`, `align`, or `socialize` without
+naming a specific person or artifact, it is replaced with `needs human
+review`. Better silence than noise.
+
+## Cost reality
+
+A daily digest on ~150 enterprise + mid-market accounts with trailing
+events runs roughly 18-25k input tokens (account JSON + events JSON +
+the three reference files) and 1-3k output tokens. At Claude Sonnet
+4.5 list pricing (~$3 / MTok input, $15 / MTok output) that's about
+**$0.10-0.15 per run**, or **$2-4 per month** running weekdays only.
+Negligible. The cost that actually matters is the 10-15 minutes of
+CSM-lead time per week spent tuning weights and thresholds for the
+first month.
+
+If your account list is in the thousands rather than hundreds, batch
+by segment and run three or four scoped digests instead of one — the
+per-token cost is the same but the per-digest scannability stays
+intact.
+
+## Success metric
+
+Watch the percentage of Red-bucket accounts that have a CSM-logged
+action within 48 hours of the digest. If it sits above 70%, the digest
+is doing its job: the Red bucket is short enough and trusted enough that
+owners act on it. If it falls below 50%, either the thresholds are too
+loose (Red bucket is overflowing and being ignored) or the suggested
+actions are too generic (Action specificity collapse — see watch-outs).
+Do not optimize for "more accounts surfaced" — fewer, better-evidenced
+Red accounts is the goal.
+
+## vs alternatives
+
+- **Gainsight Health Scorecards 2.0 + native digest email.** The
+  built-in digest has the data but not the editorial layer — every
+  at-risk account gets the same template, with no per-account
+  driver narrative or specific next action. Works as a system of
+  record; fails as a thing CSMs actually open. Pick this if your
+  team prefers fewer moving parts and you have headcount to read
+  the long version.
+- **Custom BI dashboards on the Gainsight warehouse (Looker, Mode,
+  Hex).** Better for cross-cutting "show me retention by segment"
+  questions, worse for "what should the team do today." A dashboard
+  that requires a click is a dashboard that won't get clicked at
+  7am. Run both — the dashboard for monthly review, the skill for
+  daily action.
+- **Manual Monday morning CSM review.** What most teams do today.
+  Works at four-CSM scale, breaks down past that because each CSM
+  invents their own framing of "what's risky." The skill exists to
+  give the team one shared framing they can argue with by editing
+  the weights file, instead of arguing with each other in standup.
 
 ## Watch-outs
 
-- **Threshold sensitivity.** Set it too tight, the digest is empty. Set it too loose, the digest is ignored. Aim for 5-15 accounts per day.
-- **Owner accuracy.** If account ownership is stale, the digest pings the wrong CSM. Include a self-serve fix link in the post.
-- **Action quality.** A vague suggested action is worse than none. If Claude can't recommend something specific, return "needs human review" instead.
+- **Alert fatigue.** A digest that consistently exceeds 15 accounts
+  gets folder-filtered within a week. Guard: hard-cap at 15 with
+  honest overflow counts in the footer, and if Red exceeds the cap
+  on three consecutive runs prepend a warning that the threshold
+  may be too loose. Implemented in
+  `references/3-escalation-criteria-thresholds.md` under
+  "Self-tuning trigger."
+- **False-positive flooding.** One miscalibrated event-type weight
+  can produce a Red bucket dominated by, say, every account with a
+  recent support escalation. Guard: the digest footer includes an
+  event-type mix percentage line so the team can spot one signal
+  dominating before trust erodes. Worked example in
+  `references/2-sample-digest.md` ("Event-type mix this week:").
+- **Signal weighting drift.** The weights file goes stale as the
+  product and customer base evolve. Guard: the skill emits the
+  short SHA of `references/1-risk-signal-weights.md` in the digest
+  footer. If the hash hasn't changed in 90 days, the digest
+  prepends a recalibration nudge.
+- **Owner staleness.** A digest that pings the wrong CSM is worse
+  than no digest. Guard: accounts whose `owner_email` cannot be
+  resolved get surfaced under a separate `*Ownership broken (n)*`
+  bucket with a link to the Gainsight ownership editor — they are
+  not allowed to silently fall into Red or Amber.
 
 ## Stack
 
-- **Gainsight** — risk-score source and account context
-- **Claude** — synthesis and Slack-ready formatting
+- **Gainsight** — risk-score source, account context, timeline events
+- **Claude (Sonnet 4.5)** — synthesis, bucketing, action drafting
+- **Slack** — destination channel; mrkdwn output, no attachments
+- **Cron / n8n / Claude scheduled tasks** — daily 7am trigger
