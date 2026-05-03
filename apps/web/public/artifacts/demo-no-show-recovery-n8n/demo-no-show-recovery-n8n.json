@@ -1,0 +1,636 @@
+{
+  "name": "Demo no-show recovery",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hubspot-no-show",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000001",
+      "name": "Webhook — HubSpot no-show event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "hubspot-no-show",
+      "notesInFlow": true,
+      "notes": "Configure a HubSpot Workflow that POSTs here when meetingOutcome = 'no_show'. Body must include meetingId, contactId, ownerId."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000002",
+      "name": "Ack 202 to HubSpot",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.hubapi.com/crm/v3/objects/meetings/{{ $('Webhook — HubSpot no-show event').item.json.body.meetingId }}?associations=contact,owner&properties=hs_meeting_outcome,hs_meeting_start_time,hs_meeting_title,hs_internal_meeting_notes,hs_activity_type,hs_meeting_source",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000003",
+      "name": "HubSpot — Pull Meeting + Owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_HUBSPOT_CRED_ID",
+          "name": "HubSpot — Private App token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Returns the meeting plus associated contact and owner IDs. Use Private App token (not OAuth) for server-to-server."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.hubapi.com/crm/v3/objects/contacts/{{ $('Webhook — HubSpot no-show event').item.json.body.contactId }}?properties=email,firstname,lastname,company,jobtitle,hs_lead_status,form_submission_summary,recent_form_fill,hubspot_owner_id,hs_email_optout",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000004",
+      "name": "HubSpot — Pull Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_HUBSPOT_CRED_ID",
+          "name": "HubSpot — Private App token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "guard-not-opted-out",
+              "leftValue": "={{ $json.properties.hs_email_optout }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "guard-has-email",
+              "leftValue": "={{ $json.properties.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "guard-late-arrival-window",
+              "leftValue": "={{ $now.diff($('HubSpot — Pull Meeting + Owner').item.json.properties.hs_meeting_start_time, 'minutes').as('minutes') }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000005",
+      "name": "Eligibility Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1120, 300],
+      "notesInFlow": true,
+      "notes": "Three guards: not opted out, has email, no-show window has actually passed (avoid sending to people who joined late)."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT meeting_id, completed_at\nFROM hubspot_meetings_raw\nWHERE contact_id = $1\n  AND outcome = 'completed'\n  AND completed_at >= now() - interval '90 days'\nORDER BY completed_at DESC\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $('Webhook — HubSpot no-show event').item.json.body.contactId }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000006",
+      "name": "Postgres — Recent Meeting Lookup",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1340, 200],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — recovery-state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Drives tone branching: if a completed meeting exists in the last 90d, use 'we missed you', else use 'let's get you scheduled'."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Decide tone branch based on prior-meeting lookup.\nconst prior = $json && $json.meeting_id ? true : false;\nconst meeting = $('HubSpot — Pull Meeting + Owner').item.json.properties;\nconst contact = $('HubSpot — Pull Contact').item.json.properties;\nconst webhook = $('Webhook — HubSpot no-show event').item.json.body;\n\nconst tone = prior ? 'we_missed_you' : 'lets_reschedule';\n\nreturn [{\n  json: {\n    contact_id: webhook.contactId,\n    meeting_id: webhook.meetingId,\n    owner_id: webhook.ownerId || meeting.hubspot_owner_id,\n    email: contact.email,\n    first_name: contact.firstname,\n    last_name: contact.lastname,\n    company: contact.company,\n    job_title: contact.jobtitle,\n    form_summary: contact.form_submission_summary || contact.recent_form_fill || null,\n    meeting_title: meeting.hs_meeting_title,\n    meeting_started_at: meeting.hs_meeting_start_time,\n    tone,\n    has_prior_meeting: prior,\n    sequence_started_at: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000007",
+      "name": "Build Personalization Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.hubapi.com/crm/v3/owners/{{ $json.owner_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000008",
+      "name": "HubSpot — Pull AE Owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_HUBSPOT_CRED_ID",
+          "name": "HubSpot — Private App token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Need owner email + scheduling link for delegated send and the two pre-picked slots."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 320,\n  \"system\": \"You write the opener line for a demo-no-show recovery email. Reference exactly ONE specific thing from the contact's form fill or company snapshot — never two, never three. Length: one sentence, max 22 words. Voice: peer-to-peer, AE writing to a buyer they actually wanted to talk to. Never apologize on the buyer's behalf, never say 'I noticed you missed our meeting'. If the form summary is empty or generic, return the literal string FALLBACK and nothing else.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Tone branch: {{ $('Build Personalization Context').item.json.tone }}. Contact: {{ $('Build Personalization Context').item.json.first_name }} at {{ $('Build Personalization Context').item.json.company }} ({{ $('Build Personalization Context').item.json.job_title }}). Meeting was titled: {{ $('Build Personalization Context').item.json.meeting_title }}. Form summary: {{ $('Build Personalization Context').item.json.form_summary }}. AE name: {{ $json.firstName }}.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000009",
+      "name": "Claude — Opener Line",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Cap output at 320 tokens; the opener is one sentence. The body of the email is the approved template — only the opener is generated."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compose the same-day reschedule email body from the approved template + Claude opener.\nconst ctx = $('Build Personalization Context').item.json;\nconst owner = $('HubSpot — Pull AE Owner').item.json;\nconst claudeRaw = $json.content && $json.content[0] ? $json.content[0].text.trim() : 'FALLBACK';\nconst opener = claudeRaw === 'FALLBACK'\n  ? `Sorry we didn\\'t connect earlier — happy to find another window that works.`\n  : claudeRaw;\n\n// Two pre-picked slots: tomorrow 10:00 and tomorrow 14:00 in the AE's local TZ.\nconst tomorrow = new Date();\ntomorrow.setUTCDate(tomorrow.getUTCDate() + 1);\nconst dateStr = tomorrow.toISOString().slice(0, 10);\nconst slot1 = `${dateStr} 10:00 (${owner.timeZone || 'local'})`;\nconst slot2 = `${dateStr} 14:00 (${owner.timeZone || 'local'})`;\nconst schedulingLink = owner.metadata && owner.metadata.schedulingLink\n  ? owner.metadata.schedulingLink\n  : `https://meetings.hubspot.com/${(owner.email || '').split('@')[0]}`;\n\nconst body = [\n  `Hi ${ctx.first_name},`,\n  '',\n  opener,\n  '',\n  `Two windows that should work this week:`,\n  `  • ${slot1}`,\n  `  • ${slot2}`,\n  '',\n  `Pick one or grab any other slot here: ${schedulingLink}`,\n  '',\n  `— ${owner.firstName || 'The team'}`,\n].join('\\n');\n\nreturn [{\n  json: {\n    ...ctx,\n    ae_email: owner.email,\n    ae_first_name: owner.firstName,\n    scheduling_link: schedulingLink,\n    subject: `Reschedule? Two times that work this week`,\n    body,\n    opener_used: opener,\n    used_fallback: claudeRaw === 'FALLBACK',\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000a",
+      "name": "Compose Step 1 Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 200]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "senderName": "={{ $json.ae_first_name }}",
+          "replyTo": "={{ $json.ae_email }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000b",
+      "name": "Gmail — Send Step 1 (delegated)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2440, 200],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — AE delegated mailbox"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Uses the AE's delegated Gmail send. SPF/DKIM/DMARC must be configured on the AE's domain or replies/deliverability will tank."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO recovery_state (\n  contact_id, meeting_id, owner_id, email, ae_email,\n  tone, current_step, status, started_at, next_due_at,\n  step1_sent_at, step1_opener\n) VALUES (\n  $1, $2, $3, $4, $5,\n  $6, 1, 'active', now(), now() + interval '2 days',\n  now(), $7\n)\nON CONFLICT (meeting_id) DO UPDATE SET\n  current_step = 1,\n  status = 'active',\n  next_due_at = now() + interval '2 days',\n  step1_sent_at = now(),\n  step1_opener = EXCLUDED.step1_opener;",
+        "options": {
+          "queryReplacement": "={{ $json.contact_id }},{{ $json.meeting_id }},{{ $json.owner_id }},{{ $json.email }},{{ $json.ae_email }},{{ $json.tone }},{{ $json.opener_used }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000c",
+      "name": "Postgres — Init Recovery State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2660, 200],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — recovery-state"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 9-18 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000d",
+      "name": "Cron — Step 2/3 Sweep",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 700],
+      "notesInFlow": true,
+      "notes": "Every 15 minutes during business hours, Mon-Fri. Timezone is set in workflow Settings (America/New_York by default — change to your AE timezone)."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  contact_id, meeting_id, owner_id, email, ae_email,\n  tone, current_step,\n  step1_opener,\n  EXTRACT(EPOCH FROM (now() - started_at)) / 86400.0 AS days_since_start\nFROM recovery_state\nWHERE status = 'active'\n  AND next_due_at <= now()\n  AND current_step IN (1, 2)\nORDER BY next_due_at ASC\nLIMIT 50;",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000e",
+      "name": "Postgres — Pull Due Recoveries",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 700],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — recovery-state"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-step-2",
+              "leftValue": "={{ $json.current_step }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000f",
+      "name": "Step 2 vs Step 3 Switch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 2: 'value forward' email referencing a relevant resource.\nconst row = $json;\nconst resourceMap = {\n  'we_missed_you': {\n    title: 'How peer teams cut their no-show rate by half',\n    url: 'https://example.com/resources/no-show-playbook',\n  },\n  'lets_reschedule': {\n    title: 'A 5-minute teardown of the typical RevOps stack',\n    url: 'https://example.com/resources/revops-stack-teardown',\n  },\n};\nconst resource = resourceMap[row.tone] || resourceMap['lets_reschedule'];\n\nconst body = [\n  `Hi,`,\n  '',\n  `Sending one short thing in case it lands at the right time:`,\n  `  ${resource.title} — ${resource.url}`,\n  '',\n  `If a quick walk-through would be more useful, reply with a window and I'll send a calendar hold.`,\n  '',\n  `— sent on behalf of ${row.ae_email}`,\n].join('\\n');\n\nreturn [{\n  json: {\n    ...row,\n    subject: `Worth 4 minutes — ${resource.title}`,\n    body,\n    next_step: 2,\n    next_due_in_days: 5,\n    completes_sequence: false,\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000010",
+      "name": "Compose Step 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 3: soft close after a week. Final touch in the sequence.\nconst row = $json;\nconst body = [\n  `Hi,`,\n  '',\n  `Closing the loop on this one — happy to reopen the thread if the timing shifts.`,\n  `If you'd rather not hear from me again, just reply STOP and I'll mark the record.`,\n  '',\n  `— ${row.ae_email}`,\n].join('\\n');\n\nreturn [{\n  json: {\n    ...row,\n    subject: `Closing the loop`,\n    body,\n    next_step: 3,\n    next_due_in_days: null,\n    completes_sequence: true,\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000011",
+      "name": "Compose Step 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 800]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "replyTo": "={{ $json.ae_email }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000012",
+      "name": "Gmail — Send Step 2/3",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1120, 700],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — AE delegated mailbox"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE recovery_state\nSET\n  current_step = $2,\n  last_touched_at = now(),\n  next_due_at = CASE\n    WHEN $3::boolean THEN NULL\n    ELSE now() + ($4 || ' days')::interval\n  END,\n  status = CASE\n    WHEN $3::boolean THEN 'completed'\n    ELSE 'active'\n  END\nWHERE meeting_id = $1\nRETURNING current_step, status, next_due_at;",
+        "options": {
+          "queryReplacement": "={{ $json.meeting_id }},{{ $json.next_step }},{{ $json.completes_sequence }},{{ $json.next_due_in_days || 0 }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000013",
+      "name": "Postgres — Advance State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1340, 700],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — recovery-state"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            { "mode": "everyMinute" }
+          ]
+        },
+        "filters": {
+          "labelIds": ["INBOX"],
+          "q": "in:inbox -from:me newer_than:2d"
+        },
+        "options": {
+          "downloadAttachments": false
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000014",
+      "name": "Reply Trigger — AE Inbox",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 1100],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — AE delegated mailbox"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Independent trigger watching the AE mailbox. Fires on every inbound, including STOP/unsubscribe and human replies."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize an inbound reply and classify exit reason.\nconst from = ($json.from || '').match(/<([^>]+)>/)?.[1] || ($json.from || '').trim();\nconst subject = ($json.subject || '').toLowerCase();\nconst snippet = ($json.snippet || $json.text || '').toLowerCase();\n\nlet exit_reason;\nif (/\\b(stop|unsubscribe|opt[- ]?out|do not contact)\\b/.test(snippet) || /unsubscribe/.test(subject)) {\n  exit_reason = 'opt_out';\n} else if (/\\b(book(ed)?|schedul(ed|ing)|calendar|invite|works for me|how about)\\b/.test(snippet)) {\n  exit_reason = 'rescheduled_or_replied';\n} else {\n  exit_reason = 'human_reply';\n}\n\nreturn [{\n  json: {\n    candidate_email: from,\n    subject: $json.subject,\n    snippet: $json.snippet,\n    received_at: $json.internalDate ? new Date(Number($json.internalDate)).toISOString() : new Date().toISOString(),\n    exit_reason,\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000015",
+      "name": "Classify Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 1100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE recovery_state\nSET\n  status = CASE WHEN $2 = 'opt_out' THEN 'opted_out' ELSE 'exited' END,\n  exited_at = now(),\n  exit_reason = $2,\n  next_due_at = NULL\nWHERE email = $1 AND status = 'active'\nRETURNING contact_id, owner_id, ae_email, current_step;",
+        "options": {
+          "queryReplacement": "={{ $json.candidate_email }},{{ $json.exit_reason }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000016",
+      "name": "Postgres — Exit Sequence",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 1100],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — recovery-state"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.hubapi.com/crm/v3/objects/contacts/{{ $json.contact_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"properties\": {\n    \"no_show_recovery_status\": \"{{ $('Classify Reply').item.json.exit_reason }}\",\n    \"no_show_recovery_exited_at\": \"{{ $now.toISO() }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000017",
+      "name": "HubSpot — Tag Exit on Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 1100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_HUBSPOT_CRED_ID",
+          "name": "HubSpot — Private App token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Writes the exit reason back to the HubSpot contact so reporting can roll it up alongside meetings."
+    }
+  ],
+  "connections": {
+    "Webhook — HubSpot no-show event": {
+      "main": [
+        [
+          { "node": "Ack 202 to HubSpot", "type": "main", "index": 0 },
+          { "node": "HubSpot — Pull Meeting + Owner", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "HubSpot — Pull Meeting + Owner": {
+      "main": [
+        [{ "node": "HubSpot — Pull Contact", "type": "main", "index": 0 }]
+      ]
+    },
+    "HubSpot — Pull Contact": {
+      "main": [
+        [{ "node": "Eligibility Guard", "type": "main", "index": 0 }]
+      ]
+    },
+    "Eligibility Guard": {
+      "main": [
+        [{ "node": "Postgres — Recent Meeting Lookup", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Postgres — Recent Meeting Lookup": {
+      "main": [
+        [{ "node": "Build Personalization Context", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Personalization Context": {
+      "main": [
+        [{ "node": "HubSpot — Pull AE Owner", "type": "main", "index": 0 }]
+      ]
+    },
+    "HubSpot — Pull AE Owner": {
+      "main": [
+        [{ "node": "Claude — Opener Line", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Opener Line": {
+      "main": [
+        [{ "node": "Compose Step 1 Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compose Step 1 Email": {
+      "main": [
+        [{ "node": "Gmail — Send Step 1 (delegated)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gmail — Send Step 1 (delegated)": {
+      "main": [
+        [{ "node": "Postgres — Init Recovery State", "type": "main", "index": 0 }]
+      ]
+    },
+    "Cron — Step 2/3 Sweep": {
+      "main": [
+        [{ "node": "Postgres — Pull Due Recoveries", "type": "main", "index": 0 }]
+      ]
+    },
+    "Postgres — Pull Due Recoveries": {
+      "main": [
+        [{ "node": "Step 2 vs Step 3 Switch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Step 2 vs Step 3 Switch": {
+      "main": [
+        [{ "node": "Compose Step 2", "type": "main", "index": 0 }],
+        [{ "node": "Compose Step 3", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compose Step 2": {
+      "main": [
+        [{ "node": "Gmail — Send Step 2/3", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compose Step 3": {
+      "main": [
+        [{ "node": "Gmail — Send Step 2/3", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gmail — Send Step 2/3": {
+      "main": [
+        [{ "node": "Postgres — Advance State", "type": "main", "index": 0 }]
+      ]
+    },
+    "Reply Trigger — AE Inbox": {
+      "main": [
+        [{ "node": "Classify Reply", "type": "main", "index": 0 }]
+      ]
+    },
+    "Classify Reply": {
+      "main": [
+        [{ "node": "Postgres — Exit Sequence", "type": "main", "index": 0 }]
+      ]
+    },
+    "Postgres — Exit Sequence": {
+      "main": [
+        [{ "node": "HubSpot — Tag Exit on Contact", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "versionId": "2d2d2d2d-0001-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "demo-no-show-recovery",
+  "tags": [
+    { "name": "revops" },
+    { "name": "no-show-recovery" }
+  ]
+}

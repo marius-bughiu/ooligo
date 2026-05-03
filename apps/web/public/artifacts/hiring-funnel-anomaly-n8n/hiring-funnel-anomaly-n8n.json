@@ -1,0 +1,402 @@
+{
+  "name": "Hiring funnel anomaly detection",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000001",
+      "name": "Nightly Cron — 2am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 400],
+      "notesInFlow": true,
+      "notes": "Workflow Settings timezone is America/New_York. The cron expression evaluates in that zone."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.ashbyhq.com/applicationFeed.list?syncToken={{ $json.last_sync_token || '' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendQuery": false,
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000002",
+      "name": "Ashby — Application Feed (24h)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 400],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "PLACEHOLDER_ASHBY_CRED_ID",
+          "name": "Ashby — API"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Pulls the application feed (stage transitions, scorecards, status changes). Replace endpoint for Greenhouse (/v1/applications?updated_after=…) or Lever (/v1/opportunities?expand=stage)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate the raw feed into per-(role_id, from_stage, to_stage) counts for today.\n// Output one item per (role, stage) pair with: entered, advanced, rejected, dwell_seconds_p50.\nconst events = $input.all().flatMap(i => i.json.results || []);\n\nconst byKey = new Map();\nfor (const e of events) {\n  if (!e.roleId || !e.fromStage || !e.toStage) continue;\n  const key = `${e.roleId}::${e.fromStage}::${e.toStage}`;\n  if (!byKey.has(key)) {\n    byKey.set(key, {\n      role_id: e.roleId,\n      role_name: e.roleName || e.roleId,\n      from_stage: e.fromStage,\n      to_stage: e.toStage,\n      entered: 0,\n      advanced: 0,\n      rejected: 0,\n      dwell_seconds: [],\n    });\n  }\n  const row = byKey.get(key);\n  row.entered += 1;\n  if (e.outcome === 'advanced') row.advanced += 1;\n  if (e.outcome === 'rejected') row.rejected += 1;\n  if (typeof e.dwellSeconds === 'number') row.dwell_seconds.push(e.dwellSeconds);\n}\n\nconst pct = (a, b) => (b > 0 ? a / b : null);\nconst p50 = (arr) => {\n  if (arr.length === 0) return null;\n  const sorted = [...arr].sort((x, y) => x - y);\n  return sorted[Math.floor(sorted.length / 2)];\n};\n\nconst out = [];\nfor (const row of byKey.values()) {\n  out.push({\n    json: {\n      role_id: row.role_id,\n      role_name: row.role_name,\n      from_stage: row.from_stage,\n      to_stage: row.to_stage,\n      entered: row.entered,\n      advanced: row.advanced,\n      rejected: row.rejected,\n      conversion_rate_today: pct(row.advanced, row.entered),\n      dwell_seconds_p50: p50(row.dwell_seconds),\n      window_start: $now.minus({hours: 24}).toISO(),\n      window_end: $now.toISO(),\n    },\n  });\n}\n\nreturn out;"
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000003",
+      "name": "Aggregate Per-Stage Conversion (24h)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  b.role_id,\n  b.from_stage,\n  b.to_stage,\n  b.conversion_rate_mean,\n  b.conversion_rate_stddev,\n  b.dwell_seconds_p50 AS baseline_dwell_p50,\n  b.stage_sla_seconds,\n  b.sample_size,\n  b.refreshed_at\nFROM funnel_baselines b\nWHERE b.role_id = $1 AND b.from_stage = $2 AND b.to_stage = $3\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.role_id }},{{ $json.from_stage }},{{ $json.to_stage }}"
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000004",
+      "name": "Lookup Baseline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [860, 400],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — funnel-baselines"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Baselines table is refreshed monthly by a separate job — see _README.md."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Decide which anomaly type (if any) to flag for this (role, stage) row.\n// Inputs: today's aggregate (from upstream item) joined with the baseline row.\nconst today = $('Aggregate Per-Stage Conversion (24h)').item.json;\nconst baseline = $json;\n\nconst MIN_SAMPLE = 20;       // do not flag rare stages with too little data\nconst Z_THRESHOLD = 2.0;     // 2 stddev below baseline\nconst NEW_ROLE_DAYS = 7;     // for new-role-no-movement\nconst DWELL_MULTIPLIER = 1.5; // p50 dwell vs SLA before flagging stalled\n\nconst flags = [];\n\nif (\n  baseline.conversion_rate_mean != null &&\n  baseline.sample_size >= MIN_SAMPLE &&\n  today.conversion_rate_today != null &&\n  baseline.conversion_rate_stddev > 0\n) {\n  const z = (today.conversion_rate_today - baseline.conversion_rate_mean) / baseline.conversion_rate_stddev;\n  if (z <= -Z_THRESHOLD) {\n    flags.push({\n      anomaly_type: 'stage_conversion_drop',\n      severity: z <= -3 ? 'high' : 'medium',\n      z_score: z,\n      current_value: today.conversion_rate_today,\n      baseline_value: baseline.conversion_rate_mean,\n      route_to: 'recruiter',\n    });\n  }\n}\n\nif (\n  baseline.stage_sla_seconds &&\n  today.dwell_seconds_p50 &&\n  today.dwell_seconds_p50 > baseline.stage_sla_seconds * DWELL_MULTIPLIER\n) {\n  flags.push({\n    anomaly_type: 'candidate_stalled',\n    severity: 'medium',\n    current_value: today.dwell_seconds_p50,\n    baseline_value: baseline.stage_sla_seconds,\n    route_to: 'recruiter+hiring_manager',\n  });\n}\n\nif (today.entered === 0 && baseline.sample_size < MIN_SAMPLE) {\n  flags.push({\n    anomaly_type: 'new_role_no_movement',\n    severity: 'low',\n    current_value: 0,\n    baseline_value: null,\n    route_to: 'recruiting_leader+hiring_manager',\n    note: `Less than ${MIN_SAMPLE} historical applications and zero today; thresholds suppressed.`,\n  });\n}\n\n// Emit one item per flag so downstream nodes can fan out.\nreturn flags.map(f => ({\n  json: {\n    role_id: today.role_id,\n    role_name: today.role_name,\n    from_stage: today.from_stage,\n    to_stage: today.to_stage,\n    window_start: today.window_start,\n    window_end: today.window_end,\n    sample_size: baseline.sample_size,\n    ...f,\n  },\n}));"
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000005",
+      "name": "Detect Anomalies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-flag",
+              "leftValue": "={{ $json.anomaly_type }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000006",
+      "name": "Has Anomaly?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1300, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO anomaly_alerts (role_id, from_stage, to_stage, anomaly_type, severity, current_value, baseline_value, window_end, dedupe_key)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\nON CONFLICT (dedupe_key) DO NOTHING\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ $json.role_id }},{{ $json.from_stage }},{{ $json.to_stage }},{{ $json.anomaly_type }},{{ $json.severity }},{{ $json.current_value }},{{ $json.baseline_value }},{{ $json.window_end }},{{ $json.role_id }}::{{ $json.from_stage }}::{{ $json.to_stage }}::{{ $json.anomaly_type }}::{{ $now.toFormat('yyyy-LL-dd') }}"
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000007",
+      "name": "Dedupe + Persist Alert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1520, 320],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — funnel-baselines"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Dedupe key is (role, stage, anomaly_type, day). ON CONFLICT DO NOTHING means a same-day re-run will not re-alert."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "newly-inserted",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000008",
+      "name": "Was New Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1740, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 256,\n  \"system\": \"You are explaining a single recruiting funnel anomaly to a recruiting leader. Output 1-2 sentences. State what changed (current vs baseline, in plain numbers), then the most likely cause given the anomaly type. Do not invent context. If the anomaly_type is new_role_no_movement, do not speculate beyond 'role is new and has not moved'. Never claim certainty.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Role: {{ $('Detect Anomalies').item.json.role_name }} ({{ $('Detect Anomalies').item.json.role_id }}). Stage: {{ $('Detect Anomalies').item.json.from_stage }} -> {{ $('Detect Anomalies').item.json.to_stage }}. Anomaly: {{ $('Detect Anomalies').item.json.anomaly_type }} (severity {{ $('Detect Anomalies').item.json.severity }}). Current: {{ $('Detect Anomalies').item.json.current_value }}. Baseline: {{ $('Detect Anomalies').item.json.baseline_value }}. Sample size behind baseline: {{ $('Detect Anomalies').item.json.sample_size }}. Window: {{ $('Detect Anomalies').item.json.window_start }} to {{ $('Detect Anomalies').item.json.window_end }}.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000009",
+      "name": "Claude — Narrative Explanation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1960, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Cost guard: only runs after the dedupe insert returns a fresh row, so daily token spend scales with new alerts only."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pick the Slack channel based on anomaly_type.\nconst alert = $('Detect Anomalies').item.json;\nconst narrative = ($json.content && $json.content[0] && $json.content[0].text) || 'No narrative generated.';\n\nconst routing = {\n  stage_conversion_drop: '#recruiting-alerts',\n  candidate_stalled: '#recruiting-alerts',\n  time_to_hire_trend: '#recruiting-leadership',\n  source_channel_drop: '#sourcing',\n  new_role_no_movement: '#recruiting-leadership',\n};\n\nconst channel = routing[alert.anomaly_type] || '#recruiting-alerts';\n\nconst pct = (n) => (n == null ? 'n/a' : `${(n * 100).toFixed(1)}%`);\nconst current =\n  alert.anomaly_type === 'stage_conversion_drop' ? pct(alert.current_value)\n  : alert.anomaly_type === 'candidate_stalled' ? `${Math.round(alert.current_value / 86400)}d dwell p50`\n  : String(alert.current_value);\nconst baseline =\n  alert.anomaly_type === 'stage_conversion_drop' ? pct(alert.baseline_value)\n  : alert.anomaly_type === 'candidate_stalled' ? `${Math.round((alert.baseline_value || 0) / 86400)}d SLA`\n  : String(alert.baseline_value);\n\nreturn [{\n  json: {\n    channel,\n    text: `*${alert.anomaly_type.replace(/_/g, ' ')}* — ${alert.role_name} · ${alert.from_stage} → ${alert.to_stage}\\nCurrent: ${current} | Baseline: ${baseline} | Severity: ${alert.severity}\\n${narrative}\\n<https://app.ashbyhq.com/jobs/${alert.role_id}|Open in Ashby>`,\n  },\n}];"
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000a",
+      "name": "Format Slack Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2180, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $json.channel }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000b",
+      "name": "Slack — Post Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * *"
+            }
+          ]
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000c",
+      "name": "Nightly Cron — 3am (TTH trend)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 740],
+      "notesInFlow": true,
+      "notes": "Independent trigger for the time-to-hire trend check; runs after the per-stage detector to avoid contention on the Postgres baselines table."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH recent_hires AS (\n  SELECT role_id, role_name, EXTRACT(EPOCH FROM (hired_at - applied_at))/86400 AS days_to_hire\n  FROM hires\n  WHERE hired_at >= now() - interval '7 days'\n)\nSELECT\n  r.role_id,\n  r.role_name,\n  AVG(r.days_to_hire) AS rolling_7d_tth,\n  b.tth_baseline_days,\n  b.tth_threshold_days\nFROM recent_hires r\nJOIN role_tth_baselines b USING (role_id)\nGROUP BY r.role_id, r.role_name, b.tth_baseline_days, b.tth_threshold_days\nHAVING AVG(r.days_to_hire) > b.tth_threshold_days;",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000d",
+      "name": "Time-to-Hire Trend Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [420, 740],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — funnel-baselines"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reshape time-to-hire breaches into the same alert envelope used by the per-stage path.\nreturn $input.all().map(({ json }) => ({\n  json: {\n    role_id: json.role_id,\n    role_name: json.role_name,\n    from_stage: 'overall',\n    to_stage: 'hired',\n    anomaly_type: 'time_to_hire_trend',\n    severity: json.rolling_7d_tth > json.tth_threshold_days * 1.25 ? 'high' : 'medium',\n    current_value: json.rolling_7d_tth,\n    baseline_value: json.tth_baseline_days,\n    sample_size: null,\n    window_start: $now.minus({days: 7}).toISO(),\n    window_end: $now.toISO(),\n  },\n}));"
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000e",
+      "name": "Reshape TTH Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 740]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO anomaly_alerts (role_id, from_stage, to_stage, anomaly_type, severity, current_value, baseline_value, window_end, dedupe_key)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\nON CONFLICT (dedupe_key) DO NOTHING\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ $json.role_id }},{{ $json.from_stage }},{{ $json.to_stage }},{{ $json.anomaly_type }},{{ $json.severity }},{{ $json.current_value }},{{ $json.baseline_value }},{{ $json.window_end }},{{ $json.role_id }}::overall::hired::time_to_hire_trend::{{ $now.toFormat('yyyy-LL-dd') }}"
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000f",
+      "name": "TTH — Dedupe + Persist",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [860, 740],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — funnel-baselines"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Nightly Cron — 2am": {
+      "main": [
+        [{ "node": "Ashby — Application Feed (24h)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ashby — Application Feed (24h)": {
+      "main": [
+        [{ "node": "Aggregate Per-Stage Conversion (24h)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Aggregate Per-Stage Conversion (24h)": {
+      "main": [
+        [{ "node": "Lookup Baseline", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lookup Baseline": {
+      "main": [
+        [{ "node": "Detect Anomalies", "type": "main", "index": 0 }]
+      ]
+    },
+    "Detect Anomalies": {
+      "main": [
+        [{ "node": "Has Anomaly?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Has Anomaly?": {
+      "main": [
+        [{ "node": "Dedupe + Persist Alert", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Dedupe + Persist Alert": {
+      "main": [
+        [{ "node": "Was New Alert?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Was New Alert?": {
+      "main": [
+        [{ "node": "Claude — Narrative Explanation", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Claude — Narrative Explanation": {
+      "main": [
+        [{ "node": "Format Slack Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Slack Message": {
+      "main": [
+        [{ "node": "Slack — Post Alert", "type": "main", "index": 0 }]
+      ]
+    },
+    "Nightly Cron — 3am (TTH trend)": {
+      "main": [
+        [{ "node": "Time-to-Hire Trend Query", "type": "main", "index": 0 }]
+      ]
+    },
+    "Time-to-Hire Trend Query": {
+      "main": [
+        [{ "node": "Reshape TTH Alerts", "type": "main", "index": 0 }]
+      ]
+    },
+    "Reshape TTH Alerts": {
+      "main": [
+        [{ "node": "TTH — Dedupe + Persist", "type": "main", "index": 0 }]
+      ]
+    },
+    "TTH — Dedupe + Persist": {
+      "main": [
+        [{ "node": "Was New Alert?", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "versionId": "2d2d2d2d-0002-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "hiring-funnel-anomaly",
+  "tags": [
+    { "name": "recruiting" },
+    { "name": "anomaly-detection" }
+  ]
+}

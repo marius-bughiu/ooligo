@@ -1,0 +1,537 @@
+{
+  "name": "Inbound lead triage and routing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inbound-lead-triage",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000001",
+      "name": "Webhook — HubSpot Form Submit",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "inbound-lead-triage-webhook",
+      "notesInFlow": true,
+      "notes": "Triggered by a HubSpot workflow on demo-form submission. Payload includes contactId, email, company, form_responses."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"received\": true, \"contactId\": \"{{ $json.body.contactId }}\" }",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000002",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 480],
+      "notesInFlow": true,
+      "notes": "Acknowledge HubSpot immediately so the form submission isn't blocked on the rest of the flow."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize the HubSpot webhook payload into the shape the rest of the flow expects.\nconst body = $json.body || $json;\nconst contact = body.contact || body;\n\nconst email = (contact.email || contact.properties?.email || '').toLowerCase().trim();\nconst domain = email.split('@')[1] || '';\n\nconst freeMailDomains = new Set([\n  'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com',\n  'icloud.com', 'aol.com', 'proton.me', 'protonmail.com'\n]);\n\nreturn [{\n  json: {\n    contactId: String(contact.id || contact.contactId || body.contactId || ''),\n    email,\n    domain,\n    isFreeMail: freeMailDomains.has(domain),\n    firstName: contact.properties?.firstname || contact.firstName || '',\n    lastName: contact.properties?.lastname || contact.lastName || '',\n    companyHint: contact.properties?.company || contact.company || '',\n    jobTitle: contact.properties?.jobtitle || contact.jobTitle || '',\n    formId: body.formId || body.form?.id || '',\n    formResponses: body.form_responses || body.formResponses || contact.properties?.message || '',\n    submittedAt: body.submittedAt || new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000003",
+      "name": "Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apollo.io/v1/organizations/enrich?domain={{ $json.domain }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Cache-Control", "value": "no-cache" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000004",
+      "name": "Apollo — Enrich Domain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_APOLLO_CRED_ID",
+          "name": "Apollo — X-Api-Key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "8s timeout. neverError so a failed enrichment doesn't kill the flow — score-by-rule fallback handles it downstream."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine normalized payload + enrichment into a single bundle for Claude.\nconst lead = $('Normalize Payload').item.json;\nconst enrich = $json?.organization || {};\n\nreturn [{\n  json: {\n    ...lead,\n    company: enrich.name || lead.companyHint || lead.domain,\n    industry: enrich.industry || '',\n    employeeCount: enrich.estimated_num_employees || enrich.employee_count || null,\n    annualRevenue: enrich.annual_revenue || null,\n    country: enrich.country || '',\n    state: enrich.state || '',\n    technologies: Array.isArray(enrich.technologies) ? enrich.technologies.slice(0, 12) : [],\n    enrichmentOk: !!enrich.name,\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000005",
+      "name": "Merge Lead + Firmographics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 400,\n  \"system\": \"You score inbound demo requests against the ICP rubric supplied by the user. Always reply with a single JSON object: {\\\"score\\\": integer 1-10, \\\"reasoning\\\": one sentence under 200 chars, \\\"primary_pain_hypothesis\\\": one sentence under 200 chars, \\\"disqualifiers\\\": array of strings}. Never wrap the JSON in prose or code fences. If firmographic data is missing, say so in reasoning and bias score down by 1. Free-mail addresses (gmail/yahoo/etc.) cap score at 4 unless the form responses prove a real role.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"ICP RUBRIC:\\n{{ $vars.ICP_RUBRIC }}\\n\\nLEAD:\\n{{ JSON.stringify($json) }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 6000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000006",
+      "name": "Claude — Score Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "6s timeout. neverError → empty response triggers the rule-based fallback in Parse Score."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's JSON. If anything fails (timeout, malformed, free-mail cap), fall back to a rule-based score.\nconst lead = $('Merge Lead + Firmographics').item.json;\nconst raw = $json?.content?.[0]?.text || '';\n\nlet parsed = null;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  parsed = null;\n}\n\nfunction ruleBasedScore(l) {\n  let s = 5;\n  if (l.isFreeMail) s -= 2;\n  if (!l.enrichmentOk) s -= 1;\n  const ec = l.employeeCount || 0;\n  if (ec >= 200 && ec <= 5000) s += 2;\n  else if (ec >= 50 && ec < 200) s += 1;\n  else if (ec >= 5000) s += 1;\n  if ((l.jobTitle || '').match(/director|vp|head|chief|cro|cmo|ceo/i)) s += 1;\n  return Math.max(1, Math.min(10, s));\n}\n\nconst usedFallback = !parsed || typeof parsed.score !== 'number';\nconst score = usedFallback ? ruleBasedScore(lead) : Math.max(1, Math.min(10, parsed.score));\nconst capped = lead.isFreeMail && score > 4 ? 4 : score;\n\nreturn [{\n  json: {\n    ...lead,\n    score: capped,\n    reasoning: parsed?.reasoning || (usedFallback ? 'Rule-based fallback (Claude unavailable or malformed).' : ''),\n    primary_pain_hypothesis: parsed?.primary_pain_hypothesis || '',\n    disqualifiers: parsed?.disqualifiers || (lead.isFreeMail ? ['free-mail-domain'] : []),\n    scoringMethod: usedFallback ? 'rule-based' : 'claude',\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000007",
+      "name": "Parse Score (with fallback)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "resource": "contact",
+        "email": "={{ $json.email }}",
+        "additionalFields": {
+          "icp_score__c": "={{ $json.score }}",
+          "icp_score_reasoning__c": "={{ $json.reasoning }}",
+          "icp_pain_hypothesis__c": "={{ $json.primary_pain_hypothesis }}",
+          "icp_scoring_method__c": "={{ $json.scoringMethod }}",
+          "lifecyclestage": "lead"
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000008",
+      "name": "HubSpot — Upsert Score",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [1520, 300],
+      "credentials": {
+        "hubspotOAuth2Api": {
+          "id": "PLACEHOLDER_HUBSPOT_CRED_ID",
+          "name": "HubSpot — OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "low-score",
+                    "leftValue": "={{ $json.score }}",
+                    "rightValue": 4,
+                    "operator": { "type": "number", "operation": "smaller" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "low"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "mid-score",
+                    "leftValue": "={{ $json.score }}",
+                    "rightValue": 7,
+                    "operator": { "type": "number", "operation": "smallerEqual" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "mid"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "id": "high-score",
+                    "leftValue": "={{ $json.score }}",
+                    "rightValue": 8,
+                    "operator": { "type": "number", "operation": "largerEqual" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "high"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unrouted"
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000009",
+      "name": "Route by Score",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1740, 300]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "documentId": {
+          "__rl": true,
+          "value": "PLACEHOLDER_TERRITORY_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Territories",
+          "mode": "name"
+        },
+        "lookupColumn": "country",
+        "lookupValue": "={{ $json.country || 'US' }}",
+        "options": {
+          "returnAllMatches": false
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000a",
+      "name": "Sheets — Territory Lookup",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1960, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PLACEHOLDER_GSHEETS_CRED_ID",
+          "name": "Google Sheets — Territory rules"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Sheet columns: country, sdr_email, sdr_slack_handle, ae_email, ae_slack_handle. Falls back to a 'default' row if no match."
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "task",
+        "associations": {
+          "associationsUi": {
+            "associationsValues": [
+              {
+                "associationCategory": "HUBSPOT_DEFINED",
+                "associationTypeId": 10,
+                "toObjectId": "={{ $('Parse Score (with fallback)').item.json.contactId }}"
+              }
+            ]
+          }
+        },
+        "additionalFields": {
+          "ownerId": "={{ $json.sdr_owner_id }}",
+          "subject": "=Inbound demo request — {{ $('Parse Score (with fallback)').item.json.company }} (score {{ $('Parse Score (with fallback)').item.json.score }})",
+          "body": "=Pain hypothesis: {{ $('Parse Score (with fallback)').item.json.primary_pain_hypothesis }}\n\nReasoning: {{ $('Parse Score (with fallback)').item.json.reasoning }}\n\nForm responses: {{ $('Parse Score (with fallback)').item.json.formResponses }}",
+          "priority": "MEDIUM",
+          "taskType": "TODO"
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000b",
+      "name": "HubSpot — Create SDR Task (mid)",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [2180, 300],
+      "credentials": {
+        "hubspotOAuth2Api": {
+          "id": "PLACEHOLDER_HUBSPOT_CRED_ID",
+          "name": "HubSpot — OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#inbound-hot\",\n  \"text\": \":fire: High-intent inbound — {{ $('Parse Score (with fallback)').item.json.company }} (score {{ $('Parse Score (with fallback)').item.json.score }}/10)\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \":fire: *High-intent inbound — {{ $('Parse Score (with fallback)').item.json.company }}* (score *{{ $('Parse Score (with fallback)').item.json.score }}/10*)\\nOwner: <@{{ $json.ae_slack_handle }}>\" } },\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Contact:* {{ $('Parse Score (with fallback)').item.json.firstName }} {{ $('Parse Score (with fallback)').item.json.lastName }} ({{ $('Parse Score (with fallback)').item.json.jobTitle }})\\n*Email:* {{ $('Parse Score (with fallback)').item.json.email }}\\n*Industry:* {{ $('Parse Score (with fallback)').item.json.industry }} · *Headcount:* {{ $('Parse Score (with fallback)').item.json.employeeCount }}\\n*Pain hypothesis:* {{ $('Parse Score (with fallback)').item.json.primary_pain_hypothesis }}\\n*Reasoning:* {{ $('Parse Score (with fallback)').item.json.reasoning }}\" } },\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Suggested opener:* {{ $('Parse Score (with fallback)').item.json.primary_pain_hypothesis }}\" } }\n  ]\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000c",
+      "name": "Slack — Page AE (high)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 140],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@example.com",
+        "toEmail": "={{ $('Parse Score (with fallback)').item.json.email }}",
+        "subject": "Thanks for the demo request — a few resources while we review",
+        "emailFormat": "html",
+        "html": "=<p>Hi {{ $('Parse Score (with fallback)').item.json.firstName || 'there' }},</p><p>Thanks for getting in touch. While our team reviews your request, here are the resources most teams find useful before a first call:</p><ul><li><a href=\"https://example.com/product-tour\">Self-serve product tour (8 min)</a></li><li><a href=\"https://example.com/pricing\">Pricing and editions</a></li><li><a href=\"https://example.com/case-studies\">Case studies by industry</a></li></ul><p>If you'd like to skip ahead, you can <a href=\"https://example.com/start-trial\">start a free trial</a> in under two minutes.</p><p>— The team</p>",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000d",
+      "name": "Email — Self-serve Nurture (low)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2180, 460],
+      "credentials": {
+        "smtp": {
+          "id": "PLACEHOLDER_SMTP_CRED_ID",
+          "name": "SMTP — transactional"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Low-score leads get an automated nurture, not a dead end. Subsequent product activation re-triggers the flow."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#inbound-ops-alerts\",\n  \"text\": \":warning: Unrouted inbound (score {{ $('Parse Score (with fallback)').item.json.score }}, method {{ $('Parse Score (with fallback)').item.json.scoringMethod }}). Contact {{ $('Parse Score (with fallback)').item.json.email }} — manual review needed.\"\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000e",
+      "name": "Slack — Ops Alert (unrouted)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 620],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "15 2 * * *" }
+          ]
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-00000000000f",
+      "name": "Nightly Backstop Cron",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 820],
+      "notesInFlow": true,
+      "notes": "Catches any contact whose webhook silently failed in the last 24h. Set timezone in workflow Settings."
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "resource": "contact",
+        "additionalFields": {
+          "filterGroups": [
+            {
+              "filters": [
+                { "propertyName": "lifecyclestage", "operator": "EQ", "value": "subscriber" },
+                { "propertyName": "recent_conversion_event_name", "operator": "HAS_PROPERTY" },
+                { "propertyName": "recent_conversion_date", "operator": "GTE", "value": "={{ $now.minus({hours: 26}).toMillis() }}" },
+                { "propertyName": "icp_score__c", "operator": "NOT_HAS_PROPERTY" }
+              ]
+            }
+          ],
+          "properties": ["email", "firstname", "lastname", "company", "jobtitle", "recent_conversion_event_name"]
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000010",
+      "name": "HubSpot — Find Missed Submissions",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [420, 820],
+      "credentials": {
+        "hubspotOAuth2Api": {
+          "id": "PLACEHOLDER_HUBSPOT_CRED_ID",
+          "name": "HubSpot — OAuth"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Looks for any subscriber-stage contact with a recent_conversion in last 26h that has no icp_score__c. These are leads the webhook missed."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_SELF_URL }}/webhook/inbound-lead-triage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"body\": {\n    \"contactId\": \"{{ $json.id }}\",\n    \"contact\": {\n      \"id\": \"{{ $json.id }}\",\n      \"email\": \"{{ $json.properties.email }}\",\n      \"firstName\": \"{{ $json.properties.firstname }}\",\n      \"lastName\": \"{{ $json.properties.lastname }}\",\n      \"company\": \"{{ $json.properties.company }}\",\n      \"jobTitle\": \"{{ $json.properties.jobtitle }}\"\n    },\n    \"formResponses\": \"backstop replay — {{ $json.properties.recent_conversion_event_name }}\",\n    \"submittedAt\": \"{{ $now.toISO() }}\"\n  }\n}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 2000
+            }
+          }
+        }
+      },
+      "id": "2d2d2d2d-0002-0000-0000-000000000011",
+      "name": "Replay via Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 820]
+    }
+  ],
+  "connections": {
+    "Webhook — HubSpot Form Submit": {
+      "main": [
+        [
+          { "node": "Respond 202 Accepted", "type": "main", "index": 0 },
+          { "node": "Normalize Payload", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Normalize Payload": {
+      "main": [
+        [{ "node": "Apollo — Enrich Domain", "type": "main", "index": 0 }]
+      ]
+    },
+    "Apollo — Enrich Domain": {
+      "main": [
+        [{ "node": "Merge Lead + Firmographics", "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge Lead + Firmographics": {
+      "main": [
+        [{ "node": "Claude — Score Lead", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Score Lead": {
+      "main": [
+        [{ "node": "Parse Score (with fallback)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Score (with fallback)": {
+      "main": [
+        [
+          { "node": "HubSpot — Upsert Score", "type": "main", "index": 0 },
+          { "node": "Route by Score", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Route by Score": {
+      "main": [
+        [{ "node": "Email — Self-serve Nurture (low)", "type": "main", "index": 0 }],
+        [{ "node": "Sheets — Territory Lookup", "type": "main", "index": 0 }],
+        [{ "node": "Sheets — Territory Lookup", "type": "main", "index": 0 }],
+        [{ "node": "Slack — Ops Alert (unrouted)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Sheets — Territory Lookup": {
+      "main": [
+        [
+          { "node": "HubSpot — Create SDR Task (mid)", "type": "main", "index": 0 },
+          { "node": "Slack — Page AE (high)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Nightly Backstop Cron": {
+      "main": [
+        [{ "node": "HubSpot — Find Missed Submissions", "type": "main", "index": 0 }]
+      ]
+    },
+    "HubSpot — Find Missed Submissions": {
+      "main": [
+        [{ "node": "Replay via Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionId": "2d2d2d2d-0002-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "inbound-lead-triage-n8n",
+  "tags": [
+    { "name": "revops" },
+    { "name": "inbound" }
+  ]
+}

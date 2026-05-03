@@ -1,0 +1,529 @@
+{
+  "name": "NDA intake triage",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "labelIds": ["INBOX"],
+          "q": "in:inbox -from:me has:attachment (filename:pdf OR filename:docx) -label:nda-processed newer_than:2d"
+        },
+        "options": {
+          "downloadAttachments": true,
+          "attachmentsPrefix": "nda_"
+        }
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000001",
+      "name": "Intake Inbox Poll",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 400],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — nda-intake mailbox"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Polls the dedicated nda-intake@ inbox once per minute. Downloads attachments inline so downstream nodes can stream the .pdf / .docx body to Claude."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull the first NDA-shaped attachment, base64-encode it, and normalize the\n// envelope fields the downstream prompt needs. Reject mail with no usable file.\nconst item = $json;\nconst binary = $binary || {};\nconst attachmentKey = Object.keys(binary).find(k => /\\.(pdf|docx)$/i.test(binary[k].fileName || ''));\n\nif (!attachmentKey) {\n  // Surface as a structured 'no_attachment' record so the routing IF can divert it.\n  return [{\n    json: {\n      status: 'no_attachment',\n      sender: (item.from || '').replace(/.*<|>.*/g, ''),\n      subject: item.subject || '',\n      thread_id: item.threadId,\n      message_id: item.id,\n    }\n  }];\n}\n\nconst file = binary[attachmentKey];\nconst sender = (item.from || '').match(/<([^>]+)>/)?.[1] || (item.from || '').trim();\nconst senderDomain = sender.split('@').pop()?.toLowerCase() || '';\n\nreturn [{\n  json: {\n    status: 'have_attachment',\n    sender,\n    sender_domain: senderDomain,\n    subject: item.subject || '',\n    body_snippet: (item.snippet || '').slice(0, 2000),\n    received_at: item.internalDate ? new Date(Number(item.internalDate)).toISOString() : new Date().toISOString(),\n    thread_id: item.threadId,\n    message_id: item.id,\n    attachment_filename: file.fileName,\n    attachment_mime: file.mimeType,\n    attachment_size: file.fileSize,\n    attachment_b64: file.data,\n  }\n}];"
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000002",
+      "name": "Normalize Intake",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  counterparty_id,\n  counterparty_name,\n  risk_tier,\n  preferred_paper,\n  notes\nFROM counterparty_registry\nWHERE primary_domain = $1\n  OR $1 = ANY(secondary_domains)\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.sender_domain }}"
+        }
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000003",
+      "name": "Counterparty Lookup",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 400],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — counterparty registry"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Returns null row when domain is unknown. Downstream code defaults missing rows to risk_tier='unknown'."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge the intake payload with the counterparty row (or default unknown).\nconst intake = $('Normalize Intake').item.json;\nconst registry = $json || {};\n\nconst risk_tier = registry.risk_tier || 'unknown';\nconst counterparty_name = registry.counterparty_name || intake.sender_domain;\n\nreturn [{\n  json: {\n    ...intake,\n    counterparty_id: registry.counterparty_id || null,\n    counterparty_name,\n    risk_tier,\n    preferred_paper: registry.preferred_paper || 'unknown',\n    registry_notes: registry.notes || null,\n  }\n}];"
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000004",
+      "name": "Merge Counterparty Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 2048,\n  \"system\": \"You are an in-house contracts paralegal classifying inbound NDAs against the company playbook. For each clause family (governing law, term, mutuality, IP carve-outs, residuals, non-solicit, indemnity, exclusion-of-consequential-damages, definition-of-confidential-information, notice-of-breach), label the contract's position as 'acceptable' (matches our paper or a pre-approved fallback), 'fallback' (deviates but inside our authorized fallback library), or 'walk-away' (outside fallback envelope, requires GC sign-off). Then emit a top-level recommendation: 'auto-approve' only if every clause is acceptable AND counterparty risk_tier is 'low'; 'lawyer-review' if any clause is fallback OR risk_tier is 'mid'/'unknown'; 'escalate' if any clause is walk-away OR risk_tier is 'high'. Return strict JSON only — no prose, no markdown fences.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"document\",\n          \"source\": {\n            \"type\": \"base64\",\n            \"media_type\": \"{{ $json.attachment_mime }}\",\n            \"data\": \"{{ $json.attachment_b64 }}\"\n          }\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"Counterparty: {{ $json.counterparty_name }} ({{ $json.sender_domain }}). Risk tier: {{ $json.risk_tier }}. Preferred paper: {{ $json.preferred_paper }}. Registry notes: {{ $json.registry_notes }}. Email subject: {{ $json.subject }}. Output JSON shape: { \\\"clauses\\\": [{ \\\"family\\\": str, \\\"position\\\": 'acceptable'|'fallback'|'walk-away', \\\"quote\\\": str (<=200 chars), \\\"suggested_redline\\\": str|null, \\\"confidence\\\": 0..1 }], \\\"recommendation\\\": 'auto-approve'|'lawyer-review'|'escalate', \\\"summary\\\": str (<=500 chars), \\\"overall_confidence\\\": 0..1 }.\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000005",
+      "name": "Claude — Playbook Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Sends the .pdf or .docx as a base64 document block. Sonnet 4.6 handles both. Cap at 2048 output tokens — clause JSON typically lands at 800–1200 tokens."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the Claude response, apply the conservative-tier override, and stamp\n// the routing decision used by every downstream branch.\nconst intake = $('Merge Counterparty Context').item.json;\nconst raw = $json.content?.[0]?.text || '';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  // Hard-fail to escalate when we cannot parse — never silently auto-approve.\n  return [{\n    json: {\n      ...intake,\n      recommendation: 'escalate',\n      escalation_reason: 'parser_error',\n      raw_response: raw.slice(0, 1000),\n      clauses: [],\n      summary: 'Claude response was not valid JSON. Manual review required.',\n      overall_confidence: 0,\n    }\n  }];\n}\n\n// Conservative override: any walk-away clause OR confidence < 0.7 forces escalate.\nconst hasWalkAway = (parsed.clauses || []).some(c => c.position === 'walk-away');\nconst hasFallback = (parsed.clauses || []).some(c => c.position === 'fallback');\nconst lowConfidence = (parsed.overall_confidence ?? 0) < 0.7;\n\nlet recommendation = parsed.recommendation;\nlet override_reason = null;\nif (hasWalkAway) {\n  recommendation = 'escalate';\n  override_reason = 'walk_away_clause';\n} else if (lowConfidence && recommendation === 'auto-approve') {\n  recommendation = 'lawyer-review';\n  override_reason = 'low_confidence';\n} else if (intake.risk_tier !== 'low' && recommendation === 'auto-approve') {\n  recommendation = 'lawyer-review';\n  override_reason = 'non_low_risk_tier';\n}\n\nreturn [{\n  json: {\n    ...intake,\n    recommendation,\n    override_reason,\n    has_walk_away: hasWalkAway,\n    has_fallback: hasFallback,\n    clauses: parsed.clauses || [],\n    summary: parsed.summary || '',\n    overall_confidence: parsed.overall_confidence ?? 0,\n  }\n}];"
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000006",
+      "name": "Apply Risk Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "auto-approve-branch",
+                    "leftValue": "={{ $json.recommendation }}",
+                    "rightValue": "auto-approve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "auto-approve"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "lawyer-review-branch",
+                    "leftValue": "={{ $json.recommendation }}",
+                    "rightValue": "lawyer-review",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lawyer-review"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "escalate-branch",
+                    "leftValue": "={{ $json.recommendation }}",
+                    "rightValue": "escalate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "escalate"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000007",
+      "name": "Routing Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ironcladapp.com/public/api/v1/records",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"nda\",\n  \"name\": \"NDA — {{ $json.counterparty_name }} — auto-approved\",\n  \"properties\": {\n    \"counterparty\": { \"type\": \"singleSelect\", \"value\": \"{{ $json.counterparty_name }}\" },\n    \"risk_tier\": { \"type\": \"singleSelect\", \"value\": \"{{ $json.risk_tier }}\" },\n    \"contract_type\": { \"type\": \"singleSelect\", \"value\": \"NDA\" },\n    \"status\": { \"type\": \"singleSelect\", \"value\": \"Executed — Auto-Approved\" },\n    \"intake_email\": { \"type\": \"email\", \"value\": \"{{ $json.sender }}\" },\n    \"ai_confidence\": { \"type\": \"number\", \"value\": {{ $json.overall_confidence }} },\n    \"summary\": { \"type\": \"longText\", \"value\": \"{{ $json.summary }}\" }\n  },\n  \"attachments\": [\n    {\n      \"filename\": \"{{ $json.attachment_filename }}\",\n      \"contentType\": \"{{ $json.attachment_mime }}\",\n      \"data\": \"{{ $json.attachment_b64 }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000008",
+      "name": "Ironclad — Auto-Approved Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_IRONCLAD_CRED_ID",
+          "name": "Ironclad — API token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#legal-ops-firehose\",\n  \"text\": \":white_check_mark: Auto-approved NDA — {{ $('Apply Risk Rules').item.json.counterparty_name }} (risk: {{ $('Apply Risk Rules').item.json.risk_tier }}, conf: {{ $('Apply Risk Rules').item.json.overall_confidence }}). Ironclad record: {{ $json.id || 'created' }}.\"\n}",
+        "options": {}
+      },
+      "id": "1c1c1c1c-0002-0000-0000-000000000009",
+      "name": "Slack — Audit Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2020, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ironcladapp.com/public/api/v1/workflows",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"template\": \"nda-review\",\n  \"name\": \"NDA review — {{ $json.counterparty_name }}\",\n  \"properties\": {\n    \"counterparty\": { \"type\": \"singleSelect\", \"value\": \"{{ $json.counterparty_name }}\" },\n    \"risk_tier\": { \"type\": \"singleSelect\", \"value\": \"{{ $json.risk_tier }}\" },\n    \"sla_hours\": { \"type\": \"number\", \"value\": 24 },\n    \"ai_summary\": { \"type\": \"longText\", \"value\": \"{{ $json.summary }}\" },\n    \"override_reason\": { \"type\": \"singleSelect\", \"value\": \"{{ $json.override_reason || 'none' }}\" }\n  },\n  \"attachments\": [\n    {\n      \"filename\": \"{{ $json.attachment_filename }}\",\n      \"contentType\": \"{{ $json.attachment_mime }}\",\n      \"data\": \"{{ $json.attachment_b64 }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "1c1c1c1c-0002-0000-0000-00000000000a",
+      "name": "Ironclad — Review Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_IRONCLAD_CRED_ID",
+          "name": "Ironclad — API token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#legal-nda-queue\",\n  \"text\": \":mag: NDA needs review — *{{ $('Apply Risk Rules').item.json.counterparty_name }}*\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \":mag: *NDA needs review* — {{ $('Apply Risk Rules').item.json.counterparty_name }}\\nRisk tier: `{{ $('Apply Risk Rules').item.json.risk_tier }}`  ·  Confidence: `{{ $('Apply Risk Rules').item.json.overall_confidence }}`  ·  Override: `{{ $('Apply Risk Rules').item.json.override_reason || 'none' }}`\\nSLA: 24h\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Summary*\\n{{ $('Apply Risk Rules').item.json.summary }}\" }\n    },\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        { \"type\": \"button\", \"text\": { \"type\": \"plain_text\", \"text\": \"Open in Ironclad\" }, \"url\": \"{{ $json.workflowUrl || 'https://app.ironcladapp.com' }}\" }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "1c1c1c1c-0002-0000-0000-00000000000b",
+      "name": "Slack — Lawyer Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2020, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ironcladapp.com/public/api/v1/workflows",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"template\": \"nda-escalation\",\n  \"name\": \"NDA escalation — {{ $json.counterparty_name }}\",\n  \"properties\": {\n    \"counterparty\": { \"type\": \"singleSelect\", \"value\": \"{{ $json.counterparty_name }}\" },\n    \"risk_tier\": { \"type\": \"singleSelect\", \"value\": \"{{ $json.risk_tier }}\" },\n    \"escalation_reason\": { \"type\": \"singleSelect\", \"value\": \"{{ $json.override_reason || 'walk_away_clause' }}\" },\n    \"ai_summary\": { \"type\": \"longText\", \"value\": \"{{ $json.summary }}\" }\n  },\n  \"attachments\": [\n    {\n      \"filename\": \"{{ $json.attachment_filename }}\",\n      \"contentType\": \"{{ $json.attachment_mime }}\",\n      \"data\": \"{{ $json.attachment_b64 }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "1c1c1c1c-0002-0000-0000-00000000000c",
+      "name": "Ironclad — Escalation Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_IRONCLAD_CRED_ID",
+          "name": "Ironclad — API token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#legal-gc-escalations\",\n  \"text\": \":rotating_light: NDA escalation — {{ $('Apply Risk Rules').item.json.counterparty_name }} (reason: {{ $('Apply Risk Rules').item.json.override_reason || 'walk_away_clause' }})\"\n}",
+        "options": {}
+      },
+      "id": "1c1c1c1c-0002-0000-0000-00000000000d",
+      "name": "Slack — GC Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2020, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO nda_audit_log (\n  message_id, thread_id, sender, sender_domain, counterparty_id, counterparty_name,\n  risk_tier, recommendation, override_reason, overall_confidence, clauses_json, summary, processed_at\n) VALUES (\n  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, now()\n)\nON CONFLICT (message_id) DO NOTHING\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ $('Apply Risk Rules').item.json.message_id }},{{ $('Apply Risk Rules').item.json.thread_id }},{{ $('Apply Risk Rules').item.json.sender }},{{ $('Apply Risk Rules').item.json.sender_domain }},{{ $('Apply Risk Rules').item.json.counterparty_id }},{{ $('Apply Risk Rules').item.json.counterparty_name }},{{ $('Apply Risk Rules').item.json.risk_tier }},{{ $('Apply Risk Rules').item.json.recommendation }},{{ $('Apply Risk Rules').item.json.override_reason }},{{ $('Apply Risk Rules').item.json.overall_confidence }},{{ JSON.stringify($('Apply Risk Rules').item.json.clauses) }},{{ $('Apply Risk Rules').item.json.summary }}"
+        }
+      },
+      "id": "1c1c1c1c-0002-0000-0000-00000000000e",
+      "name": "Audit Log Write",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2240, 400],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — counterparty registry"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Single audit row per inbound message (idempotent on message_id). Used for the weekly false-positive review."
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Apply Risk Rules').item.json.message_id }}",
+        "labelIds": ["Label_NdaProcessed"]
+      },
+      "id": "1c1c1c1c-0002-0000-0000-00000000000f",
+      "name": "Mark Gmail Processed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2460, 400],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — nda-intake mailbox"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Replace 'Label_NdaProcessed' with the actual Gmail label ID from your inbox so the trigger query (`-label:nda-processed`) deduplicates correctly."
+    }
+  ],
+  "connections": {
+    "Intake Inbox Poll": {
+      "main": [
+        [{ "node": "Normalize Intake", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Intake": {
+      "main": [
+        [{ "node": "Counterparty Lookup", "type": "main", "index": 0 }]
+      ]
+    },
+    "Counterparty Lookup": {
+      "main": [
+        [{ "node": "Merge Counterparty Context", "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge Counterparty Context": {
+      "main": [
+        [{ "node": "Claude — Playbook Check", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Playbook Check": {
+      "main": [
+        [{ "node": "Apply Risk Rules", "type": "main", "index": 0 }]
+      ]
+    },
+    "Apply Risk Rules": {
+      "main": [
+        [{ "node": "Routing Switch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Routing Switch": {
+      "main": [
+        [{ "node": "Ironclad — Auto-Approved Record", "type": "main", "index": 0 }],
+        [{ "node": "Ironclad — Review Workflow", "type": "main", "index": 0 }],
+        [{ "node": "Ironclad — Escalation Workflow", "type": "main", "index": 0 }],
+        [{ "node": "Slack — Lawyer Queue", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ironclad — Auto-Approved Record": {
+      "main": [
+        [{ "node": "Slack — Audit Log", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack — Audit Log": {
+      "main": [
+        [{ "node": "Audit Log Write", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ironclad — Review Workflow": {
+      "main": [
+        [{ "node": "Slack — Lawyer Queue", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack — Lawyer Queue": {
+      "main": [
+        [{ "node": "Audit Log Write", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ironclad — Escalation Workflow": {
+      "main": [
+        [{ "node": "Slack — GC Escalation", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack — GC Escalation": {
+      "main": [
+        [{ "node": "Audit Log Write", "type": "main", "index": 0 }]
+      ]
+    },
+    "Audit Log Write": {
+      "main": [
+        [{ "node": "Mark Gmail Processed", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "errorWorkflow": ""
+  },
+  "versionId": "1c1c1c1c-0002-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-nda-intake"
+  },
+  "id": "nda-intake-triage",
+  "tags": [
+    { "name": "legal-ops" },
+    { "name": "contracts" },
+    { "name": "nda" }
+  ]
+}

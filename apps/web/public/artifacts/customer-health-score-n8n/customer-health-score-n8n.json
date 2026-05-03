@@ -1,0 +1,609 @@
+{
+  "name": "Composite customer health score",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000001",
+      "name": "Nightly Cron — 2am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 400],
+      "notesInFlow": true,
+      "notes": "Set the timezone explicitly in workflow Settings — default is UTC. 2am chosen so usage events from the prior day are settled before scoring."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  account_id,\n  account_name,\n  gainsight_company_id,\n  hubspot_company_id,\n  segment,\n  weight_usage,\n  weight_activity,\n  weight_sentiment,\n  baseline_usage_28d\nFROM accounts_in_scope\nWHERE active = true\n  AND last_scored_at IS NULL OR last_scored_at < now() - interval '20 hours'\nORDER BY account_id\nLIMIT 500;",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000002",
+      "name": "Pull Accounts In Scope",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 400],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — health-score-state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "accounts_in_scope is a thin view over Gainsight/HubSpot account lists. Per-account weights live here so segment-specific weighting is one update."
+    },
+    {
+      "parameters": {
+        "batchSize": 25,
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000003",
+      "name": "Batch Accounts (25/group)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 400],
+      "notesInFlow": true,
+      "notes": "Batches keep parallel API calls under provider per-second limits and bound retry blast radius."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.gainsight.com/v1/data/objects/Company/{{ $json.gainsight_company_id }}/usage?window=28d",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": false,
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          },
+          "timeout": 15000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000004",
+      "name": "Gainsight — Usage (28d window)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_GAINSIGHT_CRED_ID",
+          "name": "Gainsight — Bearer token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Returns daily active accounts, feature events, and minutes-in-product for the last 28 days."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.hubapi.com/crm/v3/objects/companies/{{ $json.hubspot_company_id }}/associations/engagements?limit=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": false,
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          },
+          "timeout": 15000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000005",
+      "name": "HubSpot — Engagements (90d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_HUBSPOT_CRED_ID",
+          "name": "HubSpot — private app token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Engagements covers calls, meetings, emails, notes. Tickets pulled separately so closed/open ratio can be weighted."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.gong.io/v2/calls?fromDateTime={{ $now.minus({days: 30}).toISO() }}&toDateTime={{ $now.toISO() }}&filter[accountIds]={{ $json.account_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": false,
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          },
+          "timeout": 20000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000006",
+      "name": "Gong — Calls (30d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_GONG_CRED_ID",
+          "name": "Gong — Basic Auth"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Returns call metadata + transcript IDs. Transcripts pulled in next node only for calls under the cap."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Gainsight usage into a 0-100 sub-score against the account's own 28d baseline.\n// This catches drops that absolute thresholds miss (a 35% drop matters whether the account is at 1k or 100k events/day).\nconst account = $('Batch Accounts (25/group)').item.json;\nconst usagePayload = $json;\nconst baseline = Number(account.baseline_usage_28d) || 0;\nconst current = Number(usagePayload?.totals?.eventsLast28d) || 0;\nconst dau = Number(usagePayload?.totals?.distinctUsersLast28d) || 0;\nconst minutes = Number(usagePayload?.totals?.minutesInProductLast28d) || 0;\n\nlet ratio;\nif (baseline === 0) {\n  ratio = current > 0 ? 1 : 0;\n} else {\n  ratio = current / baseline;\n}\n\n// Map ratio to 0-100. Above baseline caps at 100 (we don't reward usage spikes — they can mean a fire drill).\n// Below baseline drops linearly to 0 at ratio=0.5 (50% of baseline = score 0). Below 0.5 stays at 0.\nlet usageScore;\nif (ratio >= 1) usageScore = 100;\nelse if (ratio <= 0.5) usageScore = 0;\nelse usageScore = Math.round((ratio - 0.5) * 200);\n\n// Penalty if distinct users drop below 3 — single-user dependency is a churn risk regardless of event volume.\nif (dau < 3) usageScore = Math.min(usageScore, 40);\n\nreturn [{\n  json: {\n    account_id: account.account_id,\n    account_name: account.account_name,\n    sub_usage: {\n      score: usageScore,\n      ratio_vs_baseline: Number(ratio.toFixed(2)),\n      events_28d: current,\n      distinct_users_28d: dau,\n      minutes_in_product_28d: minutes,\n    },\n    _account: account,\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000007",
+      "name": "Score Usage (vs baseline)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Score CSM/support activity from HubSpot engagements.\n// Recency-weighted: a meeting yesterday is worth more than one 60 days ago.\nconst account = $('Batch Accounts (25/group)').item.json;\nconst payload = $json;\nconst engagements = Array.isArray(payload?.results) ? payload.results : [];\nconst now = Date.now();\nconst halfLifeDays = 21;\n\nlet weightedSum = 0;\nlet meetingCount = 0;\nlet emailCount = 0;\nlet lastMeetingAt = null;\n\nfor (const e of engagements) {\n  const ts = e?.properties?.hs_timestamp ? Date.parse(e.properties.hs_timestamp) : null;\n  if (!ts) continue;\n  const ageDays = (now - ts) / 86400000;\n  if (ageDays > 90) continue;\n  const decay = Math.pow(0.5, ageDays / halfLifeDays);\n  const type = (e?.properties?.hs_engagement_type || '').toUpperCase();\n  let weight = 0;\n  if (type === 'MEETING') { weight = 5; meetingCount += 1; if (!lastMeetingAt || ts > lastMeetingAt) lastMeetingAt = ts; }\n  else if (type === 'CALL') { weight = 4; }\n  else if (type === 'EMAIL') { weight = 1; emailCount += 1; }\n  else if (type === 'NOTE') { weight = 0.5; }\n  weightedSum += weight * decay;\n}\n\n// Map weighted sum to 0-100. 30+ = saturated relationship, 0 = silent.\nlet activityScore = Math.min(100, Math.round((weightedSum / 30) * 100));\n\n// Hard floor: zero meetings in 60 days drops the activity score to 25 max.\nif (!lastMeetingAt || (now - lastMeetingAt) / 86400000 > 60) {\n  activityScore = Math.min(activityScore, 25);\n}\n\nreturn [{\n  json: {\n    account_id: account.account_id,\n    account_name: account.account_name,\n    sub_activity: {\n      score: activityScore,\n      meetings_90d: meetingCount,\n      emails_90d: emailCount,\n      last_meeting_at: lastMeetingAt ? new Date(lastMeetingAt).toISOString() : null,\n      weighted_sum: Number(weightedSum.toFixed(2)),\n    },\n    _account: account,\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000008",
+      "name": "Score Activity (recency-weighted)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 512,\n  \"system\": \"You classify the sentiment of a single customer call transcript on a -1 to +1 scale where -1 is openly frustrated/considering churn, 0 is neutral/transactional, +1 is enthusiastic/expanding. Return strict JSON only: {\\\"sentiment\\\": number, \\\"signals\\\": [string], \\\"confidence\\\": number}. Confidence is 0-1; return 0 if the transcript is fewer than 200 words or appears to be a single-speaker monologue. Never invent signals; quote phrases from the transcript.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Account: {{ $('Batch Accounts (25/group)').item.json.account_name }}. Call transcript:\\n\\n{{ JSON.stringify(($json.calls || []).slice(0, 6).map(c => ({ id: c.id, started: c.started, transcriptSnippet: (c.transcript || '').slice(0, 4000) }))) }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "maxTries": 2,
+            "waitBetweenTries": 4000
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000009",
+      "name": "Claude — Score Sentiment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Sentiment runs on at most 6 most-recent calls per account to cap token spend. Single-speaker filter avoids scoring voicemail."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Claude sentiment output to a 0-100 sub-score with a confidence floor.\nconst account = $('Batch Accounts (25/group)').item.json;\nconst raw = $json?.content?.[0]?.text || '{}';\nlet parsed;\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = { sentiment: 0, signals: [], confidence: 0 }; }\n\nconst sentiment = typeof parsed.sentiment === 'number' ? parsed.sentiment : 0;\nconst confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0;\nconst signals = Array.isArray(parsed.signals) ? parsed.signals.slice(0, 4) : [];\n\n// Map -1..+1 → 0..100. Confidence below 0.4 collapses to 50 (neutral) so we don't act on guesses.\nlet sentimentScore;\nif (confidence < 0.4) {\n  sentimentScore = 50;\n} else {\n  sentimentScore = Math.round(((sentiment + 1) / 2) * 100);\n}\n\nreturn [{\n  json: {\n    account_id: account.account_id,\n    account_name: account.account_name,\n    sub_sentiment: {\n      score: sentimentScore,\n      raw_sentiment: sentiment,\n      confidence,\n      signals,\n    },\n    _account: account,\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000a",
+      "name": "Score Sentiment (with confidence floor)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000b",
+      "name": "Merge Sub-scores",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Composite = weighted sum of three sub-scores. Compare against last score for delta + drivers.\nconst row = $json;\nconst account = row._account || {};\n\nconst wU = Number(account.weight_usage ?? 0.5);\nconst wA = Number(account.weight_activity ?? 0.3);\nconst wS = Number(account.weight_sentiment ?? 0.2);\nconst totalW = wU + wA + wS;\n\nconst sU = row.sub_usage?.score ?? 50;\nconst sA = row.sub_activity?.score ?? 50;\nconst sS = row.sub_sentiment?.score ?? 50;\n\nconst composite = Math.round((wU * sU + wA * sA + wS * sS) / totalW);\n\nconst band = composite >= 75 ? 'green' : composite >= 50 ? 'yellow' : 'red';\n\nreturn [{\n  json: {\n    account_id: account.account_id,\n    account_name: account.account_name,\n    gainsight_company_id: account.gainsight_company_id,\n    composite,\n    band,\n    sub_usage: row.sub_usage,\n    sub_activity: row.sub_activity,\n    sub_sentiment: row.sub_sentiment,\n    weights: { usage: wU, activity: wA, sentiment: wS },\n    scored_at: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000c",
+      "name": "Compute Composite",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT composite AS prev_composite, sub_usage_score AS prev_usage, sub_activity_score AS prev_activity, sub_sentiment_score AS prev_sentiment\nFROM account_health_history\nWHERE account_id = $1\nORDER BY scored_at DESC\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.account_id }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000d",
+      "name": "Lookup Previous Score",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2000, 400],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — health-score-state"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "delta-significant",
+              "leftValue": "={{ Math.abs(($('Compute Composite').item.json.composite || 0) - ($json.prev_composite || $('Compute Composite').item.json.composite)) }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000e",
+      "name": "Delta ≥ 5?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 200,\n  \"system\": \"You write a single sentence that explains why an account's composite health score changed since the last run. Reference the largest mover among usage, activity, sentiment. Cite the concrete number (e.g. '35% drop in events vs 28d baseline'). Never speculate beyond the inputs. If the largest mover has confidence < 0.4 (sentiment only), say 'low-confidence sentiment signal' instead of asserting it.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Account: {{ $('Compute Composite').item.json.account_name }}. Previous composite: {{ $json.prev_composite }}. New composite: {{ $('Compute Composite').item.json.composite }}. Sub-scores now: usage={{ $('Compute Composite').item.json.sub_usage.score }} (ratio {{ $('Compute Composite').item.json.sub_usage.ratio_vs_baseline }}), activity={{ $('Compute Composite').item.json.sub_activity.score }} (last meeting {{ $('Compute Composite').item.json.sub_activity.last_meeting_at }}), sentiment={{ $('Compute Composite').item.json.sub_sentiment.score }} (confidence {{ $('Compute Composite').item.json.sub_sentiment.confidence }}). Previous sub-scores: usage={{ $json.prev_usage }}, activity={{ $json.prev_activity }}, sentiment={{ $json.prev_sentiment }}. Signals from sentiment: {{ JSON.stringify($('Compute Composite').item.json.sub_sentiment.signals) }}.\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 20000,
+          "retry": {
+            "maxTries": 2,
+            "waitBetweenTries": 3000
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000f",
+      "name": "Claude — Why-Changed Sentence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compose the final write-back payload. Use Claude's sentence if available; otherwise a deterministic fallback.\nconst composite = $('Compute Composite').item.json;\nconst prev = $('Lookup Previous Score').item.json || {};\nconst whyText = $json?.content?.[0]?.text;\n\nconst delta = composite.composite - (prev.prev_composite ?? composite.composite);\nconst fallback = `Composite ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta)} pts (usage ${composite.sub_usage.score}, activity ${composite.sub_activity.score}, sentiment ${composite.sub_sentiment.score}).`;\n\nreturn [{\n  json: {\n    ...composite,\n    delta,\n    why_changed: (typeof whyText === 'string' && whyText.trim().length > 0) ? whyText.trim() : fallback,\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000010",
+      "name": "Compose Write-back Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2660, 300]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.gainsight.com/v1/data/objects/Company/{{ $json.gainsight_company_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customFields\": {\n    \"OoligoHealthComposite__c\": {{ $json.composite }},\n    \"OoligoHealthBand__c\": \"{{ $json.band }}\",\n    \"OoligoHealthUsage__c\": {{ $json.sub_usage.score }},\n    \"OoligoHealthActivity__c\": {{ $json.sub_activity.score }},\n    \"OoligoHealthSentiment__c\": {{ $json.sub_sentiment.score }},\n    \"OoligoHealthWhy__c\": {{ JSON.stringify($json.why_changed) }},\n    \"OoligoHealthScoredAt__c\": \"{{ $json.scored_at }}\"\n  }\n}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000011",
+      "name": "Gainsight — Write Score Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2880, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_GAINSIGHT_CRED_ID",
+          "name": "Gainsight — Bearer token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO account_health_history (\n  account_id, scored_at, composite, band,\n  sub_usage_score, sub_activity_score, sub_sentiment_score,\n  weight_usage, weight_activity, weight_sentiment,\n  why_changed, payload_json\n) VALUES ($1, now(), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)\nON CONFLICT (account_id, date_trunc('day', scored_at)) DO UPDATE SET\n  composite = EXCLUDED.composite,\n  band = EXCLUDED.band,\n  sub_usage_score = EXCLUDED.sub_usage_score,\n  sub_activity_score = EXCLUDED.sub_activity_score,\n  sub_sentiment_score = EXCLUDED.sub_sentiment_score,\n  why_changed = EXCLUDED.why_changed,\n  payload_json = EXCLUDED.payload_json;\n\nUPDATE accounts_in_scope SET last_scored_at = now() WHERE account_id = $1;",
+        "options": {
+          "queryReplacement": "={{ $json.account_id }},{{ $json.composite }},{{ $json.band }},{{ $json.sub_usage.score }},{{ $json.sub_activity.score }},{{ $json.sub_sentiment.score }},{{ $json.weights.usage }},{{ $json.weights.activity }},{{ $json.weights.sentiment }},{{ JSON.stringify($json.why_changed) }},{{ JSON.stringify($json) }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000012",
+      "name": "Persist History (idempotent per day)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [3100, 300],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — health-score-state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "ON CONFLICT key keeps re-runs of the same day idempotent — required for safe retries."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "drop-into-red",
+              "leftValue": "={{ $json.band }}",
+              "rightValue": "red",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "delta-large-negative",
+              "leftValue": "={{ $json.delta }}",
+              "rightValue": -10,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000013",
+      "name": "Alert-worthy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [3320, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#cs-health-alerts\",\n  \"text\": \"Health drop on *{{ $json.account_name }}* — composite {{ $json.composite }} ({{ $json.band }}, Δ {{ $json.delta }}). {{ $json.why_changed }}\"\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000014",
+      "name": "Slack — Alert CS Channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3540, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000015",
+      "name": "Throttle Between Batches",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3320, 500]
+    }
+  ],
+  "connections": {
+    "Nightly Cron — 2am": {
+      "main": [
+        [{ "node": "Pull Accounts In Scope", "type": "main", "index": 0 }]
+      ]
+    },
+    "Pull Accounts In Scope": {
+      "main": [
+        [{ "node": "Batch Accounts (25/group)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Batch Accounts (25/group)": {
+      "main": [
+        [
+          { "node": "Gainsight — Usage (28d window)", "type": "main", "index": 0 },
+          { "node": "HubSpot — Engagements (90d)", "type": "main", "index": 0 },
+          { "node": "Gong — Calls (30d)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gainsight — Usage (28d window)": {
+      "main": [
+        [{ "node": "Score Usage (vs baseline)", "type": "main", "index": 0 }]
+      ]
+    },
+    "HubSpot — Engagements (90d)": {
+      "main": [
+        [{ "node": "Score Activity (recency-weighted)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gong — Calls (30d)": {
+      "main": [
+        [{ "node": "Claude — Score Sentiment", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Score Sentiment": {
+      "main": [
+        [{ "node": "Score Sentiment (with confidence floor)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Score Usage (vs baseline)": {
+      "main": [
+        [{ "node": "Merge Sub-scores", "type": "main", "index": 0 }]
+      ]
+    },
+    "Score Activity (recency-weighted)": {
+      "main": [
+        [{ "node": "Merge Sub-scores", "type": "main", "index": 1 }]
+      ]
+    },
+    "Score Sentiment (with confidence floor)": {
+      "main": [
+        [{ "node": "Merge Sub-scores", "type": "main", "index": 2 }]
+      ]
+    },
+    "Merge Sub-scores": {
+      "main": [
+        [{ "node": "Compute Composite", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compute Composite": {
+      "main": [
+        [{ "node": "Lookup Previous Score", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lookup Previous Score": {
+      "main": [
+        [{ "node": "Delta ≥ 5?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Delta ≥ 5?": {
+      "main": [
+        [{ "node": "Claude — Why-Changed Sentence", "type": "main", "index": 0 }],
+        [{ "node": "Compose Write-back Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Why-Changed Sentence": {
+      "main": [
+        [{ "node": "Compose Write-back Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compose Write-back Payload": {
+      "main": [
+        [{ "node": "Gainsight — Write Score Fields", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gainsight — Write Score Fields": {
+      "main": [
+        [{ "node": "Persist History (idempotent per day)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Persist History (idempotent per day)": {
+      "main": [
+        [{ "node": "Alert-worthy?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Alert-worthy?": {
+      "main": [
+        [{ "node": "Slack — Alert CS Channel", "type": "main", "index": 0 }],
+        [{ "node": "Throttle Between Batches", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack — Alert CS Channel": {
+      "main": [
+        [{ "node": "Throttle Between Batches", "type": "main", "index": 0 }]
+      ]
+    },
+    "Throttle Between Batches": {
+      "main": [
+        [{ "node": "Batch Accounts (25/group)", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "2d2d2d2d-0001-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "customer-health-score-n8n",
+  "tags": [
+    { "name": "revops" },
+    { "name": "customer-success" },
+    { "name": "scoring" }
+  ]
+}

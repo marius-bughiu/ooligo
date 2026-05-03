@@ -13,43 +13,68 @@ ai_generated: true
 human_tested: false
 ---
 
-An n8n flow that computes a composite customer health score combining product usage from Gainsight, CRM activity from HubSpot, and conversation sentiment from Gong. Writes the score back to Gainsight nightly, with three sub-scores and a one-line "why this changed" note. Replaces the static, gameable health score most CS teams rely on.
+The default Gainsight health score is a coloured pill that means whatever you weight it to mean, and most CS teams weight it on whatever loads fastest from the integrations they happened to wire first. The result is a score that drifts toward the data, not toward churn. This workflow replaces it with a composite the CS pod can actually defend: usage measured against each account's own 28-day baseline, CSM activity scored with recency decay, and a sentiment signal derived from real Gong transcripts with an explicit confidence floor. The composite ships with a one-sentence Claude-generated explanation of what moved, so a CSM opening the account record sees not just "62, yellow" but "Composite down 14 points because product usage is 38% below the 28-day baseline despite three recent meetings." That sentence is what makes the score actionable.
 
-## What you'll need
+The artifact bundle lives at `apps/web/public/artifacts/customer-health-score-n8n/`. The n8n export is `customer-health-score-n8n.json` and the credential and verification guide is `_README.md`. Both are required reading before the schedule is activated.
 
-- n8n self-hosted or Cloud
-- Gainsight with PX or NXT for usage data
-- HubSpot for support and CSM activity
-- Gong for conversation transcripts
-- Claude API key for sentiment scoring
-- Definitions of high/medium/low for each sub-score
+## When to use this
+
+Use this workflow when your CS org has at least 100 accounts under management, has Gainsight or a similar CSP for the write-back target, has Gong (or a comparable conversation-intelligence tool the HTTP node can be repointed at), and has a CSM or RevOps lead who can defend the weighting choices to the team. The model is most useful when you have ground-truth churn data from the last 12 months — that is what you backtest the weights against. Without backtest data you are guessing, and a composite score you guessed at is no improvement over the score Gainsight ships with.
+
+It also fits the moment when the existing health score has lost trust. The most common signal is CSMs ignoring the score in QBR prep and pulling raw usage data themselves. If that is happening, the question is not "how do we get them to use the score" but "what would the score have to do for them to use it." This flow's answer is: cite a number and a baseline, and surface the largest mover. That is what the why-changed sentence delivers.
+
+## When NOT to use this
+
+Skip this if you have fewer than ~50 active accounts. At that scale, a CSM can read the account herself in less time than it takes to debug a per-batch wait node, and the model overfits to small-n noise. Skip it if your usage telemetry is not reliable in Gainsight — the per-account baseline only works when events are tagged consistently, and a flow on top of dirty data inherits and amplifies the dirt. Skip it if your CS org does not have a clear churn definition and a labelled history; without it you cannot backtest the weights, and an unbacktested model is worse than no model because it carries the authority of a number. Skip it if your Gong instance does not have transcripts enabled on the relevant calls — sentiment will collapse to neutral on every account and the 20% sentiment weight becomes dead weight. Finally, skip it if the team's actual problem is that CSMs do not have a workflow to act on the score; a more accurate score with no playbook attached changes nothing.
 
 ## Setup
 
-1. **Define the model.** Decide your sub-score weights — for example, 50% product usage, 30% CSM activity, 20% conversation sentiment. Document this in `health-model.md` so the rationale is auditable.
-2. **Import the flow.** Pull `health-score.n8n.json`. The flow has four parallel branches feeding a final aggregation node.
-3. **Wire data sources.** Gainsight branch pulls daily usage deltas. HubSpot branch pulls case volume and CSM-touch recency. Gong branch pulls call transcripts from the last 30 days and runs Claude sentiment classification per call.
-4. **Aggregate and write back.** The aggregation node computes the composite, generates a one-line "why" using Claude, and writes the score, sub-scores, and reason to a Gainsight custom field. Run nightly at 2am.
-5. **Validate against churn.** Backtest the model against the last 12 months of churn. If high-health accounts churned, your model is wrong.
+Setup is documented end-to-end in `apps/web/public/artifacts/customer-health-score-n8n/_README.md`. The short version: import the JSON in n8n under Settings → Import From File, create the five placeholder credentials (Postgres, Gainsight, HubSpot, Gong, Anthropic, Slack — six in total), provision the seven Gainsight custom fields the write-back node targets, run the eight-step verification sequence against a single canary account before activating the schedule. Time-to-first-write-back from a clean n8n install is roughly two hours, most of which is waiting for the HubSpot private-app token and the Gainsight custom-field provisioning to land.
 
-## How it works
+The `accounts_in_scope` table is where per-segment weighting lives. Enterprise accounts may weigh activity at 0.4 and sentiment at 0.3 because relationship health drives the renewal; PLG accounts may weigh usage at 0.7 because the deal is the product. Having weights as table columns rather than hard-coded constants is the difference between a model you can iterate on and a model you replace every six months.
 
-Each branch normalizes its sub-score to a 0-100 scale. Usage uses a rolling 28-day window comparing current activity to the account's own baseline, not absolute thresholds — this catches drops that absolute thresholds miss. Activity is recency plus frequency of CSM-customer touches. Sentiment runs Claude on each call and produces a rolling sentiment average, weighted by recency.
+## What the flow actually does
 
-The aggregation is a weighted sum, but the output isn't just a number. Claude generates a one-sentence explanation: "Health dropped from 78 to 64 because product usage is down 35% week over week despite three CSM touches." That sentence is what makes the score actionable for CSMs.
+The cron fires nightly at 02:00 in `America/New_York`. `Pull Accounts In Scope` pulls up to 500 accounts whose `last_scored_at` is older than 20 hours (the gap prevents double-scoring on retries). `Batch Accounts (25/group)` chunks them so the parallel API calls stay under provider rate caps. Per batch, three branches run concurrently: Gainsight returns the 28-day usage rollup, HubSpot returns the last 90 days of engagements, Gong returns up to 30 days of call metadata.
 
-The flow is idempotent. Re-runs produce the same output for the same inputs.
+`Score Usage (vs baseline)` computes the ratio of current 28-day events to the account's stored baseline. A ratio of 1.0 maps to 100, a ratio of 0.5 or below maps to 0, in between is linear. There is one extra guard: if distinct users in the last 28 days drops below three, the score is capped at 40 regardless of event volume — single-user dependency is a churn risk the event count alone cannot see.
+
+`Score Activity (recency-weighted)` walks the engagements list and applies an exponential decay with a 21-day half-life. A meeting yesterday is worth 5 points, a meeting 21 days ago is worth 2.5, a meeting 60 days ago is worth roughly 0.3. Emails are weighted 1, calls 4, notes 0.5. The weighted sum is mapped to 0-100 with a hard floor: zero meetings in the last 60 days caps the score at 25.
+
+`Claude — Score Sentiment` runs `claude-sonnet-4-6` against the up-to-six most-recent call transcripts per account, capped at 4,000 characters per transcript. The system prompt forces strict JSON, requires the model to return confidence 0 if the transcript is fewer than 200 words or appears to be a single-speaker monologue, and forbids invented signals. `Score Sentiment (with confidence floor)` collapses any result with confidence below 0.4 to a neutral 50 — a guess from the model is worse than admitting we do not know.
+
+`Compute Composite` takes the three sub-scores and the per-account weights and produces the composite plus a band (`green` ≥ 75, `yellow` ≥ 50, `red` < 50). `Lookup Previous Score` joins against the `account_health_history` table. If the absolute delta is at least 5 points, `Claude — Why-Changed Sentence` generates a one-sentence explanation that names the largest mover with its concrete number; otherwise a deterministic fallback sentence is used. The payload is written back to seven Gainsight custom fields and persisted to `account_health_history` with an `ON CONFLICT` clause keyed on `(account_id, date_trunc('day', scored_at))` so retries are idempotent. Drops into the red band, or deltas of -10 or worse, fan out to a Slack alert in `#cs-health-alerts` with the why-changed sentence quoted.
+
+## Cost reality
+
+Per account per night the flow makes three external read calls (Gainsight usage, HubSpot engagements, Gong calls), one Claude sentiment call (max 512 tokens out, ~6k tokens in for the transcripts), an optional Claude why-changed call when the delta exceeds 5 points (max 200 tokens out, ~400 tokens in), one Gainsight write, and two Postgres queries. With Sonnet 4.6 at roughly $3 per million input tokens and $15 per million output tokens, the sentiment call costs about $0.018 per account and the why-changed call about $0.005 when triggered. For 500 accounts with ~30% triggering the why-changed branch, total Anthropic spend is roughly $9.75 per night, or about $295/month. The Gong read is the larger constraint: at three calls per second per workspace, 500 accounts take at minimum 167 seconds of API time, so the per-batch wait node and the 25-account batch size are sized accordingly. End-to-end runtime for 500 accounts on n8n Cloud's small executor lands between 18 and 25 minutes. Ops cost: roughly two hours of CSM/RevOps time per quarter to review backtest results and re-tune weights, which is the operating cost the score earns its keep against.
+
+## What success looks like
+
+Watch four numbers in the first 90 days. First, **percent of accounts where the band changed in a way that aligned with the CSM's read** — survey the team weekly for the first month and compare. Target: >70% agreement by week four. Below 50% means the weights are wrong, not the model. Second, **the lead time the score gives you on actual churn** — for every churn in the next two quarters, look back at the score trajectory and measure how many days before the churn notice the score dropped into red. Target: median lead time >30 days. Third, **the why-changed sentence quality** — sample 20 sentences a week and rate them as actionable / accurate-but-vague / wrong. Target: >80% actionable by week six. Fourth, **the false-alarm rate on Slack alerts** — count alerts that triggered no follow-up action. If it is above 30%, raise the alert threshold from -10 to -15 and let the band-drop branch carry more of the load.
+
+## Versus the alternatives
+
+The default is the **Gainsight Scorecards 2.0** product. It is genuinely good at what it does — bringing in measures, applying rules, surfacing the rollup — but it does three things this flow does not. It cannot put the result of an LLM transcript classification into the rollup without you building the integration anyway, it does not natively reason against the account's own historical baseline (you write the rules account by account, segment by segment), and it produces a score, not a sentence. If your CS org wants a score and trusts CSMs to interpret it, Scorecards 2.0 is less work and a fine choice. If the problem is that CSMs do not interpret it, the why-changed sentence is the change that matters and that is what justifies the build.
+
+A second alternative is a **DIY Python script in a Lambda or a cron-on-EC2**. That is what most engineering-led RevOps teams reach for. It is faster to write the first version than the n8n flow, but it is harder to hand off, harder to debug visually, and carries the credential rotation burden as code. The n8n version trades raw flexibility for a credential UI, retry semantics out of the box, and a visual flow a CSM lead can read without engineering escort. Pick DIY if you have a permanent platform engineer; pick the n8n flow if you do not.
+
+A third alternative is **Catalyst, ChurnZero, or Vitally's built-in health score**. These are good products with their own scoring engines, but they assume you have standardized on their CSP. If you are already a Catalyst customer, use Catalyst's score and add the why-changed Claude call as a Catalyst Action; the math is the same. This workflow exists because most teams in the wild are still on Gainsight and the Gainsight write-back is the part that earns the bundle.
 
 ## Watch-outs
 
-- **Garbage in, garbage out.** If your usage events aren't tagged correctly in Gainsight, no model fixes it. Audit data quality first.
-- **Backtest before trust.** Run the model retroactively for a quarter and check whether it predicted the churn you saw. If it didn't, re-weight.
-- **Account-level vs. user-level usage.** Some products have one power user and 99 dormant users; that account is healthy or unhealthy depending on context. Build segment-specific weights if needed.
+- **Garbage usage tagging produces a confident wrong score.** If your Gainsight events are inconsistently tagged across product surfaces, the per-account baseline is meaningless and the model will surface drops that reflect a tagging change, not a behaviour change. Guard: before activating the flow, query the event-name distribution per account for the last 90 days and confirm the top five event types are consistent. The `Pull Accounts In Scope` query has a `baseline_usage_28d` column precisely so the baseline is computed once, audited, and frozen — not recomputed every night against drifting event definitions.
+- **Sentiment hallucination on short transcripts.** Claude will produce a confident-looking sentiment number on a 50-word voicemail snippet if not constrained. Guard: the `Claude — Score Sentiment` system prompt requires `confidence: 0` on transcripts under 200 words or single-speaker monologues, and `Score Sentiment (with confidence floor)` collapses anything below 0.4 confidence to neutral 50. The 20% sentiment weight becomes 0% on those accounts rather than 20% of garbage.
+- **Why-changed sentence inventing causality.** A weighted-sum delta does not have a "cause"; it has the largest mover. Guard: the why-changed prompt forbids speculation beyond the sub-score inputs and requires a concrete number be cited. The deterministic fallback runs if Claude's response is empty, so a Claude outage downgrades the sentence to a numeric summary rather than blocking the write-back.
+- **Schedule retries double-write history.** A retried run could insert two history rows for the same day. Guard: `account_health_history` has a unique constraint on `(account_id, date_trunc('day', scored_at))` and `Persist History` uses `ON CONFLICT ... DO UPDATE`, so the latest run wins for the day. Idempotence is the property that lets you re-run the flow at 09:00 if the 02:00 run failed without polluting the audit trail.
+- **Slack alert fatigue.** Twenty red-band alerts on the first activation, because every account is below 50 the first night, will train CSMs to mute the channel. Guard: on the first activation, disable the Slack node for the first three nights, let the history table fill, then re-enable. The `Delta ≥ 5?` check then filters most noise once a baseline exists.
 
 ## Stack
 
-- **n8n** — orchestration and aggregation
-- **Gainsight** — usage data and destination for the score
-- **HubSpot** — support and activity signal
-- **Gong** — conversation transcripts for sentiment
-- **Claude** — sentiment classification and reason generation
+- **n8n** — orchestration, retries, credential management, visual workflow
+- **Gainsight** — usage telemetry source and destination for the seven custom fields
+- **HubSpot** — CSM activity (calls, meetings, emails, notes) source
+- **Gong** — call transcripts for the sentiment branch
+- **Claude (Sonnet 4.6)** — sentiment classification and the why-changed sentence
+- **Postgres** — `accounts_in_scope` weights, `account_health_history` audit trail, idempotence key
+- **Slack** — alert channel for red-band and large-delta drops

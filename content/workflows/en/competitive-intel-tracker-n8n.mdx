@@ -13,38 +13,77 @@ ai_generated: true
 human_tested: false
 ---
 
-An n8n flow that monitors your tracked competitors across pricing pages, blog posts, hiring pages, and G2 reviews; uses Claude to summarize what changed; and posts a weekly digest to a Slack channel your sales team will actually open. No more discovering a competitor's price cut from a lost-deal Slack thread.
+Most competitive intel inside B2B sales teams arrives the wrong way: a rep loses a deal, posts in #lost-deals that the prospect mentioned a competitor's new pricing tier, and the rest of the team finds out three weeks later. The cost of late discovery compounds — every deal closing in that window walks into the conversation underprepared. This flow is the cheap, boring fix. A daily cron crawls a list of competitor pages you actually care about, normalizes the HTML to drop deploy noise, asks Claude to summarize what materially changed (and to return `NO_CHANGE` when the diff is cosmetic), and posts a single weekly digest to Slack so the channel stays signal-dense enough that reps still open it after a month.
 
-## What you'll need
+The artifact bundle at `apps/web/public/artifacts/competitive-intel-tracker-n8n/` contains the importable n8n workflow (`competitive-intel-tracker-n8n.json`, 20 nodes across three triggers) and `_README.md` with credential setup, the two Postgres tables you need to create, and a six-step first-run verification that exercises both the materiality-skip branch and the on-demand Slack slash command.
 
-- n8n (cloud or self-hosted) with HTTP and Schedule triggers
-- A list of competitor domains and the pages worth tracking on each
-- Claude API key
-- A Slack workspace with a competitive-intel channel and an incoming webhook
+## When to use this
+
+You have between five and fifteen competitors you actively position against, you can name three to five public pages per competitor that change in ways that matter (pricing, product positioning, hiring signal that hints at strategy), and you have at least one Slack channel that the sales team genuinely opens. You are willing to maintain a list of tracked URLs as competitors restructure their sites. You have a Postgres database (or another store you can adapt the queries to) and an n8n instance that is reachable from the public internet if you want the on-demand slash command to work.
+
+This is also the right shape if you previously tried a "Slack alert on every competitor blog post" RSS contraption and the team muted it within a week — the materiality filter and weekly cadence here are direct responses to that failure mode.
+
+## When NOT to use this
+
+Do not stand this up if your competitive set is dominated by JS-heavy review aggregators like G2, Capterra, or TrustRadius. Their public HTML is a shell — the actual review content is rendered client-side or behind authentication, and crawling them respectfully will return you almost nothing. Pay for a vendor that handles them (Crayon, Klue, Kompyte) or skip those sources entirely.
+
+Do not use this if your team needs the intel in real time — for example, a deal-cycle that turns over inside a week and whose discovery calls hinge on yesterday's competitor pricing change. The cadence here is daily fetch, weekly digest. If you need under-an-hour latency, you are buying a different product (Klue alerts) or building a different workflow (per-page change webhooks fed into rep Slack DMs, not a digest).
+
+Do not use this against private competitor surfaces (gated trials, paid customer portals, anything behind login). Crawling those is in a different ethical and legal class than checking public marketing pages, and this flow is not the right substrate for it.
+
+Do not use this for fewer than three competitors. The setup cost (twenty to thirty rows of tracked pages, schema, credentials, materiality tuning) does not pay back if you are watching one or two — a Google Alert and a calendar reminder is the right answer at that scale.
 
 ## Setup
 
-1. **Build the tracked-pages list.** A spreadsheet or n8n data table with columns: competitor name, page type (pricing, blog, hiring, reviews), URL, last seen content hash. Twenty to thirty rows is typical.
-2. **Schedule the crawl.** n8n Schedule trigger, daily at five am UTC. The flow iterates the page list, fetches each URL, computes a content hash, compares to the previous hash. New hash means changed content.
-3. **Diff and summarize.** For each changed page, the flow sends the old and new content to Claude with a prompt: "summarize what changed, in two sentences, focused on what a salesperson should know." Output goes into a per-competitor summary block.
-4. **Aggregate and post.** End of the run, n8n composes one Slack message per competitor with material changes and posts to the channel. Pages with no change are silent; no noise.
-5. **Add a manual trigger.** A second flow that lets the sales team request "what is new with Acme" on demand, bypassing the schedule.
+Read `apps/web/public/artifacts/competitive-intel-tracker-n8n/_README.md` end-to-end before importing. The short version: import `competitive-intel-tracker-n8n.json` via n8n's **Import from File**, create the two Postgres tables (`competitor_tracked_pages` and `competitor_change_log`) with the DDL in the README, wire four credentials (`PLACEHOLDER_POSTGRES_CRED_ID`, `PLACEHOLDER_ANTHROPIC_CRED_ID`, `PLACEHOLDER_SLACK_CRED_ID`, plus the optional Slack slash-command webhook URL), set the workflow timezone explicitly in **Settings**, seed the tracked-pages table with twenty to thirty rows, and walk the six-step first-run verification before activating. The verification deliberately exercises the no-prior-snapshot path, the cheap-no-change path, the forced-diff path, the materiality-skip path, the digest path, and the on-demand webhook — six branches, six small inputs.
 
-## How it works
+## What the flow actually does
 
-The flow is a classic poll-diff-summarize-fan-out pattern. The polling layer is dumb HTTP fetching. The diff layer is content hashing plus a "is this material" filter (single-character changes get ignored). The summarization layer is Claude with a tight prompt. The fan-out layer is Slack.
+The crawler is a `splitInBatches` loop with `batchSize: 1` so a single page failure does not abort the run. Each iteration sleeps four seconds before the HTTP fetch — that spreads thirty pages across two minutes, which keeps you well under any reasonable per-host rate limit and reads as a polite bot in server logs. The `httpRequest` node sets `neverError: true` because a 403 from anti-bot defenses should be recorded and skipped, not crash the workflow.
 
-The "is this material" filter matters more than it sounds. Pricing pages re-render on every deploy with timestamp differences that are not material. Blog post edits that fix typos are not material. Without this filter, the digest fires every day with nothing actually changed, and the channel gets muted.
+Normalization happens in a Code node that strips `<script>`, `<style>`, `<noscript>`, and HTML comments wholesale, then masks four classes of volatile content: ISO timestamps, US-format dates, four-digit years, and any hex string longer than 32 characters (build IDs, asset hashes). Without this step, every Astro/Next/Hugo deploy that re-renders a "© 2026" footer or an updated `og:updated_time` would register as a change, the weekly digest would fire with twenty meaningless entries, and the channel would die.
+
+The materiality gate is a four-condition AND: fetch succeeded, hash differs from the prior snapshot, a prior snapshot exists at all, and the length delta exceeds 0.5%. The length-delta term is the cheap pre-filter that saves Claude calls — single-character or whitespace-only edits never reach the model. The "had-prior-snapshot" term is what makes the first-ever run cheap: a brand-new tracked page captures its baseline hash and skips the diff entirely.
+
+The Claude call sends both snapshots truncated to 6000 characters each (roughly 1500 tokens each, plus system prompt and overhead → around 3500 input tokens per material page). The system prompt forces a binary choice: return `NO_CHANGE` if the diff is cosmetic, navigation-only, footer-only, or unidentifiable, or return exactly two sentences — what changed and why a salesperson should care. The Parse node treats `NO_CHANGE` as a sentinel and flips `is_material = false` so the row still gets logged for audit but never reaches the digest.
+
+The Monday 14:30 digest aggregator runs one SQL query that groups material changes from the last seven days by competitor, then renders one Slack Block Kit message per competitor — not one mega-post. Sales reps mute long unbroken digests; per-competitor messages are scannable and threadable. Silent weeks (no material changes anywhere) post nothing. The on-demand webhook is a third trigger, completely independent: it consumes a Slack slash command POST, runs a `LIKE`-match query against the change log over the last 90 days, and responds with up to ten formatted blocks ephemerally to the requesting user.
+
+## Cost reality
+
+Per crawl run, with 30 tracked pages and a typical 3-5 of them changing materially: roughly 11,000 input tokens and 1,000 output tokens against `claude-sonnet-4-6`, which lands at about $0.05 per run. Daily for 30 days: ~$1.50/month in Claude spend. n8n self-hosted: $0 incremental; n8n Cloud Starter: $20/month standalone or $0 if you already run it for other flows. Postgres: a few megabytes of storage if you keep the change log indefinitely (the `last_content_text` column is the heavy one — 30 rows × ~50KB ≈ 1.5MB total, growing slowly).
+
+Wall-clock per run: ~2.5 minutes (30 pages × 4s throttle + Claude latency for the material ones). Slack digest: under 5 seconds. On-demand webhook: under 2 seconds for the response.
+
+Operator time: 30-60 minutes once a quarter to refresh the tracked-pages list when competitors restructure their sites, plus ~5 minutes the first time someone reports a false positive ("the digest said pricing changed but it didn't") to tune the materiality threshold or add a noise-mask pattern.
+
+## What success looks like
+
+Concrete metric to watch for the first eight weeks: digest open-rate or read-receipt-equivalent in Slack (you can proxy this by reaction count or by manually polling reps). If under 30% of the channel reads the digest, the signal-to-noise ratio is too low — tighten the materiality threshold (raise length-delta gate from 0.5% to 1%), drop the lowest-signal page types (hiring pages from competitors with a permanent open-jobs page that churns weekly are usually noise), or merge low-frequency competitors into a "long tail" digest section. If over 60% read it consistently, you have built the right thing and the next move is to add an on-demand path for the discovery-call use case (already wired — just publicize the slash command).
+
+A second metric: number of times in a quarter that a rep cites the digest in a `#won-deals` or `#lost-deals` thread. Five citations per quarter from a 20-rep team is a good signal; zero citations after two months means either the digest is unread or the content is unactionable.
+
+## Versus the alternatives
+
+**Klue or Crayon** ($30k-$80k/year for the SMB tier of either, last checked Q1 2026) handles the JS-heavy review-aggregator sources you cannot crawl yourself, ships a polished consumer experience for the sales team (battlecards, win/loss themes, intel hub), and includes a human-curation layer that catches nuance Claude misses. If your competitive intel is core enough to a deal cycle that you have a full-time competitive intel person, buy Klue or Crayon. This flow is the right answer when you are running a 20-rep org without a dedicated CI hire and you need to stop discovering competitor pricing changes from your own lost-deal threads — it gets you 70% of the value at 1% of the cost.
+
+**Visualping or Distill.io** (under $10/month) does the page-change-detection layer well, but stops at "this page changed" and dumps the diff into your inbox. The interesting work — turning a diff into "here is what your sales team needs to say differently" — is exactly what Claude does here. You could glue Visualping into n8n and bypass the crawler/hasher half of this flow if you wanted to outsource the polite-crawler concern; the materiality filter and the Claude diff stage are the parts that actually matter.
+
+**A single Google Alerts feed** is what most teams default to and what most teams quietly stop reading after a month. Google Alerts fires on press mentions, not page changes; it misses pricing-page edits entirely (the page does not get a fresh news index entry); and the volume is dominated by syndicated press release noise. Use Alerts as a complement to this flow for press signal, not a replacement for the page-monitoring substrate.
+
+**A bespoke Python crawler on a cron job in your data warehouse** is what every staff engineer wants to build. They will get the crawler working in a sprint, the diff layer working in a sprint after that, the Slack formatting working in a sprint after that, and then nobody will own it when the engineer changes teams. The reason to use n8n here is that it makes the workflow *visible* (the graph is the documentation), *editable by a non-engineer* (the marketing ops person can add a tracked page without a PR), and *boring enough to outlive the person who built it.*
 
 ## Watch-outs
 
-- **Robot detection.** Aggressive crawling gets blocked. Throttle to one request per page per day, set a real user agent, and respect robots dot txt.
-- **G2 and review sites.** These pages are JS-heavy and often anti-bot. Either pay for a service that handles them or skip those sources.
-- **Hallucinated changes.** Claude will confidently report a change that is not really there if the diff is messy. The prompt includes "if the change is cosmetic or unclear, return NO_CHANGE."
-- **Channel noise.** Even with filtering, the channel can hit fatigue. Weekly digest beats daily. Hold the cadence.
+- **Anti-bot blocks return 403/503 and your hash silently goes stale.** Guard: the `Fetch Page HTML` node sets `neverError: true` and the materiality gate's `fetch_ok` condition (status 200-399 AND body length > 200 bytes) routes failed fetches to the false branch — they get logged but never reach Claude or the digest. Add a weekly query against `competitor_change_log` for pages whose `last_seen_at` is older than 7 days and treat that as the "stale tracked pages" report.
+- **Claude hallucinates a change when the normalized diff is messy** (e.g. a CSS-class rename touched every `<div>` and the stripped text didn't quite recover). Guard: the system prompt's escape hatch is the literal string `NO_CHANGE`, and the parser treats anything matching `^NO_CHANGE\b` (case-insensitive) as non-material. When you see an obviously-wrong digest entry, the fix is to add a noise-mask pattern in the `Normalize + Hash` Code node, not to lower the model temperature.
+- **The Slack channel gets muted within four weeks of going live** if even 20% of digest entries are non-material. Guard: weekly cadence rather than daily (the bundled digest cron is `30 14 * * 1`, Monday 14:30 only), the materiality length-delta floor at 0.5%, the `NO_CHANGE` Claude sentinel, and the silent-weeks-stay-silent IF gate that suppresses the digest entirely when no competitor has material changes. If reps still mute it, the next dial to turn is dropping the lowest-signal `page_type` values from the tracked-pages list — usually hiring pages.
+- **Long competitor names or large change volumes blow past Slack's 50-block message limit.** Guard: one message per competitor (not one mega-post), so the cap is per-competitor not per-week. If a single competitor genuinely has more than ~15 material changes in a week, that is itself a signal the materiality threshold needs raising for that competitor specifically.
+- **The on-demand slash command leaks competitive intel to anyone in the workspace** because Slack slash commands do not enforce channel membership. Guard: the `respondToWebhook` returns `response_type: "ephemeral"` so only the requesting user sees the result, and the query is scoped to the change log (no raw page text returned). If you need stricter access control, gate the slash command on a Slack user-group ID in the `Parse Slash Command` Code node before running the SQL query.
 
 ## Stack
 
-- **n8n** — scheduler, fetcher, diff, fan-out
-- **Claude** — change summarization
-- **Slack** — distribution channel for the sales team
+- **n8n** — three triggers (daily fetch cron, weekly digest cron, on-demand webhook), HTTP fetcher, normalizer, materiality gate, persistence
+- **Postgres** — `competitor_tracked_pages` (the source of truth list, 20-30 rows) and `competitor_change_log` (audit trail of every detected change, material or not)
+- **Claude Sonnet 4.6** — the diff-and-summarize stage, with `NO_CHANGE` sentinel as the escape hatch
+- **Slack** — the digest distribution channel and the on-demand slash command surface

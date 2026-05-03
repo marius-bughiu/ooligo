@@ -1,0 +1,374 @@
+{
+  "name": "HubSpot webhook handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hubspot/events",
+        "responseMode": "responseNode",
+        "responseCode": 200,
+        "options": {
+          "rawBody": true,
+          "responseHeaders": {
+            "entries": [
+              { "name": "content-type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000001",
+      "name": "Webhook — HubSpot Inbound",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 360],
+      "webhookId": "hubspot-events-prod",
+      "notesInFlow": true,
+      "notes": "POST /hubspot/events. responseMode=responseNode so we ack only after dedupe ledger insert succeeds. rawBody=true is REQUIRED — HMAC v3 signs the exact bytes HubSpot sent, not a re-serialized JSON."
+    },
+    {
+      "parameters": {
+        "jsCode": "// HubSpot Signature v3 verification.\n// Reference: https://developers.hubspot.com/docs/api/webhooks/validating-requests\n//\n// v3 signs: METHOD + URI + RAW_BODY + TIMESTAMP\n// Algo: HMAC-SHA256, key = app client secret, output = base64\n// Reject if timestamp is older than 5 minutes (replay window).\n\nconst crypto = require('crypto');\n\nconst clientSecret = $env.HUBSPOT_CLIENT_SECRET;\nif (!clientSecret) {\n  throw new Error('HUBSPOT_CLIENT_SECRET env var not set on the n8n instance');\n}\n\nconst headers = $json.headers || {};\nconst sig = headers['x-hubspot-signature-v3'];\nconst tsHeader = headers['x-hubspot-request-timestamp'];\nconst rawBody = $json.body && typeof $json.body === 'string'\n  ? $json.body\n  : JSON.stringify($json.body || {});\n\nif (!sig || !tsHeader) {\n  return [{ json: { __valid: false, __reason: 'missing-signature-headers', __status: 401 } }];\n}\n\nconst tsMs = Number(tsHeader);\nif (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {\n  return [{ json: { __valid: false, __reason: 'timestamp-out-of-window', __status: 401 } }];\n}\n\n// HubSpot Workflows webhooks POST to a fixed path; reconstruct full URL exactly as HubSpot saw it.\nconst publicBaseUrl = $env.N8N_WEBHOOK_PUBLIC_BASE_URL; // e.g. https://n8n.example.com\nconst path = '/webhook/hubspot/events';\nconst uri = `${publicBaseUrl}${path}`;\nconst payload = `POST${uri}${rawBody}${tsHeader}`;\n\nconst expected = crypto\n  .createHmac('sha256', clientSecret)\n  .update(payload, 'utf8')\n  .digest('base64');\n\n// Constant-time compare.\nconst a = Buffer.from(sig);\nconst b = Buffer.from(expected);\nconst valid = a.length === b.length && crypto.timingSafeEqual(a, b);\n\nif (!valid) {\n  return [{ json: { __valid: false, __reason: 'hmac-mismatch', __status: 401 } }];\n}\n\n// Parse the body now that the signature is verified.\nlet parsed;\ntry {\n  parsed = JSON.parse(rawBody);\n} catch (e) {\n  return [{ json: { __valid: false, __reason: 'invalid-json', __status: 400 } }];\n}\n\n// HubSpot batches events; emit one item per event so downstream can route per-event.\nconst events = Array.isArray(parsed) ? parsed : [parsed];\nreturn events.map(ev => ({\n  json: {\n    __valid: true,\n    eventId: String(ev.eventId ?? ev.subscriptionId ?? ''),\n    subscriptionType: ev.subscriptionType,\n    objectId: ev.objectId,\n    portalId: ev.portalId,\n    occurredAt: ev.occurredAt,\n    propertyName: ev.propertyName,\n    propertyValue: ev.propertyValue,\n    changeSource: ev.changeSource,\n    raw: ev,\n  }\n}));\n"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000002",
+      "name": "Verify HMAC + Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 360],
+      "notesInFlow": true,
+      "notes": "HubSpot Signature v3. Constant-time compare. Rejects timestamps >5min old. rawBody must be the exact bytes HubSpot sent — set rawBody=true on the Webhook node."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-only",
+              "leftValue": "={{ $json.__valid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equal" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000003",
+      "name": "If Signature Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO hubspot_event_ledger (event_id, subscription_type, object_id, portal_id, occurred_at, raw_payload, received_at)\nVALUES ($1, $2, $3, $4, to_timestamp($5 / 1000.0), $6::jsonb, now())\nON CONFLICT (event_id) DO NOTHING\nRETURNING event_id;",
+        "options": {
+          "queryReplacement": "={{ $json.eventId }},{{ $json.subscriptionType }},{{ $json.objectId }},{{ $json.portalId }},{{ $json.occurredAt }},{{ JSON.stringify($json.raw) }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000004",
+      "name": "Dedupe Ledger Insert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [900, 280],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — hubspot-ledger"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Idempotency keystone. UNIQUE INDEX on event_id + ON CONFLICT DO NOTHING means duplicate deliveries return zero rows and skip the rest of the branch."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "first-time-only",
+              "leftValue": "={{ $json.event_id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "exists" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000005",
+      "name": "If New Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1120, 280],
+      "notesInFlow": true,
+      "notes": "Empty result from INSERT means duplicate — short-circuit to OK ack."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "typeValidation": "strict" }, "conditions": [{ "id": "r1", "leftValue": "={{ $('Verify HMAC + Parse').item.json.subscriptionType }}", "rightValue": "deal.propertyChange", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "outputKey": "deal-stage" },
+            { "conditions": { "options": { "typeValidation": "strict" }, "conditions": [{ "id": "r2", "leftValue": "={{ $('Verify HMAC + Parse').item.json.subscriptionType }}", "rightValue": "contact.creation", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "outputKey": "contact-created" },
+            { "conditions": { "options": { "typeValidation": "strict" }, "conditions": [{ "id": "r3", "leftValue": "={{ $('Verify HMAC + Parse').item.json.subscriptionType }}", "rightValue": "ticket.propertyChange", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "outputKey": "ticket-update" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000006",
+      "name": "Switch — Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1340, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#revops-pipeline\",\n  \"text\": \"Deal stage change: {{ $('Verify HMAC + Parse').item.json.objectId }} → {{ $('Verify HMAC + Parse').item.json.propertyValue }}\"\n}",
+        "options": {
+          "retry": { "tryCount": 5, "waitBetweenTries": 1000 }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000007",
+      "name": "Branch — Deal Stage → Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.example-internal.com/contacts/created",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"hubspot_event_id\": \"{{ $('Verify HMAC + Parse').item.json.eventId }}\",\n  \"contact_id\": {{ $('Verify HMAC + Parse').item.json.objectId }},\n  \"portal_id\": {{ $('Verify HMAC + Parse').item.json.portalId }},\n  \"occurred_at\": {{ $('Verify HMAC + Parse').item.json.occurredAt }}\n}",
+        "options": {
+          "retry": { "tryCount": 5, "waitBetweenTries": 2000 }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000008",
+      "name": "Branch — Contact Created → Internal API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.example-zendesk.com/v2/tickets/sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"hubspot_event_id\": \"{{ $('Verify HMAC + Parse').item.json.eventId }}\",\n  \"ticket_id\": {{ $('Verify HMAC + Parse').item.json.objectId }},\n  \"property\": \"{{ $('Verify HMAC + Parse').item.json.propertyName }}\",\n  \"value\": \"{{ $('Verify HMAC + Parse').item.json.propertyValue }}\"\n}",
+        "options": {
+          "retry": { "tryCount": 5, "waitBetweenTries": 2000 }
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000009",
+      "name": "Branch — Ticket Update → Sync",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO hubspot_unhandled_events (event_id, subscription_type, raw_payload, received_at)\nVALUES ($1, $2, $3::jsonb, now())\nON CONFLICT (event_id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ $('Verify HMAC + Parse').item.json.eventId }},{{ $('Verify HMAC + Parse').item.json.subscriptionType }},{{ JSON.stringify($('Verify HMAC + Parse').item.json.raw) }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000a",
+      "name": "Branch — Unknown Type → Park",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 520],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — hubspot-ledger"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Schema-drift guard: park unknown subscription types in a separate table for human review instead of crashing."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"eventId\": \"{{ $('Verify HMAC + Parse').item.json.eventId }}\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000b",
+      "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 360]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": false,\n  \"reason\": \"{{ $json.__reason }}\"\n}",
+        "options": {
+          "responseCode": "={{ $json.__status || 401 }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000c",
+      "name": "Respond 401 Reject",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {},
+      "id": "2d2d2d2d-0001-0000-0000-00000000000d",
+      "name": "On Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 760]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#alerts-revops\",\n  \"text\": \":rotating_light: HubSpot webhook handler failure\\n*workflow*: {{ $json.workflow.name }}\\n*node*: {{ $json.execution.lastNodeExecuted }}\\n*error*: {{ $json.execution.error.message }}\\n*executionId*: {{ $json.execution.id }}\"\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000e",
+      "name": "Slack — Failure Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 760],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook — HubSpot Inbound": {
+      "main": [
+        [{ "node": "Verify HMAC + Parse", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verify HMAC + Parse": {
+      "main": [
+        [{ "node": "If Signature Valid", "type": "main", "index": 0 }]
+      ]
+    },
+    "If Signature Valid": {
+      "main": [
+        [{ "node": "Dedupe Ledger Insert", "type": "main", "index": 0 }],
+        [{ "node": "Respond 401 Reject", "type": "main", "index": 0 }]
+      ]
+    },
+    "Dedupe Ledger Insert": {
+      "main": [
+        [{ "node": "If New Event", "type": "main", "index": 0 }]
+      ]
+    },
+    "If New Event": {
+      "main": [
+        [{ "node": "Switch — Event Type", "type": "main", "index": 0 }],
+        [{ "node": "Respond 200 OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "Switch — Event Type": {
+      "main": [
+        [{ "node": "Branch — Deal Stage → Slack", "type": "main", "index": 0 }],
+        [{ "node": "Branch — Contact Created → Internal API", "type": "main", "index": 0 }],
+        [{ "node": "Branch — Ticket Update → Sync", "type": "main", "index": 0 }],
+        [{ "node": "Branch — Unknown Type → Park", "type": "main", "index": 0 }]
+      ]
+    },
+    "Branch — Deal Stage → Slack": {
+      "main": [
+        [{ "node": "Respond 200 OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "Branch — Contact Created → Internal API": {
+      "main": [
+        [{ "node": "Respond 200 OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "Branch — Ticket Update → Sync": {
+      "main": [
+        [{ "node": "Respond 200 OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "Branch — Unknown Type → Park": {
+      "main": [
+        [{ "node": "Respond 200 OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "On Error": {
+      "main": [
+        [{ "node": "Slack — Failure Alert", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "errorWorkflow": ""
+  },
+  "versionId": "2d2d2d2d-0001-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "webhook-handler-hubspot",
+  "tags": [
+    { "name": "revops" },
+    { "name": "webhook" },
+    { "name": "hubspot" }
+  ]
+}

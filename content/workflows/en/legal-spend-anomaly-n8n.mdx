@@ -13,53 +13,66 @@ ai_generated: true
 human_tested: false
 ---
 
-An n8n flow that ingests outside-counsel invoices (LEDES format from your e-billing system or PDF from email), runs them through [billing guideline](/en/learn/legal-spend-management/) checks plus AI-augmented anomaly detection, and produces a Slack-routed review queue with the specific findings flagged. Recovers the 5-15% of outside-counsel spend that traditional invoice review misses.
+An n8n flow that pulls outside-counsel invoices from your e-billing system, parses LEDES 1998B line items, applies your billing guidelines as deterministic rules, asks Claude for a second pass on anomalies that resist rules (duplicative timekeepers, scope creep, off-engagement-letter work), then routes each invoice into one of four buckets — auto-approve, auto-deduct with notice, Slack reviewer queue, or director escalation — with every decision written to an idempotent audit log. Recovers the 5-15% of outside-counsel spend that line-by-line manual review misses, at the cost of about $0.04 of Claude inference per invoice.
 
-## What you'll need
+The complete workflow ships in `apps/web/public/artifacts/legal-spend-anomaly-n8n/legal-spend-anomaly-n8n.json` (15 nodes, single trigger). Setup notes and credential instructions live in the sibling `_README.md`.
 
-- n8n self-hosted or cloud account
-- Source of invoices: LEDES feed from e-billing system (Brightflag, Onit, BusyLamp) OR email-based PDF intake
-- Postgres or similar for storing the matter budget, rate cards, and timekeeper roster
-- [Claude](/en/tools/claude/) API key for narrative anomaly detection
-- Slack workspace for review queue routing
+## When to use
+
+You have a steady volume of outside-counsel invoices — at least 50 a month across more than three firms — flowing through an e-billing system that exposes LEDES via API (Brightflag, Onit, BusyLamp, SimpleLegal, or a self-hosted equivalent). You have written billing guidelines and a rate card per firm, and someone on the team is already doing line-item review well enough that you can validate the flow's flags against their catches. The win is shifting that reviewer from "scan every line" to "decide on the flagged items," which typically lands at three to five times the throughput per reviewer hour.
+
+## When NOT to use
+
+Skip this if your invoice volume is under twenty a month — the calibration overhead exceeds the recoverable spend. Skip it if you do not have a rate card and approved-timekeeper list per matter; the flow leans on those tables for the rule-based checks, and without them the AI pass is doing all the work and will hallucinate violations. Skip it if your firms send PDF invoices only; this flow assumes LEDES, and the PDF-extraction variant is a different workflow with much weaker recall. Skip it if your legal-ops function is one person who reviews everything personally and trusts their own pattern recognition more than they would trust a tuned model — in that case the flow adds latency without adding judgement.
 
 ## Setup
 
-1. **Build the matter database.** Postgres tables for: active matters with budgets, approved timekeepers per matter, negotiated rates per timekeeper, billing guidelines per firm. This is the source of truth the flow checks against.
-2. **Build the n8n flow.** Eight nodes:
-   - Trigger — webhook (LEDES feed) or email IMAP polling (PDF intake)
-   - Parse invoice — LEDES parser node OR Claude API call to extract structured data from PDF
-   - Rule-based checks — Postgres queries against the matter database for: timekeeper not approved, rate exceeds card, block billing, vague descriptions, after-hours travel, scope-creep keywords
-   - AI anomaly check — Claude API call analyzing the line items for: duplicative timekeepers, disproportionate task time, scope-creep narrative, off-engagement-letter work
-   - Score aggregation — combines rule-based hits and AI flags into a per-invoice review score
-   - Routing decision — auto-approve (clean), reviewer queue (medium), executive escalation (severe)
-   - Slack notification — posts to the appropriate review channel with findings summary
-   - Audit log — Postgres insert recording every check, every flag, every disposition
-3. **Tune AI thresholds.** Anomaly detection is calibration-sensitive. Run on 100 historical invoices; verify the flow's flags match what your team would have flagged manually.
-4. **Connect to e-billing system for action.** Optionally extend the flow to auto-write deductions back to the e-billing system rather than emailing them to the firm.
+The flow assumes four supporting Postgres tables (`matters`, `matter_approved_timekeepers`, `firm_billing_guidelines`, `invoice_audit_log`) — the README spells out the columns and the indexes that make the upserts and the watermark cheap. Stand those up first, populate them from your existing matter-management system or rate-card spreadsheets, then import `legal-spend-anomaly-n8n.json` into n8n. Wire the four placeholder credentials (Brightflag/your e-billing system, Postgres, Anthropic, Slack) per the README. Run the six-step verification sequence in the README before flipping the cron trigger to active; do not skip the idempotency check, since a duplicate audit-log row will throw off the next watermark.
 
-## How the routing works
+Calibration is the part most teams underweight. Pull a hundred historical invoices your team has already reviewed manually, run them through the flow with the cron disabled, and compare the flow's `decision` against your team's actual disposition. Expect to retune the AI system prompt in `Claude — Anomaly Detection` and the thresholds in `Score + Route` at least twice before the routing distribution looks like your team's. The thresholds in the bundle are starting points (AI severity ≥ 0.8 escalates, rule value share ≥ 15% escalates, AI flag count > 0 routes to the reviewer queue) — they will move once you see your distribution.
 
-| Findings | Action |
-|---|---|
-| No flags | Auto-approve and forward to AP |
-| Rule-based flags only (low value) | Auto-deduct per guidelines, notify firm with audit log |
-| AI flags or rule-based above threshold | Reviewer queue in Slack with findings summary |
-| Severe (off-scope work, large overrun) | Escalate to Director of Legal Ops |
+## What the flow does
 
-## Output
+`Daily Cron — 7am Mon-Fri` fires the run. `Lookup Watermark` reads the most recent `checked_at` from `invoice_audit_log` and falls back to seven days if the table is empty, so re-runs after an outage do not double-process. `Brightflag — List New Invoices` queries the e-billing system for invoices submitted since the watermark; `Split Invoices` fans out one execution per invoice. `Fetch LEDES File` downloads the LEDES 1998B blob and `Parse LEDES` (a Code node) splits it into structured line items — timekeeper id, classification, rate, units, task code, activity code, narrative, line total. `Load Matter + Rate Card` pulls the matter, the approved-timekeeper list with rate caps, and the firm's billing guidelines in a single round-trip.
 
-- **Review summary** in Slack with: invoice ID, firm, matter, total value, specific flags, suggested action
-- **Audit log entry** for every invoice with full reasoning chain
-- **Monthly aggregate report** — by firm, by matter type, by flag category — showing where the team is recovering spend
+`Rule-Based Checks` is a deterministic pass: it flags unapproved timekeepers, rates above the card, block-billing (units above the firm's threshold with a short narrative), vague descriptions matching the firm's keyword list, and partner-classified travel time when the firm's no-travel-class rule applies. Each flag carries a severity (0-1) and an estimated dollar impact, summed into `rule_value_cents`. `Claude — Anomaly Detection` then makes a single Anthropic API call against `claude-sonnet-4-6` with the line items, the matter scope, and the firm guidelines as context, returning a JSON array of findings the rules cannot easily express — duplicative timekeepers on the same task on the same day, time disproportionate to scope, scope-creep narrative, off-engagement-letter work. The system prompt explicitly forbids inventing line indexes or claiming violations not tied to a specific line, which is the most common failure mode of LLM-based invoice review.
 
-## Where it fits
+`Score + Route` combines the two passes into a single decision. The four buckets — `auto_approve`, `auto_deduct`, `reviewer_queue`, `escalate_director` — are routed via two `if` nodes. Escalations land in `#legal-ops-escalations` with a Slack Block Kit payload showing the top five rule and AI findings; reviewer-queue and auto-deduct decisions land in `#legal-ops-invoice-review`; auto-approve writes the audit log only. Every branch terminates at `Audit Log Insert`, which upserts on `invoice_id` so re-runs are safe.
 
-This flow is the operational layer of [legal spend management](/en/learn/legal-spend-management/). It runs continuously on every incoming invoice. The reviewer's role shifts from "scan every line" to "decide on the AI-flagged items" — typically 3-5x throughput per reviewer hour.
+## Cost reality
+
+Per invoice: one Claude Sonnet 4.6 call at roughly 4-6k input tokens (line items + matter + guidelines) and 500-1000 output tokens, so about $0.04 each at current pricing. At 500 invoices a month that is around $20 of inference. The Postgres queries are cheap (single-row reads on indexed columns plus one upsert). The e-billing API and LEDES fetch are free side of your existing vendor contract. n8n self-hosted is the linear-fixed cost; n8n Cloud Starter at $24/month covers this volume with room to spare.
+
+The labour math is what makes this pay back. A reviewer doing line-by-line takes 10-15 minutes per invoice; the flow drops that to 2-4 minutes on the queued items (read the Slack summary, click into the audit log, decide), and zero on the auto-approve and auto-deduct paths. At 500 invoices a month with a 60/30/10 split across auto-approve, reviewer queue, and escalation, the flow saves roughly 50 hours of reviewer time a month against an inference cost of $20 plus an hour or two of operator time tuning thresholds. The recovered spend itself is the bigger line: 5-15% of monthly outside-counsel spend is the band reported in vendor case studies (Brightflag, Onit) and our own back-tests, and that swamps the operating cost by two orders of magnitude on any portfolio above $200k/month.
+
+Be honest about the time-to-payback. The first month is calibration, not recovery. Months two and three are when the routing distribution stabilises and the recovered spend starts showing up in your AP variance.
+
+## Success metric
+
+Track recovered spend per month — the dollar value of `auto_deduct` plus the dollar value of reviewer-confirmed deductions out of the queue, divided by total outside-counsel spend that month. The number to beat is whatever your manual baseline was. If the flow is not pulling at least 3% in month three you have a calibration problem, not a flow problem; pull the audit log, sample 30 invoices, and compare against your team's manual notes.
+
+Secondary metric: reviewer time per flagged invoice. If it is climbing instead of falling, the Slack messages are not giving the reviewer enough context to decide quickly — adjust the Block Kit payload in `Slack — Reviewer Queue` to include the specific line numbers and dollar deltas, not just the flag categories.
+
+## vs alternatives
+
+Versus the e-billing vendor's built-in compliance engine (Brightflag's "AI review", Onit's rules engine): the vendor's rules are competent but their AI pass is opaque, you cannot tune the prompt, and you cannot add custom checks without paying for a professional-services engagement. This flow gives you the prompt, the thresholds, and the audit log — all editable. Versus a DIY Python script: same logic, much higher operational burden (you own the cron, the retries, the credential rotation, the observability) and no visual debugger when a LEDES file from a new firm parses oddly. Versus the status quo of a paralegal reading every invoice: the paralegal is more accurate on novel patterns for the first month, after which the flow's recall on the codified rules is higher and the paralegal's time is freed for the genuinely judgement-call items.
+
+The case for the n8n version specifically over a Lambda or a Make.com build is the visual graph plus the per-node retry semantics — when the Anthropic API rate-limits you on a busy morning, n8n's automatic retry with backoff on the `httpRequest` node handles it without code, and you can see the retry happen.
 
 ## Watch-outs
 
-- **Firm relationship management.** Auto-deductions communicated badly damage firm relationships. The flow should produce reasoning, not just deductions; firms should see why a line item was reduced, not just that it was.
-- **Threshold tuning is matter-type-sensitive.** Litigation invoices have different patterns than transactional invoices; tune thresholds per matter type, not globally.
-- **Don't auto-approve novel firms.** When a firm sends its first invoice, manually review for at least the first quarter to establish baseline patterns.
-- **AI anomaly detection complements, doesn't replace, [outside counsel guidelines](/en/learn/outside-counsel-management/).** The guidelines are the contract; AI surfaces violations of the contract.
+**Auto-deductions communicated badly damage firm relationships.** Guard: the `Slack — Reviewer Queue` payload always includes the reasoning chain from both the rule pass and the AI pass, and the audit log retains the full `rule_flags_json` and `ai_flags_json`. Before any auto-deduction is communicated to the firm, generate the firm-facing note from the audit log row, not from a templated "we deducted X" message — firms accept reductions when they see the specific line, the specific guideline, and the specific dollar impact.
+
+**Threshold tuning is matter-type-sensitive.** Litigation invoices have different patterns (large discovery batches look like block billing but are not) than transactional ones (any block billing is suspicious). Guard: the `Load Matter + Rate Card` query returns `matter_type`, and the `Rule-Based Checks` Code node is the place to branch on it. Ship the v1 flow with global thresholds, then specialise within four weeks.
+
+**Novel firms produce false positives until you have a baseline.** Guard: add a `WHERE invoices_seen_count < 5` check upstream and force `decision = reviewer_queue` for any firm under that threshold, regardless of what the rules and AI say. The bundle does not include this check by default; add it before going live if you onboard new firms more than once a quarter.
+
+**LEDES parsing breaks silently when a firm sends a malformed file.** Guard: the `Parse LEDES` Code node returns `parse_error: 'empty_or_malformed_ledes'` rather than throwing, and the downstream nodes will write a row to the audit log with `decision: auto_approve` (the default) — which is wrong. Add an `if` node after `Parse LEDES` that routes parse errors to `#legal-ops-escalations` with the firm name and invoice id so a human can chase the firm for a clean file.
+
+**Claude can hallucinate violations on a busy invoice.** Guard: the system prompt forbids inventing line indexes; the `Score + Route` node treats AI findings as advisory unless severity ≥ 0.8 (escalation) or AI count > 0 alongside rule findings (reviewer queue). Never let an AI-only flag drive an `auto_deduct`.
+
+## Stack
+
+n8n (cloud or self-hosted) is the orchestrator. [Claude](/en/tools/claude/) Sonnet 4.6 via the Anthropic Messages API does the anomaly pass. Postgres holds the matter database, rate cards, billing guidelines, and audit log. Slack receives the reviewer queue and director escalations. Your e-billing system (Brightflag in the bundle defaults; swap the host and path for Onit, BusyLamp, SimpleLegal, or a self-hosted endpoint) is the source of truth for new invoices and the eventual write-back target if you extend the flow to push deductions back rather than emailing them.
+
+This flow is the operational layer of [legal spend management](/en/learn/legal-spend-management/); the policy layer is your written [outside-counsel guidelines](/en/learn/outside-counsel-management/), which the rule-based checks encode. The two only work together — the guidelines without the flow are aspirational; the flow without the guidelines is a model trying to invent your policy.

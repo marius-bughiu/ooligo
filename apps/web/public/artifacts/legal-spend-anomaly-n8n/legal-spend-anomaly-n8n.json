@@ -1,0 +1,436 @@
+{
+  "name": "Outside-counsel invoice anomaly detection",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000001",
+      "name": "Daily Cron — 7am Mon-Fri",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [220, 320],
+      "notesInFlow": true,
+      "notes": "Set the timezone explicitly in workflow Settings — default is UTC. Pulls anything new from the e-billing system since the last successful run."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT coalesce(max(checked_at), now() - interval '7 days') AS since_at\nFROM invoice_audit_log;",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000002",
+      "name": "Lookup Watermark",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [440, 320],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — legal-ops state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Read-after-write watermark. Falls back to 7d if the audit log is empty."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.brightflag.com/v1/invoices?status=submitted&updated_since={{ encodeURIComponent($json.since_at) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "accept", "value": "application/json" }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000003",
+      "name": "Brightflag — List New Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_BRIGHTFLAG_CRED_ID",
+          "name": "Brightflag — API token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Swap the host/path for Onit, BusyLamp, SimpleLegal, or your own e-billing endpoint. Response shape downstream assumes { invoices: [{ id, firm_id, matter_id, ledes_url, total_amount, currency }] }."
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "invoices",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000004",
+      "name": "Split Invoices",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [880, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.ledes_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "accept", "value": "text/plain" }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000005",
+      "name": "Fetch LEDES File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_BRIGHTFLAG_CRED_ID",
+          "name": "Brightflag — API token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse LEDES 1998B (pipe-delimited). Returns one item per invoice with line_items array.\n// Spec: https://ledes.org/ledes-1998b/\nconst raw = $json.data || $input.item.json.data || $input.item.json.body || '';\nconst lines = raw.split(/\\r?\\n/).filter(Boolean);\nif (lines.length < 2) {\n  return [{ json: { invoice_id: $('Split Invoices').item.json.id, line_items: [], parse_error: 'empty_or_malformed_ledes' } }];\n}\nconst headers = lines[0].split('|').map(h => h.trim());\nconst idx = (name) => headers.indexOf(name);\nconst col = {\n  invoice_number: idx('INVOICE_NUMBER'),\n  matter_id: idx('CLIENT_MATTER_ID'),\n  law_firm_id: idx('LAW_FIRM_ID'),\n  timekeeper_id: idx('TIMEKEEPER_ID'),\n  timekeeper_name: idx('TIMEKEEPER_NAME'),\n  timekeeper_classification: idx('TIMEKEEPER_CLASSIFICATION'),\n  rate: idx('LINE_ITEM_UNIT_COST'),\n  units: idx('LINE_ITEM_NUMBER_OF_UNITS'),\n  task_code: idx('LINE_ITEM_TASK_CODE'),\n  activity_code: idx('LINE_ITEM_ACTIVITY_CODE'),\n  date: idx('LINE_ITEM_DATE'),\n  description: idx('LINE_ITEM_DESCRIPTION'),\n  total: idx('LINE_ITEM_TOTAL')\n};\nconst items = [];\nfor (let i = 1; i < lines.length; i++) {\n  const cells = lines[i].split('|');\n  if (cells.length < headers.length) continue;\n  items.push({\n    invoice_number: cells[col.invoice_number],\n    matter_id: cells[col.matter_id],\n    law_firm_id: cells[col.law_firm_id],\n    timekeeper_id: cells[col.timekeeper_id],\n    timekeeper_name: cells[col.timekeeper_name],\n    timekeeper_classification: cells[col.timekeeper_classification],\n    rate: parseFloat(cells[col.rate]) || 0,\n    units: parseFloat(cells[col.units]) || 0,\n    task_code: cells[col.task_code],\n    activity_code: cells[col.activity_code],\n    date: cells[col.date],\n    description: (cells[col.description] || '').trim(),\n    total: parseFloat(cells[col.total]) || 0\n  });\n}\nreturn [{\n  json: {\n    invoice_id: $('Split Invoices').item.json.id,\n    matter_id: items[0]?.matter_id,\n    law_firm_id: items[0]?.law_firm_id,\n    invoice_number: items[0]?.invoice_number,\n    line_items: items,\n    line_count: items.length,\n    invoice_total: items.reduce((s, x) => s + (x.total || 0), 0)\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000006",
+      "name": "Parse LEDES",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH matter AS (\n  SELECT matter_id, matter_type, budget_remaining_cents, scope_summary\n  FROM matters\n  WHERE matter_id = $1\n),\napproved AS (\n  SELECT timekeeper_id, max_rate_cents, classification\n  FROM matter_approved_timekeepers\n  WHERE matter_id = $1\n),\nguidelines AS (\n  SELECT block_billing_min_units, vague_keywords, after_hours_window, no_travel_class\n  FROM firm_billing_guidelines\n  WHERE law_firm_id = $2\n)\nSELECT\n  (SELECT row_to_json(matter) FROM matter)            AS matter,\n  (SELECT json_agg(approved) FROM approved)           AS approved_timekeepers,\n  (SELECT row_to_json(guidelines) FROM guidelines)    AS guidelines;",
+        "options": {
+          "queryReplacement": "={{ $json.matter_id }},{{ $json.law_firm_id }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000007",
+      "name": "Load Matter + Rate Card",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1540, 320],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — legal-ops state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Single round-trip pulls matter, approved timekeepers, and firm guidelines. Add an index on matter_id and law_firm_id."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Apply deterministic billing-guideline checks. Output: per-line flags + invoice rollup.\nconst inv = $('Parse LEDES').item.json;\nconst ctx = $json;\nconst approved = new Map((ctx.approved_timekeepers || []).map(t => [t.timekeeper_id, t]));\nconst gl = ctx.guidelines || {};\nconst vagueKeywords = (gl.vague_keywords || ['attention to', 'work on', 'review of', 'various', 'general']);\nconst minBlockUnits = gl.block_billing_min_units ?? 4.0;\nconst noTravelClass = new Set(gl.no_travel_class || ['Partner']);\nconst flags = [];\nfor (const li of inv.line_items) {\n  const tkApproved = approved.get(li.timekeeper_id);\n  if (!tkApproved) {\n    flags.push({ kind: 'unapproved_timekeeper', timekeeper_id: li.timekeeper_id, line: li, severity: 0.6 });\n  } else {\n    const cap = (tkApproved.max_rate_cents || 0) / 100;\n    if (cap > 0 && li.rate > cap) {\n      flags.push({ kind: 'rate_over_card', actual_rate: li.rate, card_rate: cap, line: li, severity: 0.5 });\n    }\n  }\n  if (li.units >= minBlockUnits && /[;,\\.]/.test(li.description) === false && li.description.split(' ').length < 8) {\n    flags.push({ kind: 'block_billing', units: li.units, line: li, severity: 0.4 });\n  }\n  const desc = (li.description || '').toLowerCase();\n  if (vagueKeywords.some(k => desc.startsWith(k.toLowerCase()) || desc === k.toLowerCase())) {\n    flags.push({ kind: 'vague_description', line: li, severity: 0.3 });\n  }\n  if (li.timekeeper_classification && noTravelClass.has(li.timekeeper_classification) && /travel|commute|airport/i.test(li.description)) {\n    flags.push({ kind: 'partner_travel_billed', line: li, severity: 0.5 });\n  }\n}\nconst rule_value_cents = Math.round(\n  flags.reduce((s, f) => {\n    if (f.kind === 'rate_over_card') return s + (f.actual_rate - f.card_rate) * f.line.units * 100;\n    if (f.kind === 'block_billing') return s + (f.line.total * 0.10) * 100;\n    if (f.kind === 'partner_travel_billed') return s + (f.line.total * 0.50) * 100;\n    if (f.kind === 'vague_description') return s + (f.line.total * 0.05) * 100;\n    return s;\n  }, 0)\n);\nreturn [{\n  json: {\n    invoice_id: inv.invoice_id,\n    invoice_number: inv.invoice_number,\n    matter_id: inv.matter_id,\n    law_firm_id: inv.law_firm_id,\n    matter: ctx.matter,\n    invoice_total: inv.invoice_total,\n    rule_flags: flags,\n    rule_flag_count: flags.length,\n    rule_value_cents,\n    line_items: inv.line_items\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000008",
+      "name": "Rule-Based Checks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 1500,\n  \"system\": \"You audit outside-counsel legal invoices. You are given an invoice's line items, the matter's scope summary, and the firm's billing guidelines. Surface only items that exceed deterministic rule-based checks: duplicative timekeepers on the same task, disproportionate task time relative to scope, scope-creep narratives, off-engagement-letter work, and suspicious task/activity code combinations. For each finding return {line_index, kind, severity (0-1), reasoning (one sentence), suggested_action ('reduce'|'reject'|'query_firm')}. Return JSON only. If nothing exceeds heuristics, return an empty array. Never invent line indexes; never claim a violation you cannot tie to a specific line.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Matter: {{ JSON.stringify($json.matter) }}\\n\\nLine items (index, timekeeper, classification, rate, units, total, description, task_code, activity_code, date):\\n{{ $json.line_items.map((li, i) => `${i}\\t${li.timekeeper_name}\\t${li.timekeeper_classification}\\t${li.rate}\\t${li.units}\\t${li.total}\\t${li.description}\\t${li.task_code}\\t${li.activity_code}\\t${li.date}`).join('\\n') }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-000000000009",
+      "name": "Claude — Anomaly Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Calibration-sensitive. Run on 100 historical invoices and adjust the system prompt thresholds before going live."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine rule-based hits and Claude's flags into a single per-invoice score and routing decision.\nconst rb = $('Rule-Based Checks').item.json;\nlet aiFlags = [];\ntry {\n  const text = $json.content?.[0]?.text || '[]';\n  aiFlags = JSON.parse(text);\n  if (!Array.isArray(aiFlags)) aiFlags = [];\n} catch (e) {\n  aiFlags = [];\n}\nconst aiSeverityMax = aiFlags.reduce((m, f) => Math.max(m, Number(f.severity) || 0), 0);\nconst ruleSeverityMax = rb.rule_flags.reduce((m, f) => Math.max(m, Number(f.severity) || 0), 0);\nconst ruleValueShare = (rb.invoice_total > 0) ? (rb.rule_value_cents / 100) / rb.invoice_total : 0;\nlet decision = 'auto_approve';\nlet reason = 'no flags';\nif (aiSeverityMax >= 0.8 || ruleValueShare >= 0.15) {\n  decision = 'escalate_director';\n  reason = aiSeverityMax >= 0.8 ? 'severe_ai_anomaly' : 'large_rule_value_share';\n} else if (aiFlags.length > 0 || ruleSeverityMax >= 0.5) {\n  decision = 'reviewer_queue';\n  reason = aiFlags.length > 0 ? 'ai_flags_present' : 'rule_severity_above_threshold';\n} else if (rb.rule_flag_count > 0) {\n  decision = 'auto_deduct';\n  reason = 'low_value_rule_flags_only';\n}\nreturn [{\n  json: {\n    ...rb,\n    ai_flags: aiFlags,\n    ai_flag_count: aiFlags.length,\n    decision,\n    reason,\n    score: { aiSeverityMax, ruleSeverityMax, ruleValueShare }\n  }\n}];"
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000a",
+      "name": "Score + Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-escalation",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "escalate_director",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000b",
+      "name": "Escalation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2420, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#legal-ops-escalations\",\n  \"text\": \":rotating_light: Escalation — Invoice {{ $json.invoice_number }} (matter {{ $json.matter_id }}, firm {{ $json.law_firm_id }}). Total ${{ $json.invoice_total }}. Reason: {{ $json.reason }}. AI severity {{ $json.score.aiSeverityMax }}, rule value share {{ ($json.score.ruleValueShare * 100).toFixed(1) }}%.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \":rotating_light: *Escalation* — Invoice `{{ $json.invoice_number }}`\\nMatter `{{ $json.matter_id }}` • Firm `{{ $json.law_firm_id }}` • Total `${{ $json.invoice_total }}`\\nReason: *{{ $json.reason }}*\" } },\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*AI findings ({{ $json.ai_flag_count }})*\\n{{ ($json.ai_flags || []).slice(0,5).map(f => `• line ${f.line_index} — ${f.kind} (sev ${f.severity}): ${f.reasoning}`).join('\\n') }}\" } },\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Rule findings ({{ $json.rule_flag_count }})*\\n{{ ($json.rule_flags || []).slice(0,5).map(f => `• ${f.kind} — line: ${f.line.description?.slice(0,60)}`).join('\\n') }}\" } }\n  ]\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000c",
+      "name": "Slack — Escalate to Director",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-reviewer-or-deduct",
+              "leftValue": "={{ ['reviewer_queue', 'auto_deduct'].includes($json.decision) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000d",
+      "name": "Reviewer or Deduct?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2640, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#legal-ops-invoice-review\",\n  \"text\": \"Invoice {{ $json.invoice_number }} — decision: {{ $json.decision }} ({{ $json.reason }}). Total ${{ $json.invoice_total }}; estimated deduction ${{ ($json.rule_value_cents / 100).toFixed(2) }}.\",\n  \"blocks\": [\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Invoice* `{{ $json.invoice_number }}` — firm `{{ $json.law_firm_id }}` • matter `{{ $json.matter_id }}`\\n*Decision*: `{{ $json.decision }}` — {{ $json.reason }}\\n*Total*: ${{ $json.invoice_total }} • *Est. deduction*: ${{ ($json.rule_value_cents / 100).toFixed(2) }}\" } },\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Rule flags ({{ $json.rule_flag_count }})*: {{ ($json.rule_flags || []).map(f => f.kind).slice(0,8).join(', ') || 'none' }}\\n*AI flags ({{ $json.ai_flag_count }})*: {{ ($json.ai_flags || []).map(f => f.kind).slice(0,8).join(', ') || 'none' }}\" } }\n  ]\n}",
+        "options": {}
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000e",
+      "name": "Slack — Reviewer Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 360],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO invoice_audit_log (\n  invoice_id, invoice_number, matter_id, law_firm_id,\n  decision, reason, rule_flag_count, rule_value_cents,\n  ai_flag_count, ai_severity_max, rule_severity_max, rule_value_share,\n  rule_flags_json, ai_flags_json, checked_at\n) VALUES (\n  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, now()\n)\nON CONFLICT (invoice_id) DO UPDATE\nSET decision = excluded.decision,\n    reason = excluded.reason,\n    rule_flag_count = excluded.rule_flag_count,\n    rule_value_cents = excluded.rule_value_cents,\n    ai_flag_count = excluded.ai_flag_count,\n    ai_severity_max = excluded.ai_severity_max,\n    rule_severity_max = excluded.rule_severity_max,\n    rule_value_share = excluded.rule_value_share,\n    rule_flags_json = excluded.rule_flags_json,\n    ai_flags_json = excluded.ai_flags_json,\n    checked_at = excluded.checked_at\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ $json.invoice_id }},{{ $json.invoice_number }},{{ $json.matter_id }},{{ $json.law_firm_id }},{{ $json.decision }},{{ $json.reason }},{{ $json.rule_flag_count }},{{ $json.rule_value_cents }},{{ $json.ai_flag_count }},{{ $json.score.aiSeverityMax }},{{ $json.score.ruleSeverityMax }},{{ $json.score.ruleValueShare }},{{ JSON.stringify($json.rule_flags || []) }},{{ JSON.stringify($json.ai_flags || []) }}"
+        }
+      },
+      "id": "2d2d2d2d-0001-0000-0000-00000000000f",
+      "name": "Audit Log Insert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [3080, 320],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — legal-ops state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Idempotent on invoice_id. Watermark node reads max(checked_at). Add a unique index on invoice_id."
+    }
+  ],
+  "connections": {
+    "Daily Cron — 7am Mon-Fri": {
+      "main": [
+        [{ "node": "Lookup Watermark", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lookup Watermark": {
+      "main": [
+        [{ "node": "Brightflag — List New Invoices", "type": "main", "index": 0 }]
+      ]
+    },
+    "Brightflag — List New Invoices": {
+      "main": [
+        [{ "node": "Split Invoices", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Invoices": {
+      "main": [
+        [{ "node": "Fetch LEDES File", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch LEDES File": {
+      "main": [
+        [{ "node": "Parse LEDES", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse LEDES": {
+      "main": [
+        [{ "node": "Load Matter + Rate Card", "type": "main", "index": 0 }]
+      ]
+    },
+    "Load Matter + Rate Card": {
+      "main": [
+        [{ "node": "Rule-Based Checks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Rule-Based Checks": {
+      "main": [
+        [{ "node": "Claude — Anomaly Detection", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Anomaly Detection": {
+      "main": [
+        [{ "node": "Score + Route", "type": "main", "index": 0 }]
+      ]
+    },
+    "Score + Route": {
+      "main": [
+        [{ "node": "Escalation?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Escalation?": {
+      "main": [
+        [{ "node": "Slack — Escalate to Director", "type": "main", "index": 0 }],
+        [{ "node": "Reviewer or Deduct?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack — Escalate to Director": {
+      "main": [
+        [{ "node": "Audit Log Insert", "type": "main", "index": 0 }]
+      ]
+    },
+    "Reviewer or Deduct?": {
+      "main": [
+        [{ "node": "Slack — Reviewer Queue", "type": "main", "index": 0 }],
+        [{ "node": "Audit Log Insert", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack — Reviewer Queue": {
+      "main": [
+        [{ "node": "Audit Log Insert", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "versionId": "2d2d2d2d-0001-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-legal-ops"
+  },
+  "id": "legal-spend-anomaly",
+  "tags": [
+    { "name": "legal-ops" },
+    { "name": "anomaly-detection" }
+  ]
+}

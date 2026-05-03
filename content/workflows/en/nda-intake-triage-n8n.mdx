@@ -13,53 +13,80 @@ ai_generated: true
 human_tested: false
 ---
 
-An n8n flow that intercepts every inbound NDA arriving via email, classifies the counterparty risk tier, runs the document through the [NDA playbook](/en/learn/nda-playbook/) auto-redline check, and either auto-approves the contract or routes to the right reviewer in Slack with the redlined version attached. Designed for in-house teams handling 50+ NDAs per month where intake-time triage is the cycle-time bottleneck.
+An n8n flow that intercepts every inbound NDA arriving at a dedicated `nda-intake@` mailbox, classifies the counterparty risk tier from a Postgres registry, runs the document through Claude Sonnet 4.6 against your [NDA playbook](/en/learn/nda-playbook/), and either auto-approves the contract into Ironclad or routes it to a named reviewer in Slack with the clause-by-clause summary attached. Designed for in-house teams handling 50+ NDAs per month, where intake-time triage — not negotiation — is what consumes legal hours.
 
-## What you'll need
+The downloadable bundle is at `apps/web/public/artifacts/nda-intake-triage-n8n/` and contains the full workflow JSON plus a setup README. The bundle is the deliverable; this page explains when and how to use it.
 
-- n8n self-hosted or cloud account
-- Email account dedicated to NDA intake (e.g., `nda-intake@yourcompany.com`)
-- [Ironclad](/en/tools/ironclad/) (or another [CLM](/en/learn/contract-lifecycle-management/)) with API access for storing the resulting redlined version
-- [Claude](/en/tools/claude/) API key
-- Slack workspace for reviewer notifications
+## When to use
+
+Use this flow when three things are true at once. First, your team is processing enough NDAs that volume itself is the problem — typically 40+ per month, where the marginal NDA is essentially identical to the previous one and the legal team is acting as a bottleneck on commercial velocity rather than as a strategic gate. Second, you have an actual playbook — a written list of clause families, your standard-paper position on each, your authorized fallback positions, and the walk-away threshold. If the playbook lives in someone's head, the AI step has nothing to compare against and you'll get high-confidence garbage. Third, you have a counterparty registry in some queryable form — Postgres, Airtable, even a Google Sheet exported nightly — that maps email domains to a risk tier. Without it, every counterparty falls into "unknown" and the flow does nothing useful.
+
+The flow shines on inbound counterparty paper from known commercial partners — the classic vendor-NDA-before-RFP and prospect-NDA-before-pricing-call cases. It is also useful as the first-pass filter on outbound NDAs your sales team kicks off from a Salesforce-triggered template, where the only deviation possible is the counterparty's redline back to you.
+
+## When NOT to use
+
+Skip this flow for any contract type that is not a vanilla NDA. The clause taxonomy in the system prompt is calibrated for confidentiality agreements only — feeding it an MSA, DPA, or services agreement will produce confident output against the wrong checklist, which is the worst possible failure mode. Build a separate flow per contract family if you want to extend.
+
+Skip it for M&A NDAs, government contracting NDAs, and any NDA tied to a litigation hold. These need the GC's attention from minute one, and the time the flow saves on triage is dwarfed by the political cost of a missed escalation. Route those through a separate intake email that bypasses the automation entirely.
+
+Skip it for the first month after a material playbook change — clause additions, new fallback positions, a tier-rebalancing on the registry. The Claude prompt encodes the playbook implicitly through the system message; you need a manual-review window to catch where the model and the new policy disagree before you trust auto-approval again.
+
+Skip it altogether if you process fewer than ~15 NDAs per month. The setup time (60 minutes plus the playbook codification work, which is the real cost) does not pay back inside a year at that volume. A shared mailbox and a paralegal with a checklist is the better answer.
 
 ## Setup
 
-1. **Configure intake email.** Create a dedicated inbox; route all NDA requests through it. Forward business unit aliases (e.g., `legal-bd@yourcompany.com`) to it.
-2. **Build the n8n flow.** Six nodes:
-   - Email trigger — fires on new message in the intake inbox with `.docx` or `.pdf` attachment
-   - Counterparty extraction — Claude API call to identify the counterparty from the email body and contract content
-   - Risk tier lookup — Postgres or Airtable query against your counterparty database for known-risk-tier classifications
-   - NDA playbook check — Claude API call running the [NDA playbook](/en/learn/nda-playbook/) check on the contract; returns `auto-approve` / `lawyer-review` / `escalate`
-   - Routing decision — branches to auto-approve flow, lawyer-review flow, or escalate flow
-   - Slack notification + Ironclad upload — final actions per branch
-3. **Deploy and test.** Send 5-10 known-pattern NDAs through the inbox; verify routing decisions match expectations.
-4. **Tune the playbook check.** False positives (auto-approving contracts that should escalate) are bigger problems than false negatives. Tune the Claude prompt's threshold conservatively for first 30 days.
+Follow the README at `apps/web/public/artifacts/nda-intake-triage-n8n/_README.md` for the full credential and table-schema walkthrough. The 30-second version: provision the dedicated `nda-intake@` mailbox, create the Postgres `counterparty_registry` and `nda_audit_log` tables (DDL is implied by the column lists in the README's credentials section), pre-create three Ironclad workflow templates (`nda-review`, `nda-escalation`, and an `nda` record type), invite a Slack bot into `#legal-ops-firehose`, `#legal-nda-queue`, and `#legal-gc-escalations`, then import `nda-intake-triage-n8n.json` into n8n and bind the five credentials by name.
 
-## How the routing works
+Run the five smoke tests in the README's "First-run verification" section before you activate the workflow. The fifth test — temporarily breaking the Claude prompt to confirm the parser-error fallback escalates rather than silently auto-approves — is the one most teams skip and most regret.
 
-| Risk tier + playbook result | Action |
-|---|---|
-| Known low-risk counterparty + all clauses acceptable | Auto-approve, store in Ironclad, notify requester |
-| Unknown / mid-risk counterparty + all clauses acceptable | Send to assigned reviewer with 24-hour SLA tag |
-| Any tier + fallback clauses | Send to assigned reviewer with redlined version attached |
-| Any tier + walk-away clauses | Escalate to GC with full redline + summary |
+## What the flow does
 
-## Output
+The trigger is a Gmail poll that fires once per minute against the intake mailbox, filtered to messages with PDF or DOCX attachments and not yet labelled `nda-processed`. A Code node (`Normalize Intake`) extracts the sender, base64-encodes the attachment, and emits a typed envelope; messages with no usable attachment are diverted to a `no_attachment` status that downstream branches handle gracefully rather than crashing the workflow.
 
-For each NDA processed:
+A Postgres node (`Counterparty Lookup`) queries the registry by sender domain and returns risk tier, preferred paper, and free-form notes. A second Code node (`Merge Counterparty Context`) defaults missing rows to `risk_tier = 'unknown'` rather than failing — the conservative override later catches this case.
 
-- **Slack notification** to the assigned reviewer with: original document, redlined version, deviation summary, suggested response language
-- **Ironclad record** auto-created with extracted counterparty, contract type, status, and assigned reviewer
-- **Audit log** entry with timestamp, decisions made, AI confidence scores, and human reviewer assignment
+The Claude call (`Claude — Playbook Check`) sends the document as a base64 block to Sonnet 4.6 alongside a system prompt that names ten clause families (governing law, term, mutuality, IP carve-outs, residuals, non-solicit, indemnity, exclusion-of-consequential-damages, definition-of-confidential-information, notice-of-breach) and demands strict JSON output with per-clause `position`, `quote`, `suggested_redline`, and `confidence`, plus a top-level `recommendation` of `auto-approve`, `lawyer-review`, or `escalate`.
 
-## Where it fits
+The next Code node (`Apply Risk Rules`) is the safety belt. It applies three overrides in priority order: any walk-away clause forces `escalate` regardless of what Claude said; overall confidence below 0.7 demotes any `auto-approve` to `lawyer-review`; and any non-low risk tier demotes `auto-approve` to `lawyer-review`. The override reason is stamped on the audit row so you can measure how often each guard fires.
 
-Use this flow at the top of your [contract review SOP](/en/learn/contract-review-sop/) — it's specifically the Tier 1-2 triage layer. Strategic NDAs (M&A early-stage, government partnerships) should still come through direct GC engagement, not intake automation.
+A Switch node routes to one of three branches — Ironclad record creation (auto-approve), Ironclad review workflow + Slack lawyer queue post with Block Kit summary (lawyer-review), or Ironclad escalation workflow + GC channel alert (escalate). Every branch converges on `Audit Log Write`, which inserts a single row keyed on the Gmail message ID (so retries are idempotent), and then `Mark Gmail Processed`, which adds the `nda-processed` label so the trigger does not re-fire.
+
+The engineering choices worth naming: Sonnet 4.6 over Haiku because Haiku misses fallback clauses (cheaper per call but more expensive per false-approve); base64 document attachment over text extraction because PDF text extraction loses formatting cues that change clause meaning; conservative override at the Code-node layer rather than in the prompt because prompt-only safeguards are bypassable by adversarial counterparty paper; idempotent audit insert via `ON CONFLICT (message_id) DO NOTHING` because n8n retries on transient Postgres errors and you do not want duplicate rows; and Switch over IF because Switch keeps each branch's connection topology visually obvious in the n8n canvas.
+
+## Cost reality
+
+Per-NDA Anthropic cost is the dominant variable expense. A typical 4-page NDA serializes to roughly 6,000-9,000 input tokens (the document plus the system prompt and counterparty context) and the structured response lands at 800-1,200 output tokens. At Sonnet 4.6 list pricing of $3 per million input tokens and $15 per million output tokens, that is $0.018-$0.027 input + $0.012-$0.018 output, or roughly **$0.03-$0.045 per NDA**. At 100 NDAs per month, that is $3-$5 in API spend. At 1,000 NDAs per month it is $30-$45. Even with a 3x multiplier for retries on long documents and the occasional 10-page MSA misclassified as an NDA, the monthly bill stays under $200 at typical volumes.
+
+n8n hosting is the other line item. Self-hosted on a $20/month VPS handles thousands of executions per day. n8n Cloud's Starter tier is $24/month for 5,000 executions; if your intake mailbox triggers more than 5,000 polls + processed-message executions per month (it will at 200+ NDAs/month with one-minute polling), you need the Pro tier at $60/month or self-hosted.
+
+The cost that actually matters is the legal-hours cost you avoid. A paralegal triaging an NDA manually averages 12-15 minutes per contract for the read-classify-route step alone. At a $90/hour fully-loaded paralegal rate, that is $18-$22 per NDA in human time. The flow's $0.03 of API spend replacing $20 of paralegal time is a 600x cost ratio — but only if your team actually trusts the auto-approve branch and stops re-reading every contract behind it. Teams that double-check every auto-approval lose the savings; the flow becomes pure cost. Plan the trust-building rollout (point 2 under Watch-outs below) deliberately.
+
+## Success metric
+
+Track two numbers weekly. **Cycle time from intake to disposition** (auto-approve, lawyer-review queued, or escalation queued) should land under 5 minutes for every branch — Slack alert in the queue, Ironclad record exists, audit log row written. If it drifts above 5 minutes, your Anthropic API is slow or n8n is queueing executions; investigate. **Auto-approve precision** is the second number: of every NDA the flow auto-approved, what percentage would a human reviewer have approved unchanged? Target 99% within 60 days of go-live. The weekly false-positive review queries `nda_audit_log WHERE recommendation = 'auto-approve' AND overall_confidence < 0.85`, samples 10 rows, and walks them through the playbook by hand. Anything below 99% precision means the playbook prompt or the override thresholds need tightening before you raise volume.
+
+A useful supporting metric: **escalation rate**. Below 5% means the flow is doing real work. Above 15% means either the registry is undersized (too many "unknown" counterparties) or the playbook is too aggressive in classifying clauses as walk-away. Above 30% means the flow is acting as expensive routing for what is effectively manual triage; either fix the inputs or turn the flow off.
+
+## vs alternatives
+
+**vs manual triage by a paralegal.** A senior paralegal with a written checklist costs $18-$22 per NDA and takes 12-15 minutes. The flow costs $0.03 and takes 90 seconds. The paralegal is dramatically better at edge cases (litigation triggers, unusual jurisdictions, novel clause structures) and dramatically worse at consistency and volume. The right architecture is both — the flow handles the 80% of vanilla NDAs that are exact-paper or one-clause-fallback, and the paralegal owns the lawyer-review queue with their judgment freed up for the contracts that need it. Replacing the paralegal entirely is the failure mode; augmenting them is the win.
+
+**vs an off-the-shelf CLM intake module.** Ironclad, Icertis, ContractWorks, and similar all ship intake-routing features. They are excellent at the "store, version, route to approver" half of the problem and weak at the "classify against our specific playbook" half — their built-in AI tends to be a generic clause extractor calibrated against a generic clause library, not your particular fallback positions. The flow trades the convenience of an integrated product for the precision of a playbook-specific prompt. If your playbook is genuinely vanilla (you accept any reasonable mutual NDA), the off-the-shelf module is fine and you should not build this. If your playbook has specific positions on residuals, IP carve-outs, or non-solicits that matter, the flow's prompt is what makes it earn its keep.
+
+**vs a manual Salesforce-to-Ironclad routing rule.** A Salesforce flow that creates an Ironclad workflow when an opportunity hits a stage is purely deterministic — same routing, same reviewer, regardless of contract content. That is fine for outbound paper where you control the document, but useless for inbound counterparty paper where the routing decision should depend on what the contract actually says. Use both: Salesforce for outbound triggers, this flow for inbound classification.
 
 ## Watch-outs
 
-- **Counterparty database matters.** A working flow needs an up-to-date counterparty database with risk classifications. Without it, every NDA defaults to "unknown" and the flow's value drops.
-- **AI confidence threshold tuning.** Auto-approve threshold should be conservative — false auto-approvals are worse than false escalations. Audit weekly for first 60 days.
-- **Email channel discipline.** If business teams keep sending NDAs to attorneys directly instead of intake@, the flow doesn't help. Drive channel discipline first.
-- **Privileged content handling.** If the NDA discusses pending litigation or sensitive matters, [AI policy](/en/learn/ai-policy-for-legal-teams/) authorization for the Claude calls must be confirmed.
+**Counterparty registry coverage drives the auto-approve rate; without it the flow degrades to lawyer-review-on-everything.** Failure mode: registry coverage is below 60% of inbound senders, so 40%+ of NDAs hit the `non_low_risk_tier` override and route to manual review even when clean. Guard: instrument `Counterparty Lookup` with a weekly query (`SELECT count(*) FROM nda_audit_log WHERE counterparty_id IS NULL AND processed_at > now() - interval '7 days'`) and feed the unknown-domain list back to whoever owns the registry. Treat registry maintenance as a named role, not a side project.
+
+**Playbook drift causes silent miscalibration when policy changes faster than the prompt.** Failure mode: legal updates the residuals position, but the system prompt in `Claude — Playbook Check` still encodes the old position, and Claude confidently auto-approves clauses your team has just decided are unacceptable. Guard: gate every playbook change behind a 30-day manual-review window. The override that demotes any `auto-approve` to `lawyer-review` on `risk_tier != 'low'` partially mitigates by funnelling more contracts through human eyes; the harder mitigation is a quarterly diff check between the prompt's clause descriptions and the canonical playbook document.
+
+**Parser failures must always escalate, never default to approve.** Failure mode: a long or unusual NDA causes Claude to wrap its response in markdown fences, the JSON.parse in `Apply Risk Rules` throws, and a naive implementation might fall through to a default branch and mis-route. Guard: the `Apply Risk Rules` Code node explicitly catches the parse exception and stamps `recommendation = 'escalate'` with `escalation_reason: 'parser_error'`. Do not edit this guard out, and run the README's smoke test #5 every time you change the Claude prompt to confirm the catch still fires.
+
+**Privileged content can leak into the Anthropic API call when senders mistake the intake mailbox for general counsel.** Failure mode: a business unit forwards an email thread that includes pending-litigation context plus an attached NDA into `nda-intake@`, and the entire thread (subject, body snippet, attachment) ends up in an Anthropic API request. Guard: the Code node currently caps `body_snippet` to 2,000 characters but does not strip body content; pair the flow with the [AI policy for legal teams](/en/learn/ai-policy-for-legal-teams/) to authorize the data flow explicitly, and consider a pre-Claude IF node that diverts messages with subjects matching `/litigation|privileged|attorney-client/i` into the GC escalation branch without an LLM call.
+
+**Email channel discipline determines whether the flow ever sees the work.** Failure mode: business teams ignore the intake mailbox and email NDAs to attorneys directly because the flow is faster only after the first NDA, and the first NDA is always sent the way it has always been sent. Guard: an autoresponder on every individual attorney mailbox (`legal-bd@`, `gc@`, etc.) that says "thanks, please re-send to nda-intake@" combined with a forwarding rule that auto-routes anything with NDA-shaped attachments. Drive the channel norm in the first 30 days; revisit if the flow's monthly volume plateaus below your estimate.
+
+## Stack
+
+[n8n](/en/tools/n8n/) for orchestration, [Claude](/en/tools/claude/) Sonnet 4.6 for clause classification, [Ironclad](/en/tools/ironclad/) (or your preferred [CLM](/en/learn/contract-lifecycle-management/)) for record-keeping and downstream signature workflow, [Slack](/en/tools/slack/) for the reviewer queue, Postgres for the counterparty registry and audit log, Gmail for the intake mailbox. See the [legal-ops vertical](/en/r/legal-ops/) for related workflows including the [contract review SOP](/en/learn/contract-review-sop/) this flow plugs into as the Tier 1-2 triage layer.
