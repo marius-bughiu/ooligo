@@ -100,7 +100,8 @@ The author rejects its own draft and rewrites if any of these appear:
 - Body that doesn't reference the artifact bundle by file path.
 - Sections labelled with future tenses ("will eventually support…", "we plan to add…") — if it's not in the bundle today, it's not in the page.
 - Round-number claims with no source ("90% of teams"). Either find the real number or drop the claim.
-- "Comprehensive", "robust", "seamless", "best-in-class" used as evidence — they're conclusions, not arguments.
+- "Comprehensive", "robust", "seamless", "best-in-class" used as evidence — they're conclusions, not arguments. See `CONTENT_VOICE.md` for the full banned-vocabulary list.
+- **Padding signals** (any of these means rewrite, not pad): transition sentences that don't advance the argument ("Now let's look at…", "Moving on to…"); restating the section heading in the opening sentence ("In this section we'll cover the watch-outs…"); bullet lists where two sentences of prose would be tighter; hedge stacking ("could potentially might be useful"); confidence theater ("This robust solution provides comprehensive coverage"); filler frames ("It's worth noting that…", "It's important to remember that…").
 
 ### Pre-commit checklist
 
@@ -113,6 +114,9 @@ The author runs this against every workflow draft before committing. If any box 
 - [ ] References the artifact bundle's file paths in the body
 - [ ] Artifact bundle exists at `apps/web/public/artifacts/<slug>/` and meets the per-type minimum above
 - [ ] Compares against ≥ 1 specific alternative (DIY, status quo, named off-the-shelf product) with a reason for the choice
+- [ ] Every numerical claim has a source bucket (vendor docs, public earnings, named customer interview, or marked as estimate) per the source rules in **Editorial accountability** below
+- [ ] No banned vocabulary (run `npm run check:vocab` — see `CONTENT_VOICE.md`)
+- [ ] No padding signals (see anti-pattern list above)
 
 The same shape — concrete signals, per-type minimum, anti-patterns, pre-commit checklist — applies to every other content type on the site. Per-type bars follow.
 
@@ -160,7 +164,8 @@ A tool page under 400 words is almost always skipping a decision. The exceptions
 - [ ] Body ≥ 400 words (typical authoritative depth: 500-800; under 400 almost always means a skipped decision)
 - [ ] Names ≥ 1 specific scoped use case where this tool is the right pick
 - [ ] Names the real-world price band, not just the MSRP from the pricing page
-- [ ] Names ≥ 1 alternative + the rule for picking it instead
+- [ ] Names ≥ 1 alternative + the rule for picking it instead. **Competitive coverage**: the named alternative(s) must include the top 2 by market share in the segment AND the fastest-growing entrant — not the easiest-to-write-against. Naming a weak alternative satisfies the form and misleads the reader.
+- [ ] If `affiliate_link` is set in frontmatter, the body includes an inline disclosure ("ooligo earns a referral fee on signups via this page — the recommendation is unaffected; see `CORRECTIONS.md` if you spot bias") and the recommendation is held to the same bar as a non-affiliated entry. If you can't write the entry honestly with affiliation in mind, drop the affiliate link.
 - [ ] Has an explicit "best for…" line that names the role + use case
 - [ ] Has ≥ 2 watch-outs each paired with a specific guard
 - [ ] `last_reviewed` matches the date sources were actually checked (no backdating)
@@ -201,6 +206,10 @@ A pairwise comparison under 600 words almost always punts on at least one of: pr
 - [ ] Each option has at least one specific category where it wins (no fence-sitting on every dimension)
 - [ ] Pricing comparison is quantified (ratio, band, or per-unit) — not "more expensive"
 - [ ] Has a "Verdict" / "Pick X when…" / "Match rules" section with routing logic
+- [ ] **"The pick" discipline** — names a single default if the reader can't decide between the named conditions:
+  - *Pairwise*: "If you're choosing in a vacuum without the conditions above, pick X. You can switch to Y later if condition Y emerges."
+  - *Roundup*: "Minimum viable choice if you can't justify going deeper: X."
+  - *Alternatives*: "If the status quo is Y and budget allows the switching cost, default to X."
 - [ ] Names what to do if neither/none of the options fit (status quo, DIY, third tool)
 - [ ] No "it depends" hedge unless immediately followed by what it depends on
 - [ ] `last_updated` matches when sources were actually re-checked
@@ -307,15 +316,88 @@ Validators do **not** check:
 
 Those are the LLM author's (and translator's) job.
 
-## Refresh cadence
+## Editorial accountability
 
-When a tool's pricing/features change, an LLM session refreshes the EN entry. Bump `last_reviewed`. Refresh triggers (typical):
+The quality bar above catches *form-shallow* content (no anti-ICP, no quantified pricing, watch-outs without guards). It does not catch *substance-wrong* content (a confident anti-ICP that is wrong, a quoted price that's stale, a recommendation skewed by an undisclosed affiliation). This section closes the substance gap.
 
-- A user mentions a tool's pricing changed
-- A scheduled "weekly refresh" Claude Code session checks the top 50 tools
-- A reader opens a GitHub issue with corrections
+### Sources for every numerical claim
 
-Refresh = re-author the EN file from current sources. The next run of `npm run queue:translations` will mark every non-canonical locale variant as `stale` (because the EN body's SHA-256 changed), and subsequent `/translate-<locale>` invocations will re-translate them.
+Every numerical or specific-fact claim must trace to a named source bucket. The source doesn't have to be cited inline (citation noise drowns the page) — it has to exist in the author's notes, and the bucket has to be one of these four:
+
+1. **Vendor docs / pricing page** — for capability and MSRP claims. Vendor-direct, dated.
+2. **Public earnings / press / SEC filings** — for revenue, growth, headcount, customer counts. Quote the report and date.
+3. **Named customer interview** — for "teams pay $X at this scale" or "ramp takes Y weeks." Anonymized in the body, but the author has talked to a real customer at a named company.
+4. **Public benchmark / industry report** — for round-number-class claims ("60-70% of teams use…"). Source the report by name; if you can't find one, drop the claim.
+
+A fifth bucket — **Estimate** — is allowed but must be marked in the body (e.g. "approx.", "~", "estimate based on…"). Estimates can't be the load-bearing reason for a recommendation.
+
+If a claim doesn't fit any bucket, it doesn't go on the page. "Anecdotally," "we hear," "many teams" — these are not source buckets, they are confessions that the claim is unsourced.
+
+### Freshness SLAs
+
+Pricing changes, vendors get acquired, tools sunset. `last_reviewed` is the contract — when it goes stale beyond these SLAs, the entry is failing the bar regardless of how well it was written originally.
+
+| Entry type | Field-level SLA | Whole-body SLA |
+|---|---|---|
+| Tools — pricing fields | 60 days | — |
+| Tools — body | — | 120 days |
+| Comparisons | — | 180 days |
+| Workflows | — | 180 days |
+| Stacks | — | 120 days (cascades on any constituent tool's refresh) |
+| Learn — definition / framework / FAQ / glossary | — | 12 months |
+| Learn — how-to | — | 6 months (UI screenshots and command syntax drift fastest) |
+
+The freshness check is mechanical: for every entry, `today - last_reviewed > SLA` fails the bar. Refresh = re-author from current sources, bump `last_reviewed`. The translation queue will mark non-canonical locales stale automatically (via SHA-256 drift on the EN body), and subsequent `/translate-<locale>` runs will re-translate.
+
+A future CI script (out of scope today) will surface entries past their SLA in a weekly digest. Until then, the responsibility sits with whoever opens the entry's MDX file: if the date is past SLA, refresh before any other edit.
+
+### Editorial review gate
+
+Most pages are LLM-authored end-to-end with no human gate. That model is fine for the bulk of the catalog. It fails for these page classes, which require a named human reviewer's sign-off before merge:
+
+- **New tool entries** — first-time additions to the catalog. The risk is misclassification (wrong category, wrong segment band) that ripples through every comparison and stack that subsequently links to the tool.
+- **Comparison verdicts that move a tool's ranking by ≥ 2 positions** — relative to the prior version of the comparison, OR relative to other comparisons that include the same tool. Reviewer confirms the move is grounded in evidence, not noise.
+- **Anything in legal/compliance space** — the `legal-ops` vertical, or any entry that cites NYC LL 144, EU AI Act, GDPR, CCPA, SOC 2, ISO 27001, HIPAA, or named bar association rules. Wrong here costs more than wrong elsewhere.
+- **Affiliate-linked entries** — see "Affiliate disclosure" below.
+- **Sunset / deprecation pages** — when a tool is being marked end-of-life, removed, or has a major-version-breaking change. The reader's existing setup may depend on the tool; the deprecation language has consequences.
+
+The reviewer's name + date is recorded in the entry's frontmatter under `reviewed_by` and `reviewed_at`. Reviewer accountability is named, not anonymous. (Schema addition pending — for now, record in the commit message.)
+
+### Affiliate disclosure
+
+The `affiliate_link` field in the tool schema is allowed but carries an obligation: the page must be honest about the affiliation, and the recommendation must be the same recommendation we would make without it. Two rules:
+
+1. **Inline disclosure**: every affiliate-linked entry includes a one-line disclosure in the body (suggested: "ooligo earns a referral fee on signups via this page — the recommendation is unaffected; report bias via `CORRECTIONS.md`."). The disclosure goes near the recommendation, not buried at the bottom.
+2. **Independence test**: before adding `affiliate_link`, the author asks "would I recommend this tool with the same emphasis, in the same scope, against the same alternatives, if there were no referral fee?" If the answer is no, drop the affiliation. The page's editorial integrity is more valuable than the referral.
+
+Editorial review is required for every entry where `affiliate_link` is added or changed. The reviewer specifically validates the independence test — affiliation can't be the load-bearing reason a tool is recommended over an alternative.
+
+### Voice consistency
+
+Voice rules — sentence length bands, hedging vocabulary, the explicit banned-word list, opinion-density floor, "reporting voice" rules — live in `CONTENT_VOICE.md`. The pre-commit checklist enforces them via `npm run check:vocab` (banned-vocab scan; pure-form check that fails CI on any banned term).
+
+Voice consistency at scale is the failure mode that bites most LLM-authored sites. Without a hard list, sessions drift. With one, every session anchors on the same vocabulary.
+
+### Correction loop
+
+When a reader reports an error, where does it go and how does the bar learn? The answer is `CORRECTIONS.md` at the repo root.
+
+1. Reader reports an error → triage within 7 days → fix the page or close-with-reason → log the entry in `CORRECTIONS.md`.
+2. Each entry records: date, source (GitHub issue / email / Slack), affected page, error class (factual / stale / voice / missing context / bias), resolution commit SHA, reviewer.
+3. **Quarterly review**: scan the log for recurring error classes. If a class recurs ≥ 3 times in a quarter, the bar is missing something — update `CONTENT_PIPELINE.md` or `CONTENT_VOICE.md` to codify the lesson, and link the doc change back to the corrections that triggered it.
+
+The correction log is the only mechanism by which the quality bar improves. Without it, the bar stays static while reality drifts.
+
+### Refresh triggers
+
+A refresh is the same operation as authoring (re-write the entry from current sources, bump `last_reviewed`), and is triggered by:
+
+- A reader opens a GitHub issue with a correction (logged in `CORRECTIONS.md`).
+- A scheduled freshness sweep flags an entry past its SLA.
+- A vendor announces a material change (pricing, sunset, acquisition).
+- A class of recurring error in `CORRECTIONS.md` triggers a re-author against the new bar.
+
+After any refresh, `npm run queue:translations` will mark every non-canonical locale variant as `stale` (because the EN body's SHA-256 changed), and subsequent `/translate-<locale>` invocations re-translate.
 
 ## Adding a vertical or locale
 
