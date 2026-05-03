@@ -12,61 +12,61 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 ## Phase 0 — Foundations (Week 1-2)
 
 - [x] Strategy + architecture locked (this repo)
-- [ ] Astro app skeleton with i18n routing (`/[locale]/...`)
-- [ ] Content schema + validators (JSON Schema → TypeScript types)
-- [ ] Cloudflare Pages + Supabase + domain wired up
+- [x] Astro app skeleton with i18n routing (`/[locale]/...`)
+- [x] Content schema + validators (JSON Schema → TypeScript types)
+- [x] Cloudflare Pages + domain wired up (Supabase not yet in use)
 - [ ] Plausible analytics installed
 - [ ] beehiiv newsletter set up (one publication, EN/RevOps)
-- [ ] First commit pushed publicly
+- [x] First commit pushed publicly
 
 ## Phase 1 — Engine + Flagship (Week 3-8)
 
 **Goal: ~250 indexed pages in EN/RevOps. Engine proven.**
 
-- [ ] Tool entry generator (LLM pipeline → MDX → validated against schema)
-- [ ] Comparison page generator (`/vs/[a]-vs-[b]` from any pair of tool entries)
-- [ ] Workflow library entry format + downloadable artifact pipeline
-- [ ] Learn/AEO hub format + cross-linking engine
-- [ ] First 50 tool entries (RevOps stack: HubSpot, Salesforce, Clay, Apollo, Outreach, Gong, Chorus, Default, RegieAI, Common Room, etc.)
-- [ ] First 100 comparison pages (auto-generated from tool pairs)
-- [ ] First 30 workflow library entries (real, tested artifacts — Claude Skills, n8n flows, Cursor rules)
-- [ ] First 50 learn/glossary entries (`/learn/what-is-revops`, `/learn/pipeline-velocity`, etc.)
-- [ ] RevOps vertical landing page + 5 curated stack pages
-- [ ] Sitemap, hreflang, schema.org markup
-- [ ] Newsletter live, signup form on every page
+- [x] Tool entry generator (LLM pipeline → MDX → validated against schema)
+- [x] Comparison page generator (`/vs/[a]-vs-[b]` from any pair of tool entries)
+- [x] Workflow library entry format + downloadable artifact pipeline
+- [x] Learn/AEO hub format + cross-linking engine
+- [x] First 50 tool entries (RevOps stack: HubSpot, Salesforce, Clay, Apollo, Outreach, Gong, Chorus, Default, RegieAI, Common Room, etc.)
+- [x] First 100 comparison pages (auto-generated from tool pairs)
+- [x] First 30 workflow library entries (real, tested artifacts — Claude Skills, n8n flows, Cursor rules)
+- [x] First 50 learn/glossary entries (`/learn/what-is-revops`, `/learn/pipeline-velocity`, etc.)
+- [x] RevOps vertical landing page + 5 curated stack pages
+- [x] Sitemap, hreflang, schema.org markup
+- [ ] Newsletter live, signup form on every page (form is in place; beehiiv backend pending)
 
 ## Phase 2 — Localization online (Week 9-12)
 
 **Goal: ~750 pages (EN/ES/PT-BR × RevOps).**
 
-- [ ] Translation pipeline (Claude structured-output + glossary enforcement)
-- [ ] Automated QA gates (back-translation similarity, schema validation, broken-link check)
-- [ ] All EN content translated to ES + PT-BR
-- [ ] hreflang clusters validated; per-locale sitemaps live
+- [x] Translation pipeline (Claude structured-output + glossary enforcement)
+- [x] Automated QA gates (back-translation similarity, schema validation, broken-link check)
+- [x] All EN content translated to ES + PT-BR
+- [x] hreflang clusters validated; per-locale sitemaps live
 - [ ] Per-locale Google Search Console properties
-- [ ] Locale switcher UX
-- [ ] Open issues for any auto-translated content that fails QA gates
+- [x] Locale switcher UX
+- [x] Open issues for any auto-translated content that fails QA gates
 
 ## Phase 3 — Vertical 2: Legal Ops (Month 4)
 
 **Goal: ~1,500 pages.**
 
-- [ ] Legal Ops vertical config + landing page
-- [ ] 30 Legal-Ops-specific tools added to catalog (CARET Legal, Spellbook, Harvey, Ironclad, ContractPodAi, etc.)
-- [ ] 20 Legal-Ops-specific workflows
-- [ ] 30 Legal-Ops-specific learn entries (EU AI Act for legal teams, GDPR workflows, contract-review SOPs)
-- [ ] Cross-tagging (tools that serve both RevOps and Legal Ops surface in both tracks)
-- [ ] Auto-translate to ES/PT-BR
+- [x] Legal Ops vertical config + landing page
+- [x] 30 Legal-Ops-specific tools added to catalog (CARET Legal, Spellbook, Harvey, Ironclad, ContractPodAi, etc.)
+- [ ] 20 Legal-Ops-specific workflows (10 shipped to date)
+- [x] 30 Legal-Ops-specific learn entries (EU AI Act for legal teams, GDPR workflows, contract-review SOPs)
+- [x] Cross-tagging (tools that serve both RevOps and Legal Ops surface in both tracks)
+- [x] Auto-translate to ES/PT-BR
 
 ## Phase 4 — Vertical 3: Recruiting / TA (Month 5)
 
 **Goal: ~2,500 pages.**
 
-- [ ] Recruiting vertical config + landing page
-- [ ] 40 Recruiting-specific tools (Gem, Sense, Paradox, hireEZ, Eightfold, Findem, etc.)
-- [ ] 20 Recruiting-specific workflows (sourcing automations, screening agents, candidate-engagement sequences)
-- [ ] 30 Recruiting-specific learn entries
-- [ ] Auto-translate to ES/PT-BR
+- [x] Recruiting vertical config + landing page
+- [x] 40 Recruiting-specific tools (Gem, Sense, Paradox, hireEZ, Eightfold, Findem, etc.)
+- [ ] 20 Recruiting-specific workflows (11 shipped to date)
+- [x] 30 Recruiting-specific learn entries
+- [x] Auto-translate to ES/PT-BR
 
 ## Phase 5 — Locale-native newsletters (Month 6-7)
 
@@ -81,6 +81,7 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 ## Phase 6 — Monetization layer (Month 6-9)
 
+- [x] AdSense in-article slots live (publisher ID configured) — shipped ahead of the affiliate-first plan
 - [ ] Affiliate links live on every tool/comparison page
 - [ ] Premium directory listings (paid tier — featured placement, rich profile, lead capture)
 - [ ] Paid workflow library subscription ($19/mo or $190/yr — Claude Skills, n8n flows, Cursor rules, premium agent templates)
@@ -94,19 +95,37 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 - [ ] 6,000+ indexed pages total
 - [ ] First $10K MRR milestone
 
+## Locales
+
+| Locale | Status | Tools | Notes |
+|---|---|---|---|
+| English (en) | Launched | 99 | Canonical |
+| Spanish (es) | Launched | 52 | LATAM neutral |
+| Portuguese, Brazil (pt-BR) | Launched | 52 | |
+| Japanese (ja) | Seeded | 3 | Translation queue active |
+| Russian (ru) | Seeded | 3 | Translation queue active |
+| Romanian (ro) | Seeded | 4 | Translation queue active |
+| French (fr) | Seeded | 3 | Translation queue active |
+| German (de) | Seeded | 3 | Translation queue active |
+| Simplified Chinese (zh-CN) | Seeded | 2 | Translation queue active |
+| Korean (ko) | Seeded | 3 | Translation queue active |
+| Arabic (ar) | Seeded | 3 | RTL; translation queue active |
+
+"Launched" = full content parity with the active verticals. "Seeded" = locale is configured, translation queue is running, and a small set of entries has shipped.
+
 ## Public metrics (published once non-zero)
 
 | Metric | Status |
 |---|---|
-| Indexed pages | 0 |
-| Verticals live | 0 |
-| Locales live | 0 |
-| Newsletter subscribers | 0 |
+| Content pages live | ~855 (EN: 367 / ES: 232 / pt-BR: 232 / 8 seeded locales: ~24) |
+| Verticals live | 3 (RevOps, Legal Ops, Recruiting) |
+| Locales live | 3 launched + 8 seeded |
+| Newsletter subscribers | 0 (beehiiv not wired) |
 | Discord members | 0 |
 | Paid library subscribers | 0 |
 | MRR | $0 |
 
-Live dashboard ships in Phase 1.
+*as of 2026-05-03*
 
 ## How to follow
 
