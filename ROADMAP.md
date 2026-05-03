@@ -27,7 +27,7 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 - [x] Comparison page generator (`/vs/[a]-vs-[b]` from any pair of tool entries)
 - [x] Workflow library entry format + downloadable artifact pipeline
 - [x] Learn/AEO hub format + cross-linking engine
-- [x] First 50 tool entries (RevOps stack: HubSpot, Salesforce, Clay, Apollo, Outreach, Gong, Chorus, Default, RegieAI, Common Room, etc.)
+- [x] First 50 tool entries (RevOps stack: HubSpot, Salesforce, Clay, Apollo, Outreach, Gong, Chorus, Default, RegieAI, Common Room, Clari, Chili Piper, LeanData, etc. — full count now 50 tagged)
 - [x] First 100 comparison pages (auto-generated from tool pairs)
 - [x] First 30 workflow library entries (real, tested artifacts — Claude Skills, n8n flows, Cursor rules)
 - [x] First 50 learn/glossary entries (`/learn/what-is-revops`, `/learn/pipeline-velocity`, etc.)
@@ -52,8 +52,8 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 **Goal: ~1,500 pages.**
 
 - [x] Legal Ops vertical config + landing page
-- [x] 30 Legal-Ops-specific tools added to catalog (CARET Legal, Spellbook, Harvey, Ironclad, ContractPodAi, etc.)
-- [ ] 20 Legal-Ops-specific workflows (10 shipped to date)
+- [x] 30 Legal-Ops-specific tools added to catalog (CARET Legal, Spellbook, Harvey, Ironclad, ContractPodAi, DraftWise, etc. — now 40 tagged across the vertical)
+- [x] 20 Legal-Ops-specific workflows
 - [x] 30 Legal-Ops-specific learn entries (EU AI Act for legal teams, GDPR workflows, contract-review SOPs)
 - [x] Cross-tagging (tools that serve both RevOps and Legal Ops surface in both tracks)
 - [x] Auto-translate to ES/PT-BR
@@ -63,8 +63,8 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 **Goal: ~2,500 pages.**
 
 - [x] Recruiting vertical config + landing page
-- [x] 40 Recruiting-specific tools (Gem, Sense, Paradox, hireEZ, Eightfold, Findem, etc.)
-- [ ] 20 Recruiting-specific workflows (11 shipped to date)
+- [x] 40 Recruiting-specific tools (Gem, Sense, Paradox, hireEZ, Eightfold, Findem, etc. — now 53 tagged across the vertical)
+- [x] 20 Recruiting-specific workflows
 - [x] 30 Recruiting-specific learn entries
 - [x] Auto-translate to ES/PT-BR
 
@@ -99,9 +99,9 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 | Locale | Status | Tools | Notes |
 |---|---|---|---|
-| English (en) | Launched | 99 | Canonical |
-| Spanish (es) | Launched | 52 | LATAM neutral |
-| Portuguese, Brazil (pt-BR) | Launched | 52 | |
+| English (en) | Launched | 120 | Canonical |
+| Spanish (es) | Launched | 52 | LATAM neutral; translation queue rebuilt for the new EN entries |
+| Portuguese, Brazil (pt-BR) | Launched | 52 | Translation queue rebuilt for the new EN entries |
 | Japanese (ja) | Seeded | 3 | Translation queue active |
 | French (fr) | Seeded | 3 | Translation queue active |
 | German (de) | Seeded | 3 | Translation queue active |
@@ -112,8 +112,8 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 | Metric | Status |
 |---|---|
-| Content pages live | ~840 (EN: 367 / ES: 232 / pt-BR: 232 / 3 seeded locales: ~9) |
-| Verticals live | 3 (RevOps, Legal Ops, Recruiting) |
+| Content pages live | ~947 (EN: 467 / ES: 232 / pt-BR: 232 / 3 seeded locales: ~9; ES + pt-BR translation queue rebuilt — drain pending) |
+| Verticals live | 3 (RevOps, Legal Ops, Recruiting — all clearing per-phase floor) |
 | Locales live | 3 launched + 3 seeded |
 | Newsletter subscribers | 0 (beehiiv not wired) |
 | Discord members | 0 |
