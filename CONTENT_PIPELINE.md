@@ -114,7 +114,171 @@ The author runs this against every workflow draft before committing. If any box 
 - [ ] Artifact bundle exists at `apps/web/public/artifacts/<slug>/` and meets the per-type minimum above
 - [ ] Compares against ≥ 1 specific alternative (DIY, status quo, named off-the-shelf product) with a reason for the choice
 
-For non-workflow entity types (tools, comparisons, learn, stacks), the spirit of the bar is the same — every claim names a real thing, every recommendation cites a guard, every section answers a question a reader could otherwise not act on. Per-type checklists may follow when those backfills happen.
+The same shape — concrete signals, per-type minimum, anti-patterns, pre-commit checklist — applies to every other content type on the site. Per-type bars follow.
+
+## Per-type quality bars
+
+The workflow bar above is the most demanding because workflows ship a downloadable artifact bundle on top of the MDX body. Tools, comparisons, learn entries, and stacks ship MDX only — the body *is* the deliverable, and the bar is set on the body alone.
+
+The recurring pattern: every entry must answer questions a reader can otherwise not act on. The reader of a tool page is deciding whether to evaluate, buy, or skip it. The reader of a comparison page is deciding which of N options to pick. The reader of a learn page is deciding whether they understand the concept well enough to use it in their own work. The reader of a stack page is deciding whether to copy the combination or assemble something else.
+
+A page that doesn't move the reader off neutral on its decision is filler, regardless of how well-written or how long.
+
+### Tools
+
+A tool entry is a buying-decision aid for an ops leader who has 40-100 tools to evaluate per quarter. The reader needs the page to do the elimination work for them.
+
+**Concrete signals:**
+
+- The page names the specific scoped use case where this tool is the right pick — not "for sales teams," but "for outbound SDR teams in the 5-25 rep range building dedicated-domain warm-up infrastructure."
+- Pricing reality is named, not just MSRP. "$45/seat list" is the website. "$28/seat at the 50-seat tier with annual commit" is what teams actually pay; that's what the reader needs.
+- The page tells someone explicitly NOT to use it. The anti-ICP is the highest-signal sentence on the page — it eliminates 30-60% of readers in one line and saves them an evaluation cycle.
+- ≥1 alternative is named with the rule for picking it instead.
+- "Watch-outs" name implementation gotchas (long ramp, vendor support quality, integration debt), not generic "be sure to evaluate carefully."
+
+**Suggested body shape (~250-400 words):**
+
+- *What it is* (1 paragraph: category, what it does, what category leader it most resembles)
+- *Why it shows up in [vertical] stacks* (the concrete reason — "only one with native MCP support," "lowest-cost tier that has API access")
+- *Pricing reality* (MSRP, typical-paid, the tier you need for the use case)
+- *Best for* (role + scoped use case)
+- *Watch-outs* (each paired with a guard)
+
+**Anti-patterns to refuse:**
+
+- "Collaborative platform for modern teams." — meaningless.
+- "Scales to any team size." — false; flag the size band where ROI inverts.
+- Listing the MSRP from the pricing page without naming what teams actually pay.
+- No anti-ICP — every tool has someone who shouldn't use it; if you can't name them, the page isn't done.
+- Watch-outs that aren't paired with a guard ("watch out for vendor lock-in" → so what; "watch out for vendor lock-in — Outreach's contact-record schema is proprietary; export to a neutral format quarterly" → actionable).
+
+**Pre-commit checklist:**
+
+- [ ] Body ≥ 200 words (tools are tighter than workflows — under 200 usually means corners cut)
+- [ ] Names ≥ 1 specific scoped use case where this tool is the right pick
+- [ ] Names the real-world price band, not just the MSRP from the pricing page
+- [ ] Names ≥ 1 alternative + the rule for picking it instead
+- [ ] Has an explicit "best for…" line that names the role + use case
+- [ ] Has ≥ 2 watch-outs each paired with a specific guard
+- [ ] `last_reviewed` matches the date sources were actually checked (no backdating)
+- [ ] No vague-superlative evidence (treat "best-in-class," "comprehensive," "robust," "seamless," "powerful," "intuitive" as red flags — strip on review unless backed by a specific claim)
+
+### Comparisons
+
+A comparison entry is a routing rule. The reader has narrowed the field to 2-N options and needs the page to tell them which one to pick — and when.
+
+**Concrete signals:**
+
+- Both sides win at something specific. "It depends" without a routing rule is filler.
+- Pricing comparison is quantified ("2-3× difference at the same scope," not "more expensive").
+- The verdict is opinionated and routes by use case ("pick X when Y; pick Z when W"), not "either is fine."
+- The page names what to do if *neither* fits — the status-quo, the DIY, or the third tool that should be in the consideration set.
+- Failure modes of picking the wrong one are named ("Findem at SDR scale will burn budget").
+
+**Suggested body shape varies by `type`:**
+
+- **Pairwise** (~250-400 words): *Where X wins* / *Where Y wins* / *Pricing reality* / *Verdict — pick X when…, pick Y when…*
+- **Roundup** (~300-500 words): One section per option (use-case the option wins at) / *What's not on this list* (and why) / *Minimum viable choice* (the default if you can't justify going deeper)
+- **Alternatives** (~300-500 words): *What you're leaving (status-quo)* / *Each alternative's shape* / *Match rules* / *When the status quo wins*
+
+**Anti-patterns to refuse:**
+
+- "Both are great." — refuses to do the work.
+- "It depends on your use case" without naming the use cases.
+- Feature-list framing without differential framing — listing features both have is noise.
+- Pricing comparison without a multiplier or band.
+- Roundup that doesn't name what's *not* on the list.
+- Verdict that names neither option as the default — sometimes the right verdict is "if you can't decide, pick X; you can switch later."
+
+**Pre-commit checklist:**
+
+- [ ] Body ≥ 300 words
+- [ ] Each option has at least one specific category where it wins (no fence-sitting on every dimension)
+- [ ] Pricing comparison is quantified (ratio, band, or per-unit) — not "more expensive"
+- [ ] Has a "Verdict" / "Pick X when…" / "Match rules" section with routing logic
+- [ ] Names what to do if neither/none of the options fit (status quo, DIY, third tool)
+- [ ] No "it depends" hedge unless immediately followed by what it depends on
+- [ ] `last_updated` matches when sources were actually re-checked
+
+### Learn
+
+A learn entry is an answer to a specific question the reader has typed (or would type) into Google or Claude. The `target_questions` array in frontmatter is the contract: the body must answer those questions, in the first paragraph if possible (AEO/SGE optimization), in depth below.
+
+**Concrete signals (vary by `type`):**
+
+- **Definition** — first sentence defines the thing. Second paragraph names what it is *not*. Then who cares, why it matters, related concepts.
+- **FAQ** — the question is the H1 or first sub-heading. One-paragraph direct answer. Then nuance, edge cases, watch-outs.
+- **How-to** — numbered steps with the actual tools, files, commands named. Prerequisites listed. Success criteria specified.
+- **Framework** — the framework is rendered explicitly: a formula, a decision tree, a table with calibrated values. Generic "consider these factors" is filler.
+- **Glossary** — short, definitional. Cross-links to longer learn entries or tools where the term is operative.
+
+**Suggested body shapes:**
+
+- *Definition* (~400-700 words): lead-with-answer paragraph; what it is; what it isn't; who cares; related concepts; common pitfalls
+- *FAQ* (~300-500 words): direct answer; nuance; edge cases; related questions
+- *How-to* (~500-900 words): prerequisites; numbered steps; success criteria; common errors; troubleshooting
+- *Framework* (~500-900 words): when to use; the framework rendered explicitly with values; worked example; common pitfalls
+- *Glossary* (~150-300 words): definition; usage in context; related terms
+
+**Anti-patterns to refuse:**
+
+- Definitional content that buries the definition. The first sentence answers "what is X?" — not "X is an increasingly important concept in modern…"
+- Frameworks without calibrated values. "Pipeline coverage should be appropriate to your stage" is filler. "SMB pipeline coverage 2.5-3.5× quota; Enterprise 4.5-6.0× quota" is the framework.
+- How-tos that don't name actual tools/commands/files. "Configure your CRM" → "In HubSpot Settings → Properties → Custom Properties, add `Last_QBR_Date` as a Date type."
+- "It varies by company" with no calibration band.
+- Listicles without a "minimum viable choice" or default recommendation.
+- Round-number claims with no source ("70% of teams…"). Either find the real number or drop the claim.
+
+**Pre-commit checklist:**
+
+- [ ] Body ≥ 400 words (definitions can run shorter; frameworks/how-tos are denser)
+- [ ] First paragraph directly answers the primary `target_questions` entry — AEO snippet-worthy
+- [ ] For *definition* type: explicit "what it is NOT" content within the first 200 words
+- [ ] For *framework* type: specific values, calibrated bands, not placeholder generics
+- [ ] For *how-to* type: numbered steps + named tools/commands/files at every step
+- [ ] Has a "Common pitfalls" / "Watch-outs" section with paired guards
+- [ ] Cross-links to ≥ 1 related tool, workflow, or learn entry where the reader can act
+- [ ] `last_updated` matches when sources were actually checked
+
+### Stacks
+
+A stack entry is a copyable recipe — a curated tool combination with named roles and stated cost. The reader is deciding whether to adopt the stack wholesale, swap one tool, or assemble something different.
+
+**Concrete signals:**
+
+- Each tool has a specifically-named role (intent layer, orchestration layer, last-mile delivery), not "we use these and they work."
+- The handoffs between tools are named ("6sense fires intent → Outreach enrolls → Gong confirms the call happened"), not implied.
+- Cost baseline is named (annual ballpark for the whole stack, per-seat band, or flat).
+- Match rules — when this stack is the right pick (segment, motion, scale) and when it isn't.
+- Common variations — the 2-3 ways teams actually swap tools, with the reason for each swap.
+- "What this stack does NOT solve" — the gaps. Sets reader expectations and prevents the stack from being misread as a complete answer.
+
+**Suggested body shape (~400-700 words):**
+
+- *How the pieces fit* (per-tool role + handoffs)
+- *Why this combination* (the load-bearing reason — single source of truth, lowest integration debt, etc.)
+- *Cost reality* (annual stack cost band, per-seat or flat)
+- *Common variations* (2-3 swaps and why)
+- *What this stack does NOT replace* (the gaps)
+
+**Anti-patterns to refuse:**
+
+- "We use these tools and they work great" — no roles, no handoffs, no cost.
+- Missing cost reality. The reader is comparing this stack to their current spend; without a number they can't.
+- "Industry standard" framing without naming the load-bearing reason this combination wins.
+- Stacks without a "what this doesn't solve" — readers assume completeness and over-buy.
+- Variations described in passing ("you could swap X for Y") without naming when each swap is right.
+
+**Pre-commit checklist:**
+
+- [ ] Body ≥ 400 words
+- [ ] Each tool in the `tools[]` array has a specifically-named role in the body (not just listed)
+- [ ] Handoffs between tools are named (which event in tool A triggers which action in tool B)
+- [ ] Cost baseline (annual range, per-seat band, or flat) — not adjectives
+- [ ] Names ≥ 1 common variation + the rule for when to swap
+- [ ] Has a "What this stack does NOT replace" section with the gaps
+- [ ] Has match rules — when this stack is the right pick + when it isn't (segment, motion, scale)
+- [ ] No "best practice" framing as evidence — pick a real reason this combination wins
 
 ## What the validators actually catch
 
