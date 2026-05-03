@@ -351,17 +351,19 @@ The freshness check is mechanical: for every entry, `today - last_reviewed > SLA
 
 A future CI script (out of scope today) will surface entries past their SLA in a weekly digest. Until then, the responsibility sits with whoever opens the entry's MDX file: if the date is past SLA, refresh before any other edit.
 
-### Editorial review gate
+### Higher-risk page classes
 
-Most pages are LLM-authored end-to-end with no human gate. That model is fine for the bulk of the catalog. It fails for these page classes, which require a named human reviewer's sign-off before merge:
+Every page on this site is LLM-authored end-to-end, with no human review gate. That is the operating model. It is the right model for a catalog of this scale; a human gate would cap throughput long before it caught a meaningful share of errors that the per-type quality bars and validators don't already catch.
 
-- **New tool entries** — first-time additions to the catalog. The risk is misclassification (wrong category, wrong segment band) that ripples through every comparison and stack that subsequently links to the tool.
-- **Comparison verdicts that move a tool's ranking by ≥ 2 positions** — relative to the prior version of the comparison, OR relative to other comparisons that include the same tool. Reviewer confirms the move is grounded in evidence, not noise.
-- **Anything in legal/compliance space** — the `legal-ops` vertical, or any entry that cites NYC LL 144, EU AI Act, GDPR, CCPA, SOC 2, ISO 27001, HIPAA, or named bar association rules. Wrong here costs more than wrong elsewhere.
+Some page classes carry more downstream consequences when they're wrong. The author's response to that is not "wait for review" — it is to spend more time on the per-type checklist, source-bucket discipline, and the watch-out / paired-guard rule, before merge. The classes are:
+
+- **New tool entries** — first-time additions to the catalog. The risk is misclassification (wrong category, wrong segment band) that ripples through every comparison and stack that subsequently links to the tool. Mitigation: confirm category against ≥ 2 existing entries in the same category before merge; cross-link to the comparisons / stacks the new tool plausibly belongs in.
+- **Comparison verdicts that move a tool's ranking by ≥ 2 positions** — relative to the prior version of the comparison, OR relative to other comparisons that include the same tool. The risk is shifting recommendations on noise. Mitigation: the verdict change cites the specific evidence (vendor change, customer-interview signal, market-share shift) that drove the move; if no specific evidence exists, the verdict doesn't move.
+- **Anything in legal/compliance space** — the `legal-ops` vertical, or any entry that cites NYC LL 144, EU AI Act, GDPR, CCPA, SOC 2, ISO 27001, HIPAA, or named bar association rules. The risk is asserting a legal interpretation that's wrong. Mitigation: the page describes what the regulation requires, not what counsel should advise; jurisdiction-specific advice is hedged with "consult counsel"; citations resolve to the regulation itself, not to secondary commentary.
 - **Affiliate-linked entries** — see "Affiliate disclosure" below.
-- **Sunset / deprecation pages** — when a tool is being marked end-of-life, removed, or has a major-version-breaking change. The reader's existing setup may depend on the tool; the deprecation language has consequences.
+- **Sunset / deprecation pages** — when a tool is being marked end-of-life, removed, or has a major-version-breaking change. The reader's existing setup may depend on the tool. Mitigation: name the migration path; preserve the prior page at the original URL with a `superseded_by` pointer; do not delete.
 
-The reviewer's name + date is recorded in the entry's frontmatter under `reviewed_by` and `reviewed_at`. Reviewer accountability is named, not anonymous. (Schema addition pending — for now, record in the commit message.)
+Mistakes in any class still happen and get corrected through `CORRECTIONS.md` (see below). The site's defensibility comes from the correction loop, not from a human pre-merge gate.
 
 ### Affiliate disclosure
 
@@ -370,7 +372,7 @@ The `affiliate_link` field in the tool schema is allowed but carries an obligati
 1. **Inline disclosure**: every affiliate-linked entry includes a one-line disclosure in the body (suggested: "ooligo earns a referral fee on signups via this page — the recommendation is unaffected; report bias via `CORRECTIONS.md`."). The disclosure goes near the recommendation, not buried at the bottom.
 2. **Independence test**: before adding `affiliate_link`, the author asks "would I recommend this tool with the same emphasis, in the same scope, against the same alternatives, if there were no referral fee?" If the answer is no, drop the affiliation. The page's editorial integrity is more valuable than the referral.
 
-Editorial review is required for every entry where `affiliate_link` is added or changed. The reviewer specifically validates the independence test — affiliation can't be the load-bearing reason a tool is recommended over an alternative.
+Affiliate-linked entries don't get a separate review gate either, but the author runs the independence test explicitly before merge and records the answer in the commit message ("independence test: would recommend at same emphasis without affiliation — yes, because…"). If the answer is no, drop `affiliate_link` rather than ship the conflict.
 
 ### Voice consistency
 
