@@ -14,8 +14,7 @@ Each competency has:
 - The level bands it has anchor descriptions for
 - Anchor descriptions per score level (1-5) per level band
 
-The skill maps each competency to a stage and emits the anchors for
-the candidate's level band into the per-stage rubric.
+The skill maps each competency to a stage and emits the anchors for the candidate's level band into the per-stage rubric.
 
 ## Coverage matrix
 
@@ -33,34 +32,22 @@ the candidate's level band into the per-stage rubric.
 
 ### systems-design (IC4 band)
 
-- **5** — Designs the system end-to-end including failure modes,
-  upgrade paths, and observability. Names trade-offs explicitly with
-  reasoning per axis (latency, cost, complexity, blast radius).
-- **4** — Designs the happy path and the most likely failure modes.
-  Names trade-offs but reasoning is uneven across axes.
-- **3** — Designs the happy path. Identifies failure modes when
-  prompted. Trade-offs implicit, surfaced under follow-up questioning.
-- **2** — Designs a workable system but misses obvious failure modes
-  or scaling cliffs. Trade-offs not articulated.
-- **1** — Designs a system that does not meet stated requirements, or
-  cannot articulate why a design is structured as proposed.
+- **5** — Designs the system end-to-end including failure modes, upgrade paths, and observability. Names trade-offs explicitly with reasoning per axis (latency, cost, complexity, blast radius).
+- **4** — Designs the happy path and the most likely failure modes. Names trade-offs but reasoning is uneven across axes.
+- **3** — Designs the happy path. Identifies failure modes when prompted. Trade-offs implicit, surfaced under follow-up questioning.
+- **2** — Designs a workable system but misses obvious failure modes or scaling cliffs. Trade-offs not articulated.
+- **1** — Designs a system that does not meet stated requirements, or cannot articulate why a design is structured as proposed.
 
 > Replace the IC4 anchors above with your real anchors. Add anchor
 > blocks for IC3, IC5, and IC6 in the same shape.
 
 ### stakeholder-influence (M2 band)
 
-- **5** — Names the specific stakeholders, their incentives, the
-  surface area of the disagreement, and the sequence of conversations
-  that produced commitment. Outcome was a documented decision change.
-- **4** — Names the stakeholders and incentives, walks through
-  conversations, but the outcome description is fuzzy.
-- **3** — Walks through one or two conversations. Stakeholder
-  incentives are inferred under prompting.
-- **2** — Describes the disagreement and the resolution but cannot
-  describe the work between them.
-- **1** — Describes a meeting outcome with no underlying stakeholder
-  work.
+- **5** — Names the specific stakeholders, their incentives, the surface area of the disagreement, and the sequence of conversations that produced commitment. Outcome was a documented decision change.
+- **4** — Names the stakeholders and incentives, walks through conversations, but the outcome description is fuzzy.
+- **3** — Walks through one or two conversations. Stakeholder incentives are inferred under prompting.
+- **2** — Describes the disagreement and the resolution but cannot describe the work between them.
+- **1** — Describes a meeting outcome with no underlying stakeholder work.
 
 > Replace the M2 anchors above with your real anchors. Add anchor
 > blocks for IC4, IC5, IC6, M1, M3 in the same shape.
@@ -69,15 +56,9 @@ the candidate's level band into the per-stage rubric.
 
 When you add or change anchors:
 
-- Run a calibration session with at least 3 interviewers scoring the
-  same recorded interview. If their scores diverge by more than 1
-  point, the anchors are not calibrated yet.
-- Date each change. The skill does not version anchors automatically;
-  if you change an anchor mid-loop, the consistency of the loop is on
-  you.
-- Retire anchors that the calibration set cannot reproduce. Vague
-  anchors are worse than no anchors — they create the illusion of
-  structure.
+- Run a calibration session with at least 3 interviewers scoring the same recorded interview. If their scores diverge by more than 1 point, the anchors are not calibrated yet.
+- Date each change. The skill does not version anchors automatically; if you change an anchor mid-loop, the consistency of the loop is on you.
+- Retire anchors that the calibration set cannot reproduce. Vague anchors are worse than no anchors — they create the illusion of structure.
 
 ## Last edited
 

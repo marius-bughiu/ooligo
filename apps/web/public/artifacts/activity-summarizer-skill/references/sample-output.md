@@ -8,14 +8,10 @@
 
 ## Tone calibration notes
 
-- Bullets are one sentence. If you need two sentences, the bullet is
-  doing too much.
-- Cite the source inline. "Gong call 2026-04-29" beats "according to
-  recent activity."
-- The suggestion line names a person if possible: "propose a 30-min
-  exec brief with their CFO" beats "engage the executive sponsor."
-- Avoid hedging adverbs: `seems`, `appears`, `potentially`. The skill
-  has the data; either say it or don't include the bullet.
+- Bullets are one sentence. If you need two sentences, the bullet is doing too much.
+- Cite the source inline. "Gong call 2026-04-29" beats "according to recent activity."
+- The suggestion line names a person if possible: "propose a 30-min exec brief with their CFO" beats "engage the executive sponsor."
+- Avoid hedging adverbs: `seems`, `appears`, `potentially`. The skill has the data; either say it or don't include the bullet.
 
 ## Example
 
@@ -53,8 +49,7 @@ escalate to a paid pilot path that bypasses procurement.
 
 ## What a bad sample looks like (for contrast)
 
-The skill should NEVER produce output like this — keep this in the
-reference file as a negative example so the model conditions away from it:
+The skill should NEVER produce output like this — keep this in the reference file as a negative example so the model conditions away from it:
 
 ```markdown
 # Weekly Update
@@ -72,10 +67,7 @@ reference file as a negative example so the model conditions away from it:
 Continue the great work and keep the momentum going!
 ```
 
-Failure modes shown above: vague accounts ("several"), hedging
-("appears", "seems"), generic suggestion ("keep the momentum"), no
-citations, no specifics. The signal rubric and rendering guards in
-the skill exist to refuse output like this.
+Failure modes shown above: vague accounts ("several"), hedging ("appears", "seems"), generic suggestion ("keep the momentum"), no citations, no specifics. The signal rubric and rendering guards in the skill exist to refuse output like this.
 
 ## Last edited
 

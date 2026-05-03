@@ -7,8 +7,7 @@
 
 ## Funnel stages
 
-List every active value of the Opportunity `StageName` picklist, in funnel
-order. Mark which stages are open vs closed-won vs closed-lost.
+List every active value of the Opportunity `StageName` picklist, in funnel order. Mark which stages are open vs closed-won vs closed-lost.
 
 | Order | StageName             | Type        | Probability % |
 |------:|-----------------------|-------------|---------------:|
@@ -23,9 +22,7 @@ order. Mark which stages are open vs closed-won vs closed-lost.
 
 ## Required fields per stage
 
-A row sitting in stage N must have all fields listed for N (and all earlier
-stages) populated. The Skill flags rows that violate this as
-`stage_violation` candidates.
+A row sitting in stage N must have all fields listed for N (and all earlier stages) populated. The Skill flags rows that violate this as `stage_violation` candidates.
 
 ### Qualification
 
@@ -75,8 +72,7 @@ stages) populated. The Skill flags rows that violate this as
 
 ## Skip-stage rules
 
-Stages that may be legitimately skipped (the Skill does not flag a
-violation if the row passes through them):
+Stages that may be legitimately skipped (the Skill does not flag a violation if the row passes through them):
 
 - `Solutioning` may be skipped for inbound deals under $10k ACV
 - `Verbal Commit` may be skipped for self-serve conversions

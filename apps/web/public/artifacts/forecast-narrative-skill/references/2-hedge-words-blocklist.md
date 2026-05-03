@@ -56,14 +56,11 @@
 
 These are sometimes flagged by overzealous filters. Keep them.
 
-- "If {Account} slips, commit lands at $X." — this is a dollar consequence,
-  not a hedge.
-- "Inferred from Gong call summary" — this is a source citation, not a
-  hedge. Source labels increase trust; they do not undermine the claim.
+- "If {Account} slips, commit lands at $X." — this is a dollar consequence, not a hedge.
+- "Inferred from Gong call summary" — this is a source citation, not a hedge. Source labels increase trust; they do not undermine the claim.
 - "No recent customer activity" — direct admission. Keep.
 - "Reporting line not public" — direct admission. Keep.
 
 ## Last edited
 
-{YYYY-MM-DD} — extend whenever a new hedge survives the removal pass in
-production. The list grows; it does not shrink.
+{YYYY-MM-DD} — extend whenever a new hedge survives the removal pass in production. The list grows; it does not shrink.

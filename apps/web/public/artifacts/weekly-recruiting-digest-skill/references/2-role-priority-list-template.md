@@ -8,25 +8,14 @@
 
 ## How the skill uses this file
 
-- **Top-N drill-down selection.** The skill drills down on the top N
-  roles ranked by `priority` (critical first, then high, then
-  medium). N defaults to 5; configurable up to 12 in the skill run
-  config.
-- **Stage SLA loading.** The per-stage SLAs in the role rows are
-  what step 2 of the skill checks against when computing
-  "time-in-stage exceeded SLA".
-- **Confidentiality flagging.** Roles with `confidentiality: restricted`
-  are summarised, not drilled, regardless of priority.
-- **Critical-role validation.** Step 1 of the skill validates that
-  every `priority: critical` role still exists in the current ATS
-  snapshot, and surfaces any that have been closed or paused since
-  this file was last edited.
+- **Top-N drill-down selection.** The skill drills down on the top N roles ranked by `priority` (critical first, then high, then medium). N defaults to 5; configurable up to 12 in the skill run config.
+- **Stage SLA loading.** The per-stage SLAs in the role rows are what step 2 of the skill checks against when computing "time-in-stage exceeded SLA".
+- **Confidentiality flagging.** Roles with `confidentiality: restricted` are summarised, not drilled, regardless of priority.
+- **Critical-role validation.** Step 1 of the skill validates that every `priority: critical` role still exists in the current ATS snapshot, and surfaces any that have been closed or paused since this file was last edited.
 
 ## Per-role rows
 
-Edit weekly. Drop closed roles. Add new opens. The skill captures
-this file's SHA-256 in its run output so weekly diffs are visible
-in retro.
+Edit weekly. Drop closed roles. Add new opens. The skill captures this file's SHA-256 in its run output so weekly diffs are visible in retro.
 
 ```yaml
 roles:
@@ -109,18 +98,11 @@ roles:
 
 To keep priority assignment defensible week-to-week:
 
-- **critical** — revenue-blocking, leadership-blocking, or
-  regulatory-deadline-driven. Every critical role drills down even
-  if the priority list overflows N.
-- **high** — important to the quarter's plan but not blocking. Drills
-  down only if the top-N slots are not all consumed by critical roles.
-- **medium** — normal-priority backfills and growth roles. Appendix
-  by default.
-- **low** — exploratory or speculative reqs (talent pipelining,
-  pre-funding hiring). Appendix only; never drilled.
+- **critical** — revenue-blocking, leadership-blocking, or regulatory-deadline-driven. Every critical role drills down even if the priority list overflows N.
+- **high** — important to the quarter's plan but not blocking. Drills down only if the top-N slots are not all consumed by critical roles.
+- **medium** — normal-priority backfills and growth roles. Appendix by default.
+- **low** — exploratory or speculative reqs (talent pipelining, pre-funding hiring). Appendix only; never drilled.
 
 ## Last edited
 
-<YYYY-MM-DD> — bump weekly. The skill warns if this file is older
-than 7 days, on the assumption that a stale priority list produces
-a digest pointed at the wrong roles.
+<YYYY-MM-DD> — bump weekly. The skill warns if this file is older than 7 days, on the assumption that a stale priority list produces a digest pointed at the wrong roles.

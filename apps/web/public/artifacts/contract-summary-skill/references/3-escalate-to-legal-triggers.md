@@ -27,9 +27,7 @@
 
 ## Soft triggers (escalate if combined)
 
-Any single one of these does not force an escalation, but two or more
-in the same contract trigger a `Counsel review recommended` (lower
-severity than `required`):
+Any single one of these does not force an escalation, but two or more in the same contract trigger a `Counsel review recommended` (lower severity than `required`):
 
 - Termination for cause without a cure period
 - "Sole discretion" wording in an obligation that affects us
@@ -38,23 +36,18 @@ severity than `required`):
 - Currency or governing law mentioned inconsistently across sections
 - Notice obligations requiring physical mail or specific carriers
 - Audit rights without scope or frequency limits
-- Data-handling obligations citing standards not named in the
-  contract (e.g. "industry-standard practices" with no definition)
+- Data-handling obligations citing standards not named in the contract (e.g. "industry-standard practices" with no definition)
 
 ## Ambiguity triggers (replace line with "Ambiguous — see legal")
 
-The skill does not paraphrase past these — it leaves the gap visible
-so legal review fills it in:
+The skill does not paraphrase past these — it leaves the gap visible so legal review fills it in:
 
-- Two sections appear to conflict on the same point (e.g. term ends
-  on different dates in different clauses)
+- Two sections appear to conflict on the same point (e.g. term ends on different dates in different clauses)
 - A defined term is used but never defined
 - A monetary amount is given in two different units or currencies
-- Dates are inconsistent (e.g. effective date later than first
-  payment date)
+- Dates are inconsistent (e.g. effective date later than first payment date)
 - A signature block is missing or incomplete
-- The contract refers to a counterparty entity name that does not
-  match the parties block
+- The contract refers to a counterparty entity name that does not match the parties block
 
 ## Output format for an escalation block
 

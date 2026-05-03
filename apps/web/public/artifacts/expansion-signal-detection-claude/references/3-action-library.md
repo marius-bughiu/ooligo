@@ -24,9 +24,7 @@ Not acceptable:
 - "Reach out about expansion" (no verb-and-artifact)
 - "Engage the buying committee" (vague)
 
-The skill enforces this with a literal substring check on the
-emitted Action field. Anything not from this library — or matching
-the vague-language denylist — is replaced with `needs human review`.
+The skill enforces this with a literal substring check on the emitted Action field. Anything not from this library — or matching the vague-language denylist — is replaced with `needs human review`.
 
 ## SKU: enterprise-tier
 
@@ -52,14 +50,11 @@ the vague-language denylist — is replaced with `needs human review`.
 
 ## SKU: {your_next_sku}
 
-(Add a section per SKU. Every SKU listed in the taxonomy file MUST
-have at least one matching trigger-action row here, or the skill
-will emit `needs human review` for every signal that maps to it.)
+(Add a section per SKU. Every SKU listed in the taxonomy file MUST have at least one matching trigger-action row here, or the skill will emit `needs human review` for every signal that maps to it.)
 
 ## Vague-language denylist
 
-The post-process filter rejects any Action field containing the
-following substrings without an accompanying named artifact:
+The post-process filter rejects any Action field containing the following substrings without an accompanying named artifact:
 
 - `follow up`
 - `reach out`
@@ -71,9 +66,7 @@ following substrings without an accompanying named artifact:
 - `loop in`
 - `start a conversation`
 
-If a legitimate action needs one of these verbs, write the action
-with a named artifact attached (e.g. "Loop in the Solutions Engineer
-{name} on the next call to demo {feature}.").
+If a legitimate action needs one of these verbs, write the action with a named artifact attached (e.g. "Loop in the Solutions Engineer {name} on the next call to demo {feature}.").
 
 ## Last edited
 

@@ -7,14 +7,11 @@
 
 ## Last edited
 
-{YYYY-MM-DD} — the skill warns the reviewer when this date is more
-than 90 days old. Update it whenever any threshold below changes,
-even by a point.
+{YYYY-MM-DD} — the skill warns the reviewer when this date is more than 90 days old. Update it whenever any threshold below changes, even by a point.
 
 ## §1. Segments
 
-The thresholds in §§2-5 are segment-specific. Define your segments
-once here and the skill will apply the right column.
+The thresholds in §§2-5 are segment-specific. Define your segments once here and the skill will apply the right column.
 
 | Segment | ACV band | Typical term | Typical sales motion |
 |---|---|---|---|
@@ -34,8 +31,7 @@ Discount allowed in exchange for multi-year commit, by segment.
 | Enterprise | 0% | 8% | 15% | 18% | 22% |
 | Strategic | 0% | 10% | 18% | 22% | 25% |
 
-Term incentives stack with §3 volume discounts up to the per-segment
-ceiling in §6.
+Term incentives stack with §3 volume discounts up to the per-segment ceiling in §6.
 
 ## §3. Volume discount
 
@@ -70,13 +66,11 @@ Default Net-30. Concessions allowed below.
 | Y1 25% / Y2 75% / Y3 100% | yes | VP Sales |
 | Custom | requires VP Sales + Finance | named exception |
 
-Ramp deals require the §2 term incentive to be re-computed against
-the *contractual* term, not the ramped-up term.
+Ramp deals require the §2 term incentive to be re-computed against the *contractual* term, not the ramped-up term.
 
 ## §6. Maximum stacked discount per segment
 
-When term incentive (§2), volume discount (§3), and payment-term
-concession (§4) are stacked, total effective discount cannot exceed:
+When term incentive (§2), volume discount (§3), and payment-term concession (§4) are stacked, total effective discount cannot exceed:
 
 | Segment | Stacked ceiling | Approver to exceed |
 |---|---|---|
@@ -85,8 +79,7 @@ concession (§4) are stacked, total effective discount cannot exceed:
 | Enterprise | 28% | CRO + CFO |
 | Strategic | 35% | CEO + CFO |
 
-The skill caps recommendations at this ceiling. Anything above fires
-the escalation flag with reason "stacked concessions exceed ceiling."
+The skill caps recommendations at this ceiling. Anything above fires the escalation flag with reason "stacked concessions exceed ceiling."
 
 ## §7. Disqualifiers — do not recommend, escalate
 
@@ -95,12 +88,9 @@ The skill must escalate (not recommend) when any of these is true:
 - Discount > stacked ceiling in §6
 - Term < 12 months on a deal > $100k ACV
 - Payment terms beyond Net-90
-- Custom legal terms (MFN clause, uncapped indemnity ask, custom
-  data-residency commitments) — these need GC, not deal desk
-- Customer is on the strategic-logo list maintained at
-  `references/strategic-accounts.md` (one entry per line)
-- AE has submitted more non-policy asks this quarter than the
-  threshold in `references/3-escalation-criteria.md` §2
+- Custom legal terms (MFN clause, uncapped indemnity ask, custom data-residency commitments) — these need GC, not deal desk
+- Customer is on the strategic-logo list maintained at `references/strategic-accounts.md` (one entry per line)
+- AE has submitted more non-policy asks this quarter than the threshold in `references/3-escalation-criteria.md` §2
 
 ## §8. DOA matrix (delegation of authority)
 

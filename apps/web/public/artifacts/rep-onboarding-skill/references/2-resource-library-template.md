@@ -6,8 +6,7 @@
 > Notion page slugs, certification codes) are unusable — the rep
 > cannot self-serve from "watch a good discovery call."
 
-The skill expects each resource to have a stable ID, a tag, and a
-`last_reviewed` date. It skips any resource older than 12 months.
+The skill expects each resource to have a stable ID, a tag, and a `last_reviewed` date. It skips any resource older than 12 months.
 
 ## Format
 

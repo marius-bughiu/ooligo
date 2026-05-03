@@ -15,8 +15,7 @@
 
 ## Dimension 1 — Skill match (1-5)
 
-The candidate's profile shows direct experience with the must-have
-technologies and the specific problem-shape of the role.
+The candidate's profile shows direct experience with the must-have technologies and the specific problem-shape of the role.
 
 | Score | Anchor |
 |---|---|
@@ -28,9 +27,7 @@ technologies and the specific problem-shape of the role.
 
 ## Dimension 2 — Level fit (1-5)
 
-The candidate's stated scope and tenure pattern match the level the role
-is hiring at. Do NOT use school prestige, employer prestige, or title
-inflation as a level signal — anchor on scope description.
+The candidate's stated scope and tenure pattern match the level the role is hiring at. Do NOT use school prestige, employer prestige, or title inflation as a level signal — anchor on scope description.
 
 | Score | Anchor |
 |---|---|
@@ -42,10 +39,7 @@ inflation as a level signal — anchor on scope description.
 
 ## Dimension 3 — Company-pattern fit (1-5)
 
-The shape of the candidate's prior employers matches the shape of yours
-(stage, scale, regulated/unregulated, B2B/B2C). Anchor on
-*characteristics*, not brand names — brand-name scoring is the most
-common bias vector in AI-augmented sourcing.
+The shape of the candidate's prior employers matches the shape of yours (stage, scale, regulated/unregulated, B2B/B2C). Anchor on *characteristics*, not brand names — brand-name scoring is the most common bias vector in AI-augmented sourcing.
 
 | Score | Anchor |
 |---|---|
@@ -69,8 +63,7 @@ How likely the candidate is to respond to outreach right now.
 
 ## Disqualifiers (deterministic, applied in step 3 of the skill)
 
-These cause the candidate to be surfaced in the "skipped" table, not
-auto-rejected. The recruiter decides.
+These cause the candidate to be surfaced in the "skipped" table, not auto-rejected. The recruiter decides.
 
 - Current company is on do-not-poach list (`{path-to-list}`).
 - Email or LinkedIn URL appears in `exclude_list`.
@@ -86,11 +79,9 @@ If any of the following appear in this rubric, the skill refuses to run:
 - Photo-based scoring.
 - Employment-gap penalties without a job-related justification.
 - Age inferred from graduation year used in any dimension.
-- Gender, ethnicity, religion, sexual orientation, parental status, or
-  disability status as a scored or filtered dimension.
+- Gender, ethnicity, religion, sexual orientation, parental status, or disability status as a scored or filtered dimension.
 - "Culture fit" without behavioral anchors.
 
 ## Last edited
 
-{YYYY-MM-DD} — bump on every material change. The skill captures the
-SHA-256 of this file in its audit log per run.
+{YYYY-MM-DD} — bump on every material change. The skill captures the SHA-256 of this file in its audit log per run.

@@ -7,10 +7,7 @@
 
 ## Hard firmographic gates
 
-These are AND-gates — a candidate failing any single gate is dropped before
-any LLM scoring runs. Keep this list short (5-8 dimensions max). Long gate
-lists shrink the candidate universe below the 200-row floor and force the
-skill to loosen filters anyway.
+These are AND-gates — a candidate failing any single gate is dropped before any LLM scoring runs. Keep this list short (5-8 dimensions max). Long gate lists shrink the candidate universe below the 200-row floor and force the skill to loosen filters anyway.
 
 | Dimension | In-ICP | Stretch (allowed but downweighted) | Out (dropped pre-scoring) |
 |---|---|---|---|
@@ -23,8 +20,7 @@ skill to loosen filters anyway.
 
 ## Technographic signals
 
-Tools that signal a fit (we win when these are present). Each entry should
-name a specific product, not a category.
+Tools that signal a fit (we win when these are present). Each entry should name a specific product, not a category.
 
 - {Tool 1 — e.g. "Stripe (billing) — strong"}
 - {Tool 2 — e.g. "Datadog or New Relic — strong"}
@@ -37,9 +33,7 @@ Tools that signal misfit. The skill downweights candidates with these.
 
 ## Intent signals
 
-The signals the skill looks for in Step 4. Each must specify the primary
-source AND the required corroborating source. Single-source intent counts as
-zero per the skill's guard.
+The signals the skill looks for in Step 4. Each must specify the primary source AND the required corroborating source. Single-source intent counts as zero per the skill's guard.
 
 | Signal | Primary source | Required corroborator |
 |---|---|---|
@@ -50,8 +44,7 @@ zero per the skill's guard.
 
 ## Signal weights
 
-The skill ranks candidates on a 0-15 scale across five signal categories.
-Set the per-category weights here. Total must equal 15.
+The skill ranks candidates on a 0-15 scale across five signal categories. Set the per-category weights here. Total must equal 15.
 
 - Industry + business-model match: weight {N, e.g. 4}
 - Headcount + revenue match: weight {N, e.g. 3}
@@ -69,6 +62,4 @@ Single signals that drop a candidate regardless of other fit. Keep narrow.
 
 ## Last edited
 
-{YYYY-MM-DD} — update on every material change so the skill can warn when the
-rubric is stale (more than 6 months old triggers a stale-rubric notice in
-the output report).
+{YYYY-MM-DD} — update on every material change so the skill can warn when the rubric is stale (more than 6 months old triggers a stale-rubric notice in the output report).

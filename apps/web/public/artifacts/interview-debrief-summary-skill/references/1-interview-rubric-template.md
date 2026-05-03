@@ -16,9 +16,7 @@
 
 ## Score scale
 
-All dimensions use the same 1-5 scale. Anchors below are the *minimum*
-behavior required at each level; a candidate scoring above the level
-exceeds the anchor in addition to meeting it.
+All dimensions use the same 1-5 scale. Anchors below are the *minimum* behavior required at each level; a candidate scoring above the level exceeds the anchor in addition to meeting it.
 
 | Score | Label | Meaning |
 |---|---|---|
@@ -30,9 +28,7 @@ exceeds the anchor in addition to meeting it.
 
 ## Dimensions
 
-Each dimension below MUST have a 1-5 anchor table with behavioral
-descriptions. Free-text-only anchors fail the rubric validation in
-step 1.
+Each dimension below MUST have a 1-5 anchor table with behavioral descriptions. Free-text-only anchors fail the rubric validation in step 1.
 
 ### Dimension 1 — {e.g. Technical depth}
 
@@ -46,8 +42,7 @@ What this dimension tests: {one sentence}
 | 4 | {behavior} |
 | 5 | {behavior — e.g. "Walks through trade-offs at multiple levels of the stack unprompted, with concrete examples"} |
 
-Common evidence sources: take-home review, system-design conversation,
-deep-dive on past projects.
+Common evidence sources: take-home review, system-design conversation, deep-dive on past projects.
 
 ### Dimension 2 — {e.g. Systems design}
 
@@ -75,8 +70,7 @@ What this dimension tests: {one sentence}
 | 4 | {behavior} |
 | 5 | {behavior} |
 
-Common evidence sources: every interview; hiring-manager screen
-explicitly tests structured explanation.
+Common evidence sources: every interview; hiring-manager screen explicitly tests structured explanation.
 
 ### Dimension 4 — {e.g. Execution under pressure}
 
@@ -108,9 +102,7 @@ What this dimension tests: {one sentence}
 
 ## Interviewer-role assignment
 
-Per loop, every dimension should be covered by at least 2 interviewers
-of different `interviewer_role`s (the skill validates this in step 1).
-Suggested coverage matrix:
+Per loop, every dimension should be covered by at least 2 interviewers of different `interviewer_role`s (the skill validates this in step 1). Suggested coverage matrix:
 
 | Dimension | Hiring manager | Peer | Cross-functional | Bar-raiser |
 |---|---|---|---|---|
@@ -122,24 +114,16 @@ Suggested coverage matrix:
 
 ## Disqualifiers
 
-Single signals that result in a no-hire regardless of other dimensions.
-Keep this list short and mechanical. The skill flags these prominently
-in the brief if any interviewer notes them.
+Single signals that result in a no-hire regardless of other dimensions. Keep this list short and mechanical. The skill flags these prominently in the brief if any interviewer notes them.
 
-- {e.g. "Misrepresented past role title or scope" — backed by reference
-  check}
-- {e.g. "Hostile or dismissive toward an interviewer or coordinator" —
-  noted by 2+ interviewers}
+- {e.g. "Misrepresented past role title or scope" — backed by reference check}
+- {e.g. "Hostile or dismissive toward an interviewer or coordinator" — noted by 2+ interviewers}
 
 ## Things this rubric does NOT score
 
-These get explicitly excluded so they cannot creep back as
-"intuition":
+These get explicitly excluded so they cannot creep back as "intuition":
 
-- "Culture fit" without behavioral anchors — replace with the specific
-  behaviors you mean.
-- School prestige as a standalone signal — appears in pattern-match
-  dimensions only.
-- Tenure pattern interpretation that penalizes parental leave or
-  health gaps.
+- "Culture fit" without behavioral anchors — replace with the specific behaviors you mean.
+- School prestige as a standalone signal — appears in pattern-match dimensions only.
+- Tenure pattern interpretation that penalizes parental leave or health gaps.
 - Any inference from photo, name origin, or pronoun usage.

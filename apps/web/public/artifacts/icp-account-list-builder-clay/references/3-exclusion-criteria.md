@@ -7,16 +7,11 @@
 
 ## Why this file matters
 
-A list builder that writes existing customers, active opportunities, or
-known-loss accounts back into outbound is worse than no list — it burns
-trust with AEs, with the prospect (who gets contacted as a stranger), and
-with CS (who finds out when the customer escalates). This file is the
-backstop. The skill treats it as a hard filter, not a downweighting signal.
+A list builder that writes existing customers, active opportunities, or known-loss accounts back into outbound is worse than no list — it burns trust with AEs, with the prospect (who gets contacted as a stranger), and with CS (who finds out when the customer escalates). This file is the backstop. The skill treats it as a hard filter, not a downweighting signal.
 
 ## Banned domains
 
-Exact-match domains that must never appear in the output. The skill matches
-on root domain and known parent-company domains.
+Exact-match domains that must never appear in the output. The skill matches on root domain and known parent-company domains.
 
 ```
 # Existing customers
@@ -42,16 +37,14 @@ on root domain and known parent-company domains.
 
 ## Banned parent companies
 
-If the skill's enrichment step resolves a candidate to a parent in this list,
-the candidate is dropped regardless of root-domain match.
+If the skill's enrichment step resolves a candidate to a parent in this list, the candidate is dropped regardless of root-domain match.
 
 - {Parent 1 — e.g. "BigCo Inc — all subsidiaries flagged"}
 - {Parent 2}
 
 ## Firmographic exclusion patterns
 
-Patterns broader than a single domain. The skill applies these in Step 3
-after firmographic enrichment.
+Patterns broader than a single domain. The skill applies these in Step 3 after firmographic enrichment.
 
 - {Pattern 1 — e.g. "Any company tagged as government contractor by NAICS prefix 5417"}
 - {Pattern 2 — e.g. "Any company headquartered in {sanctioned-country-list}"}
@@ -59,15 +52,11 @@ after firmographic enrichment.
 
 ## Audit posture
 
-Excluded candidates are not silently dropped. The skill's run metadata
-section reports counts per exclusion category. This lets RevOps verify the
-exclusion file is current and catches the case where the customer list export
-was forgotten and a customer slipped through.
+Excluded candidates are not silently dropped. The skill's run metadata section reports counts per exclusion category. This lets RevOps verify the exclusion file is current and catches the case where the customer list export was forgotten and a customer slipped through.
 
 ## Refresh cadence
 
-This file is regenerated from CRM exports on a fixed cadence. Stale exclusion
-files are the most common source of bad list output.
+This file is regenerated from CRM exports on a fixed cadence. Stale exclusion files are the most common source of bad list output.
 
 - Customers: refresh weekly (every Monday)
 - Active opportunities: refresh weekly (every Monday)
@@ -77,5 +66,4 @@ files are the most common source of bad list output.
 
 ## Last refreshed
 
-{YYYY-MM-DD} — exports as of this date. The skill warns in its output report
-if this date is more than 14 days old.
+{YYYY-MM-DD} — exports as of this date. The skill warns in its output report if this date is more than 14 days old.

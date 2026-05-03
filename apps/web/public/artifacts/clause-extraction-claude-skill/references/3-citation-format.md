@@ -17,44 +17,28 @@ A citation is a structured object, not a string. The skill emits:
 }
 ```
 
-- `page` — 1-indexed page number in the source PDF, or paragraph cluster
-  index for `.docx` (since `.docx` has no fixed pagination).
-- `char_span` — `[start, end]` character offsets within the page's extracted
-  text, where `start` is inclusive and `end` is exclusive.
+- `page` — 1-indexed page number in the source PDF, or paragraph cluster index for `.docx` (since `.docx` has no fixed pagination).
+- `char_span` — `[start, end]` character offsets within the page's extracted text, where `start` is inclusive and `end` is exclusive.
 
-The `excerpt` field on the clause record is the verbatim substring at that
-span. The skill enforces that
-`page_text[char_span[0]:char_span[1]] == excerpt`. If the assertion fails,
-the extraction is rejected and the clause is recorded with
-`status: "error", error: "excerpt_not_grounded"`.
+The `excerpt` field on the clause record is the verbatim substring at that span. The skill enforces that `page_text[char_span[0]:char_span[1]] == excerpt`. If the assertion fails, the extraction is rejected and the clause is recorded with `status: "error", error: "excerpt_not_grounded"`.
 
 ## Why structured, not "p. 14, ¶ 3"
 
-Free-text citations like "p. 14, paragraph 3" cannot be machine-verified.
-A reviewer cannot click them. A pipeline cannot diff them across re-runs.
-A regression test cannot assert "the citation moved by exactly N
-characters when we re-ran extraction after taxonomy v2." Structured
-citations make every extraction reproducible and reviewable.
+Free-text citations like "p. 14, paragraph 3" cannot be machine-verified. A reviewer cannot click them. A pipeline cannot diff them across re-runs. A regression test cannot assert "the citation moved by exactly N characters when we re-ran extraction after taxonomy v2." Structured citations make every extraction reproducible and reviewable.
 
 ## Reviewer UX expectations
 
-Downstream tooling (CLM, review queue, audit log) is expected to render
-the citation as a deep link into the source PDF page with the excerpt
-highlighted. Without that affordance, reviewers fall back to ctrl-F on the
-excerpt — which works, but doubles review time.
+Downstream tooling (CLM, review queue, audit log) is expected to render the citation as a deep link into the source PDF page with the excerpt highlighted. Without that affordance, reviewers fall back to ctrl-F on the excerpt — which works, but doubles review time.
 
 Recommended renderer behavior:
 
 - Display the excerpt with the citation page badge inline
-- On click, open the source PDF at the cited page with the excerpt
-  highlighted (PDF.js supports `#highlight=<text>`)
-- Show `confidence` as a colored chip: high = green, medium = amber,
-  low = red
+- On click, open the source PDF at the cited page with the excerpt highlighted (PDF.js supports `#highlight=<text>`)
+- Show `confidence` as a colored chip: high = green, medium = amber, low = red
 
 ## "Not present" — the load-bearing answer
 
-When a clause is not located, the citation is omitted and `status:
-"not_present"` is set with a `note` field documenting the search:
+When a clause is not located, the citation is omitted and `status: "not_present"` is set with a `note` field documenting the search:
 
 ```json
 {
@@ -64,15 +48,11 @@ When a clause is not located, the citation is omitted and `status:
 }
 ```
 
-This is intentionally explicit. CLM backfill pipelines treat a `null`
-with `status: "not_present"` as confirmed-absent (file the contract
-without that field) and a `null` with `status: "error"` as needs-rerun
-(do not file). Conflating the two corrupts CLM data over time.
+This is intentionally explicit. CLM backfill pipelines treat a `null` with `status: "not_present"` as confirmed-absent (file the contract without that field) and a `null` with `status: "error"` as needs-rerun (do not file). Conflating the two corrupts CLM data over time.
 
 ## Cross-reference handling
 
-When the matched paragraph is a pointer ("as set forth in Schedule A"),
-the skill emits:
+When the matched paragraph is a pointer ("as set forth in Schedule A"), the skill emits:
 
 ```json
 {
@@ -84,10 +64,7 @@ the skill emits:
 }
 ```
 
-Resolving cross-references is out of scope. The skill could chase the
-reference into Schedule A, but the failure modes (mis-numbered schedules,
-amendments overriding the schedule, partially-resolved chains) make
-naive resolution worse than an honest "needs human" flag.
+Resolving cross-references is out of scope. The skill could chase the reference into Schedule A, but the failure modes (mis-numbered schedules, amendments overriding the schedule, partially-resolved chains) make naive resolution worse than an honest "needs human" flag.
 
 ## Confidence calibration
 
@@ -97,9 +74,7 @@ naive resolution worse than an honest "needs human" flag.
 | `medium` | Synonym match without heading, OR cross-reference, OR low heading density on the contract overall | Review every record |
 | `low` | Multiple candidate paragraphs and the model picked one with weak signal, OR excerpt is ≥ 200 chars | Review every record before filing |
 
-The skill MUST NOT emit `high` for a record that did not pass the
-byte-identical excerpt check. There is no "high-confidence hallucination"
-case — by construction.
+The skill MUST NOT emit `high` for a record that did not pass the byte-identical excerpt check. There is no "high-confidence hallucination" case — by construction.
 
 ## Last edited
 

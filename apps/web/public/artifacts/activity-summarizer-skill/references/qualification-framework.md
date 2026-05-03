@@ -12,9 +12,7 @@ MEDDPICC (replace with `BANT`, `SPICED`, your team's homegrown variant, etc.)
 
 ## Required fields
 
-For each letter / criterion, list the Salesforce field that holds it. The
-skill checks these fields per opportunity; missing values feed the "stuck"
-bucket via the signal rubric.
+For each letter / criterion, list the Salesforce field that holds it. The skill checks these fields per opportunity; missing values feed the "stuck" bucket via the signal rubric.
 
 | Criterion | Salesforce field | What "filled" looks like |
 |---|---|---|
@@ -29,8 +27,7 @@ bucket via the signal rubric.
 
 ## Stage-by-stage minimums
 
-Per stage, which fields MUST be filled before the deal is allowed to advance.
-The skill flags any deal that has advanced past the minimum without the fields.
+Per stage, which fields MUST be filled before the deal is allowed to advance. The skill flags any deal that has advanced past the minimum without the fields.
 
 | Stage | Required fields |
 |---|---|
@@ -42,9 +39,7 @@ The skill flags any deal that has advanced past the minimum without the fields.
 
 ## Time-in-stage medians (for "stuck" detection)
 
-Replace these with your team's actuals from a Salesforce report. The skill
-flags a deal as stuck when time-in-stage exceeds 1.5x the median below AND
-a required field for that stage is empty.
+Replace these with your team's actuals from a Salesforce report. The skill flags a deal as stuck when time-in-stage exceeds 1.5x the median below AND a required field for that stage is empty.
 
 | Stage | Median days |
 |---|---|
@@ -55,8 +50,7 @@ a required field for that stage is empty.
 
 ## Disqualifiers
 
-Single conditions that drop a deal out of the active pipeline regardless of
-field completeness. The skill surfaces these prominently in the report.
+Single conditions that drop a deal out of the active pipeline regardless of field completeness. The skill surfaces these prominently in the report.
 
 - No champion identified after 30 days in pipeline
 - Economic buyer never met after Proposal stage entered

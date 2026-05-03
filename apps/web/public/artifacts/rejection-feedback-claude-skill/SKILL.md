@@ -7,196 +7,82 @@ description: Take a rejected candidate's interview scorecards and (where availab
 
 ## When to invoke
 
-Use this skill when a recruiter needs to send personalized post-interview
-feedback to a candidate who reached at least an onsite or final-stage
-loop, and the team has structured scorecards plus a role rubric on file.
-Take the candidate's scorecards (across all interviewers), the role
-rubric, the recruiter-relationship context (was feedback explicitly
-offered? requested?), and the candidate's residency jurisdiction as
-input. Produce a Markdown rejection email draft, optional recruiter-call
-talking-point notes, and a one-line routing recommendation.
+Use this skill when a recruiter needs to send personalized post-interview feedback to a candidate who reached at least an onsite or final-stage loop, and the team has structured scorecards plus a role rubric on file. Take the candidate's scorecards (across all interviewers), the role rubric, the recruiter-relationship context (was feedback explicitly offered? requested?), and the candidate's residency jurisdiction as input. Produce a Markdown rejection email draft, optional recruiter-call talking-point notes, and a one-line routing recommendation.
 
 Do NOT invoke this skill for:
 
-- **Auto-sending without recruiter review.** The skill writes drafts to
-  disk and stops. There is no `send` action defined anywhere in this
-  skill. Auto-sent rejection feedback is the single most reliable way
-  to produce an inappropriate-content incident under EEOC, ADA, or
-  state employment law. The recruiter is the gate.
-- **Candidates who have not requested feedback in jurisdictions where
-  unsolicited feedback creates risk.** Specifically: France (Code du
-  travail risk on documented rejection reasons), Germany (AGG §22
-  evidentiary shift), and any jurisdiction where the recruiter's
-  HR-counsel guidance disallows unsolicited specifics. The skill
-  reads the `jurisdiction_policy.yaml` file and refuses to draft
-  specifics for any jurisdiction marked `unsolicited_feedback: deny`.
-- **EEOC-implicating language or protected-class proxies.** "Cultural
-  fit", age inferences from graduation year, family-status references,
-  national-origin references, accent commentary, gendered descriptors
-  ("aggressive", "abrasive", "soft"), pregnancy-status references,
-  disability or accommodation references. The banned-phrase blocklist
-  in `references/2-banned-phrase-blocklist.md` runs as the final check
-  before the draft is written. Any hit halts the run with the offending
-  string surfaced.
-- **Cases legal has flagged.** If the candidate file has a flag for
-  active dispute, accommodation request unaddressed, or a complaint on
-  record, the skill returns "decline to provide specific feedback —
-  legal flag present" and writes a generic-decline draft instead.
-- **Rejections from earlier stages** (resume screen, recruiter screen).
-  Templated decline is the right tool there. This skill is for
-  candidates who invested significant time and earned a real answer,
-  per the [recruiting funnel](/en/learn/recruiting-funnel-metrics/)
-  cost.
+- **Auto-sending without recruiter review.** The skill writes drafts to disk and stops. There is no `send` action defined anywhere in this skill. Auto-sent rejection feedback is the single most reliable way to produce an inappropriate-content incident under EEOC, ADA, or state employment law. The recruiter is the gate.
+- **Candidates who have not requested feedback in jurisdictions where unsolicited feedback creates risk.** Specifically: France (Code du travail risk on documented rejection reasons), Germany (AGG §22 evidentiary shift), and any jurisdiction where the recruiter's HR-counsel guidance disallows unsolicited specifics. The skill reads the `jurisdiction_policy.yaml` file and refuses to draft specifics for any jurisdiction marked `unsolicited_feedback: deny`.
+- **EEOC-implicating language or protected-class proxies.** "Cultural fit", age inferences from graduation year, family-status references, national-origin references, accent commentary, gendered descriptors ("aggressive", "abrasive", "soft"), pregnancy-status references, disability or accommodation references. The banned-phrase blocklist in `references/2-banned-phrase-blocklist.md` runs as the final check before the draft is written. Any hit halts the run with the offending string surfaced.
+- **Cases legal has flagged.** If the candidate file has a flag for active dispute, accommodation request unaddressed, or a complaint on record, the skill returns "decline to provide specific feedback — legal flag present" and writes a generic-decline draft instead.
+- **Rejections from earlier stages** (resume screen, recruiter screen). Templated decline is the right tool there. This skill is for candidates who invested significant time and earned a real answer, per the [recruiting funnel](/en/learn/recruiting-funnel-metrics/) cost.
 
 ## Inputs
 
-- Required: `candidate_id` — the ATS record ID
-  ([Ashby](/en/tools/ashby/), [Greenhouse](/en/tools/greenhouse/), or
-  [Lever](/en/tools/lever/)). The skill pulls scorecards via the ATS
-  API; it does not accept pasted scorecard text, because pasted text
-  cannot be audited back to the source interviewer.
-- Required: `role_id` — used to load the role's rubric from
-  `rubrics/<role_id>.yaml` (same source the
-  [interview debrief skill](/en/workflows/interview-debrief-summary-skill/)
-  reads). Without a rubric the skill refuses to run; ungrounded
-  feedback is how false specifics get drafted.
-- Required: `jurisdiction` — ISO 3166 country code for the
-  candidate's residency at time of application. Drives which
-  jurisdiction-policy block applies.
-- Required: `feedback_requested` — boolean. `true` only if the
-  candidate explicitly asked for feedback (in writing, captured in
-  the ATS). `false` defaults to a generic-decline draft in
-  jurisdictions where the policy file flags unsolicited specifics
-  as risk.
-- Optional: `transcript_id` — pointer to a
-  [BrightHire](/en/tools/brighthire/) or
-  [Metaview](/en/tools/metaview/) transcript bundle for the loop.
-  When present, the skill cross-references scorecard claims against
-  transcript evidence; when absent, the skill works from scorecards
-  alone and labels the draft accordingly.
-- Optional: `route` — one of `email`, `call`, `auto`. `auto` (default)
-  picks based on stage reached and seniority per the routing rules
-  in `references/3-output-format.md`.
+- Required: `candidate_id` — the ATS record ID ([Ashby](/en/tools/ashby/), [Greenhouse](/en/tools/greenhouse/), or [Lever](/en/tools/lever/)). The skill pulls scorecards via the ATS API; it does not accept pasted scorecard text, because pasted text cannot be audited back to the source interviewer.
+- Required: `role_id` — used to load the role's rubric from `rubrics/<role_id>.yaml` (same source the [interview debrief skill](/en/workflows/interview-debrief-summary-skill/) reads). Without a rubric the skill refuses to run; ungrounded feedback is how false specifics get drafted.
+- Required: `jurisdiction` — ISO 3166 country code for the candidate's residency at time of application. Drives which jurisdiction-policy block applies.
+- Required: `feedback_requested` — boolean. `true` only if the candidate explicitly asked for feedback (in writing, captured in the ATS). `false` defaults to a generic-decline draft in jurisdictions where the policy file flags unsolicited specifics as risk.
+- Optional: `transcript_id` — pointer to a [BrightHire](/en/tools/brighthire/) or [Metaview](/en/tools/metaview/) transcript bundle for the loop. When present, the skill cross-references scorecard claims against transcript evidence; when absent, the skill works from scorecards alone and labels the draft accordingly.
+- Optional: `route` — one of `email`, `call`, `auto`. `auto` (default) picks based on stage reached and seniority per the routing rules in `references/3-output-format.md`.
 
 ## Reference files
 
-Always read the following from `references/` before drafting. Without
-them the draft is generic, ungrounded, and risks tripping a banned
-phrase.
+Always read the following from `references/` before drafting. Without them the draft is generic, ungrounded, and risks tripping a banned phrase.
 
-- `references/1-rubric-to-feedback-mapping.md` — the mapping from
-  rubric dimensions to safely-sharable, candidate-facing feedback
-  language. Replace the template placeholders with your team's
-  approved phrasing before first use.
-- `references/2-banned-phrase-blocklist.md` — the blocklist the skill
-  greps the draft against in step 5. Patterns include EEOC-implicating
-  terms, protected-class proxies, comparative-ranking language, and
-  unverifiable specifics. Do not edit this file to make a draft pass.
-- `references/3-output-format.md` — the literal email and
-  call-notes format, including the routing rules.
+- `references/1-rubric-to-feedback-mapping.md` — the mapping from rubric dimensions to safely-sharable, candidate-facing feedback language. Replace the template placeholders with your team's approved phrasing before first use.
+- `references/2-banned-phrase-blocklist.md` — the blocklist the skill greps the draft against in step 5. Patterns include EEOC-implicating terms, protected-class proxies, comparative-ranking language, and unverifiable specifics. Do not edit this file to make a draft pass.
+- `references/3-output-format.md` — the literal email and call-notes format, including the routing rules.
 
 ## Method
 
-Run these six steps in order. Steps 1-3 are deterministic gating;
-steps 4-5 use the LLM for synthesis and screening; step 6 is the
-audit log. The order matters — letting the LLM draft against
-unchecked scorecards produces fast, confident, EEOC-implicating
-output.
+Run these six steps in order. Steps 1-3 are deterministic gating; steps 4-5 use the LLM for synthesis and screening; step 6 is the audit log. The order matters — letting the LLM draft against unchecked scorecards produces fast, confident, EEOC-implicating output.
 
 ### 1. Validate jurisdiction policy and consent
 
-Open `references/jurisdiction-policy.yaml` (user-supplied; template
-shipped in the bundle). Look up the candidate's `jurisdiction`. If
-`unsolicited_feedback: deny` and `feedback_requested: false`, halt
-specifics and switch to the generic-decline template at the top of
-`references/3-output-format.md`. Log the reason in the audit line.
+Open `references/jurisdiction-policy.yaml` (user-supplied; template shipped in the bundle). Look up the candidate's `jurisdiction`. If `unsolicited_feedback: deny` and `feedback_requested: false`, halt specifics and switch to the generic-decline template at the top of `references/3-output-format.md`. Log the reason in the audit line.
 
-The choice to gate on consent before pulling scorecards is deliberate:
-specifics drafted and then discarded still leave a model-call log
-entry with candidate-identifying scorecard text. Gating up front
-keeps the data-minimization story clean for GDPR Art. 5(1)(c).
+The choice to gate on consent before pulling scorecards is deliberate: specifics drafted and then discarded still leave a model-call log entry with candidate-identifying scorecard text. Gating up front keeps the data-minimization story clean for GDPR Art. 5(1)(c).
 
 ### 2. Pull scorecards and (optional) transcript
 
-Fetch all scorecards for `candidate_id` via the ATS API. Validate that
-every scorecard is signed-off (Ashby `submitted: true`, Greenhouse
-`status: complete`, Lever `state: completed`). Drop drafts. If the
-loop has fewer than two completed scorecards, halt — feedback
-synthesized from one interviewer's view is not feedback, it is an
-opinion, and exposes the firm to selective-evidence claims.
+Fetch all scorecards for `candidate_id` via the ATS API. Validate that every scorecard is signed-off (Ashby `submitted: true`, Greenhouse `status: complete`, Lever `state: completed`). Drop drafts. If the loop has fewer than two completed scorecards, halt — feedback synthesized from one interviewer's view is not feedback, it is an opinion, and exposes the firm to selective-evidence claims.
 
-When `transcript_id` is provided, fetch the transcript bundle. The
-skill will cite scorecard claims against transcript turns in step 4.
+When `transcript_id` is provided, fetch the transcript bundle. The skill will cite scorecard claims against transcript turns in step 4.
 
 ### 3. Identify dimensions and evidence
 
-For each rubric dimension, compute the cross-interviewer mean score
-and the standard deviation. Flag dimensions where:
+For each rubric dimension, compute the cross-interviewer mean score and the standard deviation. Flag dimensions where:
 
 - mean ≥ 4 (candidate strength, surface as the warm opening)
 - mean ≤ 2 (candidate gap, candidate for feedback if safe)
-- standard deviation ≥ 1.5 (interviewer disagreement — do NOT cite
-  this dimension; the loop did not converge and the feedback would
-  not survive a "but interviewer X scored me 5" challenge)
+- standard deviation ≥ 1.5 (interviewer disagreement — do NOT cite this dimension; the loop did not converge and the feedback would not survive a "but interviewer X scored me 5" challenge)
 
-For each surfaced dimension, pull the verbatim evidence quotes from
-the scorecards (or transcript, when available). Every claim in the
-final draft must cite a verbatim string from the evidence pool. No
-verbatim string → the dimension is not surfaced.
+For each surfaced dimension, pull the verbatim evidence quotes from the scorecards (or transcript, when available). Every claim in the final draft must cite a verbatim string from the evidence pool. No verbatim string → the dimension is not surfaced.
 
-The "no synthesis without verbatim citation" rule is the guard
-against false specifics. LLMs drafting feedback from scorecards
-will, without this rule, invent quotes that sound plausible — "the
-candidate struggled with system-design tradeoffs" — that no
-interviewer ever wrote. False specifics cited back to the candidate
-are how rejection-feedback workflows generate complaint emails.
+The "no synthesis without verbatim citation" rule is the guard against false specifics. LLMs drafting feedback from scorecards will, without this rule, invent quotes that sound plausible — "the candidate struggled with system-design tradeoffs" — that no interviewer ever wrote. False specifics cited back to the candidate are how rejection-feedback workflows generate complaint emails.
 
 ### 4. Draft against the rubric-to-feedback mapping
 
-Translate at most one strength and one gap into candidate-facing
-language using `references/1-rubric-to-feedback-mapping.md`. Cap at
-one of each so the draft does not read as a defensive list.
-Comparative ranking ("we had stronger candidates", "you were our
-second choice") is forbidden — the mapping file does not contain
-the language and step 5 greps it out.
+Translate at most one strength and one gap into candidate-facing language using `references/1-rubric-to-feedback-mapping.md`. Cap at one of each so the draft does not read as a defensive list. Comparative ranking ("we had stronger candidates", "you were our second choice") is forbidden — the mapping file does not contain the language and step 5 greps it out.
 
-For `route: call`, also draft recruiter-side talking points:
-bullet-point observations, the suggested phrasing for the gap, and
-two to three pre-prepared responses to likely candidate questions
-("Was there anything I could have done differently?", "Will you
-keep me in mind for future roles?", "Can I get a second look?").
+For `route: call`, also draft recruiter-side talking points: bullet-point observations, the suggested phrasing for the gap, and two to three pre-prepared responses to likely candidate questions ("Was there anything I could have done differently?", "Will you keep me in mind for future roles?", "Can I get a second look?").
 
 ### 5. Bias and false-specifics screening
 
-Grep the draft against `references/2-banned-phrase-blocklist.md`. Any
-hit halts the run with the offending string surfaced. Then verify
-that every specific claim in the draft maps back to a verbatim
-evidence string from step 3 — if a claim has no source, halt.
+Grep the draft against `references/2-banned-phrase-blocklist.md`. Any hit halts the run with the offending string surfaced. Then verify that every specific claim in the draft maps back to a verbatim evidence string from step 3 — if a claim has no source, halt.
 
-This is a separate pass from step 4 by design. The screening pass
-sees only the draft text, with no awareness of the underlying
-scorecards, so it cannot rationalize a banned phrase as "but the
-interviewer meant X".
+This is a separate pass from step 4 by design. The screening pass sees only the draft text, with no awareness of the underlying scorecards, so it cannot rationalize a banned phrase as "but the interviewer meant X".
 
 ### 6. Write to disk and audit log
 
-Write the draft to `drafts/<candidate-id>.md` per the format in
-`references/3-output-format.md`. Write the call notes (if
-applicable) to `drafts/<candidate-id>-call-notes.md`. Append one
-JSONL line to `audit/<YYYY-MM>.jsonl` containing: `run_id`,
-`candidate_id_hash` (SHA-256, not raw ID), `role_id`, `jurisdiction`,
-`feedback_requested`, `route`, `rubric_sha256`, `dimensions_surfaced`,
-`blocklist_hits` (zero on success), `model_id`, `timestamp`. No
-candidate-identifying free text in this line.
+Write the draft to `drafts/<candidate-id>.md` per the format in `references/3-output-format.md`. Write the call notes (if applicable) to `drafts/<candidate-id>-call-notes.md`. Append one JSONL line to `audit/<YYYY-MM>.jsonl` containing: `run_id`, `candidate_id_hash` (SHA-256, not raw ID), `role_id`, `jurisdiction`, `feedback_requested`, `route`, `rubric_sha256`, `dimensions_surfaced`, `blocklist_hits` (zero on success), `model_id`, `timestamp`. No candidate-identifying free text in this line.
 
-Surface the path to the recruiter and exit. The recruiter reviews,
-edits, and sends from the ATS or their own outbox.
+Surface the path to the recruiter and exit. The recruiter reviews, edits, and sends from the ATS or their own outbox.
 
 ## Output format
 
-Literal example of the email draft the skill writes to
-`drafts/<candidate-id>.md` for a candidate who reached an onsite for
-a Senior Backend Engineer role and explicitly requested feedback:
+Literal example of the email draft the skill writes to `drafts/<candidate-id>.md` for a candidate who reached an onsite for a Senior Backend Engineer role and explicitly requested feedback:
 
 ```markdown
 Subject: Update on your Senior Backend Engineer interview at Acme
@@ -233,8 +119,7 @@ Best,
 {Recruiter name}
 ```
 
-Literal example of the recruiter call-notes file written to
-`drafts/<candidate-id>-call-notes.md`:
+Literal example of the recruiter call-notes file written to `drafts/<candidate-id>-call-notes.md`:
 
 ```markdown
 # Call notes — Jamie L. (Senior Backend Engineer)
@@ -273,8 +158,7 @@ back to you on that" and routes to HR / counsel. The recruiter does
 NOT improvise an answer.
 ```
 
-Literal example of the routing recommendation appended to the
-draft file:
+Literal example of the routing recommendation appended to the draft file:
 
 ```markdown
 ---
@@ -284,43 +168,10 @@ Recruiter review required before send.
 
 ## Watch-outs
 
-- **EEOC-implicating language.** *Guard:* the banned-phrase blocklist
-  in `references/2-banned-phrase-blocklist.md` runs as a separate pass
-  in step 5, with no awareness of the underlying scorecards, so it
-  cannot rationalize a hit. Any hit halts the run with the offending
-  string surfaced. Do not edit the blocklist to make a draft pass —
-  fix the rubric or the scorecard language instead.
-- **False specifics from the LLM.** *Guard:* the "no synthesis without
-  verbatim citation" rule in step 3. Every claim in the draft must
-  trace to a verbatim string from a signed-off scorecard or
-  transcript. No verbatim string → the dimension is not surfaced.
-  This is the guard against the most common failure mode of
-  LLM-drafted feedback — plausible-sounding quotes that no
-  interviewer actually wrote.
-- **Comparative ranking language.** *Guard:* the rubric-to-feedback
-  mapping in `references/1-rubric-to-feedback-mapping.md` does not
-  contain comparative phrasing ("stronger candidates", "second
-  choice"), and the blocklist in step 5 catches it if it slips in.
-  Comparative ranking is what turns a constructive rejection into a
-  Glassdoor post.
-- **Selective-evidence risk.** *Guard:* step 2 halts if the loop has
-  under two signed-off scorecards. Step 3 refuses to surface
-  dimensions with cross-interviewer standard deviation at or above
-  1.5 — interviewer disagreement does not become candidate
-  feedback.
-- **Auto-send drift.** *Guard:* the skill defines no `send` action.
-  Drafts are written to `drafts/<candidate-id>.md` for the recruiter
-  to review, edit, and send from the ATS outbox. AI-drafted-and-sent
-  rejection feedback without review damages
-  [candidate experience](/en/learn/candidate-experience/) and
-  produces incidents.
-- **PII in the audit log.** *Guard:* step 6 writes only
-  `candidate_id_hash` (SHA-256), never the raw candidate ID, name,
-  or scorecard text. The audit line is for run reproducibility, not
-  candidate data retention.
-- **Generic boilerplate harm.** *Guard:* if step 3 cannot surface a
-  rubric dimension that has both mean ≤ 2 and a verbatim evidence
-  string, the skill writes the generic-decline template from
-  `references/3-output-format.md` rather than synthesizing weak
-  specifics. Generic decline is honest; weak specifics are worse
-  than no specifics.
+- **EEOC-implicating language.** *Guard:* the banned-phrase blocklist in `references/2-banned-phrase-blocklist.md` runs as a separate pass in step 5, with no awareness of the underlying scorecards, so it cannot rationalize a hit. Any hit halts the run with the offending string surfaced. Do not edit the blocklist to make a draft pass — fix the rubric or the scorecard language instead.
+- **False specifics from the LLM.** *Guard:* the "no synthesis without verbatim citation" rule in step 3. Every claim in the draft must trace to a verbatim string from a signed-off scorecard or transcript. No verbatim string → the dimension is not surfaced. This is the guard against the most common failure mode of LLM-drafted feedback — plausible-sounding quotes that no interviewer actually wrote.
+- **Comparative ranking language.** *Guard:* the rubric-to-feedback mapping in `references/1-rubric-to-feedback-mapping.md` does not contain comparative phrasing ("stronger candidates", "second choice"), and the blocklist in step 5 catches it if it slips in. Comparative ranking is what turns a constructive rejection into a Glassdoor post.
+- **Selective-evidence risk.** *Guard:* step 2 halts if the loop has under two signed-off scorecards. Step 3 refuses to surface dimensions with cross-interviewer standard deviation at or above 1.5 — interviewer disagreement does not become candidate feedback.
+- **Auto-send drift.** *Guard:* the skill defines no `send` action. Drafts are written to `drafts/<candidate-id>.md` for the recruiter to review, edit, and send from the ATS outbox. AI-drafted-and-sent rejection feedback without review damages [candidate experience](/en/learn/candidate-experience/) and produces incidents.
+- **PII in the audit log.** *Guard:* step 6 writes only `candidate_id_hash` (SHA-256), never the raw candidate ID, name, or scorecard text. The audit line is for run reproducibility, not candidate data retention.
+- **Generic boilerplate harm.** *Guard:* if step 3 cannot surface a rubric dimension that has both mean ≤ 2 and a verbatim evidence string, the skill writes the generic-decline template from `references/3-output-format.md` rather than synthesizing weak specifics. Generic decline is honest; weak specifics are worse than no specifics.

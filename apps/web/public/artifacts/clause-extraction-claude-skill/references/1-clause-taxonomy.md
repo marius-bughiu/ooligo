@@ -5,9 +5,7 @@
 > run; without your real taxonomy, extractions will use the generic defaults
 > below and miss the clauses your CLM cares about.
 
-The skill keys on `clause_id`. Every clause record in the output JSON uses
-the `clause_id` as the property name. Adding a clause means: add an entry
-here AND add the matching property to `output-schema.json`.
+The skill keys on `clause_id`. Every clause record in the output JSON uses the `clause_id` as the property name. Adding a clause means: add an entry here AND add the matching property to `output-schema.json`.
 
 ## Convention
 
@@ -15,13 +13,10 @@ For each clause:
 
 - `clause_id` — snake_case identifier used as the JSON key
 - `value_type` — `string | number | boolean | enum | structured`
-- `required` — `true | false` (drives `not_present` vs hard error in
-  validation)
+- `required` — `true | false` (drives `not_present` vs hard error in validation)
 - `headings` — list of section heading strings the locator matches against
-- `synonyms` — list of phrase substrings the locator falls back to when no
-  heading matches
-- `value_hint` — what the extractor should pull (e.g. "the named jurisdiction
-  state or country", "12-month-fees / 24-month-fees / unlimited / other")
+- `synonyms` — list of phrase substrings the locator falls back to when no heading matches
+- `value_hint` — what the extractor should pull (e.g. "the named jurisdiction state or country", "12-month-fees / 24-month-fees / unlimited / other")
 
 ## MSA defaults
 
@@ -39,8 +34,7 @@ For each clause:
 - required: true
 - headings: `["Limitation of Liability", "Liability Cap", "Cap on Liability"]`
 - synonyms: `["aggregate liability shall not exceed", "in no event shall either party's liability exceed"]`
-- value_hint: extract the cap amount or formula. Distinguish indirect-damages
-  exclusions (do NOT extract those here) from the cap itself.
+- value_hint: extract the cap amount or formula. Distinguish indirect-damages exclusions (do NOT extract those here) from the cap itself.
 
 ### indemnification
 
@@ -48,8 +42,7 @@ For each clause:
 - required: true
 - headings: `["Indemnification", "Indemnity"]`
 - synonyms: `["shall defend, indemnify and hold harmless"]`
-- value_hint: pull the IP indemnity boolean and the carveouts list (e.g.
-  combinations, modifications, open source).
+- value_hint: pull the IP indemnity boolean and the carveouts list (e.g. combinations, modifications, open source).
 
 ### term_length_months
 
@@ -93,20 +86,15 @@ For each clause:
 - required: true
 - headings: `["Confidentiality", "Non-Disclosure"]`
 - synonyms: `["confidentiality obligations shall survive", "for a period of"]`
-- value_hint: convert years to months. If trade-secret carveout is "in
-  perpetuity", emit `-1` and set `confidence: medium`.
+- value_hint: convert years to months. If trade-secret carveout is "in perpetuity", emit `-1` and set `confidence: medium`.
 
 ## NDA defaults
 
-(Replace with your NDA-specific taxonomy. Typical: `term_months`,
-`survival_period_months`, `permitted_purposes`, `residual_rights`,
-`return_or_destroy`.)
+(Replace with your NDA-specific taxonomy. Typical: `term_months`, `survival_period_months`, `permitted_purposes`, `residual_rights`, `return_or_destroy`.)
 
 ## DPA defaults
 
-(Replace with your DPA-specific taxonomy. Typical: `data_residency`,
-`subprocessor_consent`, `audit_rights`, `breach_notification_hours`,
-`sccs_module_used`.)
+(Replace with your DPA-specific taxonomy. Typical: `data_residency`, `subprocessor_consent`, `audit_rights`, `breach_notification_hours`, `sccs_module_used`.)
 
 ## Custom clauses (firm-specific)
 
@@ -120,5 +108,4 @@ Add your firm-specific clauses here. Examples to consider:
 
 ## Last edited
 
-{YYYY-MM-DD} — bump on every taxonomy change. The extractor records this
-date in `extractor_version` so downstream consumers can detect schema drift.
+{YYYY-MM-DD} — bump on every taxonomy change. The extractor records this date in `extractor_version` so downstream consumers can detect schema drift.

@@ -6,8 +6,7 @@
 > generated plan defaults to industry-average ramp curves that almost
 > certainly do not match your motion.
 
-For each segment your team sells into, fill out one block. Add or
-remove segments as needed.
+For each segment your team sells into, fill out one block. Add or remove segments as needed.
 
 ---
 

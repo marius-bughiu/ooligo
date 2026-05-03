@@ -7,12 +7,7 @@ description: Generate a personalized 30/60/90-day onboarding plan for a newly hi
 
 ## When to invoke
 
-Use this skill when a new sales rep has signed an offer and you need a
-personalized 30/60/90-day plan ready before their first day. The skill
-produces a single Notion-ready markdown brief covering weeks 1-12, with
-named call recordings, named certifications, named role-play exercises,
-and a manager check-in cadence calibrated to your team's historical
-ramp time.
+Use this skill when a new sales rep has signed an offer and you need a personalized 30/60/90-day plan ready before their first day. The skill produces a single Notion-ready markdown brief covering weeks 1-12, with named call recordings, named certifications, named role-play exercises, and a manager check-in cadence calibrated to your team's historical ramp time.
 
 Typical triggers:
 
@@ -45,9 +40,7 @@ Optional:
 
 ## Reference files
 
-Always read the following from `references/` before generating the plan.
-Without them, the output is a generic 30/60/90 template that ignores
-your motion, your library, and your team's actual ramp curve.
+Always read the following from `references/` before generating the plan. Without them, the output is a generic 30/60/90 template that ignores your motion, your library, and your team's actual ramp curve.
 
 - `references/1-segment-milestones-template.md` — what "ramped" looks like for each segment you sell into; the skill calibrates weekly milestones against this. Replace the template content with your team's real definitions.
 - `references/2-resource-library-template.md` — your tagged Gong calls, Notion docs, certifications, and role-play scenarios, organized by stage of the motion. The skill picks from this list rather than inventing resource names.
@@ -55,75 +48,39 @@ your motion, your library, and your team's actual ramp curve.
 
 ## Method
 
-Run these five sub-tasks in order. Steps 3-5 depend on context produced
-in steps 1-2; do not parallelize.
+Run these five sub-tasks in order. Steps 3-5 depend on context produced in steps 1-2; do not parallelize.
 
 ### 1. Classify the rep against your motion
 
-Read `rep_background` plus optional `linkedin_url`. Map the rep to one
-of: needs-fundamentals (first sales job), needs-positioning (competitor
-hire — knows how to sell, doesn't know your story), needs-product
-(adjacent SaaS — knows the buyer, doesn't know the product), needs-
-multi-threading (up-market from SMB — single-threaded muscle memory),
-or needs-velocity (down-market from enterprise — used to long cycles).
-The rest of the plan keys off this classification.
+Read `rep_background` plus optional `linkedin_url`. Map the rep to one of: needs-fundamentals (first sales job), needs-positioning (competitor hire — knows how to sell, doesn't know your story), needs-product (adjacent SaaS — knows the buyer, doesn't know the product), needs- multi-threading (up-market from SMB — single-threaded muscle memory), or needs-velocity (down-market from enterprise — used to long cycles). The rest of the plan keys off this classification.
 
-Engineering choice: a fixed 5-bucket classifier rather than free-form
-categorization. Free-form classifiers drift across runs; the bucket the
-plan keys off must be stable so milestones stay comparable across reps.
+Engineering choice: a fixed 5-bucket classifier rather than free-form categorization. Free-form classifiers drift across runs; the bucket the plan keys off must be stable so milestones stay comparable across reps.
 
 ### 2. Calibrate milestone weeks against actual ramp data
 
-If `prior_ramp_data_path` is set, compute the median week-to-first-deal
-and week-to-first-quota-month from the CSV for reps in the same
-segment. Set the plan's milestone weeks to those medians. If no data
-is available, fall back to defaults from `references/1-segment-
-milestones-template.md` and add a note: "milestone weeks are defaults;
-recalibrate after 5+ reps have ramped in this segment."
+If `prior_ramp_data_path` is set, compute the median week-to-first-deal and week-to-first-quota-month from the CSV for reps in the same segment. Set the plan's milestone weeks to those medians. If no data is available, fall back to defaults from `references/1-segment- milestones-template.md` and add a note: "milestone weeks are defaults; recalibrate after 5+ reps have ramped in this segment."
 
-Engineering choice: median over mean. One outlier rep who ramped in
-week 3 or week 24 should not pull the plan's milestones. Median is the
-honest signal of what most reps actually do.
+Engineering choice: median over mean. One outlier rep who ramped in week 3 or week 24 should not pull the plan's milestones. Median is the honest signal of what most reps actually do.
 
 ### 3. Pick named resources from the library
 
-For each week of the plan, select 2-4 resources from `references/2-
-resource-library-template.md` matching the week's focus and the rep's
-classification. A needs-positioning rep gets more competitive-frame
-calls in weeks 1-2; a needs-fundamentals rep gets more discovery calls
-across weeks 1-4. Resources are referenced by name (e.g. "Acme
-discovery — Gong call ID gc_4821"), never by generic descriptor (e.g.
-"a good discovery call").
+For each week of the plan, select 2-4 resources from `references/2- resource-library-template.md` matching the week's focus and the rep's classification. A needs-positioning rep gets more competitive-frame calls in weeks 1-2; a needs-fundamentals rep gets more discovery calls across weeks 1-4. Resources are referenced by name (e.g. "Acme discovery — Gong call ID gc_4821"), never by generic descriptor (e.g. "a good discovery call").
 
-Engineering choice: named resources with stable IDs. Generic
-descriptors mean the manager has to re-pick everything; named resources
-mean the rep can self-serve from day one.
+Engineering choice: named resources with stable IDs. Generic descriptors mean the manager has to re-pick everything; named resources mean the rep can self-serve from day one.
 
 ### 4. Set named-deal targets, not activity targets
 
-By week 8, each rep should have a written list of 5-10 named target
-accounts from their territory (pulled from CRM via the optional
-`crm_query_path`). The plan asks the rep to produce account briefs
-for each, and the manager to score them in the week-8 check-in.
+By week 8, each rep should have a written list of 5-10 named target accounts from their territory (pulled from CRM via the optional `crm_query_path`). The plan asks the rep to produce account briefs for each, and the manager to score them in the week-8 check-in.
 
-Engineering choice: named-deal targets over activity targets (e.g. "50
-calls per week"). Activity targets reward motion without progress and
-hide rep struggle behind the dialer. Named-deal targets force both rep
-and manager to look at the actual work.
+Engineering choice: named-deal targets over activity targets (e.g. "50 calls per week"). Activity targets reward motion without progress and hide rep struggle behind the dialer. Named-deal targets force both rep and manager to look at the actual work.
 
 ### 5. Embed manager check-in questions inline
 
-Each week ends with a section labeled "Manager check-in" containing
-3-5 specific questions pulled from `references/3-manager-check-in-
-template.md`, week-numbered. Generic check-ins ("how's it going?")
-get skipped; named questions ("what did you learn from the Acme
-discovery call you shadowed Tuesday?") force the conversation to
-specifics.
+Each week ends with a section labeled "Manager check-in" containing 3-5 specific questions pulled from `references/3-manager-check-in- template.md`, week-numbered. Generic check-ins ("how's it going?") get skipped; named questions ("what did you learn from the Acme discovery call you shadowed Tuesday?") force the conversation to specifics.
 
 ## Output format
 
-The skill writes a single markdown file named `<rep_name>-onboarding-
-plan.md`. Literal example:
+The skill writes a single markdown file named `<rep_name>-onboarding- plan.md`. Literal example:
 
 ```markdown
 # Onboarding plan — Jane Doe

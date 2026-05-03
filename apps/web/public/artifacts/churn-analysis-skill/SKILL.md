@@ -7,9 +7,7 @@ description: Take a churned account and produce a structured root-cause analysis
 
 ## When to invoke
 
-Invoke this skill on a churned account once the close-lost or non-renewal event is recorded in
-the CRM and the CSM has had at least 24 hours to add their final notes. The output is a
-post-mortem document the CSM reviews, RevOps stores, and the leadership team aggregates.
+Invoke this skill on a churned account once the close-lost or non-renewal event is recorded in the CRM and the CSM has had at least 24 hours to add their final notes. The output is a post-mortem document the CSM reviews, RevOps stores, and the leadership team aggregates.
 
 Do NOT invoke this skill for:
 
@@ -28,9 +26,7 @@ Do NOT invoke this skill for:
 
 ## Reference files
 
-Always read the following from `references/` before generating the analysis. These define the
-team-specific vocabulary; without them, the output regresses to generic "champion left, product
-gap" answers that aggregate poorly across quarters.
+Always read the following from `references/` before generating the analysis. These define the team-specific vocabulary; without them, the output regresses to generic "champion left, product gap" answers that aggregate poorly across quarters.
 
 - `references/1-churn-taxonomy.md` — the 5-10 root-cause categories the team has agreed on (replace template contents with your actual taxonomy before first run)
 - `references/2-prevention-action-library.md` — the menu of prevention recommendations the skill is allowed to propose (replace template contents with your actual playbook entries)
@@ -38,8 +34,7 @@ gap" answers that aggregate poorly across quarters.
 
 ## Method
 
-Run these four steps in order. Steps 2 and 3 are the two passes — they must remain separate so
-evidence extraction is not contaminated by classification anchoring.
+Run these four steps in order. Steps 2 and 3 are the two passes — they must remain separate so evidence extraction is not contaminated by classification anchoring.
 
 ### 1. Build the 180-day timeline
 
@@ -52,34 +47,21 @@ Pull from CRM, CS platform, support system, and (optionally) Gong:
 - Product usage metrics (weekly active users, key-feature adoption, integration health)
 - QBR attendance and outcomes
 
-Order events chronologically. Anchor the timeline at `churn_date - 180 days` and end at
-`churn_date`. If fewer than 3 events exist within the 30 days immediately before `churn_date`,
-the skill returns the literal output `"insufficient data — fewer than 3 timeline events in the
-30-day pre-churn window; manual CSM postmortem required"` and stops. This guard exists because
-short, sparse timelines invite hindsight-bias narratives that read confident but cannot survive
-the CSM's lived experience.
+Order events chronologically. Anchor the timeline at `churn_date - 180 days` and end at `churn_date`. If fewer than 3 events exist within the 30 days immediately before `churn_date`, the skill returns the literal output `"insufficient data — fewer than 3 timeline events in the 30-day pre-churn window; manual CSM postmortem required"` and stops. This guard exists because short, sparse timelines invite hindsight-bias narratives that read confident but cannot survive the CSM's lived experience.
 
 ### 2. Evidence pass
 
-A first Claude pass that ONLY extracts evidence. No classification, no prevention recommendation.
-For each timeline event flagged as inflection-worthy (a health drop greater than the team's
-configured delta, a sponsor change, a missed QBR, a severity-1 ticket), produce:
+A first Claude pass that ONLY extracts evidence. No classification, no prevention recommendation. For each timeline event flagged as inflection-worthy (a health drop greater than the team's configured delta, a sponsor change, a missed QBR, a severity-1 ticket), produce:
 
 - The raw quote, ticket excerpt, or metric delta (verbatim — do not paraphrase)
 - The date of the event
 - Which timeline source it came from (CRM, Gainsight, Zendesk, Gong)
 
-The output of this pass is a flat list of evidence rows. The skill stores it as an intermediate
-artifact and passes it to step 3 — it does not classify anything yet.
+The output of this pass is a flat list of evidence rows. The skill stores it as an intermediate artifact and passes it to step 3 — it does not classify anything yet.
 
 ### 3. Classification pass
 
-A second Claude pass that ONLY classifies. It receives the evidence list from step 2, the
-taxonomy from `references/1-churn-taxonomy.md`, and nothing else. Two-pass design is the
-explicit engineering choice: a single-pass model conflates "what happened" with "what category
-this belongs to," which biases the evidence selection toward whatever category the model
-already suspects. Forcing the classification pass to work from a frozen evidence list is the
-guard against that.
+A second Claude pass that ONLY classifies. It receives the evidence list from step 2, the taxonomy from `references/1-churn-taxonomy.md`, and nothing else. Two-pass design is the explicit engineering choice: a single-pass model conflates "what happened" with "what category this belongs to," which biases the evidence selection toward whatever category the model already suspects. Forcing the classification pass to work from a frozen evidence list is the guard against that.
 
 The classification pass must produce:
 
@@ -87,18 +69,11 @@ The classification pass must produce:
 - Up to two **contributing** root-cause categories (from the taxonomy, exactly)
 - For each assigned category: which specific evidence rows support it (cite by date)
 
-If no category passes a 3-evidence-row threshold, the primary category becomes
-`"insufficient-evidence"` and the analysis ends here. Padding to a category with 1-2 weak
-evidence rows is the failure mode this threshold guards against.
+If no category passes a 3-evidence-row threshold, the primary category becomes `"insufficient-evidence"` and the analysis ends here. Padding to a category with 1-2 weak evidence rows is the failure mode this threshold guards against.
 
 ### 4. Prevention recommendation
 
-Read `references/2-prevention-action-library.md`. Choose ONE prevention action from that
-library that, if it had been in place 60 days before the churn date, would have surfaced the
-primary root cause as a watchable signal. The skill is not allowed to invent a new prevention
-action — if no library entry fits, it returns `"no library match — prevention action requires
-human design"`. This forces the team to grow the library deliberately rather than letting
-Claude generate a different bespoke recommendation per churn that nobody can aggregate.
+Read `references/2-prevention-action-library.md`. Choose ONE prevention action from that library that, if it had been in place 60 days before the churn date, would have surfaced the primary root cause as a watchable signal. The skill is not allowed to invent a new prevention action — if no library entry fits, it returns `"no library match — prevention action requires human design"`. This forces the team to grow the library deliberately rather than letting Claude generate a different bespoke recommendation per churn that nobody can aggregate.
 
 ## Output format
 

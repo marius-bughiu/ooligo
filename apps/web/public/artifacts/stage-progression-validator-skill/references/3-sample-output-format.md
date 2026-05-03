@@ -19,13 +19,11 @@ Opportunities scored: N
 - needs_methodology: N
 ```
 
-If the rubric `last_reviewed` is more than 90 days old, prepend a single
-line: `> WARNING: stage-criteria rubric last reviewed YYYY-MM-DD (over 90 days).`
+If the rubric `last_reviewed` is more than 90 days old, prepend a single line: `> WARNING: stage-criteria rubric last reviewed YYYY-MM-DD (over 90 days).`
 
 ## fail section
 
-One block per failed deal. Order by deterministic-score ascending (worst
-first), tie-break by qualitative-score ascending.
+One block per failed deal. Order by deterministic-score ascending (worst first), tie-break by qualitative-score ascending.
 
 ```markdown
 ## fail (N)
@@ -55,9 +53,7 @@ Same block format as `fail`. Order by combined score ascending.
 
 ## needs_manager_review section
 
-Same block format. Add a one-line `Reason:` field naming why the deal
-landed in the borderline band — `low recording coverage`, `one rule short`,
-`mixed signal across deterministic and qualitative`, etc.
+Same block format. Add a one-line `Reason:` field naming why the deal landed in the borderline band — `low recording coverage`, `one rule short`, `mixed signal across deterministic and qualitative`, etc.
 
 ## needs_methodology section
 

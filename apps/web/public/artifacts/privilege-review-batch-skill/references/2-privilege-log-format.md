@@ -10,9 +10,7 @@
 
 ## Schema
 
-Every log entry is a row with the following fields. Required fields fail
-the draft if missing; optional fields are blank in the draft if the
-underlying signal is not present.
+Every log entry is a row with the following fields. Required fields fail the draft if missing; optional fields are blank in the draft if the underlying signal is not present.
 
 | Field | Required | Source | Notes |
 |---|---|---|---|
@@ -35,23 +33,15 @@ underlying signal is not present.
 
 ## Privilege description rules
 
-The `privilege_description` field is the load-bearing prose that
-describes the document on the log without revealing privileged content.
-Get this wrong and either you waive privilege (too much detail) or
-opposing counsel moves to compel because the description is
-inadequate (too little).
+The `privilege_description` field is the load-bearing prose that describes the document on the log without revealing privileged content. Get this wrong and either you waive privilege (too much detail) or opposing counsel moves to compel because the description is inadequate (too little).
 
-The skill drafts the description following these rules. Attorneys
-edit on finalization.
+The skill drafts the description following these rules. Attorneys edit on finalization.
 
 ### What goes in
 
-- The general subject category (e.g. "legal advice regarding indemnification
-  terms in pending vendor contract")
-- The privilege basis prong that fired (attorney-client, work-product, or
-  both)
-- The fact that the communication was between attorney and client, or
-  prepared in anticipation of litigation, as applicable
+- The general subject category (e.g. "legal advice regarding indemnification terms in pending vendor contract")
+- The privilege basis prong that fired (attorney-client, work-product, or both)
+- The fact that the communication was between attorney and client, or prepared in anticipation of litigation, as applicable
 
 ### What stays out
 
@@ -59,13 +49,11 @@ edit on finalization.
 - The legal theory or strategy discussed
 - Any privileged content of the document itself
 - Verbatim quotes from the document
-- The names of opposing parties or witnesses (unless already public via
-  the case caption)
+- The names of opposing parties or witnesses (unless already public via the case caption)
 
 ### Templates
 
-Use the matching template based on the `privilege_basis` value. The
-skill substitutes the placeholders from metadata and rubric context.
+Use the matching template based on the `privilege_basis` value. The skill substitutes the placeholders from metadata and rubric context.
 
 **Attorney-client (in-house)**:
 
@@ -96,11 +84,7 @@ skill substitutes the placeholders from metadata and rubric context.
 
 ## Output format
 
-The skill emits the draft log as a single Markdown table in
-`draft_privilege_log.md`. Markdown is chosen so attorneys can review,
-edit, and red-line in any text editor; the matter's production tool
-exports to the venue's required format (`.csv`, `.xlsx`, or
-court-specific schema).
+The skill emits the draft log as a single Markdown table in `draft_privilege_log.md`. Markdown is chosen so attorneys can review, edit, and red-line in any text editor; the matter's production tool exports to the venue's required format (`.csv`, `.xlsx`, or court-specific schema).
 
 Sample row:
 
@@ -112,35 +96,22 @@ Sample row:
 
 ## Court-format crosswalks
 
-Common court formats and how the schema maps. Verify the matter's
-specific local rule before relying on these defaults.
+Common court formats and how the schema maps. Verify the matter's specific local rule before relying on these defaults.
 
-- **Federal Rule 26(b)(5)(A)** — minimum: nature of withheld material,
-  date, author, recipients, subject. Description must be sufficient
-  for the requesting party to assess the claim. The default schema
-  satisfies the federal floor.
-- **Delaware Court of Chancery** — additionally requires
-  `attorneys_present` listed separately. The skill emits this as a
-  derived field from `recipients_to + recipients_cc` filtered by the
-  attorney custodian list.
-- **EDNY / SDNY** — categorical privilege logs are sometimes acceptable
-  by stipulation. The skill does NOT generate categorical logs; if
-  the matter has stipulated to one, the per-document draft is the
-  source data the attorney aggregates from.
+- **Federal Rule 26(b)(5)(A)** — minimum: nature of withheld material, date, author, recipients, subject. Description must be sufficient for the requesting party to assess the claim. The default schema satisfies the federal floor.
+- **Delaware Court of Chancery** — additionally requires `attorneys_present` listed separately. The skill emits this as a derived field from `recipients_to + recipients_cc` filtered by the attorney custodian list.
+- **EDNY / SDNY** — categorical privilege logs are sometimes acceptable by stipulation. The skill does NOT generate categorical logs; if the matter has stipulated to one, the per-document draft is the source data the attorney aggregates from.
 
 ## Attorney finalization checklist
 
-The draft log includes this checklist at the top so the finalizing
-attorney has a forcing function before the log is produced.
+The draft log includes this checklist at the top so the finalizing attorney has a forcing function before the log is produced.
 
 - [ ] Every `privilege_description` reviewed for over- or under-disclosure
-- [ ] Every `attorney_review_status` flipped from `draft — pending` to
-      `attorney finalized {YYYY-MM-DD} {initials}`
+- [ ] Every `attorney_review_status` flipped from `draft — pending` to `attorney finalized {YYYY-MM-DD} {initials}`
 - [ ] Sample of `not-privileged` calls (10-20 docs) spot-checked
 - [ ] All `borderline_queue.csv` entries individually decided
 - [ ] Bates numbers reconciled against the production set
-- [ ] Format converted to the venue's required format (CSV / XLSX /
-      court-specific schema)
+- [ ] Format converted to the venue's required format (CSV / XLSX / court-specific schema)
 - [ ] Log served per the protective order's service requirements
 
 ## Last edited

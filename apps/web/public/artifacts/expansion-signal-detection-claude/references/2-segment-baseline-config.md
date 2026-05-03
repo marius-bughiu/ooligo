@@ -11,22 +11,15 @@
 For each `usage_event` ingested, the skill:
 
 1. Looks up `account.segment` in this file.
-2. Fetches the noise band (typically two-sigma around the segment
-   median) for the event's `metric_name`.
-3. If `delta_pct` falls inside the noise band, the event is
-   discarded as noise even if it crossed the global emitter
-   threshold.
-4. If outside the band, the event is kept as a signal candidate
-   and proceeds to the SKU mapping in step 3 of the method.
+2. Fetches the noise band (typically two-sigma around the segment median) for the event's `metric_name`.
+3. If `delta_pct` falls inside the noise band, the event is discarded as noise even if it crossed the global emitter threshold.
+4. If outside the band, the event is kept as a signal candidate and proceeds to the SKU mapping in step 3 of the method.
 
-Edit one row at a time. Watch the next two digests before editing
-again — baselines that move every week train the team to ignore the
-output.
+Edit one row at a time. Watch the next two digests before editing again — baselines that move every week train the team to ignore the output.
 
 ## Per-segment baseline table
 
-Replace these placeholder values with values from a 90-day rolling
-window over your actual usage data.
+Replace these placeholder values with values from a 90-day rolling window over your actual usage data.
 
 ### Segment: enterprise (example)
 
@@ -67,16 +60,13 @@ Typical: 1-50 seats, monthly or annual contract, pooled CSM coverage.
 
 ## Recompute cadence
 
-Recompute the medians and noise bands from your usage warehouse on a
-quarterly basis. Append to the calibration log below so the next
-person editing this file can see why the numbers are what they are.
+Recompute the medians and noise bands from your usage warehouse on a quarterly basis. Append to the calibration log below so the next person editing this file can see why the numbers are what they are.
 
 ## Calibration log
 
 Format: `YYYY-MM-DD — change — reason`.
 
-- {YYYY-MM-DD} — initial baselines — placeholder, replace with values
-  computed from a 90-day rolling window
+- {YYYY-MM-DD} — initial baselines — placeholder, replace with values computed from a 90-day rolling window
 
 ## Last edited
 

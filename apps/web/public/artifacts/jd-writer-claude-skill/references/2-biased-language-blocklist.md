@@ -6,8 +6,7 @@
 > skill flags every match found in a draft and suggests a neutral
 > substitution.
 
-Format: each row is `term | category | suggested substitution | reason`.
-The skill matches case-insensitively on whole words.
+Format: each row is `term | category | suggested substitution | reason`. The skill matches case-insensitively on whole words.
 
 ## Gendered terms
 
@@ -64,11 +63,7 @@ The skill matches case-insensitively on whole words.
 
 ## Override mechanism
 
-Some terms in this list are unavoidable in some roles (e.g. "must lift
-50lbs" for a warehouse role). The skill accepts an inline override of
-the form `<!-- jd-writer:keep "<term>" reason="<reason>" -->` placed
-immediately above the line. The override and reason are preserved in
-the final draft for recruiter review.
+Some terms in this list are unavoidable in some roles (e.g. "must lift 50lbs" for a warehouse role). The skill accepts an inline override of the form `<!-- jd-writer:keep "<term>" reason="<reason>" -->` placed immediately above the line. The override and reason are preserved in the final draft for recruiter review.
 
 ## Last edited
 

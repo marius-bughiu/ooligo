@@ -7,8 +7,7 @@
 
 ## Object scope
 
-Which SObjects this ruleset applies to. The Skill runs the rules per
-object; rules can differ across Account / Contact / Lead.
+Which SObjects this ruleset applies to. The Skill runs the rules per object; rules can differ across Account / Contact / Lead.
 
 - [ ] Account
 - [ ] Contact
@@ -16,8 +15,7 @@ object; rules can differ across Account / Contact / Lead.
 
 ## Deterministic match keys
 
-Pass one of the dedup pipeline. Two records that match on any single key
-listed here are surfaced as `high` confidence dedup candidates.
+Pass one of the dedup pipeline. Two records that match on any single key listed here are surfaced as `high` confidence dedup candidates.
 
 ### Account
 
@@ -45,9 +43,7 @@ listed here are surfaced as `high` confidence dedup candidates.
 
 ## Fuzzy / semantic similarity threshold
 
-Pass two of the pipeline. Only candidates that share at least one weak
-signal (same first 6 digits of phone, same first token of name, same
-parent-domain TLD) are submitted for semantic comparison.
+Pass two of the pipeline. Only candidates that share at least one weak signal (same first 6 digits of phone, same first token of name, same parent-domain TLD) are submitted for semantic comparison.
 
 | SObject | Cosine similarity threshold | Notes                                    |
 |---------|-----------------------------|------------------------------------------|
@@ -61,8 +57,7 @@ Even if rules match, do not propose merge if any of the following holds:
 
 - Records belong to different `RecordType` (e.g. Customer vs Partner)
 - Records are owned by different BU `Sales_Region__c` values
-- One record has an active Opportunity in `Negotiation` or later — defer to
-  rep review, do not auto-propose
+- One record has an active Opportunity in `Negotiation` or later — defer to rep review, do not auto-propose
 - Records carry a `Do_Not_Merge__c = TRUE` flag set by an admin
 
 ## Last edited

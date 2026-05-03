@@ -114,15 +114,8 @@ comp range will be disclosed on screen if we get to that step.
 
 ## Why these fields are non-negotiable
 
-- **`Source` URL on every row** — required for the recruiter to spot-check
-  the LLM's evidence claims against the actual profile.
-- **`Pool: pre → post → top N`** — surfaces how many candidates were
-  filtered out deterministically vs. by the LLM. Big LLM-side cuts on a
-  small post-filter pool is a signal of overfitting to rubric noise.
-- **`Rubric SHA-256`** — proves which rubric was used on this run (NYC
-  LL 144 audit defense + EU AI Act traceability).
-- **`Skipped` table** — candidates filtered out are listed with reasons,
-  not erased. Erasing them turns the workflow into automated rejection.
-- **Recruiter-only metadata in outreach** — stripped before sending; its
-  presence in the draft is what reminds the recruiter the message is a
-  draft, not a finished product.
+- **`Source` URL on every row** — required for the recruiter to spot-check the LLM's evidence claims against the actual profile.
+- **`Pool: pre → post → top N`** — surfaces how many candidates were filtered out deterministically vs. by the LLM. Big LLM-side cuts on a small post-filter pool is a signal of overfitting to rubric noise.
+- **`Rubric SHA-256`** — proves which rubric was used on this run (NYC LL 144 audit defense + EU AI Act traceability).
+- **`Skipped` table** — candidates filtered out are listed with reasons, not erased. Erasing them turns the workflow into automated rejection.
+- **Recruiter-only metadata in outreach** — stripped before sending; its presence in the draft is what reminds the recruiter the message is a draft, not a finished product.

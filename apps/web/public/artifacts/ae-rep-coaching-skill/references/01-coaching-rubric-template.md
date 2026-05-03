@@ -8,13 +8,9 @@
 
 ## How to use this rubric
 
-Each call type has 4-6 criteria. Each criterion is scored 1-5 against
-a transcript with a citation (timestamp + 1-2 sentence quote). The
-Skill aggregates scores across calls; this file defines what is being
-scored, not how the aggregation works.
+Each call type has 4-6 criteria. Each criterion is scored 1-5 against a transcript with a citation (timestamp + 1-2 sentence quote). The Skill aggregates scores across calls; this file defines what is being scored, not how the aggregation works.
 
-Update `last_edited` at the bottom every time you change the rubric.
-The Skill warns the manager when the rubric is older than 90 days.
+Update `last_edited` at the bottom every time you change the rubric. The Skill warns the manager when the rubric is older than 90 days.
 
 ## Discovery rubric
 

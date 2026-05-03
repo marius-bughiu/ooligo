@@ -9,11 +9,9 @@
 The library is organised by objection pattern. Each pattern has:
 
 - The pattern name (used as the slug the skill matches against)
-- The customer wording variants the skill should treat as the same
-  pattern
+- The customer wording variants the skill should treat as the same pattern
 - The canonical handler (the rep response)
-- The evidence requirement (what must back the handler before it can
-  ship as `[EXTERNAL_OK]`)
+- The evidence requirement (what must back the handler before it can ship as `[EXTERNAL_OK]`)
 - The escalation path (when to bring in PMM, SE, or product)
 
 ## Pattern: pricing-aggression
@@ -39,8 +37,7 @@ The library is organised by objection pattern. Each pattern has:
 
 If neither, the handler ships as `[INTERNAL]` and the rep adapts live.
 
-**Escalation:** finance-partnered TCO model — bring in PMM if the
-pattern repeats across 5+ deals in 30 days.
+**Escalation:** finance-partnered TCO model — bring in PMM if the pattern repeats across 5+ deals in 30 days.
 
 ## Pattern: integration-depth
 
@@ -101,9 +98,7 @@ pattern repeats across 5+ deals in 30 days.
 
 - Public support SLA page URL with fetched date.
 
-Never say anything about the competitor's support quality unless
-quoting a customer who came from that competitor and was on the
-record.
+Never say anything about the competitor's support quality unless quoting a customer who came from that competitor and was on the record.
 
 ## Pattern: security-and-compliance
 
@@ -122,8 +117,7 @@ record.
 
 **Evidence requirement:**
 
-- Public trust portal URL with fetched date and the actual
-  certifications listed.
+- Public trust portal URL with fetched date and the actual certifications listed.
 
 ## Pattern: feature-gap (genuine)
 
@@ -142,13 +136,9 @@ record.
 
 **Evidence requirement:**
 
-- Internal product confirmation that the gap is real and the
-  workaround is genuine.
+- Internal product confirmation that the gap is real and the workaround is genuine.
 
-This handler is the exception: it is intentionally honest about a
-gap. The traps-to-avoid section in the battlecard skeleton exists
-partly to remind reps not to fight battles they will lose — guard
-against pretending parity where none exists.
+This handler is the exception: it is intentionally honest about a gap. The traps-to-avoid section in the battlecard skeleton exists partly to remind reps not to fight battles they will lose — guard against pretending parity where none exists.
 
 ## Last edited
 

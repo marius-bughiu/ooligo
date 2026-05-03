@@ -77,8 +77,7 @@ Write a single Markdown file with one section per slot. Each section is wrapped 
 ## Slot: `usage_trend`
 
 ```text
-{Three-sentence summary of usage trajectory keyed to the prior quarter.
-Names the metric, the delta, and one likely cause from the synthesis pass.}
+{Three-sentence summary of usage trajectory keyed to the prior quarter. Names the metric, the delta, and one likely cause from the synthesis pass.}
 ```
 
 ## Slot: `top_wins`
@@ -120,9 +119,7 @@ If success plan is `unavailable`, this slot emits the literal string `SUCCESS_PL
 ## Slot: `exec_summary`
 
 ```text
-{Five-bullet summary intended for the cover slide. Each bullet is one
-fact, no adjectives. Always ends with the proposed agenda for the
-live QBR call.}
+{Five-bullet summary intended for the cover slide. Each bullet is one fact, no adjectives. Always ends with the proposed agenda for the live QBR call.}
 ```
 ````
 

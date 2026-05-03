@@ -13,10 +13,8 @@
 For each clause type, three columns:
 
 - **Green (acceptable as drafted).** Do nothing. Skill leaves the clause untouched.
-- **Yellow (negotiation room — propose fallback).** Skill substitutes the
-  fallback paragraph from `2-fallback-positions.md` §<ID>.
-- **Red (must-have — propose walk-away rewrite).** Skill substitutes the
-  must-have paragraph from `2-fallback-positions.md` §<ID>.
+- **Yellow (negotiation room — propose fallback).** Skill substitutes the fallback paragraph from `2-fallback-positions.md` §<ID>.
+- **Red (must-have — propose walk-away rewrite).** Skill substitutes the must-have paragraph from `2-fallback-positions.md` §<ID>.
 
 Anything not listed below is **out-of-playbook** and goes to escalation.
 

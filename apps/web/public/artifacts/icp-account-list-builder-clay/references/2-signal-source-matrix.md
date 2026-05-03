@@ -6,22 +6,15 @@
 
 ## Why this file exists
 
-The skill's intent-signal scoring (method Step 4) requires a primary source
-plus a corroborating source for any signal to count above 0. This matrix is
-where you encode which source plays which role for your team. Without it the
-skill defaults to a generic ordering that under-weights signals you trust
-and over-weights ones you've found unreliable.
+The skill's intent-signal scoring (method Step 4) requires a primary source plus a corroborating source for any signal to count above 0. This matrix is where you encode which source plays which role for your team. Without it the skill defaults to a generic ordering that under-weights signals you trust and over-weights ones you've found unreliable.
 
 ## Source roles
 
 For each public source the skill may query, assign one role:
 
-- **primary** — a signal originating here can anchor a score (still needs
-  one corroborator)
-- **corroborator** — only counts as the second source confirming a primary
-  signal; cannot anchor on its own
-- **skip** — never query this source; results are too noisy or stale to
-  trust
+- **primary** — a signal originating here can anchor a score (still needs one corroborator)
+- **corroborator** — only counts as the second source confirming a primary signal; cannot anchor on its own
+- **skip** — never query this source; results are too noisy or stale to trust
 
 ## Source × signal-type matrix
 
@@ -40,16 +33,14 @@ For each public source the skill may query, assign one role:
 
 ## Sources explicitly disallowed
 
-The skill must never query these. Add domains here as you discover sources
-that have produced bad data for your team.
+The skill must never query these. Add domains here as you discover sources that have produced bad data for your team.
 
 - {Domain 1 — e.g. "scraped-data-aggregator-x.example"}
 - {Domain 2}
 
 ## Refresh windows
 
-How fresh a signal must be to count. Anything older than the window is
-dropped to corroborator-only or to 0.
+How fresh a signal must be to count. Anything older than the window is dropped to corroborator-only or to 0.
 
 | Signal type | Max age to count as primary | Max age to count as corroborator |
 |---|---|---|

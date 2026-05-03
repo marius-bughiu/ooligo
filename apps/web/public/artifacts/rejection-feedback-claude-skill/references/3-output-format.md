@@ -6,8 +6,7 @@
 
 ## Routing rules
 
-The skill picks a route per the matrix below. The recruiter can
-override.
+The skill picks a route per the matrix below. The recruiter can override.
 
 | Stage reached | Seniority | feedback_requested | Default route |
 |---|---|---|---|
@@ -19,8 +18,7 @@ override.
 | referred-by-VIP | any | any | call (recruiter judgment) |
 | earlier than onsite | any | any | OUT OF SCOPE — use templated decline |
 
-`senior+` = staff, principal, manager, director. `referred-by-VIP` =
-candidate has a `referrer_priority: high` flag in the ATS.
+`senior+` = staff, principal, manager, director. `referred-by-VIP` = candidate has a `referrer_priority: high` flag in the ATS.
 
 ## Email format — specific feedback (consent + safe jurisdiction)
 
@@ -57,14 +55,9 @@ Best,
 Constraints baked into this template:
 
 - One strength, one gap. No more.
-- The phrase "not a ranking against other candidates" is mandatory,
-  because it pre-empts the most common candidate response loop
-  ("how did I compare").
-- The phrase "not a comment on your overall engineering ability" is
-  mandatory, because it isolates the feedback to this loop and
-  pre-empts the "you said I am bad at engineering" escalation.
-- "We would welcome your application" — neutral future language.
-  Not "we will reach out", not "next time".
+- The phrase "not a ranking against other candidates" is mandatory, because it pre-empts the most common candidate response loop ("how did I compare").
+- The phrase "not a comment on your overall engineering ability" is mandatory, because it isolates the feedback to this loop and pre-empts the "you said I am bad at engineering" escalation.
+- "We would welcome your application" — neutral future language. Not "we will reach out", not "next time".
 
 ## Email format — generic decline (deny jurisdiction OR no consent OR no surfacable specific)
 
@@ -86,18 +79,14 @@ Best,
 {recruiter_first_name}
 ```
 
-This is the safe default. The skill writes this template byte-for-byte
-when:
+This is the safe default. The skill writes this template byte-for-byte when:
 
-- `jurisdiction_policy` returned `unsolicited_feedback: deny` and
-  `feedback_requested: false`
-- step 3 surfaced no rubric dimension with both `mean ≤ 2` AND a
-  verbatim evidence string
+- `jurisdiction_policy` returned `unsolicited_feedback: deny` and `feedback_requested: false`
+- step 3 surfaced no rubric dimension with both `mean ≤ 2` AND a verbatim evidence string
 - a legal flag on the candidate file is present
 - the loop has under two signed-off scorecards
 
-Generic decline is honest. Weak specifics are worse than no
-specifics.
+Generic decline is honest. Weak specifics are worse than no specifics.
 
 ## Call-notes format
 
@@ -174,10 +163,7 @@ One JSON object per line in `audit/<YYYY-MM>.jsonl`:
 }
 ```
 
-No raw candidate ID, no candidate name, no scorecard text, no
-draft text. The audit log is for run reproducibility, not data
-retention. Candidate-facing drafts live in `drafts/<id>.md` under
-the recruiter's own retention policy.
+No raw candidate ID, no candidate name, no scorecard text, no draft text. The audit log is for run reproducibility, not data retention. Candidate-facing drafts live in `drafts/<id>.md` under the recruiter's own retention policy.
 
 ## Last edited
 

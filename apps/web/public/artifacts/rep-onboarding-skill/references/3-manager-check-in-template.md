@@ -6,8 +6,7 @@
 > ("how's it going?") get skipped — these named questions force the
 > conversation to specifics.
 
-The skill expects every week 1-12 to have a block of 3-5 questions.
-Add weeks 13+ if your ramp runs longer.
+The skill expects every week 1-12 to have a block of 3-5 questions. Add weeks 13+ if your ramp runs longer.
 
 ## Operating rules for the check-in itself
 

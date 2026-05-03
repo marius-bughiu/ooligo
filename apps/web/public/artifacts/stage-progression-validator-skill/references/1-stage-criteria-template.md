@@ -6,20 +6,15 @@
 
 ## Last reviewed
 
-YYYY-MM-DD — bump this date every time the rubric is materially changed.
-The skill warns at the top of the report if this date is more than 90 days old.
+YYYY-MM-DD — bump this date every time the rubric is materially changed. The skill warns at the top of the report if this date is more than 90 days old.
 
 ## Methodology in use
 
-One of: `MEDDPICC`, `MEDDIC`, `SPICED`, `BANT`, `custom`. Keep this string in
-sync with `methodology-mapping-template.md` so the skill loads the right
-phrase patterns.
+One of: `MEDDPICC`, `MEDDIC`, `SPICED`, `BANT`, `custom`. Keep this string in sync with `methodology-mapping-template.md` so the skill loads the right phrase patterns.
 
 ## Stages
 
-For each stage that the skill should validate, list rules under three buckets:
-`field_rules`, `activity_rules`, `stakeholder_rules`. Stages omitted from this
-file are emitted as `needs_methodology` rather than scored.
+For each stage that the skill should validate, list rules under three buckets: `field_rules`, `activity_rules`, `stakeholder_rules`. Stages omitted from this file are emitted as `needs_methodology` rather than scored.
 
 ### Stage 2 — Discovery confirmed
 
@@ -94,9 +89,7 @@ evidence_required (qualitative):
 
 ## Recording-coverage floor (per stage)
 
-Minimum recorded calls in the prior 30 days for the deal. If the deal is
-below the floor, the skill emits `needs_manager_review` and surfaces the
-coverage gap rather than scoring qualitative checks.
+Minimum recorded calls in the prior 30 days for the deal. If the deal is below the floor, the skill emits `needs_manager_review` and surfaces the coverage gap rather than scoring qualitative checks.
 
 | Stage | Min recorded calls in last 30 days |
 |---|---|

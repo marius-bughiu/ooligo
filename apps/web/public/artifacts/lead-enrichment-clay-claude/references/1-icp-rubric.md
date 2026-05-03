@@ -17,24 +17,20 @@
 
 ## Technographics
 
-Tools whose presence on the prospect's stack signals fit (we win when
-they have these because the integration story is short or the pain is
-acute):
+Tools whose presence on the prospect's stack signals fit (we win when they have these because the integration story is short or the pain is acute):
 
 - {Tool 1 — e.g. "Salesforce + Outreach"}
 - {Tool 2 — e.g. "dbt + Snowflake"}
 - {Tool 3 — e.g. "Segment"}
 
-Tools whose presence signals misfit (we lose to them, or their presence
-implies a build-not-buy culture):
+Tools whose presence signals misfit (we lose to them, or their presence implies a build-not-buy culture):
 
 - {Tool A — e.g. "Hightouch (we lose to)"}
 - {Tool B — e.g. "in-house reverse-ETL (build-not-buy)"}
 
 ## Pain ranking
 
-When the skill produces an ICP score, it weights against this priority
-order. Higher = more important to surface first.
+When the skill produces an ICP score, it weights against this priority order. Higher = more important to surface first.
 
 1. {Pain category — e.g. "outbound data quality blocking pipeline"} — weight 5
 2. {Pain category — e.g. "rep ramp time eating quota"} — weight 4
@@ -54,9 +50,7 @@ The skill returns `1-10`. Suggested interpretation (override per team):
 
 ## Disqualifiers
 
-Single signals that drop a row out regardless of other fit. The skill
-flags these with `disqualifier: "..."` in the output and forces score
-to 1.
+Single signals that drop a row out regardless of other fit. The skill flags these with `disqualifier: "..."` in the output and forces score to 1.
 
 - {Disqualifier 1 — e.g. "uses {Competitor} as system of record"}
 - {Disqualifier 2 — e.g. "regulated industry without our SOC 2 + HIPAA"}
@@ -64,5 +58,4 @@ to 1.
 
 ## Last edited
 
-{YYYY-MM-DD} — bump on every material change. The skill prepends a
-"rubric may be stale" note when this date is more than 90 days old.
+{YYYY-MM-DD} — bump on every material change. The skill prepends a "rubric may be stale" note when this date is more than 90 days old.

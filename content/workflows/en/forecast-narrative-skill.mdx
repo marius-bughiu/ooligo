@@ -13,39 +13,88 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that turns the messy reality of pipeline data into a one-page forecast narrative for the weekly forecast call: commit, best-case, and pull-in deals; risks against committed; deals that moved this week and why; deals stalled. Reads Salesforce as ground truth and Gong as the truth-check on what reps say versus what customers said.
+A Claude Skill that turns the messy reality of pipeline data into a one-page forecast narrative for the weekly forecast call. The output is the document the VP Sales / CRO reads in the thirty minutes before the live call: a headline number with a confidence band, the top three deals moving the number, the single biggest risk, and one ask of leadership.
 
-## What you'll need
+The Skill reads Salesforce as ground truth on pipeline state and Gong as the truth-check on what reps say versus what customers actually said. It fights two specific failure modes RevOps teams hit every week: deals sitting in commit on hope rather than evidence, and exec briefs written in language so hedged that the exec stops reading.
 
-- Salesforce with a clean Stage and Close Date discipline
-- Gong API access for call activity per opportunity
-- Claude Code or Claude.ai with the Skill loaded
-- Your team's stage-to-forecast-category mapping
-- A definition of "stalled" (e.g., no Gong call in 14 days on a commit deal)
+## When to use
+
+Use the Skill on a recurring cadence — once per week per forecast segment, posted to the forecast Slack channel about thirty minutes before the live call. The point is to give leaders time to read it cold, walk in with sharper questions, and shorten the call.
+
+It pays back when:
+
+- Your forecast segments have at least ten active commit deals each week. Below that, the marginal value over a manually-written brief shrinks.
+- Your reps log Gong calls reliably. If Gong activity is patchy, the Skill's risk section becomes noise.
+- Your Salesforce stage and close-date discipline is reasonable. The Skill cannot fix bad data; it surfaces it more visibly, which is useful but not what most teams want from a "forecast tool."
+
+## When NOT to use
+
+Three situations where the Skill output is the wrong artifact:
+
+- **Board-of-directors materials without CFO review.** The narrative is an internal RevOps artifact reconciled against Salesforce, not against finance's bookings ledger. Numbers shown to the board should come through finance under the controls policy. The Skill explicitly refuses to produce board-formatted output.
+- **Financial-disclosure-bound communications** (10-Q, 10-K, earnings prep, investor updates, public guidance, anything legal will see). Use finance's process; do not paste this narrative into anything filed externally.
+- **Re-baselining the official commit.** This narrative explains the commit the segment leader already set. It does not replace the commit-setting meeting itself. If you find yourself using the Skill to discover what the commit should be, you have two problems and this Skill is not solving either of them.
 
 ## Setup
 
-1. **Install the Skill.** `account-forecast.skill` into `~/.claude/skills/`. Set `SFDC_TOKEN` and `GONG_API_KEY`.
-2. **Configure rules.** Edit `references/forecast-rules.md` with: which stages count as commit, what "stalled" means in days and signals, and what counts as a "real" close-date slip versus expected.
-3. **Run for one segment.** `build_forecast_narrative(segment="enterprise-amer", week_ending="2026-05-01")`. The Skill outputs three sections: numbers, risk to commit, and deal-by-deal commentary on movers.
-4. **Pre-publish to Slack.** Post the narrative to your forecast channel 30 minutes before the live call so leaders read it cold and arrive with sharper questions.
+The bundle lives at `apps/web/public/artifacts/forecast-narrative-skill/`. It contains:
 
-## How it works
+1. `SKILL.md` — install at `~/.claude/skills/forecast-narrative/SKILL.md`. Set `SFDC_TOKEN`, `GONG_API_KEY` in your environment.
+2. `references/1-narrative-structure.md` — the section template and per-section rules. Edit the heading names if your exec scans for different labels, but keep the section count: every section exists because removing it caused a confusion in past calls.
+3. `references/2-hedge-words-blocklist.md` — the input to the hedge-removal pass. Edit per company tone; extend whenever a hedge word survives a real run. The blocklist is the durable artifact — the prompt is not.
+4. `references/3-sample-output.md` — a worked example with the reviewer checklist. Run a Skill invocation on a known segment first and compare against this; if the structure does not match, fix the prompt before shipping to the exec.
 
-The Skill snapshots Salesforce at the cutoff time, then computes deltas against the prior week's snapshot stored locally. It surfaces every deal that changed stage, close date, or amount, plus every deal that was added or removed from commit.
+Configure your forecast segments in `references/segment-config.md` — one row per segment with the Salesforce report ID, the Gong workspace ID, and the segment leader's name (so the "Ask of VP/CRO" line resolves automatically). Snapshots land at `snapshots/<segment>/<week_ending>.json` and are version-checked on every run; if the file's row count does not match the report's expected row count, the Skill aborts before computing deltas.
 
-For each commit deal, the Skill cross-references Gong activity. If a deal is committed but has zero customer-side activity in 14 days, it's flagged. If a deal moved to commit this week, the Skill pulls the most recent customer call and extracts a one-line "why now" from the transcript. This is the part reps love and hate equally — it makes the rep's narrative defensible or visibly thin.
+Invoke each week with the segment slug and the week-ending date: `build_forecast_narrative(segment="enterprise-amer", week_ending="2026-05-01")`.
 
-Final synthesis is a single Markdown page. RevOps reviews it, adds context, and ships.
+## What the Skill actually does
+
+Six steps, run in order. They are sequential by design — every step after the first depends on the snapshot, and the hedge-removal pass depends on the full draft existing.
+
+1. **Snapshot Salesforce at the cutoff.** Pull the saved report at the week-ending timestamp. Persist to disk so the next run has a real prior-week snapshot to diff against. Diffing against the live Salesforce state instead of a stored snapshot loses the audit trail.
+2. **Compute the deltas.** Surface every opportunity that changed forecast category, slipped close date by more than 14 days, changed amount by more than 10%, or was created or removed from the segment.
+3. **Pull Gong evidence per commit deal.** For every deal in commit, query Gong for customer-side activity in the trailing 14 days. This is the part that makes the Skill different from "summarize Salesforce in pretty Markdown" — combining the two systems catches deals kept in commit on hope, which Salesforce alone cannot see.
+4. **Rank the movers.** Score by `abs(amount_change) × close_date_proximity`. Take the top three. Hard cap at three because the narrative is for the exec, not for inspection.
+5. **Identify the single biggest risk.** From the commit set, pick one deal where Gong is silent for fourteen-plus days, the close date has slipped twice in 60 days, or the deal was added to commit in the last 7 days without a corresponding customer call. Pick one. A list of five risks gets read as no risks.
+6. **Hedge-removal pass.** Generate the draft following `references/1-narrative-structure.md`. Then run a second pass that scans against `references/2-hedge-words-blocklist.md` and rewrites every flagged phrasing into a direct claim or a "do not know" admission. The reason for two passes rather than prompting up front: language models drift toward hedging the longer the output gets, and a dedicated removal pass reliably catches what a single-pass prompt misses.
+
+The choice to use a structured narrative format — fixed section order, fixed headings, fixed reasoning shape — rather than free-form prose is deliberate. Free-form output drifts in structure week-to-week, which forces the exec to re-orient on every read. Fixed structure means the exec scans the same five locations every week and arrives at the same information types in the same places. Predictability is the feature.
+
+## Cost reality
+
+A single segment narrative consumes roughly 18,000-24,000 input tokens (the snapshot, the prior snapshot, the Gong activity rows, the three reference files) and produces about 1,200-1,800 output tokens, including the hedge-removal pass. With Sonnet 4.6 list pricing, that is on the order of $0.07-$0.11 per narrative. With Opus 4.7, expect $0.35-$0.55. Run it on Sonnet for the weekly cadence and reserve Opus for end-of-quarter when the stakes justify the spend.
+
+Time saved against a manually-written brief: a senior RevOps analyst takes 60-90 minutes per segment per week to assemble the same artifact from raw Salesforce reports and Gong notes. Across four segments, that is roughly half a day per week reclaimed. The Skill takes 90-120 seconds per segment to run, plus 5-10 minutes of human review before posting to Slack.
+
+The honest constraint: the time saved disappears entirely if the human review step gets skipped. Reviewers catch the hallucinated specifics this Skill cannot eliminate; without that step, the cost reality flips and the Skill becomes a liability. Budget the review time explicitly.
+
+## Success metric
+
+Watch one number: forecast-call duration over a six-week trailing window. If the brief is doing its job, leaders walk in pre-read and the call shortens by 15-25%. The narrative replaces the "what changed this week" portion of the call, which is the part that scales worst with deal volume.
+
+Secondary metrics worth tracking after the first month:
+
+- Beat-or-miss accuracy of the headline against actuals at period close (target: within $500K on segments above $10M commit).
+- Number of "this is wrong" corrections from segment leaders per week (target: trending toward zero by week six).
+- Whether the "single biggest risk" deal actually slipped — false positives are tolerable, but a pattern of false negatives (slipped deals that were not flagged) means the risk heuristics in step 5 of the Skill need tuning.
+
+## vs alternatives
+
+- **Clari Narrative.** Clari produces a similar artifact natively if you are already on Clari. The Skill wins when (a) you are not on Clari and your forecast tool of record is Salesforce + Gong + spreadsheets, or (b) you are on Clari but want to extend the narrative with company-specific reasoning the Clari template cannot express. Clari wins on out-of-the-box deployment and on tighter Salesforce hooks.
+- **Gong Forecast Notes.** Gong's forecast features lean heavily on call-side signal and are weaker on pipeline-state reasoning. The Skill explicitly stitches Salesforce-side state with Gong-side evidence; Gong Forecast Notes does the opposite and treats the pipeline as a follow-on. Pick this Skill when Salesforce is the source of truth and Gong is the verification layer.
+- **Manually-written exec brief.** A senior RevOps analyst still produces the best narrative — the Skill is at best 80% of that output, and that 80% is on factual structure, not on judgment calls about which deals to surface. The Skill wins on consistency, cadence, and the half-day per week it returns to the analyst. The analyst should review and edit every run; this is a co-author tool, not a replacement.
 
 ## Watch-outs
 
-- **Stage discipline.** If reps move deals to commit without the work being done, no Skill fixes that. Pair this with a stage-progression validator workflow.
-- **Gong silence is not always bad.** Some buyers genuinely go quiet during procurement. The Skill flags it; humans interpret.
-- **Snapshot storage.** Store snapshots somewhere version-controlled (an S3 bucket, a Snowflake table). If you only diff against last week's live state, you lose the audit trail and the Skill's signal degrades.
+- **Confident-sounding hallucinations on deal specifics.** The model can invent a procurement step, a stakeholder name, or a contract value that reads plausibly. Guard: every claim about a specific deal must trace to a Salesforce field or a Gong call summary in the source data. The Skill labels any inferred-not-observed claim with `(inferred)` or omits it. If a confident specific claim appears with no source citation, treat the run as failed and re-run with a smaller deal set.
+- **Hedging language slipping back in despite the removal pass.** "May," "could," "potentially," "appears to" creep back, especially in the risk section. Guard: extend `references/2-hedge-words-blocklist.md` whenever a new hedge word survives a pass. The blocklist is the durable artifact; the prompt is not. RevOps owns this file.
+- **The summary cited as the actual forecast.** The narrative explains the commit; it does not set it. Guard: the headline cites the segment leader's commit number, never a number computed by the Skill alone. If `current_commit` was not passed in, the Skill labels its computed range as "Skill-computed pipeline coverage range, not an approved commit" so the document cannot be misread as the official number.
+- **Snapshot drift.** If `snapshots/<segment>/<week_ending>.json` was written from a partially-loaded report (Salesforce timeout mid-pull, for example), the deltas in the next run will be wrong in invisible ways. Guard: the snapshot file's first line records the row count expected vs received; if they disagree, the Skill aborts and tells the operator to re-snapshot before continuing.
+- **Stage discipline.** If reps move deals to commit without the work being done, no Skill fixes that. The narrative will faithfully report whatever Salesforce says. Pair this Skill with a stage-progression validator workflow upstream.
 
 ## Stack
 
-- **Salesforce** — pipeline state, stage history, deal amounts
-- **Gong** — activity signal and customer-side voice
-- **Claude** — narrative synthesis and risk surfacing
+- **Salesforce** — pipeline state, stage history, deal amounts, the saved report that defines each segment.
+- **Gong** — customer-side activity signal and call summaries used as the truth-check on rep narrative.
+- **Claude** — narrative synthesis, ranking, and the hedge-removal pass. Sonnet for weekly cadence; Opus for end-of-quarter when the stakes justify it.

@@ -31,33 +31,26 @@
 
 ## Top 3 deals moving the number
 
-1. **{Deal name}** — {Owner}, {$XXk}. {What changed in plain English: stage
-   transition, new add, scope expansion, slipped close date.}
+1. **{Deal name}** — {Owner}, {$XXk}. {What changed in plain English: stage transition, new add, scope expansion, slipped close date.}
 2. **{Deal name}** — {Owner}, {$XXk}. {What changed.}
 3. **{Deal name}** — {Owner}, {$XXk}. {What changed.}
 
 ## Top 3 risks
 
-1. **{Deal name}** — {Owner}, {$XXk}. {Risk signal: pushed twice, stage
-   regression, amount cut, dormant.}
+1. **{Deal name}** — {Owner}, {$XXk}. {Risk signal: pushed twice, stage regression, amount cut, dormant.}
 2. **{Deal name}** — {Owner}, {$XXk}. {Risk signal.}
 3. **{Deal name}** — {Owner}, {$XXk}. {Risk signal.}
 
 ## The pattern this week
 
-{One paragraph naming the single biggest pattern across the segments, the
-moving deals, and the risks. Flat statement, no hedging. If the data is
-diffuse, write "no dominant pattern this week" rather than padding.}
+{One paragraph naming the single biggest pattern across the segments, the moving deals, and the risks. Flat statement, no hedging. If the data is diffuse, write "no dominant pattern this week" rather than padding.}
 
 ## Recommended ask
 
-{One sentence the VP can carry into the room. If the pattern was diffuse and
-no clean ask follows, write "no clear ask this week" — do not invent one.}
+{One sentence the VP can carry into the room. If the pattern was diffuse and no clean ask follows, write "no clear ask this week" — do not invent one.}
 
 ---
 
-Operational summary, not a forecast. Forecast is owned by {VP name} and
-produced in the Friday forecast call.
+Operational summary, not a forecast. Forecast is owned by {VP name} and produced in the Friday forecast call.
 
-Snapshot freshness: {N hours} (extractor ran {YYYY-MM-DD HH:MM}).
-Deals reassigned this week: {N} (excluded from top-moves section).
+Snapshot freshness: {N hours} (extractor ran {YYYY-MM-DD HH:MM}). Deals reassigned this week: {N} (excluded from top-moves section).

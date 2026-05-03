@@ -64,18 +64,12 @@ security at minimum if patterns exist)
 
 ## Authoring rules for whoever fills this
 
-- Every line carries either `[INTERNAL]` or `[EXTERNAL_OK]`. No line
-  is unmarked. The internal-vs-external classifier in
-  `references/internal-vs-external.md` decides borderline cases.
-- Quotes are verbatim. Cleaning up grammar is fine; rewording the
-  meaning is not.
-- Deal counts are always raw integers, never percentages. "12 of 47
-  lost deals" not "26% of losses" — the denominator is meaningful.
-- Public-source claims always carry a fetched-date next to the URL.
-  Without it the next refresh has no anchor for diffing.
+- Every line carries either `[INTERNAL]` or `[EXTERNAL_OK]`. No line is unmarked. The internal-vs-external classifier in `references/internal-vs-external.md` decides borderline cases.
+- Quotes are verbatim. Cleaning up grammar is fine; rewording the meaning is not.
+- Deal counts are always raw integers, never percentages. "12 of 47 lost deals" not "26% of losses" — the denominator is meaningful.
+- Public-source claims always carry a fetched-date next to the URL. Without it the next refresh has no anchor for diffing.
 - Section order is fixed. Do not reorder; reps build muscle memory.
 
 ## Last edited
 
-{YYYY-MM-DD} — bump on every material edit so the skill can warn when
-the format itself is stale.
+{YYYY-MM-DD} — bump on every material edit so the skill can warn when the format itself is stale.

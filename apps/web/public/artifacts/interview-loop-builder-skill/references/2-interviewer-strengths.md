@@ -7,19 +7,13 @@
 
 ## How to use
 
-Each row is one eligible interviewer. Columns are the competency IDs
-from `1-competency-library.md`. Each cell is the level band(s) the
-interviewer is calibrated to score that competency on. Empty cell =
-not calibrated; the skill will not assign.
+Each row is one eligible interviewer. Columns are the competency IDs from `1-competency-library.md`. Each cell is the level band(s) the interviewer is calibrated to score that competency on. Empty cell = not calibrated; the skill will not assign.
 
-The skill reads this matrix in step 4 (interviewer assignment) and
-matches by:
+The skill reads this matrix in step 4 (interviewer assignment) and matches by:
 
-1. Calibration fit (interviewer is calibrated on the competency at
-   the candidate's level band).
+1. Calibration fit (interviewer is calibrated on the competency at the candidate's level band).
 2. Load — at most one stage per loop per interviewer.
-3. Diversity — at least one interviewer from outside the hiring team
-   when the eligible pool allows.
+3. Diversity — at least one interviewer from outside the hiring team when the eligible pool allows.
 
 ## Pool
 
@@ -37,24 +31,16 @@ matches by:
 
 When you add an interviewer or extend an interviewer's coverage:
 
-- They sit shadow on at least 2 interviews at the new level band, then
-  reverse-shadow (they score, the calibrated interviewer audits) on at
-  least 2 more.
-- Both calibrated interviewer and new interviewer sign off in the
-  matrix before the cell is added.
-- Retire a calibration band if the interviewer has not used it in 6
-  months. The "Last interview" column is the trigger to re-calibrate.
+- They sit shadow on at least 2 interviews at the new level band, then reverse-shadow (they score, the calibrated interviewer audits) on at least 2 more.
+- Both calibrated interviewer and new interviewer sign off in the matrix before the cell is added.
+- Retire a calibration band if the interviewer has not used it in 6 months. The "Last interview" column is the trigger to re-calibrate.
 
 ## Outside-the-hiring-team rule
 
-The skill prefers at least one interviewer outside the hiring team per
-loop, to reduce consensus bias in debriefs. To make this work:
+The skill prefers at least one interviewer outside the hiring team per loop, to reduce consensus bias in debriefs. To make this work:
 
 - Tag each interviewer's `Team` accurately.
-- Ensure the eligible pool for each role family includes at least 2
-  outside-team interviewers per must-have competency at the role's
-  level. If it does not, the skill will assign in-team only and surface
-  a TODO ("expand cross-team calibration for {competency}").
+- Ensure the eligible pool for each role family includes at least 2 outside-team interviewers per must-have competency at the role's level. If it does not, the skill will assign in-team only and surface a TODO ("expand cross-team calibration for {competency}").
 
 ## Last edited
 

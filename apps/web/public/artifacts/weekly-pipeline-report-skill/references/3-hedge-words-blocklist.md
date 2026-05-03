@@ -7,11 +7,7 @@
 
 ## Why a blocklist
 
-Hedging language drifts in because the model is being polite about
-uncertain data. A weekly brief that hedges every claim is unreadable, and
-the VP starts ignoring it. The blocklist enforces flat statements; the
-reader pushes back if a claim is wrong, which is the correct shape of the
-loop.
+Hedging language drifts in because the model is being polite about uncertain data. A weekly brief that hedges every claim is unreadable, and the VP starts ignoring it. The blocklist enforces flat statements; the reader pushes back if a claim is wrong, which is the correct shape of the loop.
 
 ## Blocked phrases (rewrite required)
 
@@ -68,18 +64,14 @@ loop.
 
 The hedge-removal pass rewrites blocked phrases into one of these patterns:
 
-- Replace "X may be Y" with "X is Y" (if the data supports it) or with
-  "the data does not show whether X is Y" (if it does not).
+- Replace "X may be Y" with "X is Y" (if the data supports it) or with "the data does not show whether X is Y" (if it does not).
 - Replace "X seems to be growing" with "X grew $N WoW" or drop the claim.
-- Replace "you may want to consider Z" with "Z" as an imperative, or with
-  "do Z" — the brief is operational; the recommendation is the recommendation.
+- Replace "you may want to consider Z" with "Z" as an imperative, or with "do Z" — the brief is operational; the recommendation is the recommendation.
 - Replace "significant increase" with the actual percent or dollar figure.
 
 ## Exceptions
 
-The "Recommended ask" section may use an imperative without softening
-("review the pushed-twice deals owner-by-owner"). It does not need an
-allowed-alternative rewrite — the imperative is already the target shape.
+The "Recommended ask" section may use an imperative without softening ("review the pushed-twice deals owner-by-owner"). It does not need an allowed-alternative rewrite — the imperative is already the target shape.
 
 ## Last edited
 

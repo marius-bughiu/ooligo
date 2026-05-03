@@ -19,9 +19,7 @@ Every brief MUST contain these sections in this order:
 7. Calibration note (always present; says "no prior data" if first run)
 8. Appendix — per-interviewer evidence
 
-There is intentionally NO "Recommendation" section. The brief never
-emits a hire/no-hire. The panel resolves the decision-points and
-makes the call in the synchronous debrief.
+There is intentionally NO "Recommendation" section. The brief never emits a hire/no-hire. The panel resolves the decision-points and makes the call in the synchronous debrief.
 
 ## Template
 
@@ -118,16 +116,11 @@ For each interviewer:
 
 ## Formatting rules
 
-- Soft-wrap prose paragraphs in the synthesis blocks. Tables, headings,
-  and block quotes are preserved verbatim.
+- Soft-wrap prose paragraphs in the synthesis blocks. Tables, headings, and block quotes are preserved verbatim.
 - Use `—` (em-dash) for missing values in the aggregate-signal table.
-- Quote evidence notes verbatim in quotation marks. Do not paraphrase.
-  Paraphrasing is where bias and false certainty enter.
-- Interviewer-role labels in the synthesis: `HM`, `Peer`, `XFN`,
-  `Bar-raiser`. Always exactly these strings — the brief is sometimes
-  parsed downstream for analytics.
-- Timestamp citations: `(Tool TimecodeStart-TimecodeEnd)`. The tool
-  name is `BrightHire` or `Metaview`. Timecodes are `mm:ss-mm:ss`.
+- Quote evidence notes verbatim in quotation marks. Do not paraphrase. Paraphrasing is where bias and false certainty enter.
+- Interviewer-role labels in the synthesis: `HM`, `Peer`, `XFN`, `Bar-raiser`. Always exactly these strings — the brief is sometimes parsed downstream for analytics.
+- Timestamp citations: `(Tool TimecodeStart-TimecodeEnd)`. The tool name is `BrightHire` or `Metaview`. Timecodes are `mm:ss-mm:ss`.
 - File location: `briefs/<candidate_id>-<YYYYMMDD>.md`.
 
 ## What this format intentionally does NOT include
@@ -137,6 +130,4 @@ For each interviewer:
 - A summary "lean" toward hire or no-hire.
 - An overall pass/fail at the top of the brief.
 
-These omissions are load-bearing. Every one of them, in earlier
-iterations, became the one thing the panel read — turning the brief
-into the decision and the meeting into a rubber stamp.
+These omissions are load-bearing. Every one of them, in earlier iterations, became the one thing the panel read — turning the brief into the decision and the meeting into a rubber stamp.

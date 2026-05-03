@@ -7,8 +7,7 @@
 
 ## Methodology in use
 
-`MEDDPICC` (replace if your team uses a different framework — see worked
-examples for MEDDIC, SPICED, and a custom framework below).
+`MEDDPICC` (replace if your team uses a different framework — see worked examples for MEDDIC, SPICED, and a custom framework below).
 
 ## MEDDPICC mapping (replace contents with team's real fields)
 
@@ -48,10 +47,7 @@ Replace your `methodology in use` above with `MEDDIC` and use this table instead
 
 ## Custom framework template
 
-If the team uses a homegrown rubric, list each concept on its own row with the
-same four columns. The skill treats `Salesforce field` as the ground truth for
-"what was claimed" and the `Phrase patterns` as the ground truth for "what
-counts as supporting evidence in Gong."
+If the team uses a homegrown rubric, list each concept on its own row with the same four columns. The skill treats `Salesforce field` as the ground truth for "what was claimed" and the `Phrase patterns` as the ground truth for "what counts as supporting evidence in Gong."
 
 | Custom concept | Salesforce field | Evidence required | Phrase patterns |
 |---|---|---|---|

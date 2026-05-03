@@ -82,8 +82,7 @@ position the product against displacement instead of 7.
 
 ## Example: insufficient-data short-circuit
 
-When the timeline has fewer than 3 events in the 30 days before churn,
-the skill stops at step 1 and emits:
+When the timeline has fewer than 3 events in the 30 days before churn, the skill stops at step 1 and emits:
 
 ```markdown
 # Churn analysis — Acme Industries (HUB-5523-ACME)
@@ -103,8 +102,4 @@ instrumentation should be improved for accounts of this profile
 
 ## Example: insufficient-evidence classification
 
-When the evidence pass produces evidence rows but no category
-clears the 3-row threshold, the skill emits the full structure
-above with primary set to `insufficient-evidence` and a note that
-the analysis ends without a prevention recommendation pending CSM
-input.
+When the evidence pass produces evidence rows but no category clears the 3-row threshold, the skill emits the full structure above with primary set to `insufficient-evidence` and a note that the analysis ends without a prevention recommendation pending CSM input.

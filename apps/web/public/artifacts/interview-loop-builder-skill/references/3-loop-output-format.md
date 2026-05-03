@@ -10,9 +10,7 @@
 The skill writes:
 
 - `loop.md` — the loop design, in the format below.
-- `scorecards/<NN>-<stage-id>.md` — one scorecard scaffold per
-  post-screen stage, with the rubric block prefilled and an empty
-  scoring section.
+- `scorecards/<NN>-<stage-id>.md` — one scorecard scaffold per post-screen stage, with the rubric block prefilled and an empty scoring section.
 
 ## loop.md format
 
@@ -121,12 +119,9 @@ Independent scoring submitted to debrief before discussion.
 
 ## What the format enforces
 
-- Every rubric dimension has anchor descriptions inline. No "rate 1
-  to 5" without anchors.
-- Every behavioral question has a probe. Interviewers do not have to
-  invent follow-ups in the moment.
-- Every interviewer assignment has a rationale. The hiring manager
-  can audit why a person was assigned without re-running the skill.
+- Every rubric dimension has anchor descriptions inline. No "rate 1 to 5" without anchors.
+- Every behavioral question has a probe. Interviewers do not have to invent follow-ups in the moment.
+- Every interviewer assignment has a rationale. The hiring manager can audit why a person was assigned without re-running the skill.
 - The candidate-experience pass is a section, not a sentence.
 - Open TODOs are explicit. The skill never silently leaves a gap.
 

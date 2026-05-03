@@ -8,10 +8,7 @@
 
 ## Stage gating
 
-Rows are asset categories. Columns are deal stages. A check means the
-category is allowed at that stage; a dash means the skill must omit it
-even if a matching asset exists. NDA-gated cells require both the stage
-gate and `nda_signed: true` on the input.
+Rows are asset categories. Columns are deal stages. A check means the category is allowed at that stage; a dash means the skill must omit it even if a matching asset exists. NDA-gated cells require both the stage gate and `nda_signed: true` on the input.
 
 | Asset category | mutual_plan | proposal | procurement | legal_redline |
 |---|---|---|---|---|
@@ -34,36 +31,19 @@ gate and `nda_signed: true` on the input.
 
 ## Why pricing is gated to `proposal` and later
 
-Exposing pricing in `mutual_plan` trains buyers to anchor on the list
-price before the value conversation has landed. The wedge use case has
-not been tied back to the buyer's strategic priority yet. Almost every
-deal that ends in "the price is too high" had pricing exposed too early.
-The gate is enforced by the matrix even when the rep is impatient.
+Exposing pricing in `mutual_plan` trains buyers to anchor on the list price before the value conversation has landed. The wedge use case has not been tied back to the buyer's strategic priority yet. Almost every deal that ends in "the price is too high" had pricing exposed too early. The gate is enforced by the matrix even when the rep is impatient.
 
 ## Why customer-named case studies are NDA-gated
 
-Customer reference programs typically come with contractual obligations
-on how the customer name is used in pre-sales contexts. The anonymized
-versions are the safe default; the named versions go into the deal-room
-only after the buyer has signed an NDA that protects both the buyer and
-the reference customer.
+Customer reference programs typically come with contractual obligations on how the customer name is used in pre-sales contexts. The anonymized versions are the safe default; the named versions go into the deal-room only after the buyer has signed an NDA that protects both the buyer and the reference customer.
 
 ## Why detailed security artifacts are gated past `mutual_plan`
 
-A buyer who has not yet committed to a mutual action plan does not need
-the SOC 2 audit detail or the architecture diagram — surfacing them
-shifts the conversation into a procurement frame before the value
-conversation is finished. The exception is when security is on the
-buying committee from day one (rare in mid-market, common in regulated
-enterprise); in that case the rep should override by passing
-`nda_signed: true` once the NDA is in place.
+A buyer who has not yet committed to a mutual action plan does not need the SOC 2 audit detail or the architecture diagram — surfacing them shifts the conversation into a procurement frame before the value conversation is finished. The exception is when security is on the buying committee from day one (rare in mid-market, common in regulated enterprise); in that case the rep should override by passing `nda_signed: true` once the NDA is in place.
 
 ## Override behavior
 
-The skill never silently overrides the matrix. If the rep wants to
-include a gated asset earlier than the matrix permits, the matrix entry
-itself must be edited (and committed) — the skill output cites the matrix
-file path, so any deviation from the team's policy is auditable.
+The skill never silently overrides the matrix. If the rep wants to include a gated asset earlier than the matrix permits, the matrix entry itself must be edited (and committed) — the skill output cites the matrix file path, so any deviation from the team's policy is auditable.
 
 ## Last edited
 

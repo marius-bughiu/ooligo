@@ -15,13 +15,10 @@
 
 Each section has two paragraphs:
 
-- **Fallback (yellow zone).** What the skill proposes when the counterparty
-  draft is in the playbook's yellow band — negotiation room, but acceptable.
-- **Must-have (red zone).** What the skill proposes when the counterparty
-  draft is in the playbook's red band — walk-away language.
+- **Fallback (yellow zone).** What the skill proposes when the counterparty draft is in the playbook's yellow band — negotiation room, but acceptable.
+- **Must-have (red zone).** What the skill proposes when the counterparty draft is in the playbook's red band — walk-away language.
 
-Both are written as drop-in replacements for the counterparty clause, in
-the firm's house voice. The skill does not paraphrase; it pastes.
+Both are written as drop-in replacements for the counterparty clause, in the firm's house voice. The skill does not paraphrase; it pastes.
 
 ---
 

@@ -7,10 +7,7 @@
 
 ## How to use
 
-One file per role family (e.g. `eng-comp-band.md`, `gtm-comp-band.md`,
-`product-comp-band.md`) lives in your private fork of the references
-directory. The skill loads the relevant file based on the `role` input.
-Each file follows the structure below.
+One file per role family (e.g. `eng-comp-band.md`, `gtm-comp-band.md`, `product-comp-band.md`) lives in your private fork of the references directory. The skill loads the relevant file based on the `role` input. Each file follows the structure below.
 
 ## Role family: REPLACE_ME (e.g. Engineering)
 
@@ -27,8 +24,7 @@ Each file follows the structure below.
 
 ### Per-level bands
 
-For each level, document floor / midpoint / ceiling. The skill uses these as
-hard bounds. Above-ceiling recommendations trigger `escalation: comp-committee`.
+For each level, document floor / midpoint / ceiling. The skill uses these as hard bounds. Above-ceiling recommendations trigger `escalation: comp-committee`.
 
 #### L4 — Senior Software Engineer (example)
 
@@ -58,25 +54,20 @@ Equity priced at: REPLACE (e.g. last-round preferred, current 409a).
 | EU Tier 2           | REPLACE           |
 | LATAM remote        | REPLACE           |
 
-Apply the factor to base. Bonus target and equity are typically NOT
-geo-adjusted — confirm with your comp framework.
+Apply the factor to base. Bonus target and equity are typically NOT geo-adjusted — confirm with your comp framework.
 
 ### Signing-bonus policy
 
 When signing is allowed, and the maximum:
 
 - Relocation bridging: up to $REPLACE, repayable on REPLACE schedule.
-- Unvested-equity bridging: up to estimated value of REPLACE months of
-  unvested grant at prior employer. Requires documentation.
+- Unvested-equity bridging: up to estimated value of REPLACE months of unvested grant at prior employer. Requires documentation.
 - Pure comp-gap closing without one of the above reasons: NOT ALLOWED.
 
 ### Internal-equity guardrail
 
-If the recommendation would place the candidate above any current
-employee at the same level + geo by more than REPLACE %, the brief sets
-`escalation: comp-committee` regardless of band position.
+If the recommendation would place the candidate above any current employee at the same level + geo by more than REPLACE %, the brief sets `escalation: comp-committee` regardless of band position.
 
 ### Last reviewed
 
-REPLACE_DATE — refresh whenever bands change so the brief's recommendation
-is bounded by current numbers.
+REPLACE_DATE — refresh whenever bands change so the brief's recommendation is bounded by current numbers.

@@ -13,38 +13,86 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that takes any lead row, runs it against your ICP rubric, and outputs a numeric score plus the reasoning. Designed to plug into Clay tables, HubSpot workflows, or a standalone Python script. Replaces the spreadsheet-based scoring matrix nobody has updated since last year.
+A Claude Skill that takes any lead row, runs it against your team's ICP rubric, and returns a 0-10 score, a per-criterion rationale citing the rubric, a recommended next action by tier, and an escalation flag for borderline cases. Designed to plug into a Clay AI column, a HubSpot custom-code action, or a standalone CLI run over a CSV. Replaces the spreadsheet scoring matrix nobody has updated since last year — without pretending it can also do intent or behavioral scoring, which it cannot.
 
-## What you'll need
+The bundle ships at `apps/web/public/artifacts/lead-scoring-icp-rubric-skill/` and contains `SKILL.md` plus three reference templates the user adapts before first run.
 
-- Claude.ai or Claude Code with Skills enabled
-- A lead source: Clay table with enrichment, HubSpot lead list, or CSV export
-- HubSpot or your CRM as the destination for the score
-- An ICP rubric document with explicit weights, not vibes
+## When to use
+
+Use this skill when you have inbound MQLs piling up faster than your SDR team can triage them, and the existing scoring is either nonexistent ("everything is a lead") or stale ("HubSpot scoring matrix last calibrated in 2023, nobody trusts it"). It is also useful for outbound: score an enriched cold list before assigning it, and you stop burning SDR time on out-of-ICP companies that look superficially fine.
+
+The skill is fit scoring, not intent scoring. It answers "is this the right kind of company for us" — not "are they in-market this week." That distinction matters: if you only ever score for fit, you will sequence great-fit accounts that have no current need and ignore poor-fit accounts that are actively buying. Pair this skill with whatever signals in-market behavior — Bombora, 6sense, your own product-usage events, pricing-page hits — to route correctly.
+
+Concretely, invoke it from:
+
+- A **Clay AI column** that fires on every new row in a lead table, writing the score and rationale back to two columns.
+- A **HubSpot custom-code action** in a workflow triggered by `Lifecycle stage = MQL`, which calls the skill and writes both the score and the rationale to lead properties.
+- A **standalone CLI** over a CSV export — useful for one-off list scoring before a campaign launch.
+
+## When NOT to use
+
+Skip this skill when:
+
+- **You want to auto-reject leads with no human in the loop.** The output is a recommendation. The skill explicitly tags borderline cases with `escalate: needs_human_review`, but if you wire it to delete leads scored C or below, you will silently destroy pipeline whenever the rubric drifts out of date. Always keep an SDR review path for at least the C tier.
+- **Your "rubric" is vibes.** The skill refuses to score against a rubric that has no explicit weights and tier values. If your team has not had the argument about what an A-tier industry actually is, have that argument first. The skill cannot make the rubric defensible if the source is not.
+- **You need behavioral or intent scoring.** This is fit scoring only. Trying to encode "engagement score" or "last website visit" into the rubric forces you to update it constantly; use a dedicated intent tool for the time-varying signals and keep this skill for the static fit ones.
+- **You operate in a regulated domain that requires explainability beyond per-criterion rationale.** Per-criterion outputs are auditable but they are not the same as a regulator-defensible model card. If you need that, invest in a proper scoring service, not a Claude Skill.
 
 ## Setup
 
-1. **Install the Skill.** `icp-scoring.skill` exposes one primary function: `score_lead`. Inputs are a structured lead record and the rubric. Output is a score from one to one hundred plus per-criterion reasoning.
-2. **Drop in the rubric.** The rubric is the leverage point. Format it as a markdown table with criterion, weight, and the values that hit each scoring tier. Vague rubrics produce vague scores; tight rubrics produce defensible ones.
-3. **Wire the input source.** In Clay, point an AI column at the Skill and pass enriched fields. In HubSpot, use a custom code action to call the Skill via API. In a script, read from CSV and write back the score.
-4. **Configure the destination.** Score and reasoning both go to the lead record. Score in a number property, reasoning in a textarea property. Both are useful: the score for routing, the reasoning for the SDR who gets the lead.
-5. **Calibrate.** Run on twenty closed-won leads and twenty closed-lost. The score distribution should clearly separate the two. If it does not, the rubric is the problem.
+Setup takes about 30 minutes once you have the rubric drafted. The rubric itself takes longer — usually a 60-minute working session with the SDR manager, an AE, and someone from RevOps to argue about weights.
 
-## How it works
+1. **Install the Skill.** Drop `apps/web/public/artifacts/lead-scoring-icp-rubric-skill/SKILL.md` and the `references/` folder into your `.claude/skills/lead-scoring/` directory (or upload as a Skill in claude.ai). The frontmatter `name` and `description` are what triggers the Skill on relevant prompts.
+2. **Replace the rubric template.** Open `references/1-icp-rubric-template.md` and replace the placeholder rows in "Criteria" with your actual criteria, weights (1-5), and tier values (A / B / C). Fill the "Hard disqualifiers" section — these run as deterministic checks before any LLM call. Update "Last edited" so the SHA-256 the skill prints in every output footer reflects who owns the current version.
+3. **Replace the tier-to-action matrix.** Open `references/2-tier-to-action-matrix.md` and replace the example rows with what your team actually does on each `(tier, source_of_lead)` combination. The defaults are reasonable but not yours.
+4. **Wire the input source.** In Clay, point an AI column at the Skill, pass the enriched lead row as `lead`, the rubric file as `rubric`, and the source column as `source_of_lead`. In HubSpot, wrap the Skill in a custom-code action that reads the contact + company properties into a `lead` object and posts the structured output back. In a script, glob the CSV, post each row, write the score and rationale to two new columns.
+5. **Configure the destination.** Both score and rationale go to the lead. Score in a number property (for routing logic), rationale in a long-text property (for the SDR who will read it before the call). Wire the `escalate` field to a separate boolean or enum property so the SDR manager can filter for review.
+6. **Calibrate.** Before turning it on, run the skill over 20 closed-won leads and 20 closed-lost leads from the last 6 months. The score distribution should clearly separate the two cohorts. If it does not, the rubric is the problem, not the skill — go back to step 2 and re-argue weights.
 
-The Skill takes the rubric and the lead, and asks Claude to score each criterion in turn, output a per-criterion score, multiply by weight, and sum. The sum is the headline number. The reasoning is the per-criterion explanation, which is what makes the score defensible to a skeptical AE.
+## What the skill actually does
 
-The Skill can also output a tier label (A, B, C, disqualified) based on configurable thresholds. Tiers are easier for downstream routing logic than raw numbers, but the raw number is still useful for sorting and debugging.
+The skill runs four steps in a fixed order. Earlier steps gate later steps; do not parallelize.
+
+**Step 1 — deterministic firmographic checks.** Before any LLM call, plain code runs the rubric's hard disqualifiers (sanctioned country, disqualified industry, headcount under your floor, free-mail domain) and the required-field check (`email` and `company_domain` must be present). Hits return immediately — `disqualified` with the citation, or `escalate: insufficient_data` with the missing fields. Why deterministic first: it is free, fast, and never hallucinates. Burning tokens to confirm a 3-person hairdresser is not in your enterprise-SaaS ICP is wasteful.
+
+**Step 2 — per-criterion LLM scoring with explicit weighting.** For each remaining criterion, the model emits a tier (A / B / C) and a one-sentence rationale citing the rubric row. The skill multiplies tier (A=3, B=2, C=1) by the criterion's weight and sums. Why per-criterion rather than a holistic prompt: holistic outputs blend criteria silently and you lose the ability to debug why a lead got an 8 instead of a 5. Why explicit weighting rather than letting the model balance: stated weights are the only way the rubric stays the source of truth. If the model decides its own balance, rubric reviews become theatre.
+
+**Step 3 — borderline fallback to human review.** If the final score is within 0.5 of a tier boundary, or if more than 3 criteria were scored on missing or inferred data, the skill sets `escalate: needs_human_review` and names the missing fields. The most expensive scoring failure is not a wrong tier on a confident lead — it is a wrong tier on a lead that was always borderline.
+
+**Step 4 — output assembly.** The skill emits the markdown described in `references/3-sample-output.md`: headline score and tier, recommended next action joined from the tier-to-action matrix, per-criterion table with reasons, disqualifier check, data-gaps list, and a footer with the rubric's SHA-256 and last-edited date.
+
+## Cost reality
+
+Per-lead token cost depends on rubric size, but for a typical 6-criterion rubric with structured per-criterion output, expect roughly 1,500-2,500 input tokens and 400-700 output tokens per lead. At Claude Sonnet 4.x pricing (approximately $3 per million input and $15 per million output as of late 2026), that is around $0.01-0.02 per scored lead.
+
+A team running 5,000 inbound MQLs per month spends roughly $50-100/month in Claude tokens. A team running 50,000 enriched outbound leads per month spends $500-1,000/month — at which point batching, prompt caching of the rubric, and pre-filtering with the deterministic step matter a lot. The skill defaults to a single structured prompt per lead (rather than 6-10 small prompts) precisely to keep token usage bounded.
+
+The non-token costs are bigger. Building the rubric is a 60-minute working session you do once and re-do quarterly. Calibrating against 20 closed-won + 20 closed-lost leads is another hour. Wiring the Clay or HubSpot integration is half a day. After that the skill is hands-off until the rubric drifts.
+
+## Success metric
+
+The metric to watch is **score-to-conversion correlation**: of the leads scored A in the last 90 days, what fraction converted to opportunities? Of those scored B? C? If the curve is monotonic — A converts at a higher rate than B, B at a higher rate than C — the rubric is doing work. If C converts at a similar rate to B, the rubric does not separate fit from non-fit and needs to be re-argued.
+
+Secondary metric: **SDR time-to-first-touch on A-tier leads**. A working scoring system collapses this to under 1 hour for inbound. If A-tier leads still sit in a queue for 24h, the routing — not the scoring — is the bottleneck.
+
+## vs alternatives
+
+**vs HubSpot Predictive Lead Scoring.** HubSpot's built-in predictive score is a black box trained on your historical conversion data. It works once you have enough closed-won volume (HubSpot recommends about 500 closed deals as a minimum). For teams under that bar, the model has nothing to learn from and the score is noise. This skill works from day one because the rubric is hand-authored, not learned. The trade-off: HubSpot's model picks up patterns a rubric author would miss; this skill only knows what you wrote down. Run both if you have the volume — use HubSpot's score for "what surprises me" and this skill's per-criterion rationale for "why is this one ranked here."
+
+**vs Marketo behavioral scoring.** Marketo (or HubSpot's behavioral scoring) tracks engagement signals — email opens, page views, form submissions — and adds points. That is intent scoring, not fit scoring, and the two answer different questions. A great-fit account that has not opened an email is still a great-fit account. A poor-fit account that binge-read your blog is still a poor-fit account. Use behavioral scoring in addition to this skill, not instead of it; route on the combined signal (high fit + high intent → AE direct; high fit + low intent → nurture; low fit + high intent → SDR fit-call before AE).
+
+**vs manual SDR review.** For under 50 inbound leads per week, manual review by an SDR manager is genuinely competitive — humans pick up nuance ("this company just acquired our customer, prioritize") that the skill will miss. Above ~200 leads per week, manual review becomes the bottleneck and consistency drops. The skill scales linearly with token budget; humans do not.
 
 ## Watch-outs
 
-- **Rubric staleness.** Your ICP shifts every quarter. The Skill cannot know that. Schedule a quarterly rubric review or scores will calcify around last year's reality.
-- **Enrichment quality.** Garbage enrichment produces garbage scores. The Skill's first action should be a "do I have enough data" check; if not, output "insufficient data" rather than a low score.
-- **Score inflation.** Reps push for "more leads scored A." Resist. Tiers exist to focus attention, not to make everyone feel busy.
-- **Bias in the rubric.** Industry-only rubrics miss great-fit accounts in adjacent industries. Pair industry weights with use-case fit signals.
+- **Rubric drift.** Someone edits the markdown rubric, ships the change, and SDRs reading the new scores never see a diff. Six weeks later, the team realizes the headcount weight got bumped from 4 to 2 by accident and 200 stretch-tier accounts were silently downgraded to C. **Guard:** the skill records the rubric's SHA-256 in every output footer and prepends a "Rubric updated YYYY-MM-DD" banner whenever the hash changes between runs. A quarterly calendar reminder forces a review even if no edits happen.
+- **Source-bias amplification.** A rubric built from your closed-won set encodes who you have already sold to. Scoring against it makes you blind to adjacent ICP and your pipeline narrows over time to lookalikes of last year's customers. **Guard:** every quarter, sample 20 leads the skill scored as C-tier and have an AE manually review whether any are actually fit. If more than 3 are misclassified, add a "stretch ICP" row to the rubric and recalibrate.
+- **False confidence on thin data.** When enrichment is missing 4 of 6 criteria fields, a 7.4 score is mostly noise but reads as authoritative. SDRs will treat it as a confident A-tier and skip the call prep. **Guard:** the skill sets `escalate: needs_human_review` whenever more than 3 criteria are scored on missing or inferred data, and adds a "Data gaps" section listing the absent fields. SDRs are trained to read the gaps section before the headline number.
+- **Protected-class proxies.** Even with good intent, a rubric that weights "geography" can collapse into nationality, and "industry" can collapse into proxies for company demographics in ways your legal team will not love. **Guard:** the skill refuses fields it recognizes as protected-class proxies (name-derived gender, photo, age signals). Review the rubric annually with someone who can spot the less obvious proxies.
 
 ## Stack
 
-- **Claude** — scoring engine and reasoning generator
-- **Clay or HubSpot** — lead source and enrichment layer
-- **HubSpot** — destination for score and reasoning
+- **Claude** — scoring engine and rationale generator. Sonnet 4.x is the sweet spot for cost vs reasoning quality on this task; Haiku works for the deterministic-only path but loses rationale quality on the LLM step.
+- **Clay** — preferred lead-source and enrichment layer for outbound and cold-list scoring. The AI column is a clean integration point.
+- **HubSpot** — CRM destination for score, rationale, escalate flag, and source. Custom-code actions are the integration point for inbound MQL scoring.
+- **A markdown editor and a calendar** — the unglamorous pieces. The rubric lives in markdown, the quarterly review lives in someone's calendar, and both matter more than the model choice.

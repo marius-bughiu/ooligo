@@ -5,9 +5,7 @@
 > uses it to map assets to stakeholders. Without your real inventory, the
 > output is a generic deal-room template.
 
-The skill expects every asset to declare: `id`, `title`, `type`, `personas`,
-`stages`, `last_updated`, `nda_required`, and `link`. Anything missing is
-treated as "do not select" — the skill prefers omission over guessing.
+The skill expects every asset to declare: `id`, `title`, `type`, `personas`, `stages`, `last_updated`, `nda_required`, and `link`. Anything missing is treated as "do not select" — the skill prefers omission over guessing.
 
 ## Asset format
 
@@ -29,26 +27,16 @@ Each entry in this table corresponds to one piece of collateral.
 ## Field meanings
 
 - **id** — short slug, used in the deal-room outline tables.
-- **type** — one of `case_study`, `calculator`, `diagram`, `video`,
-  `security_doc`, `pricing`, `legal`, `compliance`, `battlecard`, `faq`.
-  The skill uses this to group assets in the persona shelf.
-- **personas** — list, drawn from: `economic_buyer`, `champion`,
-  `technical_evaluator`, `end_user`, `procurement`, `legal`, `security`.
-- **stages** — list, drawn from: `mutual_plan`, `proposal`, `procurement`,
-  `legal_redline`.
-- **last_updated** — ISO date. Anything older than 9 months from today is
-  surfaced as `stale?` in the output so the rep refreshes or removes it.
-- **nda_required** — boolean. The skill cross-references this against the
-  `nda_signed` input; gated assets appear in the outline as "gated: NDA
-  required" rather than being silently omitted.
-- **link** — internal URL to the canonical version of the asset (Highspot,
-  DocSend, Notion, Drive, Seismic — whatever your team uses).
+- **type** — one of `case_study`, `calculator`, `diagram`, `video`, `security_doc`, `pricing`, `legal`, `compliance`, `battlecard`, `faq`. The skill uses this to group assets in the persona shelf.
+- **personas** — list, drawn from: `economic_buyer`, `champion`, `technical_evaluator`, `end_user`, `procurement`, `legal`, `security`.
+- **stages** — list, drawn from: `mutual_plan`, `proposal`, `procurement`, `legal_redline`.
+- **last_updated** — ISO date. Anything older than 9 months from today is surfaced as `stale?` in the output so the rep refreshes or removes it.
+- **nda_required** — boolean. The skill cross-references this against the `nda_signed` input; gated assets appear in the outline as "gated: NDA required" rather than being silently omitted.
+- **link** — internal URL to the canonical version of the asset (Highspot, DocSend, Notion, Drive, Seismic — whatever your team uses).
 
 ## Battlecards (optional sub-section)
 
-If the deal has a `competitor_in_play` input, the skill also reads this
-sub-section and pulls the matching battlecard into the persona shelf for
-the technical evaluator and economic buyer.
+If the deal has a `competitor_in_play` input, the skill also reads this sub-section and pulls the matching battlecard into the persona shelf for the technical evaluator and economic buyer.
 
 | competitor_slug | battlecard_id | last_updated | link |
 |---|---|---|---|
@@ -57,5 +45,4 @@ the technical evaluator and economic buyer.
 
 ## Last edited
 
-{YYYY-MM-DD} — update on every material change so the deal-room outline
-can flag stale entries.
+{YYYY-MM-DD} — update on every material change so the deal-room outline can flag stale entries.

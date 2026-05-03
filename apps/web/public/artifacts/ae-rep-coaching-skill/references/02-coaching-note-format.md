@@ -7,11 +7,7 @@
 
 ## Why a fixed format
 
-The AE reads one of these every week. A fixed shape lets them scan
-for what changed week over week instead of re-parsing the structure
-each time. The same reason quarterly business reviews use a fixed
-deck template — the cognitive load belongs on the content, not the
-container.
+The AE reads one of these every week. A fixed shape lets them scan for what changed week over week instead of re-parsing the structure each time. The same reason quarterly business reviews use a fixed deck template — the cognitive load belongs on the content, not the container.
 
 ## The literal format
 
@@ -67,12 +63,9 @@ other way around.
 
 ## Voice rules
 
-- Trusted peer, not performance reviewer. Read aloud — if it sounds
-  like a written warning, rewrite.
-- Specific over flattering. "You opened with an agenda on three of
-  four calls" beats "great job on agendas."
-- No corporate hedging. "You did" / "tighten this" / "try this." No
-  "you might consider perhaps."
+- Trusted peer, not performance reviewer. Read aloud — if it sounds like a written warning, rewrite.
+- Specific over flattering. "You opened with an agenda on three of four calls" beats "great job on agendas."
+- No corporate hedging. "You did" / "tighten this" / "try this." No "you might consider perhaps."
 - One exercise, not five. Five exercises is zero exercises.
 
 ## Last edited

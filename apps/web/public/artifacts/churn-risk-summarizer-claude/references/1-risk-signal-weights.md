@@ -19,8 +19,7 @@
 
 ## Always-escalate single signals
 
-These trigger Red regardless of `signal_score`. The skill should treat
-them as a hard override, not a soft boost.
+These trigger Red regardless of `signal_score`. The skill should treat them as a hard override, not a soft boost.
 
 - `exec_disengagement` at severity 5
 - `sponsor_change` at severity 4-5 when the renewal date is within 90 days
@@ -28,15 +27,11 @@ them as a hard override, not a soft boost.
 
 ## Per-event contribution cap
 
-A single event contributes at most 5.0 to `signal_score` regardless of
-`severity * weight`. This prevents one severity-5 sponsor change from
-single-handedly flooding the digest with one account at the expense of
-two genuinely declining ones.
+A single event contributes at most 5.0 to `signal_score` regardless of `severity * weight`. This prevents one severity-5 sponsor change from single-handedly flooding the digest with one account at the expense of two genuinely declining ones.
 
 ## Weight calibration log
 
-Append every change here so the next person editing this file can see
-why the numbers are what they are. Format: `YYYY-MM-DD — change — reason`.
+Append every change here so the next person editing this file can see why the numbers are what they are. Format: `YYYY-MM-DD — change — reason`.
 
 - {YYYY-MM-DD} — initial weights — placeholder, replace with team-tuned values
 

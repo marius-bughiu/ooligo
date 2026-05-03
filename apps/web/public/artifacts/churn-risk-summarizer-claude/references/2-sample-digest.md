@@ -46,10 +46,6 @@ _Weights file: 1-risk-signal-weights.md @ a3f9c12_
 ## Notes for the skill
 
 - Account names are bolded with single asterisks (Slack-mrkdwn).
-- The `Action:` line is the *only* place where a generic phrase
-  (`engage`, `align`, `socialize`, `reach out`, `touch base`) is
-  rejected and replaced with `needs human review`.
+- The `Action:` line is the *only* place where a generic phrase (`engage`, `align`, `socialize`, `reach out`, `touch base`) is rejected and replaced with `needs human review`.
 - The Watch bucket never emits per-account lines. Only the count.
-- The footer carries three diagnostics — filter counts, event-type
-  mix, and the weights-file hash — that exist to make
-  miscalibration visible early. Do not drop them to save lines.
+- The footer carries three diagnostics — filter counts, event-type mix, and the weights-file hash — that exist to make miscalibration visible early. Do not drop them to save lines.

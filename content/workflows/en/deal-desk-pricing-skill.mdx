@@ -13,39 +13,91 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that reviews a proposed deal against your pricing and discount policy and returns a structured response: which terms are within policy, which need approval, what the recommended counter is, and which historical analogs support the proposed structure. Cuts deal-desk turnaround from days to minutes for routine asks.
+A Claude Skill that reviews a non-standard deal against your discount rubric and your comparable-deal history, then returns a structured Markdown recommendation: the recommended counter, the rubric sections that justify it, the historical analogs that support it, and an explicit escalation flag when the ask sits outside what the rubric covers. The skill is decision support for the deal-desk reviewer; it never auto-approves, never auto-discounts, and never substitutes for the named approver in the DOA matrix. It exists to shorten the time between "AE submitted the ask" and "reviewer has the context to counter intelligently" — typically from days to minutes for routine asks — without taking the decision away from the human.
 
-## What you'll need
+The artifact bundle lives at [`/artifacts/deal-desk-pricing-skill/`](/artifacts/deal-desk-pricing-skill/SKILL.md): the `SKILL.md` is the entry point and the three files under `references/` are the editable scaffolding the skill loads on every run — the discount rubric, the comparable-deal schema, and the escalation criteria the skill checks before rendering.
 
-- Salesforce with Quote and Opportunity Line Item objects
-- Claude Code with the Skill installed
-- Your pricing and discount policy as a Markdown doc
-- A reference set of approved past deals for analog matching
-- A standard quote template (PDF or DOCX)
+## When to use
+
+Drop this skill in when an AE submits a non-standard pricing ask and a deal-desk reviewer has to decide what to counter with:
+
+- A multi-year discount request that stacks term incentive on top of a volume discount.
+- An upfront-payment-for-discount swap or a Net-60/Net-90 payment concession.
+- A ramp structure (Y1 50% / Y2 100%, custom shapes) that needs the contractual term re-checked against the rubric.
+- A co-term against an existing contract where the buyer wants the effective discount weighted across the joined contracts.
+- A competitive deal where the AE has named a competitor and a tight close date, and the reviewer needs the analogs that closed under similar pressure.
+
+The skill returns a Markdown recommendation with the recommended counter, the rubric §s and analog IDs that justify it, and an escalation block at the top that fires when the ask sits outside rubric coverage. The reviewer reads it, edits it, and decides.
+
+## When NOT to use
+
+Do not use this skill — and do not wire it into anything that does these things automatically:
+
+- **Final approval.** The skill recommends; it does not approve. Approval authority sits with the named human in the DOA matrix (`references/1-discount-rubric.md` §8). The skill output is an input to that decision, not a substitute for it. Wiring approval on top of an LLM recommendation is exactly the wrong place to remove a checkpoint.
+- **Auto-discounting on the quote.** The skill never writes a discount to a CPQ record or a Salesforce Quote. It produces a recommendation the reviewer types into the quote (or rejects). Auto-applying an LLM recommendation to a live quote is the failure mode this skill is designed to avoid.
+- **Anything that skips the deal-desk human review.** If your team has a fast-path for in-policy deals — single-year, list-price, no exceptions — run that fast-path through CPQ rules. CPQ is the right tool for deterministic in-policy enforcement; it is faster, cheaper, and audit-friendly. This skill exists for the asks that need judgment, and on those asks bypassing the human is exactly the wrong place to remove a checkpoint.
+- **Non-Tier-A AI vendors.** Run on Claude (workspace or team plan whose data-handling posture you have reviewed). Pricing rubrics and comparable-deal histories are commercially sensitive; do not pipe them through consumer-grade LLMs.
 
 ## Setup
 
-1. **Codify the policy.** Edit `references/pricing-policy.md` with your discount tiers, multi-year incentive math, payment terms boundaries, and approval thresholds. Be explicit: which discount levels need which approval (manager, VP, CRO).
-2. **Install the Skill.** Drop `deal-desk-pricing.skill` into `~/.claude/skills/`. Set `SFDC_TOKEN`.
-3. **Load analogs.** Place a CSV of the last 50 approved non-standard deals at `references/analogs.csv` with columns for ACV, discount, term length, payment terms, and approver.
-4. **Run.** AE submits a deal via a Slack command or a form that hits the Skill: `review_deal(opp_id="...")`. Skill returns a one-page review.
-5. **Approval routing.** If everything is in policy, the Skill auto-approves. If something needs review, it routes to the right approver with the gap surfaced.
+1. **Drop the bundle.** Copy [`/artifacts/deal-desk-pricing-skill/`](/artifacts/deal-desk-pricing-skill/SKILL.md) into your Claude Code skills directory at `~/.claude/skills/deal-desk-pricing/` (or upload as a Skill in a Claude.ai project). The `SKILL.md` is the entry point; Claude loads the three files under `references/` automatically when the skill runs.
+2. **Codify your rubric.** Edit [`references/1-discount-rubric.md`](/artifacts/deal-desk-pricing-skill/references/1-discount-rubric.md) with your actual segment definitions, term-incentive table, volume-discount tiers, payment-term boundaries, ramp shapes, stacked-discount ceilings, and DOA matrix. Be explicit on every threshold. The skill applies the rubric deterministically — it reads what you wrote, and nothing else, when classifying in-policy vs exception-needed vs out-of-policy.
+3. **Build the comparable-deal CSV.** Drop a sibling file at `references/comparable-deals.csv` matching the schema in [`references/2-comparable-deal-format.md`](/artifacts/deal-desk-pricing-skill/references/2-comparable-deal-format.md). Backfill the last 8 quarters of non-standard deals — including rejected, lost, and withdrawn deals, not only `won`. Anonymize customer names. The skill is only as good as this CSV, and a CSV full of `won` deals trains the skill to rubber-stamp.
+4. **Tune escalation triggers.** Edit [`references/3-escalation-criteria.md`](/artifacts/deal-desk-pricing-skill/references/3-escalation-criteria.md) to match your DOA matrix and your strategic-accounts list. Start conservative (the defaults will over-escalate) and loosen quarterly after watching what gets flagged.
+5. **Wire to Salesforce.** The skill expects a `deal_record` input — either a structured JSON pasted from Salesforce, or a Salesforce Opportunity ID resolved via your team's preferred MCP/connector. Set `SFDC_TOKEN` if invoking via a connector. The skill itself is read-only against Salesforce; it never writes back.
+6. **Test against three deals you already reviewed.** Pick two in-policy and one exception-needed. Run the skill, compare its recommendation against what the team actually countered with, and tune the rubric or escalation criteria until the skill's output reads like the deal desk's own thinking.
 
-## How it works
+## What the skill actually does
 
-The Skill pulls the proposed quote line items and contract terms from Salesforce, then evaluates each against the policy doc. It computes effective discount, term-adjusted ACV, payment terms cost, and any custom-terms drift. Each evaluation returns one of: in-policy, exception-needed, out-of-policy.
+`SKILL.md` runs five steps in order. Engineering choices are named for each step; the two-pass shape — pull comparables and load the rubric first, then evaluate; then re-check against escalation triggers — is the load-bearing design choice.
 
-For exceptions, it pulls the closest five historical analogs from the CSV and shows whether similar asks were approved — and if so, by whom and under what conditions. This converts deal desk from a gatekeeper into a context provider; the approver sees precedent at a glance.
+1. **Load rubric and pull comparables, in that order.** The skill queries the comparable-deal history for the closest 5-10 analogs by segment, ACV band, term length, and competitive context *before* evaluating the ask. Pulling comparables first prevents the recommendation from anchoring on the rubric's nominal answer. A rubric tier might say "10% for 3-year," but if the last eight 3-year deals in this segment all closed at 14-16%, the ask is in line with precedent even when it sits outside the nominal tier. The reviewer needs both signals to counter intelligently.
+2. **Apply the rubric deterministically.** Each line of the proposed quote is walked against the rubric. For each dimension (discount %, term, payment terms, ramp, co-term) the skill computes in-policy / exception-needed / out-of-policy and cites the specific rubric §. The skill does not reinterpret thresholds; it renders the rubric's verdict with citations. When the rubric is silent, the line reads "rubric does not address" rather than the skill improvising a number.
+3. **Compute the recommended counter.** Given the rubric verdict and the comparable evidence, the skill produces a single counter expressed as a delta from the AE's ask. Two rules: hit the buyer's effective price target (or land within two points) when the rubric supports a structure that gets there; never recommend a counter that stacks every available concession to the rubric ceiling — that is mathematically correct against the rubric and commercially terrible.
+4. **Escalation check.** The rendered recommendation is re-read against the escalation criteria. Hard triggers (above-ceiling discount, sub-12-month enterprise term, custom legal terms, strategic-logo customer, AE-pattern threshold) set `escalation: required` and name the approver. Thin evidence (under three analogs) on an out-of-policy ask also escalates, with reason "outlier — insufficient analog evidence." Outliers go to a human who can reason about them; the skill does not invent precedent.
+5. **Render the structured recommendation.** Markdown with header, escalation block, ask-summary table, recommended-counter section, comparable-deal evidence table, rationale, and reviewer notes. Every line cites either a rubric § or an analog ID. The header always includes "Decision support, not approval."
 
-The recommended counter is a small but high-value output. The Skill suggests a structure that hits the buyer's effective price target while respecting policy: trade higher discount for longer term, trade upfront discount for ramp.
+## Cost reality
+
+Token cost is the dominant variable, and it scales with the size of the rubric and the number of comparables pulled, not with the deal itself. A typical run loads a 2-3k-token rubric, pulls 5-10 analog rows from the CSV (≈ 500-1.5k tokens), receives a 1-2k-token `deal_record`, and renders a 1-2k-token output.
+
+| Profile | Approx. tokens per review | Cost per review (Sonnet) | Cost per review (Opus) |
+|---|---|---|---|
+| Compact rubric, 5 analogs | ~6k in / 1.5k out | ~$0.03 | ~$0.16 |
+| Standard rubric, 8 analogs | ~10k in / 2k out | ~$0.05 | ~$0.25 |
+| Heavy rubric + competitive context, 10 analogs | ~16k in / 2k out | ~$0.07 | ~$0.36 |
+
+Time saved per deal is the part that pays for the token bill. A typical non-standard ask consumes 30-90 minutes of deal-desk time: pulling the rubric, finding analogs in Salesforce, sanity-checking against the DOA matrix, drafting the counter rationale. The skill collapses the prep to under five minutes; the reviewer spends the saved time on judgment, not retrieval.
+
+At a typical mid-market revops volume of 60 non-standard asks per month (40 exception-needed, 15 out-of-policy, 5 strategic), monthly cost on Sonnet runs around $3-5; on Opus around $15-25. Both bands round to noise against the salary cost of one deal-desk reviewer's hour.
+
+## Success metric
+
+Track two metrics. They should move in opposite directions; if both move the same way, you have a calibration problem.
+
+1. **Time-to-counter.** Wall-clock from "AE submitted ask" to "reviewer sent counter to AE." Baseline before this skill is typically 4-48 hours (queueing, retrieval, drafting). Target after adoption is under 30 minutes for routine asks (skill run + reviewer edit + send).
+2. **Escalation rate on non-trivial asks.** Of the asks the skill flags as exception-needed or out-of-policy, what fraction reach the named approver in the DOA matrix? This should *go up* when the skill is calibrated correctly — the escalation triggers exist to surface asks that need a senior eye that previously got rubber-stamped because no one had time to pull the analogs. If the rate goes down, the skill is over-paving and the criteria in `references/3-escalation-criteria.md` need to be tightened.
+
+If time-to-counter drops *and* escalation rate rises, the skill is working. If only the first happens, you have built a confidence machine that is hiding margin risk.
+
+## vs alternatives
+
+- **CPQ rules (Salesforce CPQ, DealHub, etc.).** CPQ is the right tool for deterministic in-policy enforcement: list-price catalogs, approval routing on discount tiers, automatic configuration validation. Use CPQ for the fast-path. Use this skill on top of CPQ for the asks CPQ flags as needing approval — where the decision is "what do we counter with," not "is this in policy." CPQ tells you the ask is out-of-policy; the skill helps you counter it.
+- **Salesforce Discount Approval flows.** Native approval flows route an exception to the right approver. They do not produce the recommended counter or surface the comparable-deal evidence. Use approval flows as the routing layer; use this skill to populate the context the approver reads before deciding.
+- **Manual deal-desk review.** A trained deal-desk reviewer produces the best counter when given time to pull the analogs and re-read the rubric. The constraint is throughput: a typical reviewer handles 8-15 non-standard asks per day before the retrieval work crowds out the judgment work. Use the skill as the retrieval-and-first-draft layer; the reviewer spends their time on the counter, not on assembling the inputs to it.
+- **Spreadsheet rubric calculator.** Some teams build an Excel sheet that takes ACV, term, and discount and returns "in-policy / exception." Cheap, fast, and brittle: it does not know about analogs, competitive context, or AE-pattern triggers, and it dies the first time the rubric grows a new dimension. Use the spreadsheet for AE self-service; use the skill when the ask reaches deal desk.
 
 ## Watch-outs
 
-- **Policy drift.** Pricing policy is updated quarterly. The Skill is only as fresh as the doc. Set a reminder to refresh references on a schedule.
-- **Analog selection bias.** If your CSV is full of "we approved everything" deals, the Skill will rubber-stamp future asks. Curate the analogs.
-- **Auto-approval scope.** Start narrow. Only auto-approve the truly trivial — single-year, in-policy, list-price deals. Expand the scope after watching a few weeks of decisions.
+- **Over-discounting recommendation.** The skill can produce a counter that closes the gap to the buyer's target by stacking every available concession (max discount, max term incentive, max payment-term concession). That is mathematically correct against the rubric and commercially terrible — it leaves nothing on the table for the negotiation. Guard: the recommendation caps total stacked concessions at the lesser of (rubric ceiling) or (comparable median + one standard deviation). Anything above that fires the escalation flag with reason "stacked concessions exceed precedent."
+- **Stale rubric.** Pricing policy changes quarterly, sometimes faster (a new packaging launches, a competitor moves on price, a segment is re-cut). A skill running against a six-month-old rubric will recommend a counter the team no longer offers. Guard: the skill checks the `last_edited` date in the rubric frontmatter and prepends a "Rubric may be stale (last edited YYYY-MM-DD)" warning to the reviewer notes when it is more than 90 days old. The reviewer is responsible for refreshing the rubric on a calendar; the skill surfaces the staleness so it does not hide.
+- **Missed competitive context.** A deal where the buyer named a competitor and a tight close date deserves a different counter than a deal in a vacuum, even when the rubric verdicts are identical. Guard: when `competitive_context` is provided, the rationale section references it explicitly and the recommendation checks whether any analog under comparable competitive pressure took a different shape. If `deal_record` flags a competitor but `competitive_context` is empty, the skill returns a prompt asking the reviewer to re-run with the context filled in rather than producing a context-blind counter.
+- **Analog selection bias.** A comparable-deal CSV full of "we approved everything" deals trains the skill to rubber-stamp future asks. Guard: every analog in the evidence table includes its approval status (approved, rejected, lost-to-competitor, withdrawn). The reviewer sees the approval mix and can spot the curation problem; the skill also flags "no rejected analogs in last 20" as a calibration note in the reviewer notes.
+- **Recommendation cited back as approval.** Downstream readers (AE, customer, sometimes the AE's manager) sometimes treat the recommendation as the approved counter. Guard: every output header includes "Decision support, not approval." and the escalation block names the actual approver in the DOA matrix. If the recommendation is forwarded as the counter without going through the human reviewer, the named-approver line makes the process gap self-evident.
 
 ## Stack
 
-- **Salesforce** — quote and opportunity data
-- **Claude** — policy evaluation, counter recommendation, analog matching
+Pair with [contract redline with Claude](/en/workflows/contract-redline-claude-skill/) for the negotiation-stage workflow that runs after the counter is agreed, and with [contract summary with Claude](/en/workflows/contract-summary-skill/) for the post-signature audience-tuned summary. The deal-desk skill sits in the middle: after CPQ flags the ask, before the redline.
+
+- **Salesforce** — opportunity and quote data, approval routing
+- **Claude** — rubric evaluation, comparable-deal pulling, counter recommendation, escalation check

@@ -10,16 +10,13 @@
 
 ## Format
 
-Each entry has a slug (used by the skill), a one-sentence description,
-the trigger condition that should fire it, the owner role, and the
-churn category it most often pairs with.
+Each entry has a slug (used by the skill), a one-sentence description, the trigger condition that should fire it, the owner role, and the churn category it most often pairs with.
 
 ## Entries
 
 ### `health-score-alert-multi-week-drop`
 
-Fire a CSM alert when the health score drops by 15 points or more over
-any rolling 14-day window.
+Fire a CSM alert when the health score drops by 15 points or more over any rolling 14-day window.
 
 - Trigger: rolling 14-day delta ≤ -15
 - Owner: CSM
@@ -27,18 +24,15 @@ any rolling 14-day window.
 
 ### `sponsor-change-detection`
 
-Cross-reference CRM contacts against LinkedIn weekly. Flag any
-departure of a contact tagged `economic-buyer` or `champion`.
+Cross-reference CRM contacts against LinkedIn weekly. Flag any departure of a contact tagged `economic-buyer` or `champion`.
 
-- Trigger: LinkedIn departure of a contact tagged with one of the
-  champion roles
+- Trigger: LinkedIn departure of a contact tagged with one of the champion roles
 - Owner: RevOps (automation), CSM (response)
 - Pairs most with: `champion-departure`
 
 ### `quarterly-pricing-sensitivity-check`
 
-In every QBR, ask the buyer's stated budget posture for the next
-contract cycle. Record verbatim in the CRM.
+In every QBR, ask the buyer's stated budget posture for the next contract cycle. Record verbatim in the CRM.
 
 - Trigger: every QBR, no exceptions
 - Owner: CSM
@@ -46,8 +40,7 @@ contract cycle. Record verbatim in the CRM.
 
 ### `escalation-on-severity-1-pattern`
 
-Auto-escalate to the VP of CS when an account opens 3 or more
-severity-1 tickets in any rolling 60-day window.
+Auto-escalate to the VP of CS when an account opens 3 or more severity-1 tickets in any rolling 60-day window.
 
 - Trigger: ≥ 3 sev-1 tickets in 60 days
 - Owner: Support → VP CS
@@ -55,8 +48,7 @@ severity-1 tickets in any rolling 60-day window.
 
 ### `success-plan-milestone-tracking`
 
-Each success plan defines 3-5 milestones with dates. The CSM reviews
-status weekly and flags any milestone slipping by more than 14 days.
+Each success plan defines 3-5 milestones with dates. The CSM reviews status weekly and flags any milestone slipping by more than 14 days.
 
 - Trigger: milestone slip > 14 days
 - Owner: CSM
@@ -64,19 +56,15 @@ status weekly and flags any milestone slipping by more than 14 days.
 
 ### `consolidation-conversation-trigger`
 
-When a customer publicly announces a strategic vendor consolidation
-initiative, the CSM books a check-in within 14 days to position the
-product against displacement.
+When a customer publicly announces a strategic vendor consolidation initiative, the CSM books a check-in within 14 days to position the product against displacement.
 
-- Trigger: public announcement (press release, earnings call, blog)
-  of a consolidation initiative naming a competing platform
+- Trigger: public announcement (press release, earnings call, blog) of a consolidation initiative naming a competing platform
 - Owner: CSM + AE
 - Pairs most with: `consolidation`
 
 ### `usage-threshold-alert`
 
-Fire an alert when weekly active users drops below the success-plan
-threshold for two consecutive weeks.
+Fire an alert when weekly active users drops below the success-plan threshold for two consecutive weeks.
 
 - Trigger: WAU < threshold for 2 weeks
 - Owner: CSM
@@ -84,9 +72,7 @@ threshold for two consecutive weeks.
 
 ### `restructure-watchlist`
 
-Maintain a watchlist of accounts where the customer has announced
-layoffs, M&A, or strategic pivot. Re-validate the use case within 30
-days of the announcement.
+Maintain a watchlist of accounts where the customer has announced layoffs, M&A, or strategic pivot. Re-validate the use case within 30 days of the announcement.
 
 - Trigger: public announcement of restructure event
 - Owner: CSM + AE
@@ -94,8 +80,7 @@ days of the announcement.
 
 ### `competitive-mention-alert`
 
-Flag any Gong call where a named competitor appears in customer
-speech. Notify the AE and CSM jointly.
+Flag any Gong call where a named competitor appears in customer speech. Notify the AE and CSM jointly.
 
 - Trigger: competitor named in customer speech on a Gong call
 - Owner: AE + CSM
@@ -103,15 +88,11 @@ speech. Notify the AE and CSM jointly.
 
 ## Adding a new entry
 
-The skill flags `no library match — prevention action requires human
-design` when no entry fits a churn. Review these monthly. Add a new
-entry only when:
+The skill flags `no library match — prevention action requires human design` when no entry fits a churn. Review these monthly. Add a new entry only when:
 
-1. The trigger is mechanically detectable (a metric, a date, a public
-   event) — not a vibe.
+1. The trigger is mechanically detectable (a metric, a date, a public event) — not a vibe.
 2. The owner is a single named role.
-3. The action is small enough to actually happen on the timeline
-   between the trigger firing and the churn risk crystallizing.
+3. The action is small enough to actually happen on the timeline between the trigger firing and the churn risk crystallizing.
 
 ## Last edited
 

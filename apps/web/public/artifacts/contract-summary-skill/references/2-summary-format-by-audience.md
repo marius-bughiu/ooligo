@@ -5,10 +5,7 @@
 > with your firm's preferred section names if your house style differs;
 > the section *order* is what matters for reader scannability.
 
-The skeleton is shared across audiences (Parties / Term / Key
-obligations / Key money flows / Renewal / Termination). Only the
-**Watch-outs** block changes by audience — that is where the skill
-applies the question library from `1-audience-question-library.md`.
+The skeleton is shared across audiences (Parties / Term / Key obligations / Key money flows / Renewal / Termination). Only the **Watch-outs** block changes by audience — that is where the skill applies the question library from `1-audience-question-library.md`.
 
 ## Exec template
 

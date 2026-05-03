@@ -16,8 +16,7 @@ score = 0.40 * activity_recency_signal
       + 0.10 * not_integration_user_signal
 ```
 
-Higher score wins survivor status. Ties default to the record with the
-lower (older) Salesforce Id, which is conventionally the canonical record.
+Higher score wins survivor status. Ties default to the record with the lower (older) Salesforce Id, which is conventionally the canonical record.
 
 ## Signal definitions
 
@@ -30,8 +29,7 @@ lower (older) Salesforce Id, which is conventionally the canonical record.
 
 ### contact_count_signal
 
-- Normalized count of active Contacts attached to the Account.
-  `min(count, 20) / 20`. Capped to avoid one record's bloat dominating.
+- Normalized count of active Contacts attached to the Account. `min(count, 20) / 20`. Capped to avoid one record's bloat dominating.
 
 ### opportunity_history_signal
 
@@ -53,8 +51,7 @@ The integration-user allowlist (set by RevOps admin):
 
 ## Override columns
 
-Even after the Skill proposes a survivor, RevOps can override per-row in
-the dry-run CSV. The columns the Skill respects on read-back:
+Even after the Skill proposes a survivor, RevOps can override per-row in the dry-run CSV. The columns the Skill respects on read-back:
 
 - `survivor_override` — set to the Id you want as survivor
 - `do_not_merge` — set to `Y` to drop this row from `apply_fix`
@@ -64,12 +61,9 @@ the dry-run CSV. The columns the Skill respects on read-back:
 
 Skip survivor proposal entirely if any of:
 
-- Both records have an open Opportunity in `Negotiation` or later — too
-  much risk of breaking deal motion mid-flight
-- Records have different Account Owners and one is in their first 30 days
-  on the team (avoid trampling new-hire pipelines)
-- One record carries a `Strategic_Account__c = TRUE` flag — kick to a
-  RevOps human
+- Both records have an open Opportunity in `Negotiation` or later — too much risk of breaking deal motion mid-flight
+- Records have different Account Owners and one is in their first 30 days on the team (avoid trampling new-hire pipelines)
+- One record carries a `Strategic_Account__c = TRUE` flag — kick to a RevOps human
 
 ## Last edited
 
