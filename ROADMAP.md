@@ -103,13 +103,8 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 | Spanish (es) | Launched | 52 | LATAM neutral |
 | Portuguese, Brazil (pt-BR) | Launched | 52 | |
 | Japanese (ja) | Seeded | 3 | Translation queue active |
-| Russian (ru) | Seeded | 3 | Translation queue active |
-| Romanian (ro) | Seeded | 4 | Translation queue active |
 | French (fr) | Seeded | 3 | Translation queue active |
 | German (de) | Seeded | 3 | Translation queue active |
-| Simplified Chinese (zh-CN) | Seeded | 2 | Translation queue active |
-| Korean (ko) | Seeded | 3 | Translation queue active |
-| Arabic (ar) | Seeded | 3 | RTL; translation queue active |
 
 "Launched" = full content parity with the active verticals. "Seeded" = locale is configured, translation queue is running, and a small set of entries has shipped.
 
@@ -117,9 +112,9 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 | Metric | Status |
 |---|---|
-| Content pages live | ~855 (EN: 367 / ES: 232 / pt-BR: 232 / 8 seeded locales: ~24) |
+| Content pages live | ~840 (EN: 367 / ES: 232 / pt-BR: 232 / 3 seeded locales: ~9) |
 | Verticals live | 3 (RevOps, Legal Ops, Recruiting) |
-| Locales live | 3 launched + 8 seeded |
+| Locales live | 3 launched + 3 seeded |
 | Newsletter subscribers | 0 (beehiiv not wired) |
 | Discord members | 0 |
 | Paid library subscribers | 0 |

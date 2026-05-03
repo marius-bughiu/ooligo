@@ -6,13 +6,8 @@ export type LocaleCode =
   | "es"
   | "pt-BR"
   | "ja"
-  | "ru"
-  | "ro"
   | "fr"
-  | "de"
-  | "zh-CN"
-  | "ko"
-  | "ar";
+  | "de";
 
 // `en` is required (canonical fallback); other locales are optional and fall
 // back to `en` at read time via `localizedName`/`localizedTagline`/`localeText`.

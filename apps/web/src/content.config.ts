@@ -6,13 +6,8 @@ const LOCALE = z.enum([
   "es",
   "pt-BR",
   "ja",
-  "ru",
-  "ro",
   "fr",
   "de",
-  "zh-CN",
-  "ko",
-  "ar",
 ]);
 const SLUG = z.string().regex(/^[a-z0-9-]+$/);
 
