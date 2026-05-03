@@ -69,6 +69,53 @@ The authoring LLM is on the hook for:
 
 The translating LLM (per the per-locale skills) is on the hook for translation parity — the ES/pt-BR variants must say the same things as EN. That's enforced in the skill bodies.
 
+### What "best-in-class" actually means
+
+Necessary but insufficient: factual accuracy, currency, cross-linking, voice. Those rule out blatant errors. They don't catch the more common failure mode — *competently shallow* content. A page can pass every validator and still read like a confident blog post that nobody can act on. Best-in-class content is the opposite: a reader can stand up the workflow, ship the change, or make the buying decision from this single page.
+
+Concrete signals:
+
+- **Every claim names a real thing.** A real tool, endpoint, flag, role, query, threshold, or number. "Configure rate limiting" is not a claim; "exponential backoff with jitter, base 1s, max 60s, 5 retries for idempotent operations" is. If the author doesn't know the real value, the author finds it or omits the claim.
+- **Every workflow body answers five questions.** When do I use this? When do I *not* use this? What does success look like as a metric I can watch move? What does it cost me — in tokens, time, ops headcount? What's the alternative I'm picking against (DIY script, off-the-shelf product, status quo) and why is this better in this case?
+- **Every watch-out cites the guard.** "Hindsight bias is a risk" is filler. "Hindsight bias is a risk; the Skill returns 'insufficient data' rather than guessing when fewer than 3 timeline events exist within 30 days of the churn date" is the watch-out paired with the specific behavior that mitigates it. If the author can't name a guard, the watch-out goes back into the draft as a TODO until they can.
+- **Length is the by-product.** Workflow MDX bodies typically land at 800-1500 words once the author has actually said the thing. Bodies under ~600 words are usually a signal that decisions are being skimmed. The fix isn't padding — it's writing what was missing.
+
+### Per-artifact-type minimum bundle
+
+Every workflow ships an artifact bundle at `apps/web/public/artifacts/<slug>/` that the reader downloads and adapts. The bundle, not the MDX body, is the deliverable. The MDX body explains when and how to use it. Per-type minimums:
+
+- **`n8n-flow`** — complete export `.json`, every node fully configured (not stub parameters). Placeholder credentials referenced by name (`PLACEHOLDER_<TOOL>_CRED_ID`). `executionOrder` and `timezone` set explicitly in `settings`. Every Cron node names its timezone. Code nodes contain real logic, not `// TODO`. Sibling `_README.md` covering: import procedure, credential setup (one section per credential), first-run verification (a sequence of small inputs that prove each branch works).
+- **`claude-skill`** — `SKILL.md` with frontmatter (`name`, `description`) + sections for: when-to-invoke (and when not to), inputs (required + optional, types), reference files loaded from `references/`, method (the steps the Skill runs, in order, with the engineering choices named — why two-pass, why a particular threshold), output format (a literal example, not a description), watch-outs paired with guards. 1-3 reference docs as `references/*.md` — fillable templates the user adapts (not "TODO" — actual scaffolding with placeholder content the user replaces).
+- **`mcp-server`** — `README.md` + `pyproject.toml` (or `package.json` for TS) + working scaffold importable from disk (not pseudocode). Minimum 3 tool definitions with proper input schemas + dispatch implementations. Read-only by default; writes only with explicit per-tool justification. README documents: install, env vars (one section per var, with where to find the value), Claude Desktop / Code registration JSON, sanity-check invocation, security model (token scope, who sees what data), known limits with a numbered TODO list before production use. Disclaim explicitly when the scaffold has not been runtime-tested.
+- **`cursor-rule`** — full `.cursorrules` (markdown) with: a "before writing code, ask" section (the questions Cursor must surface to the user before generating); tool-specific guidance per tool the workflow names (one subsection each, with real endpoints/limits/quirks); defaults to enforce (rate-limiting, idempotence, observability, secrets — all four, with concrete values); anti-patterns to refuse with the reason; a "when the user is wrong" section naming the specific shortcuts to push back on.
+- **`prompt`** — organized into tiers (e.g. portfolio / single-instance / meeting-prep / cross-cutting). Each prompt is structured: role / context / input format / task / things-to-avoid / output format. Ready to paste into Claude.ai or Claude Code, not paraphrased examples. Every "things-to-avoid" lists the specific failure mode being guarded against (vague hedging, inventing data, generic advice, etc.).
+
+### Anti-patterns to refuse
+
+The author rejects its own draft and rewrites if any of these appear:
+
+- Setup steps that say "configure X" without specifying *which* values change.
+- "How it works" paragraphs that describe the flow without naming the engineering choices (why this method? why this threshold? why this fallback?).
+- Watch-outs without a paired guard.
+- Body that doesn't reference the artifact bundle by file path.
+- Sections labelled with future tenses ("will eventually support…", "we plan to add…") — if it's not in the bundle today, it's not in the page.
+- Round-number claims with no source ("90% of teams"). Either find the real number or drop the claim.
+- "Comprehensive", "robust", "seamless", "best-in-class" used as evidence — they're conclusions, not arguments.
+
+### Pre-commit checklist
+
+The author runs this against every workflow draft before committing. If any box is unchecked and there is no documented reason for an exemption, the draft goes back:
+
+- [ ] Body is ≥ 800 words (signal for depth, not the goal — confirm the words are doing work, not padding)
+- [ ] Has explicit "when not to use" content
+- [ ] Has cost / throughput / budget numbers, not adjectives
+- [ ] Names ≥ 3 specific failure modes, each paired with a guard
+- [ ] References the artifact bundle's file paths in the body
+- [ ] Artifact bundle exists at `apps/web/public/artifacts/<slug>/` and meets the per-type minimum above
+- [ ] Compares against ≥ 1 specific alternative (DIY, status quo, named off-the-shelf product) with a reason for the choice
+
+For non-workflow entity types (tools, comparisons, learn, stacks), the spirit of the bar is the same — every claim names a real thing, every recommendation cites a guard, every section answers a question a reader could otherwise not act on. Per-type checklists may follow when those backfills happen.
+
 ## What the validators actually catch
 
 In CI (`npm run validate:config` and `npm run build`):

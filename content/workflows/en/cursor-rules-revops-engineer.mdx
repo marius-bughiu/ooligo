@@ -13,36 +13,69 @@ ai_generated: true
 human_tested: false
 ---
 
-A Cursor rules file tuned for RevOps engineers shipping SOQL, Apex, HubSpot scripts, n8n flows, and dbt models against revenue data. Forces the model toward idempotent writes, explicit error handling, and the conventions your team actually uses. Drop it in `.cursor/rules` and stop relitigating "should this be a workflow or a flow" with the assistant.
+A Cursor `.cursorrules` file tuned for the RevOps engineer (or GTM-engineering-adjacent person) shipping SOQL, Apex, [HubSpot](/en/tools/hubspot/) custom code, [n8n](/en/tools/n8n/) flows, and dbt models against revenue data. The artifact is one file — `apps/web/public/artifacts/cursor-rules-revops-engineer/.cursorrules` — that you drop into your project's `.cursor/rules/` directory and stop relitigating "should this be bulkified" or "do we need a dbt test on this model" with the AI assistant for the rest of the quarter.
 
-## What you'll need
+The defining property of RevOps code is that **it touches the pipeline numbers the CRO will report on the next earnings call**. A duplicate write at scale, a missed dedupe key, or a stage-progression bug doesn't just break a script — it breaks the forecast. The rules in this bundle encode bulkification, idempotence, explicit limits checks, and conservative writes so Cursor's suggestions reflect the actual blast radius of a RevOps mistake.
 
-- Cursor (any recent version with rules support)
-- A monorepo or a per-tool repo where the rules will live
-- Your team's coding conventions doc, even if it is a half-finished Notion page
+## When to use this
+
+You're a RevOps engineer, GTM engineer, or RevOps manager who writes integration code (Python, TypeScript, Apex, n8n flows, dbt models) against [Salesforce](/en/tools/salesforce/) or HubSpot. Your team ships at least a few changes per month that touch pipeline data. Cursor is your IDE.
+
+## When NOT to use this
+
+- You're not running an engineering practice in RevOps — your "automation" is admin-built workflows in the CRM UI, not code in a repo. The rules assume code reviews, version control, and a deployment pipeline; they don't help a config-only org.
+- You're an external SI building Salesforce solutions for clients. The rules are tuned for the in-house operator who lives with the consequences for years; consultant economics are different (deliverable scope, handoff documentation, post-engagement support model).
+- You're shipping a marketing-attribution feature in your product. The rules are for ops engineering inside the company that *uses* a CRM, not for engineering teams *building* CRM-adjacent products.
 
 ## Setup
 
-1. **Create the rules file.** Drop `revops-engineer.mdc` in `.cursor/rules/`. The file is split into sections: SOQL and Apex, HubSpot custom code, n8n authoring, dbt and SQL, secrets handling.
-2. **Edit the conventions section.** The rules file ships with sensible defaults but your team has opinions: bulkified Apex, no anonymous SOQL, n8n flows over webhooks first. Override the defaults.
-3. **Set the secrets policy.** The rules ban hardcoded credentials and direct the model toward your secret manager of choice (1Password CLI, Doppler, AWS Secrets Manager). Pick one.
-4. **Test on a typical task.** Ask Cursor to "write a HubSpot custom code action that updates a deal stage when a contact submits a form." The output should follow your conventions out of the box.
+1. **Copy the artifact.** Grab `.cursorrules` from the bundle above (or download the zip) and drop it in your project's `.cursor/rules/` directory. Cursor's Project Rules indicator confirms it's loaded.
+2. **Trim the tool sections.** The file ships with sections for Salesforce (SOQL/Apex), HubSpot custom code, n8n, and dbt. Delete the sections you don't use — leaving guidance the model has to weigh against irrelevant context dilutes the signal.
+3. **Set the secrets policy.** The rules ban hardcoded credentials and direct the model toward your secret manager. Edit the "Secrets and access" section so the model suggests the right call (1Password CLI, Doppler, AWS Secrets Manager, Vault — pick one).
+4. **Fix the audit destination.** Several rules require an audit object reference (`Cleanup_Audit__c` is the default placeholder). Edit to your team's actual audit object, or the suggestions will reference a name that doesn't exist in your org.
+5. **Test on a representative task.** Ask Cursor: "write an Apex trigger that updates the opportunity's `Last_Activity_Date__c` whenever a related task is closed." The output should be bulkified, include a `Limits.getQueries()` check, ship with a test class, and not contain anonymous Apex. If it doesn't, the rules aren't loaded — check Cursor's Project Rules indicator.
 
-## How it works
+## What the rules actually do
 
-Cursor rules apply to every prompt in the workspace. The rules file is structured as a series of "when working with X, prefer Y, avoid Z" directives. For Salesforce work, the rules push toward bulkified patterns and explicit limits checks. For HubSpot custom code, they push toward the v4 client and away from deprecated endpoints. For n8n, they push toward typed credentials and away from inline secrets.
+The bundle is structured as five layers, applied to every Cursor prompt:
 
-The most valuable rules are the negative ones. "Do not write anonymous Apex when a deploy is feasible." "Do not put filter logic in n8n IF nodes when a Code node is clearer." "Do not generate dbt models without a `unique` test on the primary key." Negative rules cut more bad output than positive ones add good output.
+1. **A "before writing code, ask" preamble.** Five questions the model surfaces before generating: which system is the source of truth, what's the data volume, what does failure mean for revenue reporting, is this a one-off or recurring, who reads the audit trail. The questions sound obvious. They're not asked often enough.
+2. **Tool-specific guidance** for SOQL/Apex (governor limits, bulk patterns, `WITH SECURITY_ENFORCED`), HubSpot custom code (v4 SDK, daily quota circuit breaker, 20-second timeout), n8n (executionOrder, timezone, IF-vs-Code-node), dbt (unique tests, ref(), incremental strategy, source freshness), and secrets (named credentials, Private App tokens, scoped access). Each subsection cites real limits and current SDK versions.
+3. **Defaults to enforce** across bulkification, idempotence, limits/circuit-breakers, observability, and secrets. Each default has a concrete value: bulk batches default to 25 records, daily HubSpot quota halts at 80% consumed, n8n flows cap at 1000 items per execution.
+4. **Anti-patterns to refuse.** Specific patterns the model rejects: anonymous Apex against production, HubSpot loops without circuit breakers, n8n IF nodes with 5+ conditions, dbt models without unique tests, direct production writes from notebooks.
+5. **A "when the user is wrong" section.** The shortcuts engineers reach for under deadline pressure that the model pushes back on rather than execute. The single most cost-saving rule: refuse to bypass a Salesforce validation rule for an import, because the bypass produces records downstream reports can't aggregate, surfacing as a forecast variance the CRO has to explain.
+
+## Cost reality
+
+- **Token cost: zero.** Cursor rules are local context shipped on each prompt — no per-request API charge beyond the ~5 KB they occupy in the context window.
+- **Setup time: ~10 minutes** to drop the file, set the secret manager, point the audit object at a real name in your org.
+- **Per-task overhead:** the preamble adds 1-2 turns of dialogue before generation. For a 3-line script, this is heavy. For a real integration task, it surfaces decisions that would otherwise emerge in code review or a SOX walkthrough.
+- **Maintenance: ~30 minutes per quarter.** SDK versions drift (v3 → v4 in HubSpot already; v4 → v5 will happen). Salesforce governor limits are stable across releases but worth confirming on a Trailhead refresh per major release.
+
+## What success looks like
+
+- **Forecast variances tied to data-quality bugs drop.** Bulk patterns and idempotent writes prevent the duplicate-row class of bug that silently inflates pipeline.
+- **Code review focuses on logic, not on "did you bulkify."** The rules suggest the bulk pattern inline; reviewers stop catching its absence.
+- **SOX walkthroughs surface the audit trail without engineer involvement.** Every write produces a row in `Cleanup_Audit__c` (or your team's equivalent) with `(timestamp, user, object, record_id, field, old_value, new_value)` — the auditor can answer their questions from the audit object, not from a Slack thread with the engineer.
+- **The "this used to work" debugging session over a deprecated SDK doesn't happen.** Version-tagged rules ensure the model uses current endpoints; the deprecated code never enters the repo.
+
+## Versus the alternatives
+
+- **No rules at all (status quo).** Cursor generates plausible Apex that fails at 200-record load tests. The first time the bulk script silently truncates and the forecast is off by $400K, the absence of rules becomes the bottleneck.
+- **A team coding-conventions doc in Notion.** Functionally equivalent to no rules — the doc isn't loaded into the AI's context. The Cursor rules file is the conventions doc that's loaded on every prompt.
+- **A linter/static analyzer (PMD for Apex, dbt-checkpoint for dbt).** Catches patterns after the code is written. Coexist with the Cursor rules; the rules prevent the code from being written in the first place, the linter catches the cases that slip through.
 
 ## Watch-outs
 
-- **Rule drift.** Teams add rules and never remove them. Quarterly review or the file becomes a museum.
-- **Conflicting rules.** Cursor applies all matching rules; conflicting directives produce confused output. Keep the file under three hundred lines.
-- **Tool version churn.** "Use the v4 HubSpot client" becomes wrong when v5 ships. Version-tag rules where it matters.
-- **Per-repo overrides.** A rule that makes sense in your forecasting repo may not in the lead-routing repo. Use Cursor's per-directory rule support.
+- **Rule drift.** Teams add rules and never remove them. The file becomes a museum of "we used to do it this way" guidance the model still tries to apply. Guard: quarterly review with `git blame` — anything older than 18 months gets re-justified or deleted.
+- **Conflicting rules.** Cursor applies all matching rules; conflicting directives produce confused output. Hard cap the file at ~300 lines. Guard: when adding a rule, search for existing rules on the same surface; consolidate rather than append.
+- **Tool version churn.** "Use the v4 HubSpot SDK" becomes wrong when v5 ships. Guard: version-tag every rule that mentions an SDK version (e.g. `# HubSpot SDK v4 (verified 2026-Q2)`) so the next reviewer knows when to recheck.
+- **Per-repo overrides.** A rule that's right in your forecasting repo may be wrong in your lead-routing repo (e.g. write-vs-read defaults). Use Cursor's per-directory rule support; document the divergence in the repo's README. Guard: prefer one shared rules file with documented exceptions over forking the file.
+- **Rules don't replace QA on production data changes.** They shape what Cursor suggests. They do not run in CI, they do not validate the data the script will touch, and they do not constitute a SOX control. Guard: keep dbt tests, validation rules, and code review as separate enforcement layers.
 
 ## Stack
 
-- **Cursor** — IDE and rules engine
-- **`.cursor/rules` directory** — checked-in, versioned, code-reviewed
-- **Conventions doc** — the source of truth the rules reference
+- **[Cursor](/en/tools/cursor/)** — IDE and rules engine
+- **`.cursor/rules/revops-engineer.md`** — versioned in repo, code-reviewed
+- **Secret manager of choice** — referenced from the rules, never inlined
+- **Audit object** — `Cleanup_Audit__c` or equivalent custom object, named explicitly so suggestions point at the real name
