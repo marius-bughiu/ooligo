@@ -145,7 +145,7 @@ function maskNonProse(text: string): string {
   let frontmatterClosed = false;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i] ?? "";
     const stripped = line.trim();
 
     // Frontmatter handling
@@ -207,14 +207,15 @@ function scan(file: string): Finding[] {
     let idx = 0;
     while ((idx = lower.indexOf(lowerTerm, idx)) !== -1) {
       // Word-boundary check: term must not be sandwiched in a longer word
-      const before = idx === 0 ? " " : lower[idx - 1];
-      const after = idx + lowerTerm.length >= lower.length ? " " : lower[idx + lowerTerm.length];
+      const before = idx === 0 ? " " : (lower[idx - 1] ?? " ");
+      const after =
+        idx + lowerTerm.length >= lower.length ? " " : (lower[idx + lowerTerm.length] ?? " ");
       const isWordChar = (c: string) => /[a-z0-9]/.test(c);
       const beforeIsWord = isWordChar(before);
       const afterIsWord = isWordChar(after);
       // Allow when the term itself starts/ends with non-word chars (e.g. "let's dive into")
-      const termStartsWord = isWordChar(lowerTerm[0]);
-      const termEndsWord = isWordChar(lowerTerm[lowerTerm.length - 1]);
+      const termStartsWord = isWordChar(lowerTerm[0] ?? "");
+      const termEndsWord = isWordChar(lowerTerm[lowerTerm.length - 1] ?? "");
       const startBoundaryOk = !termStartsWord || !beforeIsWord;
       const endBoundaryOk = !termEndsWord || !afterIsWord;
 
