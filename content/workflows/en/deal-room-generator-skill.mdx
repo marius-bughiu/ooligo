@@ -13,38 +13,225 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that takes an account ID and outputs a fully populated Notion deal-room: account snapshot, stakeholder map, MEDDPICC scorecard, competitive landscape, mutual close plan template. Replaces the two hours an AE spends prepping for a renewal kickoff.
+A Claude Skill that takes an account brief, the current deal stage, the named
+stakeholder map, and the team's collateral inventory, and produces a structured
+buyer-facing deal-room outline. The outline maps each stakeholder to the
+assets that move them, proposes a three-act narrative arc, gates pricing and
+security artifacts behind the deal stage and NDA status, and emits a list of
+gap questions the AE has to answer before the deal-room can be shared.
 
-## What you'll need
+The skill replaces the two-to-three hours an AE spends curating collateral by
+hand for a mutual-action-plan buyer, without replacing the AE's judgment about
+which named reference customer to use, what discount band is in play, or
+whether the buyer has actually agreed to the close-plan timeline.
 
-- Salesforce with read access to Accounts, Contacts, Opportunities, and Activities
-- Notion with a deal-room template database and an API integration token
-- Claude.ai or Claude Code
-- Your team's MEDDPICC or qualification doc as project knowledge
+## When to use
+
+Reach for this when an opportunity is in the late-stage motion and the buyer
+needs a single artifact — a Notion page, a DocSend room, a Highspot
+collection — to drive their internal review. Concretely:
+
+- After a mutually-agreed-plan call, when the rep needs to send the buying
+  committee a curated set of assets that speak to each persona in the room.
+- Before a procurement / security review kickoff, to assemble the artifacts
+  procurement is going to ask for anyway.
+- When the AE is rolling up a multi-stakeholder evaluation and wants every
+  persona to land first on the page that actually addresses their decision
+  criteria.
+
+The skill assumes you have already done the discovery work and produced an
+account brief — the [account-research-claude-skill](/en/workflows/account-research-claude-skill)
+output is the canonical input format, but any structured brief with named
+stakeholders, strategic priorities, and a wedge-pain hypothesis works.
+
+## When NOT to use
+
+- **Auto-publishing a deal-room without rep review.** The bundle's
+  [`SKILL.md`](/artifacts/deal-room-generator-skill/SKILL.md) is explicit:
+  the output is an outline plus an asset-mapping draft. A human AE selects,
+  redacts, and approves before the buyer sees anything. The skill never
+  sends, never publishes.
+- **Deals not yet in a mutually-agreed-plan stage.** Pre-discovery,
+  qualification, and early-demo stages do not need a deal room. Sending
+  one early reads as a forcing function the buyer did not ask for, and
+  trains the buyer to anchor on commercial terms before the value
+  conversation has landed.
+- **Renewals where no new collateral is required.** A QBR deck and a usage
+  report are not a deal room.
+- **Net-new logos pre-NDA, for the security and pricing sections.** The
+  skill refuses to populate those sections without `nda_signed: true` on
+  the input.
 
 ## Setup
 
-1. **Install the Skill.** `deal-room.skill` exposes `pull_account_context`, `build_stakeholder_map`, `score_qualification`, and `render_notion_doc`.
-2. **Wire Salesforce.** API user with read scope. The Skill pulls the parent account, all related opportunities, the contact list, and the last ninety days of activity.
-3. **Wire Notion.** Add the integration to the deal-room database. Pass the database ID to the Skill. Each generated doc lands as a new row with the account name as the page title.
-4. **Drop in the template structure.** A Notion template page with the section headers your team uses. The Skill fills them in; the structure stays consistent.
-5. **Test on one account.** Pick an account you know cold. Spot-check the stakeholder map and MEDDPICC scoring. Tune the prompt for your vocabulary.
+1. **Drop the bundle into the team's Skills directory.** Copy
+   [`apps/web/public/artifacts/deal-room-generator-skill/SKILL.md`](/artifacts/deal-room-generator-skill/SKILL.md)
+   and the three reference files into your Skills folder. The skill reads
+   from `references/` on every invocation, so the directory layout matters.
+2. **Replace the asset inventory template with the real thing.** Edit
+   [`references/1-asset-inventory-template.md`](/artifacts/deal-room-generator-skill/references/1-asset-inventory-template.md)
+   so the table reflects your actual collateral library — every asset with
+   `type`, `personas`, `stages`, `last_updated`, `nda_required`, and
+   `link`. Anything missing is treated as "do not select"; the skill
+   prefers omission over guessing.
+3. **Tune the stage-to-asset matrix.** The default in
+   [`references/2-stage-to-asset-matrix.md`](/artifacts/deal-room-generator-skill/references/2-stage-to-asset-matrix.md)
+   is conservative — pricing gated to `proposal` or later, security
+   artifacts NDA-only, named customer references NDA-only. If your
+   commercial policy is different, edit the matrix; the skill cites the
+   matrix path in every output, so deviations from team policy are
+   auditable.
+4. **Wire Salesforce read access** if you want the skill to pull
+   stakeholders directly from the Opportunity contact roles. Optional —
+   most reps pass the stakeholder map in by hand from their notes, which
+   tends to be more accurate than the contact roles anyway.
+5. **Wire Notion (or DocSend, or Highspot)** as the publishing target. The
+   skill produces the outline; a separate publishing step turns the
+   outline into a buyer-facing artifact. Publishing is intentionally
+   manual — see "When NOT to use."
+6. **Test on one account.** Pick an opportunity you know cold — preferably
+   one that already closed, where you can compare the skill's outline
+   against what you actually shipped. Spot-check the persona mapping and
+   the NDA-gated sections. Tune the matrix and the asset inventory
+   accordingly.
 
-## How it works
+## What the skill actually does
 
-The Skill runs four steps. First, it pulls account context from Salesforce, including the contact list with titles. Second, it asks Claude to build a stakeholder map: who are the likely champions, the economic buyer, the technical evaluator, the blockers. This is inferred from titles, activity history, and the account's industry. Third, it scores the deal against your qualification framework, surfacing gaps as questions for the AE. Fourth, it renders into the Notion template.
+The skill runs five sequential sub-tasks, all documented in the bundle's
+[`SKILL.md`](/artifacts/deal-room-generator-skill/SKILL.md):
 
-The stakeholder map is the most useful piece. AEs typically build it in their head; rendering it explicitly forces the question "who is missing." Claude will literally say "no champion identified" when the activity history shows zero engagement with anyone outside procurement.
+1. **Validate stage and gating.** Cross-references `deal_stage` and
+   `nda_signed` against the matrix. Gated sections are emitted as
+   "gated: NDA required" rather than silently omitted, so the rep can see
+   what is being held back and chase the NDA explicitly.
+2. **Map assets to stakeholders, not to deal stage.** For each named
+   stakeholder, the skill walks the asset inventory and selects the one
+   to three assets that match the persona and seniority. A CFO gets the
+   ROI calculator and pricing one-pager first; a Director of Engineering
+   gets the architecture diagram and SOC 2 summary first; an end-user
+   lead gets the workflow walkthrough video first. Stage-driven asset
+   packs (the obvious approach) produce the same deal-room for every
+   buyer at the same stage. Persona-driven mapping forces the AE to
+   think about the actual people in the room.
+3. **Build a three-act narrative arc.** "Why act" cites a strategic
+   priority from the account brief, in the buyer's own language. "Why
+   us" pulls one proof point per persona present. "Why now" is the
+   close-plan summary — what the next 14 to 30 days look like and what
+   each role on the buyer side owns.
+4. **Layer in stage-specific sections.** Pricing only appears at
+   `proposal` or later. Security artifacts only with `nda_signed: true`.
+   The matrix enforces this even when the rep is impatient.
+5. **Emit gap questions.** For every section where the rep needs to make
+   a judgment call — pick a specific reference, confirm a discount band,
+   confirm an implementation date — a question pulled from
+   [`references/3-rep-gap-questions.md`](/artifacts/deal-room-generator-skill/references/3-rep-gap-questions.md)
+   appears under "Rep gaps to fill." These are deliberately blocking:
+   the deal-room outline is not "done" until the rep answers them.
+
+The output is a Markdown file with the narrative arc inline, a stakeholder
+to asset mapping table, a checklist of sections to publish (with gating
+reasons annotated), and the gap-question list at the bottom. See the
+"Output format" section in the bundle's `SKILL.md` for the literal
+template.
+
+## Cost reality
+
+Per deal-room generation, the token cost lands in the range of a few
+cents to under a dollar — typically around 8k-15k input tokens (account
+brief, stakeholder map, asset inventory, matrix, gap-questions reference)
+and 2k-4k output tokens. On Claude Sonnet at roughly $3 per million input
+and $15 per million output, that is on the order of $0.06 to $0.10 per
+deal room.
+
+Time-saved per AE is the larger number. The hand-curation workflow runs
+two to three hours per late-stage opportunity: pick the right case study
+from the asset library, write the narrative arc, draft the FAQ, decide
+which security artifacts are share-able pre-NDA, build the close-plan
+table. The skill compresses this to a 15-to-25-minute review pass over a
+generated outline. For an AE running 6-10 mutual-action-plan deals at a
+time, that is 12-30 hours per quarter back per rep.
+
+The cost that is harder to quantify but is the actual point: deal-rooms
+that ship faster, with persona-mapped collateral, close at higher rates
+than deal-rooms full of generic "everything we have" links. The skill
+makes the disciplined version cheap enough to do every time.
+
+## Success metric
+
+The metric to watch move is **time from mutual-plan call to deal-room
+sent**. Pre-skill, the median in a typical SaaS team sits around two to
+three business days; post-skill, it should land at under one day. If the
+metric does not move, the skill is being treated as a generator the AE
+runs and discards rather than as a draft they edit and ship — usually a
+sign that the asset inventory is stale or the persona-mapping is firing
+on low-confidence stakeholders.
+
+A secondary metric: **NDA turn time**. With the gated-section "NDA
+required" callouts surfaced explicitly in every outline, reps tend to
+chase NDAs sooner; expect to see NDA execution time drop after a few
+sprints of using the skill.
+
+## vs alternatives
+
+- **vs. DealHub** — DealHub is a full digital sales room product:
+  branded, hosted, with engagement analytics and contract orchestration.
+  It is the right answer for a team that wants a productized buyer
+  experience and is willing to standardize on a vendor's templates and
+  pay per-seat. The skill is the right answer when the team already has
+  the publishing target (Notion, Highspot, DocSend) and wants the
+  upstream judgment — which assets, in which order, for which persona,
+  gated by what — done consistently across reps without buying another
+  tool.
+- **vs. GetAccept** — Similar shape to DealHub. GetAccept's strength is
+  the e-signature and engagement-tracking layer; the skill leaves that
+  to whatever your team already uses and focuses on the deal-room
+  *content design* step that GetAccept assumes the rep has already done.
+- **vs. building deal-rooms manually in Notion** — This is what most
+  teams actually do. It works, and is the closest comparison. The
+  difference the skill makes is consistency: the persona-mapping
+  discipline, the NDA gating, the gap-question prompts. A senior AE
+  doing this by hand will produce something close to the skill's output;
+  a junior AE doing it by hand will skip the gap questions and ship
+  pricing pre-NDA. The skill makes the senior-AE output the floor.
 
 ## Watch-outs
 
-- **Title-based inference is shallow.** A "Director of Operations" might be your buyer or your blocker depending on the company. The Skill flags inference confidence per stakeholder; do not treat the map as ground truth.
-- **Activity history quality.** If reps do not log anything in Salesforce, the stakeholder map collapses to "the people on the opportunity contact role." Garbage in.
-- **Notion API rate limits.** Each section is a block creation call. A populated deal-room can be fifty calls. The Skill batches and backs off, but very large templates will hit limits.
-- **Refresh cadence.** Deal-rooms go stale fast. Add a refresh function or schedule a weekly re-run that updates the doc in place.
+- **Sharing collateral pre-NDA.** The matrix in
+  [`references/2-stage-to-asset-matrix.md`](/artifacts/deal-room-generator-skill/references/2-stage-to-asset-matrix.md)
+  refuses to populate security, detailed-architecture, and named
+  customer-reference sections without `nda_signed: true`. Gated sections
+  appear in the outline as "gated: NDA required" so the rep can see what
+  is being held back; silent omission would let a rep ship an incomplete
+  deal-room without realizing what they pushed past.
+- **Persona mismatch.** Title-based inference can put the wrong asset in
+  front of the wrong person — a "VP Operations" might be the economic
+  buyer at one company and a blocker at another. The skill emits a
+  per-stakeholder confidence note and surfaces low-confidence mappings
+  under "Rep gaps to fill" rather than locking them in.
+- **Stale assets.** Deal-rooms full of two-year-old case studies and
+  superseded pricing pages do more damage than no deal-room at all. The
+  asset inventory format requires a `last_updated` date on every entry;
+  the skill flags any selected asset older than nine months in the
+  output as `stale?` so the rep refreshes or removes it before
+  publishing.
+- **Narrative drift.** It is easy for the suggested narrative to wander
+  into generic positioning. The "Why act" paragraph must cite a
+  strategic priority from the account brief; if no strategic priority is
+  available, the section is emitted as "REQUIRES INPUT — no strategic
+  priority in brief" rather than filled with platitudes.
+- **Publishing as a generator habit.** The skill produces an outline,
+  not a finished artifact. Reps who treat the output as the artifact
+  ship deal-rooms with placeholder customer names and uncommitted
+  go-live dates. Treat the gap-questions list as blocking before
+  publishing.
 
 ## Stack
 
-- **Salesforce** — account, contact, and activity context
-- **Notion** — destination doc layer
-- **Claude** — stakeholder inference, qualification scoring, narrative generation
+- **Claude** — narrative drafting, persona mapping, gap-question
+  selection
+- **Salesforce** — optional source for stakeholder pulls from
+  Opportunity contact roles
+- **Notion / DocSend / Highspot** — publishing target for the final
+  buyer-facing deal-room (publishing is manual on purpose)
+- **The asset inventory** — your team's existing collateral library,
+  catalogued in the format the bundle's reference files specify

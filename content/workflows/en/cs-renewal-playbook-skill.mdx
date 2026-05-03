@@ -13,39 +13,213 @@ ai_generated: true
 human_tested: false
 ---
 
-A Claude Skill that generates a renewal playbook for any at-risk account: which executive to engage, what value story to lead with, which adoption gaps to address before the renewal call, and a 30/60/90-day intervention plan. Takes the account context and turns it into a CSM-ready action sheet.
+A Claude Skill that takes an at-risk renewal account and produces a structured draft
+playbook: a renewal-probability band, stakeholder-by-stakeholder motions tied to a
+30/60/90-day pacing plan, talk-tracks for the most likely objections, and an escalation
+gate. The CSM reviews the draft, edits it, and converts each motion to a Gainsight CTA.
+The Skill replaces the blank-page problem at T-90, not the CSM's judgment.
 
-## What you'll need
+## When to use
 
-- Gainsight with health scores, risk flags, and success-plan history
-- Gong access to the last 180 days of calls on the account
-- Claude Code or Claude.ai with the Skill installed
-- A library of renewal playbooks per risk archetype (champion lost, low adoption, pricing pushback, competitive)
-- Renewal date and ARR per account
+Use this Skill at T-90 to T-120 days from renewal on any account a CSM has flagged as
+at-risk. Earlier than T-120 the signal is too noisy; later than T-90 there is not enough
+runway to act on what the playbook recommends. The Skill is built for B2B SaaS accounts
+above 50k ARR where the cost of a custom playbook is justified by the expected save value.
+
+The reader should expect to spend roughly 15 minutes per account: a few seconds to invoke
+the Skill, ten to twelve minutes reviewing and editing the draft, two to three minutes
+converting motions into Gainsight CTAs. That is the "time saved" baseline — replacing the
+60 to 90 minutes a CSM otherwise spends pulling Gainsight reports, scrubbing Gong call
+notes, and assembling a renewal plan from scratch.
+
+## When NOT to use
+
+This Skill is not the right tool for several account shapes that look superficially
+similar:
+
+- **Auto-renewal accounts where the contract auto-extends without a CSM-led motion.** The
+  playbook assumes the renewal is a moment of choice. Auto-renewal accounts need an
+  entirely different motion (de-risk the auto-renew trigger, monitor health, intervene only
+  if the customer initiates an opt-out conversation). The Skill aborts and flags this if
+  the contract has an active auto-renewal clause and the opt-out window has not opened.
+- **Anything customer-facing without CSM review.** The Skill produces internal strategy and
+  scaffolding for preparation. It does not produce customer-ready copy. Talk-tracks are
+  structured objection-and-response frames the CSM rewrites in their own voice — not
+  scripts to paste into an email or read aloud on a call.
+- **Contractually-binding emails, commercial proposals, or anything that touches commercial
+  terms.** Pricing, discounting, term length, and legal language stay with the CSM and Deal
+  Desk. The Skill is forbidden from recommending specific discount amounts.
+- **SMB accounts under 25k ARR.** The cost of generating, reviewing, and customizing a
+  bespoke playbook exceeds the expected save value. Use a templated low-touch motion
+  instead — the Skill returns a recommendation to that effect rather than a full playbook.
 
 ## Setup
 
-1. **Build the archetype library.** Edit `references/renewal-playbooks/` with one Markdown file per archetype. Each describes the typical pattern, the recommended interventions, and a sample messaging arc.
-2. **Install the Skill.** Drop `renewal-playbook.skill` into `~/.claude/skills/`. Set `GAINSIGHT_TOKEN` and `GONG_API_KEY`.
-3. **Run on a flagged account.** `build_renewal_playbook(account_id="...", renewal_date="2026-08-15")`. The Skill diagnoses the risk archetype, then generates a tailored playbook.
-4. **CSM ownership.** The playbook is a draft; the CSM customizes and executes. Track interventions as Gainsight CTAs.
+1. **Drop the Skill into your Claude config.** The bundle is at
+   `apps/web/public/artifacts/cs-renewal-playbook-skill/`. Copy `SKILL.md` to
+   `~/.claude/skills/cs-renewal-playbook/SKILL.md` and the `references/` directory
+   alongside it.
+2. **Customize the reference files.** The bundle ships three template references the
+   Skill reads on every invocation. Edit each to match your team:
+   - `references/1-segment-playbook-config.md` — your ARR thresholds, per-segment section
+     inclusion rules, and the "do not run this Skill" floor.
+   - `references/2-stakeholder-motion-matrix.md` — your canonical stakeholder roles, the
+     motion per (role times archetype) cell, and the stakeholder-gap rules that cap the
+     renewal-probability band.
+   - `references/3-output-format.md` — the literal Markdown shape the Skill emits. Edit
+     only if you are extending the format itself; for wording inside motions, edit the
+     other two references.
+3. **Wire credentials.** Set `GAINSIGHT_TOKEN` and `GONG_API_KEY` in your shell. The Skill
+   uses Gainsight for health-score history, success-plan progress, and the stakeholder
+   map; Gong for the last 180 days of calls.
+4. **Run on a flagged account.** Invoke as `cs-renewal-playbook(account_id="...",
+   renewal_date="2026-08-15", arr=180000, segment="mid-market")`. Optional inputs:
+   `risk_archetype_hint`, `competitor`, `executive_sponsor_email`. The Skill returns a
+   Markdown draft.
+5. **Convert to Gainsight CTAs.** The playbook is worthless if the motions stay in a
+   document. Each row in the stakeholder-motion table is one CTA — owner, due week, success
+   signal. Tracked weekly in your renewal pipeline review.
 
-## How it works
+## What the skill actually does
 
-The Skill first diagnoses. It pulls health-score history, success-plan progress, recent calls, and support-ticket patterns, then runs a Claude classification pass to assign one or two archetypes. A "champion lost" archetype looks like a sponsor LinkedIn departure plus a drop in stakeholder calls. "Low adoption" is a usage trend below baseline despite onboarding completion. Etc.
+The Skill runs eight steps in order; the order matters because each step constrains the
+next. Pulling contract terms first means every downstream recommendation has to fit
+inside commercial reality. Diagnosing the risk archetype next means the segment-aware
+template has something concrete to tailor. Selecting the segment template before
+generating stakeholder motions means the motion matrix is filtered to the right shape
+before any output is assembled.
 
-Once the archetype is assigned, the Skill pulls the matching playbook template and tailors it to the specific account: real names of stakeholders, the actual usage gaps, the specific competitor mentioned in calls (if any). Each intervention has a date, an owner, and a measurable outcome.
+The risk diagnosis runs a Claude classification pass against five canonical archetypes:
+`champion-lost`, `low-adoption`, `pricing-pushback`, `competitive`, and `value-gap`. Each
+archetype has a concrete signal definition — `low-adoption` means weekly active users below
+the segment p25 for two consecutive months, not a vibes-based read of the dashboard. The
+Skill returns up to two archetypes ranked by confidence; if the CSM passed a hint that
+disagrees, the Skill surfaces the disagreement rather than overriding either side.
 
-The 30/60/90 view forces structured pacing. CSMs tend to either over-react in week one and burn the relationship, or do nothing until 30 days before renewal. Both fail. The plan paces it.
+Renewal probability is bucketed into four bands (over 70 percent, 40 to 70, 15 to 40,
+under 15) rather than a point estimate. Point estimates here are spurious precision —
+nobody can tell the difference between a 32 percent and a 38 percent renewal in practice,
+and presenting a number invites overconfidence. The bands map to recognizably different
+motions: a `40-70%` band runs a standard save play; a `15-40%` band assumes executive
+escalation; an `under 15%` band shifts the playbook from save to de-risk-the-loss (data
+export, contract-termination terms, prevent-bad-references motion).
+
+The segment-aware template is the difference between this Skill and a generic prompt.
+The same archetype demands a different motion at different deal sizes. A "low adoption"
+save on a 500k enterprise account warrants a CSM-and-CSM-leader joint executive business
+review and a 90-day pacing plan. The same archetype on an 80k mid-market account warrants
+a 30-minute working session with the end-user team and a 60-day pacing plan. The
+segment-playbook config in `references/1-segment-playbook-config.md` encodes these
+differences as section-inclusion rules.
+
+The stakeholder-motion matrix in `references/2-stakeholder-motion-matrix.md` is the
+single source of truth for "which stakeholder do we engage, and how, given which risk
+pattern." The Skill looks up each stakeholder in the account's Gainsight map and assigns
+the recommended motion. If a required role is missing, the Skill caps the
+renewal-probability band — no economic buyer means the band cannot exceed `40-70%` until
+one is identified, no champion means the band cannot exceed `15-40%`. This forces the
+output to surface the gap rather than paper over it.
+
+Talk-tracks are structured as objection (verbatim, in the customer's likely phrasing),
+underlying concern, response posture (acknowledge then reframe then ask), and bridge
+question. They are explicitly labeled as "scaffolding for preparation, not a script" in
+the output. The Skill does not produce conversational copy at all — that is the CSM's
+job.
+
+The escalation gate specifies the explicit signal that triggers escalation to the CSM
+leader, and from CSM leader to VP CS. "If no new champion identified by end of W3" is a
+gate. "If renewal-probability band drops to under 15 percent after W4 motions complete"
+is a gate. Without explicit gates, CSMs grind through doomed save motions past the point
+of recoverability — the gate is what makes "stop, escalate, or write off" a decision the
+CSM has pre-committed to.
+
+## Cost reality
+
+Token cost per playbook is in the order of 30k to 60k tokens (input plus output) on
+Claude — call it 10 to 25 cents at current Sonnet pricing, or under 50 cents at Opus. The
+input volume varies with how much Gong call transcript and Gainsight history is loaded;
+the output is consistently around 1500 to 2500 words.
+
+Time saved per playbook is the load-bearing cost number. A CSM running a manual renewal
+prep on a flagged account spends 60 to 90 minutes pulling reports, reviewing call notes,
+and assembling a draft plan. The Skill compresses that to roughly 15 minutes of CSM
+attention: invoke, review, edit, convert to CTAs. On a CS team with 30 at-risk renewals
+per quarter, that is roughly 25 to 35 hours of CSM time reclaimed per quarter, or roughly
+10 percent of one CSM FTE if you assume a 4-renewal-per-week steady state.
+
+Net: the Skill pays for itself if it saves a single 100k renewal that would otherwise
+have been worked at a lower quality. The token cost is rounding error against the
+contract value at risk.
+
+## Success metric
+
+Track three things over the first quarter of use:
+
+1. **Time-to-first-draft per renewal.** Should drop from 60 to 90 minutes to under 20
+   minutes (Skill runtime plus CSM review). If it does not, the bottleneck is either
+   stale Gainsight data or under-customized reference files.
+2. **CSM CTA conversion rate.** Of the motions in each generated playbook, what
+   percentage become tracked Gainsight CTAs within 48 hours of the playbook being
+   generated. Target above 80 percent. Lower than that means the motions are not
+   actionable enough — usually a sign the stakeholder-motion matrix is too generic.
+3. **Renewal rate on at-risk accounts where the Skill was used vs not.** This is the
+   delayed signal that matters most. Compare quarter-over-quarter. The Skill is not the
+   only variable, but if at-risk renewal rate does not move at all, the playbooks are
+   being generated and ignored.
+
+## vs alternatives
+
+- **Gainsight Renewal Playbooks (the in-product feature).** Gainsight ships templated
+  renewal playbooks tied to CTA workflows. They are operationally tighter than this Skill
+  — every motion is a tracked task in the same system as the rest of CS. They are also
+  generic: the templates are not tailored per-account using call evidence, and the
+  archetype diagnosis is whatever the CSM types in. The right combination is to use this
+  Skill to generate the draft and Gainsight Playbooks to track execution. The Skill is
+  the brain; Gainsight is the system of record.
+- **Catalyst (or other CS platforms).** Catalyst's renewal forecasting produces a single
+  renewal-probability number per account from a model, no plan attached. Useful for
+  prioritization, useless for "what do I do about it." The Skill is complementary —
+  Catalyst tells you which accounts to flag, the Skill tells you what to do per flagged
+  account.
+- **Manual Quartet planning (a CSM and their leader spending an hour per account in a
+  whiteboard session).** Highest quality output, completely unscalable. Reserve for the
+  top three accounts of the quarter; let the Skill handle the long tail. The Skill is not
+  better than two experienced CS humans thinking carefully — it is better than the same
+  humans skipping the analysis on accounts 5 through 30 because they ran out of time.
 
 ## Watch-outs
 
-- **Archetype overlap.** Many at-risk accounts have multiple causes. The Skill returns up to two; force-pick one as primary or the playbook becomes mush.
-- **Plan vs. execution.** The playbook is worthless if interventions aren't tracked and reviewed. Tie it to Gainsight CTAs.
-- **Renewal-date math.** Don't generate the playbook 30 days before renewal. Run at 90 days minimum to leave room for actual intervention.
+- **Over-confident probability bands.** The classifier will sometimes confidently bucket
+  an account into `over 70 percent` based on a strong recent health-score trend that
+  masks a stakeholder loss the Skill weighted too lightly. Guard: the band must always be
+  paired with at least three independent drivers; if the Skill cannot produce three, it
+  downgrades the band one level. The CSM treats every band as a hypothesis, not a
+  forecast — and the band that says "likely renews" warrants the same scrutiny as the band
+  that says "likely churns."
+- **Stale stakeholder map.** Gainsight stakeholder maps go stale fast. Sponsors leave,
+  titles change, someone gets reorged into a different BU and nobody updated the record.
+  Guard: the Skill compares Gainsight roles against LinkedIn current titles where
+  possible and flags every stakeholder it cannot reconcile within the last 90 days. If
+  more than half the map is unreconciled, the Skill aborts with "stakeholder map
+  staleness over 50 percent; refresh in Gainsight before re-running." This refuses to
+  generate a playbook on a fictional org chart.
+- **Scripted talk-tracks losing trust.** If the CSM reads the talk-tracks aloud as
+  scripts, the customer hears it and the renewal save dies. Guard: every talk-track is
+  labeled "scaffolding for preparation, not a script" in the output, and the CSM is
+  instructed to rewrite each one in their own voice before any conversation. The Skill
+  does not produce conversational copy at all — only the structured objection,
+  underlying-concern, posture, and bridge-question scaffolding.
+- **Treating the playbook as the work.** The playbook is worthless if interventions are
+  not converted to tracked Gainsight CTAs and reviewed weekly. The output's footer
+  reminds the CSM of this; the setup step ties generation to a CTA-creation step.
 
 ## Stack
 
-- **Gainsight** — health, risk, success-plan history
-- **Gong** — call evidence for archetype diagnosis
-- **Claude** — diagnosis and playbook tailoring
+- **Gainsight** — health-score history, success-plan progress, stakeholder map,
+  CTA tracking
+- **Gong** — last 180 days of calls for archetype diagnosis and citation
+- **Claude (Sonnet or Opus)** — diagnosis, segment-aware template selection, motion
+  matching, talk-track scaffolding
+- **Artifact bundle** at `apps/web/public/artifacts/cs-renewal-playbook-skill/`
+  (`SKILL.md`, `references/1-segment-playbook-config.md`,
+  `references/2-stakeholder-motion-matrix.md`, `references/3-output-format.md`)
