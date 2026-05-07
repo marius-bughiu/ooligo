@@ -1,0 +1,74 @@
+---
+slug: candidate-engagement-sequence-n8n
+canonical_slug: candidate-engagement-sequence-n8n
+locale: es
+verticals: [recruiting]
+title: Secuencia de engagement de candidatos con n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, gmail]
+roles: [recruiter, sourcer, talent-acquisition]
+difficulty: intermediate
+time_to_setup: 75min
+human_tested: false
+translated_from: en/candidate-engagement-sequence-n8n.mdx
+translated_at: "2026-05-07T05:58:34Z"
+translation_model: claude-opus-4-7
+source_sha256: "fd68a5a07f46d4db3a249f0e6edaff6b5015e17d143c738dbc9afbeb1f5bc1c3"
+---
+
+Un flow de n8n que corre secuencias de outreach multi-touch contra candidatos pasivos y candidatos previamente rechazados — retomando donde quedaron, personalizando el siguiente mensaje y enrutando las respuestas de vuelta al recruiter correcto. Reemplaza el patrón típico de "nos olvidamos de los candidatos después de un único outreach" con construcción sostenida de pipeline.
+
+## Qué necesitas
+
+- Cuenta de n8n self-hosted o cloud
+- Acceso a la API de un CRM de recruiting o ATS — [Gem](/es/tools/gem/), [Ashby](/es/tools/ashby/), [Greenhouse](/es/tools/greenhouse/), o [Lever](/es/tools/lever/)
+- Infraestructura de email — Gmail/Workspace, o un dominio dedicado de outreach con infraestructura de deliverability
+- API key de [Claude](/es/tools/claude/) para personalización
+- Postgres o similar para tracking del estado de la secuencia
+
+## Setup
+
+1. **Define la librería de secuencias.** 3-5 secuencias nombradas en Postgres: "passive-engineer-3-touch", "previously-rejected-12mo-recheck", "talent-pool-quarterly-touchpoint", etc. Cada una define: condición de trigger, plantillas de mensaje, intervalos, condiciones de salida.
+2. **Construye el flow de n8n.** Ocho nodos:
+   - Trigger de cron — corre diariamente a una hora de envío amigable para recruiting
+   - Query de secuencia — saca de Postgres a los candidatos que tocan para el siguiente touch
+   - Enriquecimiento de datos del ATS — trae los datos más recientes del candidato desde Ashby (actividad reciente, estado actual, última interacción)
+   - Chequeo de skip-condition — excluye candidatos que respondieron desde el último touch, que aplicaron recientemente o que explícitamente hicieron opt-out
+   - Personalización con Claude — genera el cuerpo del próximo mensaje personalizado al candidato
+   - Envío de email — a través de la API de Gmail o de la plataforma de outreach
+   - Update del estado de la secuencia — update en Postgres con el timestamp del último touch y el del próximo
+   - Detección de respuestas — chequea Gmail por respuestas; enruta al recruiter asignado en Slack con el contexto de la respuesta
+3. **Prueba las secuencias en lotes pequeños.** Corre sobre 20-30 candidatos por secuencia; verifica la calidad del contenido y el enrutamiento. Afina los intervalos de la secuencia y el prompt de personalización.
+4. **Establece infraestructura de opt-out.** Cada email incluye un unsubscribe de un click; los opt-outs se respetan a lo largo de todas las secuencias.
+
+## Cómo funciona el enrutamiento
+
+| Trigger de la secuencia | Cadencia | Condición de salida |
+|---|---|---|
+| Candidato pasivo mostró señal (cambio de trabajo, mencionado en noticias de funding) | 3 touches en 21 días | Respuesta, aplicación, opt-out |
+| Previamente rechazado, hace 12 meses, rol aún relevante | Único touch de re-engagement | Respuesta, aplicación, opt-out |
+| Miembro del talent pool, sin contacto reciente | Touch trimestral con contenido relevante | Aplicación, opt-out |
+| Rechazado en ronda final, alta calidad, abre rol relacionado | Único touch dirigido | Respuesta, aplicación, opt-out |
+
+## Output
+
+Por cada candidato tocado:
+
+- **Mensaje enviado** — email personalizado con un subject line apropiado, cuerpo referenciando el contexto real del candidato
+- **Log del estado de la secuencia** — registro del touch (qué secuencia, qué mensaje dentro de la secuencia, timestamp del envío)
+- **Notificación de respuesta** — cuando el candidato responde, notificación de Slack al recruiter asignado con el contexto de la respuesta y la siguiente acción sugerida
+
+## Dónde encaja
+
+Este flow es la capa operacional del [talent pipelining](/es/learn/talent-pipelining/) de ciclo largo. Sin él, los candidatos tocados una vez típicamente quedan en silencio para siempre. Con él, el pipeline mantiene calor a lo largo de meses y años — produciendo flujo de aplicaciones inbound cuando se abre el rol correcto.
+
+Las organizaciones de recruiting maduras reportan que 15-30% de las contrataciones senior se originan en re-engagement de candidatos previamente tocados, atribuible a infraestructura de engagement sostenido como esta.
+
+## Cuidados
+
+- **La deliverability importa.** Mandar outbound en bulk desde un solo dominio destruye la deliverability rápido. Usa infraestructura de outreach apropiada (dominio dedicado, warm-up, SPF/DKIM/DMARC). Es mejor enviar de menos que quemar la deliverability.
+- **La calidad de la personalización importa.** El outreach genérico personalizado por AI se lee como obviamente generado por AI. La personalización necesita contexto real específico del candidato, no relleno generado por pattern-matching.
+- **El manejo de opt-out es no-negociable.** Cada mensaje debe incluir unsubscribe de un click; los opt-outs se respetan en todas las secuencias actuales y futuras. CAN-SPAM, CASL, GDPR todos lo requieren.
+- **No envíes auto-mensajes a candidatos que ya respondieron.** La detección de respuestas es crítica — mandar el siguiente mensaje de la secuencia a un candidato que ya respondió es el peor fallo posible de CX.
+- **Revisión del recruiter en candidatos de alto valor.** Para roles senior o talent pools de alta prioridad, el recruiter revisa y aprueba cada mensaje en vez de auto-enviarlo.
+- **Frequency caps.** El mismo candidato no debería aparecer en múltiples secuencias activas simultáneamente. Cap las reglas en la lógica de estado de secuencia.
