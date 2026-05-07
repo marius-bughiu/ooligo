@@ -1,0 +1,98 @@
+---
+slug: candidate-sourcing-claude-skill
+canonical_slug: candidate-sourcing-claude-skill
+locale: es
+verticals: [recruiting]
+title: AI candidate sourcing con Claude
+artifact_type: claude-skill
+tools_used: [claude, juicebox, gem, ashby]
+roles: [recruiter, sourcer, talent-acquisition]
+difficulty: intermediate
+time_to_setup: 45min
+human_tested: false
+translated_from: en/candidate-sourcing-claude-skill.mdx
+translated_at: "2026-05-07T06:01:03Z"
+translation_model: claude-opus-4-7
+source_sha256: "def2cbd8e628fc153a90e76ddc330a22e60225d20ddc5482a91620d7c13f2eb4"
+---
+
+Una Claude Skill que toma un perfil de puesto más una rúbrica de ICP, construye una query de [AI sourcing](/es/learn/ai-sourcing/) contra [Juicebox](/es/tools/juicebox/), [hireEZ](/es/tools/hireez/), o LinkedIn Recruiter, recupera hasta 200 candidatos, puntúa cada uno contra la rúbrica con evidencia citada, y redacta outreach personalizado para los top-N — y luego se detiene en una compuerta de revisión humana. El recruiter lee el shortlist, edita los mensajes y envía. Reemplaza el loop de 3 horas de Boolean-más-scoring-más-outreach con un loop de revisión de 30 minutos.
+
+## Cuándo usarlo
+
+- Estás haciendo sourcing para un rol que corre más de una vez por trimestre y la rúbrica de ICP es lo suficientemente estable como para escribirse.
+- Tienes una rúbrica de ICP con anclas conductuales por dimensión (no solo etiquetas vagas). La plantilla de rúbrica en `references/1-icp-rubric-template.md` del bundle muestra la forma; si no puedes llenarla, todavía no tienes una rúbrica que esta skill pueda usar para puntuar.
+- Tienes acceso a la API de [Juicebox](/es/tools/juicebox/) PeopleGPT, [hireEZ](/es/tools/hireez/), o LinkedIn Recruiter. La skill se rehúsa a hacer fallback a scraping de URLs públicas de LinkedIn.
+- Un recruiter o sourcer humano revisa cada shortlist antes de que se envíe cualquier outreach. La skill escribe los borradores a disco y se detiene.
+
+## Cuándo NO usarlo
+
+- **Auto-rechazo en el loop.** La skill rankea; no rechaza. Los candidatos "skipeados" se surface con razones para que el recruiter los pueda anular. Conectar una acción `reject` a un umbral de score convierte esto en toma de decisión automatizada y dispara obligaciones de [EU AI Act](/es/learn/eu-ai-act-for-legal-teams/) Anexo III de alto riesgo más obligaciones de bias-audit de NYC LL 144 dentro de un año antes de usarlo. Si necesitas eso, consigue un bias audit, no esta skill.
+- **Scoring sobre proxies de clases protegidas.** Prestigio de escuela como dimensión independiente, origen del nombre, presencia de foto, penalización por gaps de empleo, edad inferida del año de graduación, "culture fit" sin anclas conductuales. El checklist de equidad de la skill se rehúsa a correr si cualquiera de estos aparece en la rúbrica. No edites el checklist para hacer pasar una rúbrica sesgada.
+- **Recomendaciones de pay-band.** NYC LL 32-A, Colorado, California y Washington requieren rangos publicados y obligaciones de bias-audit sobre decisiones de pago automatizadas. Usa una herramienta de comp benchmarking, no una skill de sourcing.
+- **Búsquedas one-off de C-suite.** Una búsqueda retenida para un individuo específico nombrado o para un ejecutivo definido de forma estricta se hace más rápido por un humano con red de contactos. La skill está construida para sourcing repetible a nivel IC y manager, donde la calibración de la rúbrica recupera su costo de setup.
+- **Reference checks o investigación por backchannel.** Postura de consentimiento distinta. Workflow distinto.
+
+## Setup
+
+1. **Pega el bundle.** Coloca `apps/web/public/artifacts/candidate-sourcing-claude-skill/SKILL.md` en tu directorio de skills de Claude Code (o en las Skills personalizadas de claude.ai).
+2. **Llena la rúbrica.** Copia `references/1-icp-rubric-template.md` a un archivo por rol bajo tu propio repo. Reemplaza cada `{placeholder}`. La skill captura el SHA-256 de la rúbrica en su audit log por run, así que las ediciones posteriores son visibles en el retro.
+3. **Configura el canal de fuente.** Agrega tu API key de Juicebox o hireEZ a la configuración de la skill. Para LinkedIn, configura las credenciales de la API de Recruiter — la skill se rehúsa a scrapear URLs de perfiles públicos.
+4. **Escribe las listas de do-not-poach y exclude.** Un CSV de dominios de clientes (do-not-poach) y un CSV de URLs de `exclude_list` (recientemente rechazados, en periodo de silencio, opt-out). El pre-filtro determinístico en el paso 3 de la skill aplica estas antes de que el LLM vea ningún candidato.
+5. **Dry-run sobre un rol cerrado.** Córrelo sobre un rol que sourceaste manualmente el trimestre pasado. Compara los top-25 de la skill con tus top-25 manuales. Afina las anclas de la rúbrica si la skill calibra distinto — las anclas, no la query de búsqueda, son las que suelen estar mal.
+
+## Lo que la skill realmente hace
+
+Seis pasos, en orden. El orden importa: los filtros determinísticos y el pre-flight de equidad vienen antes del ranking del LLM, porque dejar suelto a un LLM sobre un pool contaminado produce output rápido, confiado e inutilizable.
+
+1. **Validar la rúbrica** contra `references/2-fairness-checklist.md`. Detener si la rúbrica contiene proxies de clases protegidas. La elección de fallar antes del retrieval en lugar de después es deliberada — una rúbrica sesgada cargada en la API de una herramienta de sourcing deja una entrada de log que ya cuenta como procesamiento automatizado bajo el Art. 22 del GDPR.
+2. **Construir la query de búsqueda** en el formato nativo del canal. Tope de sinónimos en 5 por dimensión; tope del pool recuperado en 200. Pools más grandes degradan el ranking porque el contexto del modelo se llena con candidatos de baja relevancia.
+3. **Pre-filtro determinístico.** Descartar matches de `exclude_list`, empresas do-not-poach, mismatches de ubicación, y perfiles con >18 meses de antigüedad. Estos son filtros auditables; el LLM no los re-litiga.
+4. **Ranking basado en rúbrica.** Score 1-5 sobre skill, level, company-pattern, response-likelihood. Cada score arriba de 1 cita un string textual del perfil. Sin cita → score 1. El requisito de la cita es lo que mantiene al modelo anclado en el texto del perfil en vez de inferir desde nombre, foto o escuela.
+5. **Compuerta de revisión humana.** Escribir `shortlist.md` y archivos `outreach/<id>.md` por candidato. Detener. La skill no define ninguna acción `send`.
+6. **Audit log.** Anexar una línea JSONL por run con `run_id`, `rubric_sha256`, tamaños de pool, canal, modelo. Sin PII. Esto es lo que hace defendible al run bajo cuestionamiento de NYC LL 144 o EU AI Act.
+
+El formato del shortlist y el layout de evidencia por candidato viven en `references/3-shortlist-format.md` en el bundle. El formato es fijo porque los consumidores downstream — recruiter, hiring manager, revisor de auditoría — necesitan columnas predecibles.
+
+## Realidad de costos
+
+Por shortlist de 25 desde un pool de 200 candidatos, sobre Claude Sonnet 4.5:
+
+- **Costo de retrieval** — depende del canal. Juicebox PeopleGPT cuenta contra tu cuota mensual de queries (los planes starter de 200 búsquedas se topan rápido si corres múltiples roles por semana). Los unlocks-por-mes de hireEZ son la restricción vinculante ahí. La API de LinkedIn Recruiter tiene sus propias cuotas de InMail y búsqueda por seat. Nada de esto cambia con la skill en el loop; gastas la misma cuota de canal que habrías gastado haciendo Boolean manual.
+- **Tokens del LLM** — típicamente 80-120k tokens de input (rúbrica + 200 extractos de perfil de candidato + instrucciones de la skill) y 8-15k tokens de output (shortlist + 25 borradores de outreach). Sobre Sonnet 4.5 eso es aproximadamente $0,50-0,80 por shortlist. El mes completo para un sourcer corriendo ~80 shortlists cae en $40-65 en costo de modelo.
+- **Tiempo del recruiter** — la ganancia está aquí, no en el costo del modelo. Boolean manual + scoring + outreach para 25 candidatos toma 2-3 horas. Revisar el shortlist de la skill y editar los borradores toma 25-40 minutos, que es lo que hace que valga la pena correr el workflow.
+- **Tiempo de setup** — 45 minutos para la rúbrica y las listas de exclude si la rúbrica ya existe en alguna forma; más si la rúbrica es completamente nueva (en cuyo caso [structured interviewing](/es/learn/structured-interviewing/) es el prerequisito, no esta skill).
+
+## Métrica de éxito
+
+Trackea tres números por rol por mes, en el ATS:
+
+- **Reply rate al outreach** — debe igualar o superar la tasa baseline manual del recruiter. Si baja, los borradores de outreach son genéricos — usualmente la rúbrica es demasiado gruesa, no el modelo.
+- **Tasa de pase de shortlist a screen** — la proporción de candidatos del shortlist con los que el hiring manager está de acuerdo en que valen un screen. Debe ser ≥70% sobre un rol estable. Por debajo de eso, la rúbrica de ICP está mal calibrada; vuelve a correr sobre un rol cerrado y afina.
+- **Tiempo desde apertura del rol hasta el primer screen calificado** — la métrica de throughput que la skill busca mover. La reducción de 3-horas-a-30-minutos aparece aquí, no en el gasto de modelo.
+
+## vs alternativas
+
+- **vs [Gem AI Sourcing](/es/tools/gem/)** — Gem es dueño del workflow del recruiter de punta a punta (UI de sourcing, secuencias, analytics, integración de ATS vía [Ashby](/es/tools/ashby/) y otros). Elige Gem si quieres un producto gestionado y tu equipo va a vivir en su UI. Elige esta skill si quieres la rúbrica, la lógica de pre-filtro, y el audit log en tu propio repo, bajo control de versiones, con el modelo intercambiable.
+- **vs el ranking AI nativo de hireEZ** — el AI Match de hireEZ es buen retrieval; el gap está en la capa de la rúbrica. Con esta skill mantienes hireEZ como el canal de retrieval y traes tu propia rúbrica + scoring con evidencia citada por encima. Si los defaults de hireEZ coinciden con tu ICP, no necesitas esta skill.
+- **vs Boolean manual + scoring por spreadsheet** — manual es lo correcto para búsquedas one-off o ejecutivas, donde la rúbrica está en la cabeza del recruiter y escribirla es overhead que no se paga. La skill se gana su costo de setup en roles que se repiten.
+- **vs script DIY en Python contra las APIs de LinkedIn / Juicebox** — misma calidad de ranking si construyes el prompt con cuidado, pero también construyes el checklist de equidad, el audit log, y la compuerta de revisión humana tú mismo. El bundle los trae.
+
+## Cuidados
+
+- **Amplificación de sesgo** — guardado por el checklist de equidad en `references/2-fairness-checklist.md`, que detiene el run si la rúbrica contiene proxies de clases protegidas. El audit log captura `rubric_sha256` por run para que la rúbrica usada en una fecha dada sea reproducible bajo revisión de [EU AI Act](/es/learn/eu-ai-act-for-legal-teams/) o NYC LL 144.
+- **Datos obsoletos de LinkedIn / Juicebox** — guardado por el filtro determinístico en el paso 3 (descartar perfiles con >18 meses de antigüedad) y por la dimensión de response-likelihood en el scoring (que pondera la frescura). Los candidatos en cold-storage no desplazan a los que están buscando activamente.
+- **Exposición a los ToS de LinkedIn** — guardado por la negativa a scrapear URLs de perfiles públicos. La skill usa la API de Recruiter, Juicebox o hireEZ, que traen su propio licenciamiento de datos. Si se selecciona `linkedin_recruiter` y la API no está configurada, la skill aborta con un setup-error en vez de hacer fallback.
+- **Drift de auto-send** — guardado por la compuerta de revisión humana (paso 5) y por la ausencia de cualquier acción `send` en la skill. Los borradores se escriben en archivos `outreach/<id>.md` para que el recruiter los pegue en el outbox del ATS / herramienta de sourcing. Los mensajes redactados por AI y enviados sin revisión producen volumen sin calidad y dañan la [candidate experience](/es/learn/candidate-experience/).
+- **Transparencia de comp** — los borradores de outreach nunca citan un número; referencian la banda como "rango competitivo divulgado en el screen" para que el recruiter siga siendo la fuente de las afirmaciones de pay-band (requisitos de pay-transparency de NYC LL 32-A, Colorado, California, Washington).
+
+## Stack
+
+El bundle de la skill vive en `apps/web/public/artifacts/candidate-sourcing-claude-skill/` y contiene:
+
+- `SKILL.md` — la definición de la skill
+- `references/1-icp-rubric-template.md` — llenar por rol
+- `references/2-fairness-checklist.md` — chequeos pre-flight (no editar para hacer pasar rúbricas sesgadas)
+- `references/3-shortlist-format.md` — el formato literal del output
+
+Herramientas que el workflow asume que ya usas: [Claude](/es/tools/claude/) (el modelo), [Juicebox](/es/tools/juicebox/) o [hireEZ](/es/tools/hireez/) (el canal de retrieval), [Ashby](/es/tools/ashby/) (el ATS para el write-back una vez que el recruiter aprobó un candidato). [Gem](/es/tools/gem/) es la alternativa de build-vs-buy si no quieres ser dueño de la rúbrica y el audit log tú mismo.
