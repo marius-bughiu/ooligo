@@ -1,0 +1,93 @@
+---
+slug: boolean-search-builder-claude-skill
+canonical_slug: boolean-search-builder-claude-skill
+locale: es
+verticals: [recruiting]
+title: Constructor de búsquedas Boolean y X-ray con Claude
+artifact_type: claude-skill
+tools_used: [claude, hireez, juicebox]
+roles: [sourcer, recruiter, talent-acquisition]
+difficulty: beginner
+time_to_setup: 20min
+human_tested: false
+translated_from: en/boolean-search-builder-claude-skill.mdx
+translated_at: "2026-05-07T05:46:16Z"
+translation_model: claude-opus-4-7
+source_sha256: "e34ed625ddc4d0be13c4611eaa4528ff48aa98e412d53c23a46eedbcafeb99a2"
+---
+
+Una Claude Skill que toma un intake estructurado del rol (must-haves, nice-to-haves, anti-señales, política de ubicación) y lo convierte en tres artefactos de búsqueda calibrados: un string Boolean para [hireEZ](/es/tools/hireez/), una query X-ray de Google para LinkedIn / GitHub / Stack Overflow, y un prompt de PeopleGPT en [Juicebox](/es/tools/juicebox/) con filtros estructurados. Cada query viene nombrada con su banda esperada de tamaño de pool y las dimensiones que captura y no captura, para que el sourcer elija el canal según el rol en vez de correr la misma query contra tres herramientas y obtener tres pools con formas distintas.
+
+## Cuándo usarlo
+
+- Estás abriendo un rol nuevo y necesitas sembrar tres canales de sourcing en paralelo sin escribir tres queries distintas a mano.
+- Estás afinando una búsqueda con bajo rendimiento — la query actual devuelve 4.000 resultados o 12 resultados, ninguno útil — y necesitas probar si el problema es la cobertura de sinónimos, las cláusulas NOT o el filtro de ubicación.
+- Estás calibrando a un sourcer junior. El output estructurado de la skill hace visible *cuál* señal está haciendo el trabajo de eliminación en cada query, que es la parte que el entrenamiento de Boolean suele saltarse.
+
+## Cuándo NO usarlo
+
+- **Reemplazar el juicio del sourcer sobre qué cuenta como señal.** La skill convierte la rúbrica en una query; no escribe la rúbrica. Si el intake del rol son dos bullets, las queries serán tres sabores de dos bullets y no devolverán mejores candidatos que adivinar.
+- **Scrapear LinkedIn público a escala.** La query X-ray es para uso ocasional contra la superficie pública indexada, con rate limiting bajo control del recruiter. La skill avisa y se rehúsa a paginar en bulk. Hacer sourcing en producción a través de URLs públicas de LinkedIn es una violación de los ToS, independientemente del fallo de *hiQ*.
+- **Construir un panel de diversidad.** Las queries Boolean pueden codificar sesgo a través de términos proxy (nombre de la escuela, afiliación grupal). Usa el [auditor de panel de diversidad](/es/workflows/diversity-slate-auditor-skill/) sobre el pool de candidatos resultante, no sobre la query de búsqueda, para detectar esto.
+- **Búsquedas confidenciales de ejecutivos.** Las queries dejan rastros en historiales compartidos de búsqueda o en cachés del navegador, lo que es un riesgo de exposición. Esas córrelas a mano con el historial de búsqueda desactivado.
+
+## Setup
+
+1. **Pega el bundle.** Coloca `apps/web/public/artifacts/boolean-search-builder-claude-skill/SKILL.md` en tu directorio de skills de Claude Code o en las Skills personalizadas de claude.ai.
+2. **Escribe el intake del rol.** Copia `references/1-role-intake-template.md`, reemplaza cada placeholder. El intake distingue entre *must-haves* (binarios, usados como AND), *nice-to-haves* (aditivos, usados para rankear), *anti-señales* (usadas como NOT), y *política de ubicación* (parseada en filtros estructurados).
+3. **Configura la profundidad de sinónimos.** El default de la skill es 5 sinónimos por dimensión. Súbelo a 7-8 para un rol nicho donde el label en lenguaje natural es ambiguo (p. ej. "platform engineer" significa cosas distintas en empresas distintas). Tope en 10 — más allá de eso las queries devuelven pools con falsos positivos.
+4. **Córrelo primero sobre un rol cerrado.** Genera queries para un rol que sourceaste el trimestre pasado. Compara los sets de sinónimos que la skill eligió con los sinónimos que efectivamente usaste. Afina el intake del rol si la skill se pierde títulos adyacentes obvios o incluye otros poco plausibles.
+
+## Lo que la skill realmente hace
+
+Cinco pasos. El orden importa: el pre-flight de la rúbrica corre primero porque una rúbrica que contiene proxies de clases protegidas va a producir queries que las codifican.
+
+1. **Validar el intake** contra `references/2-rubric-fairness-checklist.md`. Detiene el proceso si el intake del rol incluye scoring por prestigio de escuela, filtrado por patrón de nombre, penalización por gaps de empleo, o "culture fit" sin anclas conductuales. El chequeo corre en el momento del parseo del intake, no en el momento de la generación de la query, así que una rúbrica que viola las reglas nunca llega al paso de expansión de sinónimos.
+2. **Expandir sinónimos por dimensión.** Para cada must-have, generar 5-10 sinónimos anclados en uso de la industria (títulos, nombres de framework, certificaciones). Citar el razonamiento por sinónimo para que el sourcer pueda descartar los poco plausibles antes de que se construya la query. Los sinónimos no se inventan; si el modelo no puede anclar un sinónimo en uso nombrado, se omite.
+3. **Construir tres queries en paralelo.** *Boolean para hireEZ* — agrupamiento explícito con AND/OR/NOT y paréntesis, tope de 5 sinónimos, ubicación parseada en el filtro estructurado de hireEZ en lugar de texto libre. *X-ray de Google* — `site:linkedin.com/in` o `site:github.com` con título entre comillas y un filtro `-` para anti-señales. *PeopleGPT en Juicebox* — prompt en lenguaje natural con filtros estructurados para nivel y ubicación. Cada query apunta a las fortalezas del canal; el mismo rol no se describe de manera idéntica en las tres.
+4. **Estimar la banda de tamaño de pool.** Para cada query, devolver una banda esperada de tamaño de pool (p. ej. "200-800 resultados en hireEZ para esta geografía") con los supuestos nombrados. La banda está calibrada contra el conteo de sinónimos y el filtro de ubicación; los sourcers pueden ajustar más estricto o más amplio según la banda en vez de correr la query y llevarse una sorpresa.
+5. **Surfacing de gaps de cobertura dimensional.** Cada query viene anotada con lo que *no* está capturando — usualmente probabilidad de respuesta (sin filtro de recencia), nivel (Boolean no puede codificar fácilmente "alcance Senior IC"), o señales conductuales (ninguna expresión Boolean captura "lideró migración"). El output hace visible el gap para que el sourcer planifique el siguiente paso (ranking por rúbrica sobre el pool devuelto, o una query de seguimiento para la dimensión faltante).
+
+## Realidad de costos
+
+Por intake-de-rol-a-tres-queries, sobre Claude Sonnet 4.6:
+
+- **Tokens del LLM** — típicamente 4-7k de input (intake + instrucciones de la skill + ejemplos) y 2-3k de output (tres queries + razonamiento por sinónimo + estimación de tamaño de pool). Al precio de lista de Sonnet 4.6, aproximadamente $0,04-0,07 por rol. Un sourcer corriendo 30 roles por trimestre gasta $1-2 en costo de modelo.
+- **Costo del canal** — depende de qué hagas con las queries. Correrlas cuesta la cuota del canal que ibas a gastar de todos modos. La skill en sí no corre contra ninguna API de sourcing.
+- **Tiempo del sourcer** — la ganancia. Escribir tres queries calibradas a mano es 30-60 minutos por rol; la skill toma 5-10 minutos incluyendo leer el razonamiento de sinónimos y descartar términos poco plausibles. El mayor ahorro de tiempo está en afinar búsquedas de bajo rendimiento, donde la estimación de tamaño de pool de la skill hace visible el loop de diagnóstico.
+- **Tiempo de setup** — 20 minutos una sola vez. La plantilla del intake del rol es el artefacto vinculante; los equipos que ya escriben intakes estructurados adoptan la skill en un ciclo de apertura de rol.
+
+## Métrica de éxito
+
+Trackea dos números por rol sourceado:
+
+- **Yield de primera pasada** — proporción de candidatos del pool consultado que pasan el paso de ranking por rúbrica (en el proceso del sourcer o vía la [skill de candidate sourcing](/es/workflows/candidate-sourcing-claude-skill/)). Debe estar en 25-50% para una query calibrada; abajo de 15% significa que la expansión de sinónimos está demasiado floja, arriba de 60% que está demasiado estrecha.
+- **Precisión de la estimación de tamaño de pool** — tamaño real del pool devuelto por el canal vs. la estimación de la skill. Debe caer dentro de ±50% de la banda en una geografía bien conocida. Una desviación mayor significa que el conteo de sinónimos no es el correcto para la especificidad del rol.
+
+## vs alternativas
+
+- **vs AI Match de hireEZ (sugerencia de query nativa)** — las sugerencias de hireEZ son buenas y la UX in-product es más rápida que copiar y pegar desde una Skill. Elige AI Match si vives en hireEZ. Elige la Skill si necesitas queries calibradas para *múltiples* canales (para que el mismo rol golpee hireEZ, Juicebox y X-ray con criterios consistentes), o si quieres tener visible el razonamiento de sinónimos para entrenar a un sourcer junior.
+- **vs un "escríbeme una query Boolean" estilo ChatGPT** — el chat genérico devuelve un string Boolean sin razonamiento por sinónimo, sin estimación de tamaño de pool, sin afinado por canal y sin pre-flight de equidad. La Skill es estructuralmente distinta: fuerza las dimensiones a campos separados, rechaza rúbricas sesgadas y surface el gap de cobertura.
+- **vs plantillas tipo cheat-sheet de Boolean** — las plantillas funcionan para el 80% de los roles que coinciden con la plantilla, y producen queries basura de 4.000 resultados en el 20% de los roles donde los supuestos de la plantilla están mal (stack nicho, alcance híbrido IC/manager, industria regulada). La Skill es el diagnóstico para esos casos extremos.
+- **vs escribir queries a mano** — escribir a mano es lo correcto para roles con una rúbrica estable y repetible donde las heurísticas del sourcer ya codifican los sinónimos. La Skill se gana su costo de setup en roles nuevos o al afinar búsquedas de bajo rendimiento.
+
+## Cuidados
+
+- **Codificación de sesgo a través de términos proxy.** *Guardia:* el pre-flight de equidad en el paso 1 detiene el proceso si el intake del rol nombra proxies de clases protegidas. El prestigio de escuela en particular: no listes escuelas específicas como `must_have`; lista la señal de profundidad técnica con la que esas escuelas tienden a correlacionarse, y deja que la expansión de sinónimos atrape a los graduados de escuelas no-target que tengan la profundidad.
+- **Exposición a los ToS de LinkedIn en X-ray.** *Guardia:* el output de la query X-ray viene anotado con un aviso de "uso manual solamente" y un máximo recomendado de 50 page-fetches por query antes de cambiar a la API de Recruiter o a Juicebox. La Skill no genera scripts de scraping.
+- **Alucinación de sinónimos.** *Guardia:* cada sinónimo en el output cita la fuente del razonamiento ("comúnmente usado en Stripe / Plaid / fintechs", "framework introducido en 2022, el nombre varía"). Los sinónimos sin razonamiento anclado se descartan antes de construir la query. Si el sourcer ve un sinónimo citado que no coincide con el uso real, esa es la señal para afinar el intake del rol.
+- **Drift en la estimación de tamaño de pool.** *Guardia:* la estimación es una banda, no un número, y viene anotada con la geografía y el conteo de sinónimos que asume. Si los resultados reales divergen >2× de la banda, registra el drift y re-afina; no actúes sobre la estimación como si fuera una medición.
+- **Sinónimos obsoletos en stacks que se mueven rápido.** *Guardia:* las fuentes de sinónimos de la skill incluyen un chequeo "última verificación". Para roles muy nuevos (p. ej. posiciones de AI infra donde los títulos cambiaron en 2025-2026), la skill marca los sinónimos como "uso post-2024; verificar en el canal" en vez de afirmarlos.
+
+## Stack
+
+El bundle de la skill vive en `apps/web/public/artifacts/boolean-search-builder-claude-skill/` y contiene:
+
+- `SKILL.md` — la definición de la skill (cuándo invocarla, inputs, método, formato de output, cuidados)
+- `references/1-role-intake-template.md` — plantilla rellenable por rol
+- `references/2-rubric-fairness-checklist.md` — chequeos pre-flight (no editar para hacer que pasen intakes sesgados)
+- `references/3-channel-query-formats.md` — notas de sintaxis por canal (hireEZ, X-ray, Juicebox)
+
+Herramientas que el workflow asume que ya usas: [Claude](/es/tools/claude/) (el modelo), [hireEZ](/es/tools/hireez/) y [Juicebox](/es/tools/juicebox/) (los canales de retrieval). Para rankear el pool devuelto, ver la [skill de candidate sourcing](/es/workflows/candidate-sourcing-claude-skill/).
+
+Conceptos relacionados: [AI sourcing](/es/learn/ai-sourcing/), [passive candidate sourcing](/es/learn/passive-candidate-sourcing/), [recruiting funnel metrics](/es/learn/recruiting-funnel-metrics/).
