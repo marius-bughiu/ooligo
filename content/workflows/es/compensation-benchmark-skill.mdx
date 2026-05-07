@@ -1,0 +1,99 @@
+---
+slug: compensation-benchmark-skill
+canonical_slug: compensation-benchmark-skill
+locale: es
+verticals: [recruiting]
+title: Benchmarking de compensación con Claude
+artifact_type: claude-skill
+tools_used: [claude, ashby, greenhouse]
+roles: [recruiter, compensation-analyst, hiring-manager]
+difficulty: intermediate
+time_to_setup: 30min
+human_tested: false
+translated_from: en/compensation-benchmark-skill.mdx
+translated_at: "2026-05-07T09:10:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "b4b628b622d03221243149b53cc9e316fa0cc42c0c8529d92638ef49c825a91d"
+---
+
+Un Claude Skill que toma el nivel de un puesto, su geografía y un export de encuesta de compensación (Radford, Pave, Carta), y produce una recomendación estructurada de banda salarial por componente (base, equity, bonus / OTE) con percentil nombrado, citación de la encuesta-fuente y las notas de calibración que el recruiter lleva a la llamada de oferta. Reemplaza el malabarismo de pestañas y planillas del recruiter con un único documento que el [hiring manager](/es/learn/recruiting-coordinator/) y el aprobador de finanzas pueden firmar. Publica el rango público (compatible con NYC LL 32-A, CO/CA/WA pay-transparency) como output separado.
+
+## Cuándo usarlo
+
+- Estás publicando un nuevo puesto y necesitas un rango público con fuente defendible (no el framing vago de `industry standard`, ni `percentil 75` sin nombrar la encuesta o la geografía).
+- Estás preparando una oferta y necesitas la banda que el hiring manager pueda aprobar sin medio día de ida y vuelta con finanzas.
+- Estás auditando bandas de compensación existentes trimestralmente y quieres una comparación estructurada de "lo que pagamos" vs. "lo que dice la encuesta" por familia de puesto.
+
+## Cuándo NO usarlo
+
+- **Decisiones unilaterales de compensación fuera de una cadena de aprobación.** El skill produce una recomendación. La filosofía de compensación y la matriz de aprobación son propiedad de People Ops / Finanzas / Comité de Compensación. El skill los informa; no los reemplaza.
+- **Equity comp en startups pre-Serie-B.** El benchmarking de equity en etapas muy tempranas tiene más que ver con la cap table específica de la firma y la trayectoria de dilución que con datos de mercado. Los números de la encuesta no aplican ahí.
+- **Generación de scripts de negociación.** El skill emite una banda; no escribe el lenguaje de negociación. El lenguaje de negociación de compensación auto-generado se lee como frío y daña la [candidate experience](/es/learn/candidate-experience/).
+- **Decisiones de excepción específicas de candidato.** "¿Podemos ofrecer 15% por encima de la banda para este candidato?" es una pregunta para el hiring manager y finanzas, no para el skill. El skill informa al exponer la banda; no aprueba excepciones.
+- **Geografías donde la encuesta tiene datos finos.** Las encuestas cubren bien EE.UU., UE y los principales mercados de APAC; los datos de mercados emergentes (LatAm, África, APAC más pequeño) son más finos. El skill marca las geografías de bajo-N en la salida.
+
+## Setup
+
+1. **Coloca el bundle.** Pon `apps/web/public/artifacts/compensation-benchmark-skill/SKILL.md` en tu directorio de skills de Claude Code.
+2. **Configura la fuente de la encuesta.** El skill lee exports de Radford, Pave, Carta o un CSV personalizado. El schema por fuente vive en `references/1-survey-source-schemas.md`. El skill no llama directamente a las APIs de las encuestas — los exports pasan por la ruta de acceso aprobada de tu compensation analyst.
+3. **Define la filosofía de compensación de la firma.** ¿En qué percentil paga la firma (50, 60, 75)? ¿La suma de base+equity apunta a un percentil objetivo, o cada uno se calibra por separado? La filosofía vive en `references/2-comp-philosophy-template.md` y es el input contra el cual el skill calibra.
+4. **Configura el output de la cadena de aprobación.** El skill emite el rango público como output separado (compatible con NYC LL 32-A, CO/CA/WA pay-transparency). Conecta ese output a tu paso de publicación de oferta (descripción de puesto en Greenhouse / Ashby), o cópialo a mano, según el proceso de tu equipo.
+5. **Dry-run sobre una oferta cerrada.** Haz benchmark de un puesto que cerraste el trimestre pasado. Compara la banda del skill contra lo que la oferta fue en realidad. Si la divergencia es grande, o el export de la encuesta está fuera de ciclo, o el archivo de filosofía de la firma no coincide con cómo se están aprobando las ofertas en realidad.
+
+## Qué hace realmente el skill
+
+Cinco pasos. El orden mantiene los lookups deterministas de la encuesta antes de la calibración impulsada por LLM, porque dejar que el modelo parafrasee los números de la encuesta introduce drift que el recruiter no puede auditar.
+
+1. **Validar la definición del puesto.** Verificar que el nivel, la geografía y la función del puesto estén presentes y coincidan con valores en el export de la encuesta. Detener en campos faltantes o ambiguos ("Senior Engineer" sin un nivel en la escalera de la firma es ambiguo).
+2. **Buscar percentiles de la encuesta.** Lookup determinista, no LLM. Para cada uno de base, equity (anualizado) y bonus / OTE, sacar los percentiles 25 / 50 / 60 / 75 / 90 del export para la celda (nivel, geografía, función) coincidente. Si la celda tiene menos respondientes que el umbral de tamaño de muestra documentado por la encuesta (varía por encuesta: Radford típicamente 5+, Pave típicamente 10+), marcar low-N y rehusarse a recomendar una banda basada en percentiles — hacer fallback a (nivel, función) más amplio sin geografía o a una geografía expandida (ej. "US-wide" en vez de "Bay Area").
+3. **Calibrar contra la filosofía de la firma.** Leer la filosofía de compensación de la firma. Aplicar el percentil objetivo a los números de la encuesta. La salida es una banda estructurada por componente:
+   - Base: target_pct de la encuesta, con un rango de ±10% para absorber variación por nivel del candidato.
+   - Equity: igual; convertir a valor en dólares al strike price actual de la firma para nuevos grants, documentar la matemática.
+   - Bonus / OTE: target_pct sobre el OTE; dividir base/variable según el ratio de la firma para esa función.
+4. **Componer el rango público.** Bajo NYC LL 32-A y los requisitos de pay-transparency de CO/CA/WA, la publicación pública necesita un rango de salario base. Default: "min del borde inferior de la banda al max del borde superior de la banda, expresado como un único rango salarial." Si el puesto cruza estados de EE.UU. con distintos umbrales de transparencia, aplica el rango más amplio. El skill emite esto como output separado para uso directo en la JD.
+5. **Emitir el reporte de recomendación + registro de auditoría.** El reporte tiene: bandas por componente con percentil citado y encuesta fuente, notas de calibración, advertencias de low-N o thin-data, y el rango público. El registro de auditoría es una línea JSONL: puesto, geografía, nivel, percentil objetivo, fuente de la encuesta, fecha del export de la encuesta, banda recomendada — para la auditoría de pay-equity de la firma más adelante en el año.
+
+## Realidad de costos
+
+Por puesto evaluado, en Claude Sonnet 4.6:
+
+- **Tokens de LLM** — típicamente 5-8k de entrada (definición del puesto + filas del export de la encuesta + filosofía + instrucciones del skill) y 1-2k de salida (reporte estructurado). Aproximadamente $0,04-0,08 por puesto. Insignificante.
+- **Costo de acceso a la encuesta** — las suscripciones a las encuestas son el costo limitante (Radford, Pave, Carta van de $15K-$80K+ anuales según cobertura). El skill asume que el compensation analyst ya tiene acceso; no cambia esa matemática.
+- **Tiempo del recruiter / compensation analyst** — la ganancia. Componer a mano una recomendación de compensación lleva 30-90 minutos por puesto (lookup en encuesta + malabarismo de planilla + aplicación de filosofía + redacción de la nota de calibración). El skill toma 5-10 minutos incluyendo el sanity check del dry-run.
+- **Tiempo de setup** — 30 minutos una sola vez para el archivo de filosofía y la integración del export de encuesta. El archivo de filosofía rara vez se revisa; los exports de encuesta se refrescan trimestralmente.
+
+## Métrica de éxito
+
+Trackea tres números, trimestralmente:
+
+- **Tasa de aceptación de ofertas en 3 semanas** — la compensación calibrada impulsa la aceptación. Por debajo de 60% en tu geografía estás pagando de menos; por encima de 90% puedes estar pagando de más. Ambas direcciones importan; el número correcto depende de la filosofía de compensación de la firma (las startups con alto equity aceptan base más bajo; las firmas mid-stage con alto base aceptan base más alto).
+- **Tasa de edición de la banda post-skill** — la proporción de bandas recomendadas por el skill que el hiring manager o finanzas editan antes de aprobar. Debería estar entre 10-25%. Por encima de 40% significa que el archivo de filosofía no refleja el comportamiento real de aprobación; por debajo de 5% significa que el panel está sellando con el visto bueno (el modo de falla contra el cual el skill está diseñado).
+- **Drift de la auditoría de pay-equity** — en la revisión anual de pay-equity, ¿las recomendaciones del skill correlacionan con dónde aterrizaron las ofertas reales? Si la auditoría revela brechas de equity que las recomendaciones del skill habrían cerrado, el skill está haciendo su trabajo; si la auditoría revela brechas que las recomendaciones del skill habrían ampliado, el archivo de filosofía o la calibración están sesgados.
+
+## vs alternativas
+
+- **vs los reportes de Pave / Carta / Radford / Mercer directamente.** Los reportes son los datos fuente; el skill los compone en una recomendación por puesto. Elige solo los reportes si tu compensation analyst vive en ellos y el recruiter solo consume "dime el percentil 75". Elige el skill si el recruiter necesita la nota de calibración + rango público + registro de auditoría sin el analista en el loop para cada puesto.
+- **vs estilo "qué debería pagar a un senior engineer en NYC" en ChatGPT.** El chat genérico devuelve datos parafraseados de encuestas sin trail de auditoría y sin fuente fijada por versión — eso no es defendible al momento de la auditoría de pay-equity. El skill cita el export de la encuesta por nombre y fecha.
+- **vs plantillas de planilla.** Las plantillas están bien hasta que la filosofía de la firma cambia o el export de la encuesta se refresca; ahí cada plantilla guardada se vuelve obsoleta silenciosamente. El skill lee de fuentes actuales en cada corrida.
+- **vs no hacer benchmarking.** El default en muchas firmas más pequeñas. Modo de falla predecible: las brechas de pay-equity emergen en la auditoría anual, y al recruiter se le culpa por ofertas individuales que estaban dentro de la práctica normal de la firma. El benchmarking defendible es la intervención más barata contra esto.
+
+## Watch-outs
+
+- **Staleness del export de encuesta.** *Guard:* el skill lee la metadata fechada del export y advierte si el export tiene más de 6 meses. Los datos de encuesta cambian más rápido que anualmente; el refresh trimestral es el piso.
+- **Mapeo geográfico erróneo.** *Guard:* el skill empareja la geografía del puesto contra la taxonomía geográfica de la encuesta de forma explícita ("SF Bay Area" de Pave no es la misma celda que "San Francisco MSA" de Radford). Si el match es ambiguo, el skill se detiene y le pide al recruiter desambiguar en lugar de elegir un default.
+- **Celda de bajo N.** *Guard:* el skill se rehúsa a recomendar una banda basada en percentiles cuando la celda de la encuesta tiene menos respondientes que el umbral documentado por la encuesta. Hace fallback a una celda más amplia (función más amplia, geografía más amplia) y deja constancia del fallback.
+- **Drift de comparación de equity.** *Guard:* los valores de equity se anualizan y se convierten al strike price actual de la firma. La matemática de conversión está documentada en el reporte. El registro de auditoría guarda los valores crudos y convertidos para que auditorías futuras puedan re-derivar.
+- **Rango público demasiado estrecho.** *Guard:* si el rango público es tan estrecho que funciona como un único número, el skill advierte. Publicar "$140K-$145K" es una violación del espíritu (y posiblemente de la letra) de NYC LL 32-A, que requiere un rango de "buena fe". El skill aplica un ancho mínimo de banda por geografía.
+- **Propagación de sesgo a través de la compensación histórica.** *Guard:* si el archivo de filosofía de la firma se calibra por "matchear lo que hemos pagado en esta banda antes", el skill propaga las brechas de pago que existan en los datos históricos. El skill marca esto cuando el matching de filosofía sigue de cerca el pago histórico en lugar de los percentiles de la encuesta, y recomienda que el compensation analyst corra un check separado de pay-equity.
+
+## Stack
+
+El bundle del skill vive en `apps/web/public/artifacts/compensation-benchmark-skill/` y contiene:
+
+- `SKILL.md` — la definición del skill
+- `references/1-survey-source-schemas.md` — schemas de export por fuente (Radford, Pave, Carta, CSV personalizado)
+- `references/2-comp-philosophy-template.md` — archivo de filosofía por firma rellenable
+
+Herramientas que el workflow asume que usas: [Claude](/es/tools/claude/) (el modelo), [Ashby](/es/tools/ashby/) o [Greenhouse](/es/tools/greenhouse/) (el ATS, para publicar el rango público).
+
+Conceptos relacionados: [recruiting funnel metrics](/es/learn/recruiting-funnel-metrics/), [offer acceptance rate](/es/learn/offer-acceptance-rate/), [candidate experience](/es/learn/candidate-experience/).
