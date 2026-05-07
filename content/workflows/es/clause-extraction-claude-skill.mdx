@@ -1,0 +1,105 @@
+---
+slug: clause-extraction-claude-skill
+canonical_slug: clause-extraction-claude-skill
+locale: es
+verticals: [legal-ops]
+title: Extracción de cláusulas para cualquier contrato con Claude
+artifact_type: claude-skill
+tools_used: [claude, ironclad]
+roles: [legal-ops, in-house-counsel, paralegal, contract-manager]
+difficulty: beginner
+time_to_setup: 20min
+human_tested: false
+translated_from: en/clause-extraction-claude-skill.mdx
+translated_at: "2026-05-07T06:15:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "e96906761293209a349ebbd3af39f252c368a3f0b281185c690c2780248e70eb"
+---
+
+Un Claude Skill que toma un único contrato firmado — `.docx` o `.pdf` con capa de texto — y emite un registro JSON anclado con citas que contiene las cláusulas que tu CLM realmente indexa: ley aplicable, límite de responsabilidad, indemnización, plazo, renovación automática, causales de terminación, condiciones de pago, propiedad intelectual, plazo de confidencialidad, además de cualquier campo personalizado que configures (residencia de datos, MFN, cambio de control, cesión). Cada valor extraído incluye un extracto literal, una cita `{page, char_span}` y un puntaje de confianza, de modo que el revisor downstream pueda verificar en segundos en lugar de releer el contrato.
+
+Esta página cubre cuándo ejecutarlo, cuándo explícitamente no hacerlo, cuánto cuesta y los modos de falla nombrados que debes dimensionar antes de apuntarlo a un repositorio en producción.
+
+## Cuándo usarlo
+
+Recurre al skill cuando tengas una necesidad de salida estructurada contra contratos que ya hayan superado la etapa de privilegio:
+
+- **Backfill de datos en CLM.** Heredaste un repositorio de archivos planos (Box, SharePoint, unidad de red) y necesitas poblar los campos de metadatos de [Ironclad](/es/tools/ironclad/) o [Agiloft](/es/tools/agiloft/) sin quemar un trimestre de paralegal.
+- **Construcción de biblioteca de cláusulas.** Quieres cada cláusula de "límite de responsabilidad" en todo el portafolio para que la [biblioteca de cláusulas](/es/learn/clause-library-design/) refleje lo que realmente acordaste, no la posición declarada del playbook.
+- **Diligencia.** Tienes 48 horas para identificar cláusulas de cambio de control, cesión y cliente más favorecido en el conjunto de contratos de un objetivo antes de cerrar una operación.
+- **Triaje de renovaciones.** Necesitas marcar cada contrato con renovación automática en los próximos 90 días, con el campo notice-period-days completado.
+
+El bundle del artefacto vive en `apps/web/public/artifacts/clause-extraction-claude-skill/` e incluye:
+
+- `SKILL.md` — la definición del Skill con método, formato de salida y advertencias
+- `references/1-clause-taxonomy.md` — las cláusulas a extraer por tipo de contrato, con encabezados y sinónimos
+- `references/2-output-schema.json` — el JSON Schema contra el cual valida cada registro (fíjalo a una versión)
+- `references/3-citation-format.md` — la gramática de citas y las reglas para los fallbacks de "no presente" / "no se pudo extraer"
+
+## Cuándo NO usarlo
+
+El skill es estrecho a propósito. Rechaza la invocación en cualquiera de estos casos.
+
+- **Borradores privilegiados en negociación activa.** La política de IA de la mayoría de los equipos legales (y la [plantilla de política de IA](/es/learn/ai-policy-for-legal-teams/) que recomendamos) traza una línea dura ante borradores en negociación — particularmente redlines de outside counsel y producto de trabajo del abogado. Este skill es para contratos firmados o casi finales que ya hayan superado la cuestión del privilegio. Si no estás seguro de si un documento ha superado esa etapa, la respuesta es no.
+- **Cualquier cosa vía proveedores de IA que no sean Tier-A.** Ejecuta solo contra el endpoint Tier-A aprobado por tu firma (Anthropic API directa, o tu tenant empresarial de Claude). Nunca el chatbot de consumo. Nunca un plugin de navegador. Nunca un wrapper SaaS no auditado que prometa "Claude por debajo". Enviar un contrato a través de un proveedor Tier-B es un vector de fuga de privilegio — rechaza la invocación en lugar de saltarte la política de IA. El propio Skill codifica una allowlist de endpoints; si lo ejecutas dentro de Claude Code o Claude.ai con tu tenant empresarial, estás bien.
+- **Redacción o redlining.** Este skill solo lee. Para redlining, usa el skill separado de contract-redline.
+- **Interpretación legal.** La salida es texto + cita. Si un límite de responsabilidad de 12 meses es "suficientemente bueno" dado el contexto del trato es una decisión de criterio que se queda con el abogado.
+
+## Setup
+
+1. Coloca el bundle en `~/.claude/skills/` (Claude Code) o sube el directorio `references/` y `SKILL.md` a un proyecto en Claude.ai.
+2. Reemplaza el contenido de `references/1-clause-taxonomy.md` con la taxonomía real de tu firma. La taxonomía por defecto trae las cláusulas comunes de MSA; la mayoría de las firmas agrega 5 a 10 campos personalizados (residencia de datos por jurisdicción, carveouts de cambio de control, plazo de no captación, alcance de MFN).
+3. Fija `references/2-output-schema.json` a una versión. Sube `extractor_version` en el schema y en el Skill en cada cambio de taxonomía para que los consumidores downstream puedan detectar drift.
+4. Ejecuta sobre un contrato conocido — elige uno cuyos valores de cláusula ya tengas en el CLM. Compara el JSON extraído contra el registro del CLM. Itera sobre los sinónimos de la taxonomía hasta que coincida.
+5. Ejecuta a escala. El Skill es por contrato; orquesta el batch en n8n, en un loop de shell, o en el hook de ingesta de tu CLM.
+
+## Qué hace realmente el skill
+
+Cuatro pasos, en orden.
+
+1. **Extracción de texto preservando layout.** El `.docx` se parsea vía el XML de docx; el `.pdf` vía pdfplumber para que sobrevivan los números de página y los character spans con bounding box. Si el PDF no tiene capa de texto (imagen escaneada), el Skill aborta con `error: "ocr_required"` en lugar de emitir texto vacío. Enrutar PDFs escaneados a OCR es una preocupación upstream separada; este Skill no hace OCR, porque producir silenciosamente una extracción "limpia" vacía a partir de un escaneo es peor que fallar de forma ruidosa.
+2. **Extracción anclada con citas, una pasada por cláusula.** Para cada cláusula en la taxonomía: encuentra párrafos candidatos por coincidencia de encabezado + sinónimos, pasa solo esos candidatos (no el contrato completo) a Claude con la definición de la cláusula, y exige de vuelta el valor, un extracto literal de ≤ 280 caracteres, la cita `{page, char_span}` y un puntaje de confianza `high | medium | low`. **Cualquier extracto que no sea byte-idéntico a un substring de los párrafos fuente es rechazado** — esta es la guardia anti-alucinación, y es no negociable. Los prompts por cláusula (vs un mega-prompt) te permiten reintentar solo las fallas, capar los tokens de entrada por llamada y aislar la alucinación a un solo campo en lugar del registro completo.
+3. **Validación de schema** contra el `output-schema.json` fijado. Los errores de validación aterrizan en el array `errors` de la salida. El Skill no coacciona tipos en silencio.
+4. **Fallback de "no presente".** Cuando una cláusula no se localiza, emite `value: null, status: "not_present", note: "Searched headings: [...]"`. No adivines. Los pipelines de backfill de CLM tratan `null + status:not_present` como ausencia confirmada (archivar el contrato sin ese campo) y `null + status:error` como necesita re-ejecución (no archivar). Confundir los dos corrompe los datos del CLM con el tiempo.
+
+## Realidad de costos
+
+Con el pricing de Claude en 2026 — pongamos ~$3/M de tokens de entrada y ~$15/M de tokens de salida para el modelo cost-effective usado dentro del Skill — el costo está dominado por los tokens de entrada, y los tokens de entrada están dominados por la longitud de los párrafos candidatos (porque el Skill nunca envía el contrato completo, solo los párrafos coincidentes por cláusula).
+
+Números aproximados por contrato:
+
+- **Contrato corto (5 páginas, ~3K tokens de entrada en todas las llamadas por cláusula, ~500 tokens de salida):** ~$0,02 por contrato.
+- **MSA estándar (20 páginas, ~12K tokens de entrada, ~1K tokens de salida):** ~$0,05 por contrato.
+- **MSA enterprise largo con anexos (60 páginas, ~35K tokens de entrada, ~2K tokens de salida):** ~$0,13 por contrato.
+
+En un equipo in-house típico de mid-market que pasa ~200 contratos nuevos y heredados al mes por el pipeline, eso son $10–$30/mes en gasto de tokens. El costo es un error de redondeo frente a una hora de paralegal. Donde deja de ser error de redondeo es en el proyecto de diligencia de 50.000 contratos — a $0,05 cada uno, son $2.500, que sigue siendo barato, pero vale la pena presupuestarlo de antemano y no descubrirlo en el extracto de la tarjeta de crédito.
+
+El costo no-token: cada extracción con `confidence: medium | low` (y un sample del 10% de `high`) necesita revisión humana. Planifica ~30 segundos por registro en `medium` y ~2 minutos en `low`. El Skill es más rápido que un paralegal, no gratis.
+
+## Métrica de éxito
+
+Dos métricas que vale la pena instrumentar desde el día uno.
+
+- **Precisión de extracción sobre un set etiquetado.** Construye un gold set de 50 contratos con extracciones manuales. Mide precisión y recall por cláusula. Objetivo: ≥ 95% de precisión en las cláusulas requeridas (governing_law, liability_cap, term_length_months, auto_renewal). Por debajo de eso, los falsos positivos envenenan el CLM y los revisores aprenden a ignorar el campo. El recall importa menos — `not_present` es una respuesta load-bearing, y una cláusula no detectada se enruta a revisión humana de todas formas.
+- **Tiempo por contrato, end to end.** Incluyendo la pasada de revisión humana sobre los registros marcados. Objetivo para un MSA de 20 páginas: menos de 4 minutos de wall-clock, vs. 20-30 minutos de extracción manual completa. Si no estás viendo 5×, la cola de revisión humana es demasiado agresiva — ajusta los umbrales de confianza.
+
+## vs alternativas
+
+- **vs la extracción nativa de cláusulas con IA de [Ironclad](/es/tools/ironclad/).** La extracción incorporada de Ironclad es excelente si todos los contratos que te importan viven en Ironclad. Tropieza cuando estás haciendo backfill desde fuera de Ironclad (la ruta de import es torpe) y cuando quieres cláusulas personalizadas más allá del set templado de Ironclad. Este Skill corre contra cualquier archivo en disco y usa tu taxonomía. Si vives enteramente en Ironclad, usa su extracción nativa; si estás alimentando múltiples destinos o haciendo diligencia sobre un repositorio no-Ironclad, este Skill es el mejor encaje.
+- **vs [Kira Systems](/es/tools/kira-systems/).** Kira es el incumbente de grado enterprise — alta precisión, biblioteca profunda de templates, caro (seis cifras), ciclo de venta largo, requiere datos de entrenamiento por cláusula personalizada. Si eres una firma BigLaw haciendo diligencia M&A a escala, Kira se gana su precio. Si eres un equipo de legal-ops de 50 personas haciendo backfill de unos pocos miles de MSAs heredados, Kira es overkill y este Skill es dos órdenes de magnitud más barato para la precisión que necesitas.
+- **vs revisión manual de paralegal.** La comparación honesta. Un paralegal extrayendo 10 cláusulas de un MSA de 20 páginas tarda 20-30 minutos y obtiene ≥ 99% de precisión en las cláusulas fáciles (ley aplicable, plazo) y ~90% en las difíciles (estructura del límite de responsabilidad, carveouts de indemnización). Este Skill lo hace en menos de un minuto a ~$0,05, llega a ~95% en fáciles y ~85% en difíciles, y enruta el resto a un humano vía la flag de confianza. La movida correcta para la mayoría de los equipos es híbrida: Skill en cada contrato, paralegal en los registros marcados.
+
+## Watch-outs
+
+- **Fuga de privilegio vía proveedor Tier-B.** Enrutar un documento privilegiado a través de un endpoint de IA no aprobado puede renunciar al privilegio. **Guard:** el Skill verifica una allowlist de endpoints codificada (`api.anthropic.com` más tu tenant empresarial) al inicio y se rehúsa a correr si el endpoint configurado no está en ella. Documenta al dueño de la allowlist en tu política de IA.
+- **Vacíos de texto inducidos por OCR en PDFs escaneados.** Un PDF de imagen escaneada sin capa OCR se extrae como páginas vacías; sin una guardia, el Skill reportaría la mayoría de las cláusulas como `not_present` y parecería una corrida limpia. **Guard:** el paso 1 detecta páginas con < 50 caracteres extraídos y aborta con `ocr_required` en lugar de emitir un registro engañoso. Enruta el contrato por OCR upstream y vuelve a ejecutar.
+- **Cláusulas alucinadas.** Los modelos amablemente inventarán una cláusula de "terminación por conveniencia" que no existe si se les pide. **Guard:** la verificación de extracto byte-idéntico-a-substring del paso 2 — cualquier extracto no presente literalmente en los párrafos fuente es rechazado y la cláusula registra `status: "error", error: "excerpt_not_grounded"`. No hay ruta de alucinación de alta confianza por construcción.
+- **Drift de schema entre versiones de contrato.** Una actualización de taxonomía que cambia `liability_cap` de string a un objeto `{type, amount, period}` rompe silenciosamente a cada consumidor downstream. **Guard:** fija `extractor_version` en `references/2-output-schema.json` y súbelo en cada cambio de taxonomía o schema. Los consumidores downstream se basan en la versión, no en una asunción de estabilidad.
+- **Resolución de términos definidos.** "As set forth in Schedule A" devuelve la referencia, no el valor. **Guard:** el Skill detecta `as set forth in` / `as defined in` y emite `confidence: medium` con `note: "cross-reference, manual resolution required"`. La auto-resolución ingenua es peor que la flag honesta.
+- **No es asesoría legal.** La extracción es mecánica. Si un cap de 12 meses es aceptable para este trato es criterio que se queda con el abogado.
+
+## Stack
+
+- **Claude** — orquestación de extracción de texto, extracción de cláusulas anclada con citas, validación de schema
+- **[Ironclad](/es/tools/ironclad/)** (opcional) — destino CLM principal para los registros extraídos. Ver también [alternatives-to-ironclad](/es/vs/alternatives-to-ironclad/) y la comparación de [best CLM platforms](/es/vs/best-clm-platforms/) si todavía estás eligiendo uno.
+- **[Contexto de CLM](/es/learn/contract-lifecycle-management/)** — qué es CLM y dónde encaja la extracción.
