@@ -1,0 +1,90 @@
+---
+slug: dsar-intake-triage-n8n
+canonical_slug: dsar-intake-triage-n8n
+locale: es
+verticals: [legal-ops]
+title: Intake y triaje de DSAR / data-subject-request con n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops, privacy-counsel, dpo]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/dsar-intake-triage-n8n.mdx
+translated_at: "2026-05-10T00:00:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "4399840da13687b5c80f9b702bd4136e2f0c5a20f1a9c3455a906e404a8e6246"
+---
+
+Un flow de n8n que recibe data-subject requests (Art. 15-22 del GDPR, §1798.100-105 de CCPA-CPRA, equivalentes bajo UK GDPR / LGPD / VCDPA) en una bandeja `privacy@` dedicada o en un formulario web, los clasifica por tipo (acceso / eliminación / rectificación / portabilidad / oposición / restricción / decisión-automatizada), los enruta por jurisdicción al counsel correcto, abre un registro de seguimiento con el reloj del plazo de respuesta corriendo, y dispara una solicitud de verificación al titular de los datos. Reemplaza el spreadsheet manual de intake de DSARs que silenciosamente incumple el plazo de 1 mes del GDPR / 45 días del CCPA.
+
+## Cuándo usarlo
+
+- La firma procesa datos personales de la UE/Reino Unido (gatillos de GDPR / UK GDPR) O información personal de California en el umbral de CCPA-CPRA O está sujeta a equivalentes de LGPD / VCDPA / CPA / CDPA.
+- Los DSARs entrantes están en una frecuencia donde el tracking manual empieza a fallar (usualmente >5 por mes).
+- La firma tiene un [workflow de derechos del titular de datos](/es/learn/gdpr-for-legal-teams/) definido — qué cuenta como verificación, quién responde, de qué fuentes de datos extraer. El flow es la orquestación; el workflow es el contenido.
+
+## Cuándo NO usarlo
+
+- **Auto-responder DSARs sin revisión del counsel.** El flow abre el registro de seguimiento y verifica la identidad. La respuesta sustantiva (datos extraídos, decisión sobre alcance, comunicación al titular) es decisión del counsel.
+- **Saltarse el paso de verificación.** Auto-actuar sobre un DSAR no verificado es el modo de falla más común de DSAR — la solicitud puede venir de alguien distinto al titular, o puede ser una solicitud maliciosa para extraer datos de otra persona. El paso de verificación del flow no es opcional.
+- **Reemplazar el trabajo subyacente de extracción de datos.** El flow rastrea; no extrae datos de los sistemas. Cada sistema que la firma usa necesita su propio camino de extracción (manual o automatizado); el flow muestra qué extraer y de dónde.
+- **DSARs sujetos a reglas de industria específicas** (solicitudes de registros médicos HIPAA, solicitudes de registros estudiantiles FERPA, solicitudes de registros financieros GLBA). Aplican procedimientos distintos de verificación y respuesta; los defaults de este flow son GDPR + CCPA-CPRA.
+
+## Setup
+
+1. **Importa el flow** desde `apps/web/public/artifacts/dsar-intake-triage-n8n/dsar-intake-triage-n8n.json`.
+2. **Conecta credenciales.** Cinco requeridas: IMAP / Gmail (bandeja privacy@), Anthropic (clasificación con Claude), Postgres (tabla de tracking de DSAR), SMTP (envío de verificación), Slack (notificación al counsel).
+3. **Provisiona la tabla de tracking.** Schema en `_README.md` — keyed sobre `dsar_id`, capturando timestamp de recepción, jurisdicción, tipo de solicitud, plazo, estado.
+4. **Redacta la plantilla de verificación.** Por jurisdicción (GDPR vs CCPA-CPRA tienen estándares de verificación distintos), escribe una plantilla bajo `n8n/data/verification/<jurisdiction>.md`.
+5. **Configura el routing.** Routing al counsel por jurisdicción (UE → DPO, US → privacy counsel, etc.) y routing por tipo de solicitud (acceso vs eliminación van por caminos distintos).
+6. **Haz un dry-run con DSARs cerrados.** Reproduce los DSARs del trimestre pasado (con identidades anonimizadas). Confirma que la clasificación y el routing coincidan con lo que el privacy counsel hizo realmente.
+
+## Qué hace el flow
+
+Seis nodos. Clasificación antes del routing porque el routing depende de la clasificación.
+
+1. **Inbox Poll / Webhook** — sondea la bandeja `privacy@` cada 5 minutos O recibe webhooks desde un formulario web de derechos de privacidad. Extrae sujeto, cuerpo, remitente, timestamp.
+2. **Classify** — llamada a Claude. Devuelve `{request_type, jurisdiction, subject_email, urgency_signal, malicious_signal}`. El malicious_signal es distinto de cero ante patrones como "soy el abogado de X" o "esto es para discovery en litigio" — esos enrutan diferente y no siguen el camino del DSAR de consumidor.
+3. **Open Tracking Record** — INSERT en la tabla DSAR con plazo computado por jurisdicción (GDPR: 1 mes desde recepción; CCPA-CPRA: 45 días desde recepción; etc.).
+4. **Send Verification Request** — envía un email de verificación al titular de datos con la plantilla por jurisdicción. La verificación pide prueba de identidad suficiente para actuar sobre un DSAR — qué cuenta varía por jurisdicción (GDPR es "necesaria y proporcional"; CCPA-CPRA exige verificar a un "grado razonable de certeza").
+5. **Notify Counsel** — Slack DM al counsel enrutado con: clasificación, jurisdicción, countdown del plazo, link al registro de tracking. El trabajo del counsel desde aquí es supervisar la extracción de datos y la respuesta sustantiva.
+6. **Audit Append** — una fila por DSAR por intake en la tabla de auditoría.
+
+## Realidad de costos
+
+- **Tokens del LLM** — típicamente 2-4k de input + 0.5-1k de output por DSAR. ~USD 0.02-0.04 por solicitud. Despreciable.
+- **Conteo de ejecuciones de n8n** — ~5-15/día en una firma mid-size promedio; bien dentro del plan Starter.
+- **Tiempo del counsel** — el gane está en la carga de tracking y plazos, no en el trabajo sustantivo. El tracking manual de plazos cuesta ~30 minutos por DSAR semanalmente; la operación del flow expone problemas en el intake y libera el tiempo del counsel para la respuesta.
+
+## Métrica de éxito
+
+- **Tasa de cumplimiento de plazos** — proporción de DSARs respondidos dentro del plazo legal. Debería ser 100%; por debajo, la firma está expuesta a multas del Art. 83 del GDPR (techo del 4% de revenue global por falla sistemática) y a enforcement de CCPA-CPRA.
+- **Tiempo de ida-y-vuelta de verificación** — debería caer por debajo de 24 horas desde el intake (el email de verificación sale inmediatamente al recibir).
+- **Tasa de mala clasificación al revisar el counsel** — proporción de DSARs que el counsel reclasifica. Debería estar bajo el 10%; por encima, el prompt de clasificación o la tabla de routing necesitan ajuste.
+
+## vs alternativas
+
+- **vs los módulos DSAR de OneTrust / TrustArc / Securiti.** Esos productos manejan DSAR de extremo a extremo incluyendo integraciones de extracción por sistema. Elígelos para firmas de alto volumen o firmas que necesiten la plataforma completa de programa de privacidad. El flow es el punto medio liviano.
+- **vs Excel + reglas de Outlook.** El default y la fuente de plazos incumplidos.
+- **vs el counsel revisa cada email de intake.** Funcional a muy bajo volumen; el flow gana su costo de setup pasando los ~5 DSARs/mes.
+
+## Watch-outs
+
+- **Clasificación en solicitudes borderline.** *Guard:* `urgency_signal` y `malicious_signal` se exponen como bandas de confianza; las clasificaciones ambiguas enrutan al privacy counsel para reclasificación en lugar de adivinar.
+- **Drift del estándar de verificación.** *Guard:* las plantillas por jurisdicción fijan el estándar de verificación. La verificación UE pide menos que la verificación CCPA-CPRA.
+- **Suplantación de identidad como solicitante.** *Guard:* el email de verificación va al email registrado (cuando aplica) — no al email desde el cual vino la solicitud. Si la solicitud viene de `attacker@example.com` afirmando ser `victim@firm.com`, la verificación llega a victim@firm.com.
+- **Miss de routing entre jurisdicciones.** *Guard:* las solicitudes con múltiples jurisdicciones plausibles enrutan a TODOS los counsel aplicables, no al primer match. La respuesta sustantiva selecciona la jurisdicción de control.
+- **Mal cálculo del calendario de plazos.** *Guard:* la matemática de plazos corre en el timezone del workflow; el log de auditoría captura el timestamp del plazo explícitamente para que un counsel pueda verificar contra el calendario de la firma.
+- **Almacenamiento de datos de DSAR no verificados.** *Guard:* el registro de tracking guarda solo subject-email y tipo de solicitud hasta que la verificación pasa; el cuerpo completo de la solicitud no se propaga a sistemas más allá del log de auditoría hasta que la verificación lo confirma.
+
+## Stack
+
+El bundle vive en `apps/web/public/artifacts/dsar-intake-triage-n8n/`:
+
+- `dsar-intake-triage-n8n.json` — el export del flow
+- `_README.md` — schema, credenciales, plantillas de jurisdicción
+
+Tools: [n8n](/es/tools/n8n/), [Claude](/es/tools/claude/), [Slack](/es/tools/slack/).
+
+Relacionado: [GDPR for legal teams](/es/learn/gdpr-for-legal-teams/), [legal intake](/es/learn/legal-intake/), [legal knowledge management](/es/learn/legal-knowledge-management/).
