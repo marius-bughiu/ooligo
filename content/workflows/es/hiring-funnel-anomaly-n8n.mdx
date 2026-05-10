@@ -1,0 +1,93 @@
+---
+slug: hiring-funnel-anomaly-n8n
+canonical_slug: hiring-funnel-anomaly-n8n
+locale: es
+verticals: [recruiting]
+title: Detección de anomalías en el funnel de hiring con n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, slack]
+roles: [recruiting-leader, talent-acquisition, recruiting-ops]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/hiring-funnel-anomaly-n8n.mdx
+translated_at: "2026-05-10T01:30:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "4e174fe537288513d7b5b6ce199683e752091ae4e7369348a2b9984a5336c024"
+---
+
+La mayoría de los equipos de reclutamiento descubren los problemas del funnel en el quarterly business review. Para entonces, el rol lleva sesenta días abierto, dos de los tres mejores candidatos firmaron en otro lado, y el hiring manager perdió la confianza en el [pipeline](/es/learn/recruiting-funnel-metrics/). Este workflow cierra esa brecha. Un flow de n8n corre cada noche contra tu [ATS](/es/learn/ats-vs-recruiting-crm/), calcula tasas de conversión y dwell times por rol-y-stage contra una baseline móvil de 90 días, marca desviaciones estadísticamente significativas, le pide a Claude que explique cada una en una o dos oraciones, y publica el resultado a un canal de Slack con ruteo según tipo antes del stand-up de la mañana siguiente.
+
+El bundle en `apps/web/public/artifacts/hiring-funnel-anomaly-n8n/hiring-funnel-anomaly-n8n.json` trae quince nodos completamente configurados — dos triggers programados, un pull de Ashby, un nodo de Code de agregación con la lógica real de anomalías, un lookup de baseline en Postgres, el detector, un insert con dedupe, la llamada a Claude para la narrativa, el formateador de Slack, y un path paralelo de tendencia de time-to-hire. El `_README.md` que lo acompaña documenta las cuatro credenciales, las tres tablas de Postgres que tienes que crear, y una verificación de primer-run de cinco pasos que ejercita cada rama.
+
+## Cuándo usarlo
+
+Deberías shippear esto cuando tu equipo de reclutamiento corre al menos ocho a diez roles activos en paralelo, el equipo lleva al menos noventa días en el mismo [ATS](/es/learn/ats-vs-recruiting-crm/) ([Ashby](/es/tools/ashby/), [Greenhouse](/es/tools/greenhouse/), o [Lever](/es/tools/lever/)) para que exista una baseline, y al menos una persona del equipo tiene la salud del funnel como parte de su trabajo. Por debajo de esos umbrales la relación señal-ruido está mal: las baselines tienen demasiado ruido para fijar un umbral de z-score útil, y no hay nadie que vaya a actuar realmente sobre la alerta cuando dispare.
+
+La otra precondición es disciplina taxonómica. Si tus stages tienen nombres distintos para cada rol, o los hiring managers crean nuevos stages libremente a mitad de búsqueda, la agregación por rol-y-stage producirá una larga cola de pares (rol, stage) con sample size de uno. La guarda `MIN_SAMPLE = 20` del detector suprime esos, lo cual es correcto, pero terminarás sin ninguna señal en lugar de señal equivocada. Arregla la taxonomía de stages primero.
+
+## Cuándo NO usarlo
+
+No shippees esto si corres menos de cinco roles activos. Las cuentas no dan — no hay suficientes eventos por par (rol, stage) para calcular una desviación estándar significativa de baseline, y vas a gastar más tiempo afinando umbrales que actuando sobre alertas. Una revisión semanal manual en un spreadsheet es honestamente mejor a esa escala.
+
+No shippees esto si tu ATS es el único lugar donde existe data de candidatos y todavía no tienes un warehouse de analítica separado. El flow asume que puedes levantar una base Postgres a la que se le permita espejear data de candidatos. Si tu equipo de privacidad o de política de IA todavía no ha firmado para que la data de candidatos salga del ATS, corre este ejercicio solo sobre conteos agregados a nivel stage — quítale el cálculo de dwell a nivel candidato — y revísalo cuando la política se ponga al día.
+
+No shippees esto encima de una taxonomía de stages que cambia cada semana. La detección de anomalías sobre una definición móvil de "stage" produce alertas que nadie puede interpretar. Estabiliza la taxonomía durante al menos un trimestre antes de prender el flow.
+
+Por último, no shippees esto si la respuesta de tu equipo a una alerta de funnel sería "ya lo sabíamos". El valor del workflow es la latencia de 24 horas sobre una métrica que de otra forma saldría a la luz en 60 días. Si ya tienes un standup diario donde esto se revisa en vivo, la alerta es redundante.
+
+## Setup
+
+Construye la baseline primero. Corre un backfill de una sola vez sobre los últimos 90 días usando el mismo endpoint del application-feed de Ashby que usa el workflow, agrupa por `(role_id, from_stage, to_stage)`, y escribe `conversion_rate_mean`, `conversion_rate_stddev`, `dwell_seconds_p50`, `stage_sla_seconds`, y `sample_size` a la tabla `funnel_baselines`. El DDL para esa tabla — y para `role_tth_baselines` y `anomaly_alerts` — está en el `_README.md` del bundle.
+
+Importa `hiring-funnel-anomaly-n8n.json` del bundle a n8n. El workflow viene inactivo a propósito. Abre `Settings` y confirma que la timezone coincide con el horario laboral de tu equipo; los dos nodos Cron evalúan sus expresiones en la timezone del workflow, no en UTC. Crea las cuatro credenciales referenciadas por nombre en el JSON: `PLACEHOLDER_ASHBY_CRED_ID`, `PLACEHOLDER_POSTGRES_CRED_ID`, `PLACEHOLDER_ANTHROPIC_CRED_ID`, `PLACEHOLDER_SLACK_CRED_ID`. El README te lleva a través de cada una incluyendo los scopes de Slack (`chat:write`, `chat:write.public`) y la forma del Header Auth de Anthropic.
+
+Pasa por la verificación de primer-run de cinco pasos antes de activar. El paso dos — insertar una fila sintética de baseline que tenga garantizado disparar — es el que más gente se salta y luego se pregunta por qué no salta ninguna alerta; hazlo. El paso tres confirma que la dedupe key está haciendo su trabajo, que es la guarda de costo alrededor de la llamada a Claude.
+
+Refresca las baselines mensualmente. Las tasas de conversión drift con la estacionalidad, las condiciones de mercado y la composición del equipo, y una baseline desactualizada produce o spam de alertas o regresiones perdidas. El refresh es el mismo query que armó la baseline; cron-éalo como un workflow separado de n8n o como un job de SQL del lado de Postgres.
+
+## Qué hace el flow
+
+El Cron de las 2am dispara un pull del application-feed de Ashby para las últimas 24 horas. El nodo Code agregador agrupa eventos por `(role_id, from_stage, to_stage)`, calcula la tasa de conversión de hoy y el dwell time mediano para cada par, y emite un item por par. El nodo Postgres `Lookup Baseline` une cada par con su fila de baseline. El nodo Code `Detect Anomalies` aplica tres reglas: un z-score de conversión por stage por debajo de `-2.0` contra la media de la baseline se marca como `stage_conversion_drop`, un dwell mediano que excede `stage_sla_seconds * 1.5` se marca como `candidate_stalled`, y un par (rol, stage) con cero eventos hoy y menos de 20 eventos históricos se marca como `new_role_no_movement` con una nota de baja severidad de que se suprimieron los umbrales.
+
+Cada flag se escribe a `anomaly_alerts` con una `dedupe_key` de `role::from_stage::to_stage::anomaly_type::yyyy-mm-dd` bajo una cláusula `ON CONFLICT DO NOTHING`. Solo los inserts que devolvieron una fila — es decir, alertas que aún no existían para hoy — proceden a la llamada de narrativa de Claude y al post de Slack. Esta es la guarda de costo: una re-corrida del mismo día del workflow no le cobra doble a Anthropic y no postea doble a Slack. El formateador de Slack rutea por tipo de anomalía: las caídas a nivel stage y los candidatos estancados van a `#recruiting-alerts`, las tendencias de time-to-hire y new-role-no-movement van a `#recruiting-leadership`, y las caídas de source-channel van a `#sourcing`.
+
+El Cron de las 3am corre el path paralelo de tendencia de time-to-hire contra una tabla `hires`. Reformatea cualquier fila donde el promedio móvil de 7 días excede el umbral en el mismo envelope de alerta y las pasa por el mismo path de dedupe-y-post.
+
+## Realidad de costos
+
+Para un equipo de 30 roles corriendo esto cada noche, espera alrededor de 600 agregaciones (rol, stage) por día. El pull de Ashby y los lookups de Postgres cuestan esencialmente nada. La llamada de narrativa a Claude usa `claude-sonnet-4-6` con un cap de 256 tokens y dispara solo en alertas recién insertadas — para un equipo sano eso típicamente son 0 a 3 alertas por noche, o aproximadamente $0.05 a $0.15 por noche en gasto de tokens. Un spike de 20 regresiones simultáneas cuesta alrededor de $1.00. La dedupe key mantiene los re-runs gratis.
+
+n8n self-hosted en un VPS de $20/mes maneja esta carga con margen de sobra; el plan Starter de n8n Cloud ($24/mes) también está bien. Postgres puede ser la misma instancia que respalda cualquier otra cosa que corras — las tres tablas son chicas, de bajo tráfico, e indexadas en una sola key compuesta. El costo marginal total está dominado por el people-time para mantener la baseline fresca y la taxonomía de stages estable, no por el runtime.
+
+Si cambias a Opus para la llamada de narrativa, espera aproximadamente un multiplicador de 5x en el costo de tokens; eso rara vez vale la pena para una explicación de 1-2 oraciones.
+
+## Métrica de éxito
+
+Trackea el tiempo mediano entre que una regresión (rol, stage) realmente empieza y que el equipo de reclutamiento toma acción sobre ella. Antes de este flow, esa latencia es típicamente de dos a seis semanas (la siguiente revisión de pipeline). Con el flow shippeado y vigilado, debería bajar a 24 a 48 horas. Si no — si las alertas disparan y nadie actúa — el problema no es el detector, es el ruteo o el umbral, y el fix es o apretar los canales hasta que la alerta llegue a una persona con autoridad para actuar, o aflojar el umbral de z-score hasta que el volumen de alertas coincida con lo que el equipo puede absorber.
+
+Una métrica secundaria que vale la pena vigilar: alertas descartadas sin acción como porcentaje del total. Arriba de 30% estás alertando sobre ruido; debajo de 5% probablemente estás alertando de menos y perdiendo señal.
+
+## vs alternativas
+
+La alternativa DIY es un job de Python o SQL que corre la misma agregación y postea a Slack vía webhook. Eso funciona y el costo por evento es más bajo, pero el grafo de n8n es la documentación — un ingeniero de recruiting-ops que se una el siguiente trimestre puede abrir el workflow, ver los ocho nodos en orden, y entender el sistema sin leer código. El path DIY también típicamente se salta el insert de dedupe y la guarda de costo alrededor de la llamada al LLM, que es donde llegan las facturas.
+
+La alternativa off-the-shelf es comprar [Gem](/es/tools/gem/), [Ashby Analytics](/es/tools/ashby/), o [Datapeople](/es/tools/datapeople/) para reportes de funnel. Esos son buenos productos y son la respuesta correcta para equipos que quieren dashboards manejados y no quieren ser dueños de una tabla de baseline en Postgres. Son la respuesta equivocada cuando quieres *alertas* de anomalía en Slack con narrativa adjunta, porque ninguno de ellos shippea eso hoy; shippean dashboards que alguien tiene que acordarse de revisar. El trade es: paga al vendor y pierde la latencia de alerta, o sé dueño del flow de n8n y gana la señal de 24 horas al costo de correr Postgres.
+
+La alternativa del status quo — la revisión trimestral de pipeline — es lo que la mayoría de los equipos ya hace. No cuesta nada y saca a la luz las mismas regresiones, solo que sesenta días tarde. Si tus roles tardan seis meses en llenarse y una señal a sesenta días aún te deja tiempo para corregir, el status quo está honestamente bien.
+
+## Watch-outs
+
+**La fatiga de alertas es el modo de falla dominante.** Un equipo que recibe diez alertas cada mañana va a empezar a ignorar las diez en una semana, incluyendo la que importaba. La guarda son las constantes `MIN_SAMPLE = 20` y `Z_THRESHOLD = 2.0` en el nodo Code `Detect Anomalies`, más el `DWELL_MULTIPLIER = 1.5` para candidatos estancados. Empieza con esos valores, vigila el canal las primeras tres noches, y aprieta — no aflojes — hasta que la mañana mediana traiga 0 a 2 alertas. Afloja después si descubres que estás perdiendo regresiones reales.
+
+**El drift de baseline produce falsos negativos silenciosos.** Las tasas de conversión cambian con el mercado laboral, el mix de sourcing del equipo, y el rol mismo. Una baseline calculada en noviembre contra un mercado caliente va a sub-marcar en un mercado suave y sobre-marcar en uno apretado. La guarda es el refresh mensual de `funnel_baselines` y `role_tth_baselines` desde el mismo query que las construyó — programa eso como un workflow recurrente de n8n o un job de Postgres y trata la falla de ese refresh como un incidente P1.
+
+**La auto-acción sobre una alerta de reclutamiento casi siempre está mal.** La narrativa que devuelve Claude es correlación, no causación; tratarla como una directiva ("la conversión cayó 30%, rechaza automáticamente todos los no-shows de phone-screen") va a agravar el problema. La guarda es estructural: el flow no tiene path de write-back al ATS. Si un contributor futuro propone agregar uno, empújalo de regreso. La IA saca a la luz la anomalía; los humanos diagnostican y actúan.
+
+**Datos privilegiados de candidatos saliendo del ATS.** Las tablas de Postgres guardan `role_id`, nombres de stage, tasas de conversión, y dwell times, lo cual es solo agregado por diseño — pero una extensión descuidada que agregue nombres de candidato o info de contacto para habilitar narrativas más ricas creará una nueva superficie de privacidad. La guarda es el schema en `_README.md`: las tablas intencionalmente no tienen columnas que identifiquen al candidato. Si un contributor las quiere agregar, rutea el cambio por tu revisión de privacidad y política de IA.
+
+**La atribución de source-channel es tan buena como la data del ATS.** La alerta opcional `source_channel_drop` (referenciada en el mapa de ruteo de Slack pero no habilitada por default en el bundle) depende de que cada applicant tenga una atribución de fuente limpia en Ashby. Si tu equipo es descuidado con el etiquetado de fuente, la alerta va a disparar sobre problemas de calidad de datos, no sobre problemas reales de canal. La guarda es un check de precondición: no habilites ese tipo de alerta hasta que la atribución de fuente esté al menos al 90% completa en tu export del ATS. Verifícalo con un query de SQL de una línea contra el application feed antes de prenderla.
+
+## Stack
+
+Este flow asume [n8n](/es/tools/n8n/) para orquestación, [Ashby](/es/tools/ashby/) (o [Greenhouse](/es/tools/greenhouse/) / [Lever](/es/tools/lever/)) como ATS, Postgres para el estado de baseline y de alertas, [Claude](/es/tools/claude/) para la explicación narrativa, y [Slack](/es/tools/slack/) para la entrega. Es el complemento operativo a las métricas definidas en [recruiting funnel metrics](/es/learn/recruiting-funnel-metrics/) y usa la distinción entre [time-to-hire vs time-to-fill](/es/learn/time-to-fill-vs-time-to-hire/) en el path de chequeo de tendencia.
