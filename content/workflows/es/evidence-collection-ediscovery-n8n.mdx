@@ -1,0 +1,95 @@
+---
+slug: evidence-collection-ediscovery-n8n
+canonical_slug: evidence-collection-ediscovery-n8n
+locale: es
+verticals: [legal-ops]
+title: Orquestación de recolección de evidencia para ediscovery con n8n
+artifact_type: n8n-flow
+tools_used: [n8n, relativity, slack]
+roles: [legal-ops, ediscovery-lead, in-house-counsel]
+difficulty: advanced
+time_to_setup: 180min
+human_tested: false
+translated_from: en/evidence-collection-ediscovery-n8n.mdx
+translated_at: "2026-05-10T00:00:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "d7c698322bd644f099fdad13e759f4d734c2f574e00390d4c745a0dee3b99a46"
+---
+
+Un flow de n8n que orquesta la fase de recolección de [ediscovery](/es/learn/ediscovery/) (la etapa "Collection" del EDRM) — extrae datos de la lista de custodios desde el HRIS de la firma, genera solicitudes de recolección por custodio contra las fuentes de datos de la firma (Google Workspace, Microsoft 365, Slack, file shares, SaaS custom), rastrea la finalización de la recolección y la cadena de custodia, despacha los datos recolectados al workspace de [Relativity](/es/tools/relativity/) (o [Everlaw](/es/tools/everlaw/) / [Logikcull](/es/tools/logikcull/)) para procesamiento. Cada paso escribe a un log de auditoría inmutable que el counsel usa para defender la suficiencia de la recolección. Reemplaza la recolección manual con spreadsheet-y-screenshot del admin de legal-ops por un flow determinístico.
+
+## Cuándo usarlo
+
+- Firmas con ediscovery regular — típicamente las que tienen portfolios de litigio activos donde la recolección ocurre varias veces al año.
+- El conteo de custodios por matter es lo suficientemente grande como para que la recolección manual sea operacionalmente inviable (típicamente >5 custodios por matter).
+- La firma tiene capacidad de IT-engineering para conectar la capa de connectors (Google Workspace Vault, M365 eDiscovery, Slack Discovery API, etc.). El flow es la orquestación; los connectors son por sistema.
+- El counsel aprueba el alcance de recolección por custodio; el flow ejecuta contra el alcance aprobado.
+
+## Cuándo NO usarlo
+
+- **Recolecciones de un solo custodio** — manual está bien; el costo de setup del flow (180 minutos más wiring de connectors) no se recupera.
+- **Reemplazar la expertise en documentación de cadena de custodia.** El flow genera registros de auditoría; el ediscovery lead valida que los registros cumplan el estándar de cadena de custodia de la jurisdicción. Distintas jurisdicciones tienen distintos requisitos.
+- **Auto-definir el alcance de recolección.** El counsel define el alcance según el matter; el flow ejecuta contra el alcance, no lo redacta.
+- **Matters primerizos de la firma** sin un baseline de procedimiento de recolección establecido. El flow codifica un procedimiento; si no hay procedimiento que codificar, defínelo primero.
+
+## Setup
+
+1. **Importa el flow.** Suelta `apps/web/public/artifacts/evidence-collection-ediscovery-n8n/evidence-collection-ediscovery-n8n.json` en tu instancia de n8n.
+2. **Conecta credenciales.** Por fuente: Google Workspace (Vault API; cuenta de servicio con autoridad delegada), Microsoft 365 (Compliance Center API; registro de app por tenant), Slack (Discovery API — solo disponible en Enterprise Grid), HRIS (fuente de custodios). Más Relativity / Everlaw / Logikcull (la plataforma de e-discovery) y Postgres (log de auditoría).
+3. **Redacta la plantilla de alcance de recolección por fuente.** Por fuente de datos, documenta: qué alcances son recolectables (rango de fechas, términos de búsqueda, filtros específicos por custodio), cuáles son los rate limits por fuente, cuál es el formato de output esperado.
+4. **Configura la plantilla de cadena de custodia.** Por matter y por custodio: quién recolectó (nombre de la cuenta de servicio + reviewer humano), cuándo, qué se recolectó, hash de la recolección al completarse. Plantilla en `_README.md`.
+5. **Configura la integración con la plataforma de e-discovery.** Relativity Processing API o equivalente para Everlaw / Logikcull. El flow sube a un workspace por matter; la pipeline de procesamiento (deduplicación, OCR, etc.) corre en la plataforma.
+6. **Haz un dry-run con un matter cerrado.** Reproduce la recolección de un matter completado el trimestre pasado. Confirma que el volumen recolectado coincida con lo que se produjo originalmente y que los registros de cadena de custodia coincidan con lo que el counsel certificó.
+
+## Qué hace el flow
+
+Ocho nodos. Orquestación por-custodio-por-fuente, con cadena de custodia en cada paso.
+
+1. **Collection Request Trigger** — webhook desde la plataforma de legal-ops cuando el counsel marca el alcance de recolección como aprobado.
+2. **Load Custodian + Scope** — extrae la lista de custodios + el alcance por-custodio-por-fuente desde el plan de recolección del matter.
+3. **Per-Source Dispatch** — abre una rama por fuente de datos por custodio. La parte más compleja del flow — cada fuente tiene su propia API y sus propias restricciones de rate-limit.
+4. **Source: Google Workspace Vault** — Vault matter creado (o reusado), hold emitido, búsqueda ejecutada contra Gmail / Drive / Calendar del custodio dentro del alcance, resultados exportados.
+5. **Source: M365 Compliance** — Content search ejecutada contra mailbox / OneDrive / Teams del custodio dentro del alcance, resultados exportados vía el Compliance Center.
+6. **Source: Slack Discovery** — Slack Enterprise Grid Discovery API; export por-custodio-por-canal dentro del alcance.
+7. **Hash + Chain-of-Custody Append** — cada export por fuente se hashea (SHA-256), y se anexa un registro de cadena de custodia a la tabla de auditoría: `{matter_id, custodian_id, source, scope_summary, collected_at, collected_by_service_account, hash, file_count, byte_count}`.
+8. **Upload to E-Discovery Platform** — empuja los exports al workspace de Relativity por matter; dispara el job de procesamiento; registra el load ID del lado de la plataforma en el log de auditoría para trazabilidad.
+
+## Realidad de costos
+
+- **Costos de connector / plataforma fuente** — Google Vault, M365 E5 con Advanced eDiscovery, Slack Enterprise Grid todos cargan costos por seat. El flow no los reduce; los hace usar de forma efectiva.
+- **Ejecuciones de n8n** — long-running (los exports grandes toman horas); usa el modo de cola de n8n para producción.
+- **Costo de procesamiento de la plataforma de e-discovery** — Relativity / Everlaw / Logikcull todos cobran por GB-procesado; el flow no cambia esa matemática.
+- **Tiempo del admin de legal-ops** — el gane. La orquestación manual de una recolección de 10 custodios en 4 fuentes son días de trabajo; el flow corre en horas sin supervisión.
+- **Tiempo de setup** — 180 minutos para el flow en sí + wiring significativo de connectors por fuente (los connectors son la mayor parte del setup real).
+
+## Métrica de éxito
+
+- **Tiempo desde la aprobación del counsel hasta la recolección completa** — debería caer de días/semanas (manual) a horas (flow), módulo la duración del job de export en la plataforma fuente.
+- **Completitud de la cadena de custodia** — debería ser 100% por matter. Cualquier brecha es un riesgo de defensibilidad.
+- **Drift de volumen** — volumen recolectado por el flow vs alcance esperado por el counsel. Dentro del 10% es normal (calibración de filtros); >25% dispara una revisión de re-scope.
+
+## vs alternativas
+
+- **vs los módulos nativos de recolección de la plataforma de e-discovery** ([Relativity](/es/tools/relativity/) Collect, [Everlaw](/es/tools/everlaw/) Collections). Elígelos si tu equipo vive en la plataforma y los connectors de la plataforma cubren tus fuentes. El flow es para matters de fuentes custom o matters que abarcan más fuentes que las que cubre nativamente cualquier plataforma única.
+- **vs herramientas comerciales de orquestación de recolección** (Reveal Brainspace, OpenText EnCase, Cellebrite, Onna). Elígelas para los matters de gama más alta con requisitos de grado forense. El flow es el punto medio liviano para ediscovery corporativo de rutina.
+- **vs recolección manual.** Funcional a pequeña escala; no escala a matters multi-custodio.
+
+## Watch-outs
+
+- **Integridad de la cadena de custodia.** *Guard:* cada export por fuente se hashea al momento de la recolección y otra vez antes de subir a la plataforma de e-discovery. Los mismatches de hash detienen el upload y alertan al ediscovery lead.
+- **Scope creep en recolección automatizada.** *Guard:* el alcance del flow se lee desde el plan de recolección aprobado por el counsel; ampliar el alcance a mitad de corrida requiere enmienda del plan, no un tweak al flow. El log de auditoría captura el SHA del plan por corrida.
+- **Agotamiento de rate-limits de la plataforma fuente.** *Guard:* rate limiters por fuente en los nodos por fuente del flow. La Slack Discovery API en particular tiene rate limits agresivos — el flow marca el ritmo en consecuencia.
+- **Exposición de privilegio durante la recolección.** *Guard:* la recolección captura todo lo que está en alcance; la revisión de privilegio ocurre downstream en la plataforma de e-discovery (la [privilege review batch skill](/es/workflows/privilege-review-batch-skill/) es la siguiente etapa). El flow NO pre-filtra contenido privilegiado — esa es una decisión downstream.
+- **Preocupaciones de privacidad del custodio.** *Guard:* el flow opera contra los sistemas que el custodio usa para trabajo; las cuentas personales (Gmail personal, Slack personal) están fuera de alcance a menos que el counsel las nombre explícitamente. El plan de recolección documenta la frontera.
+- **Localización de datos entre jurisdicciones.** *Guard:* los datos de custodios residentes en la UE pueden estar sujetos a consideraciones de localización de datos del GDPR; el alcance por custodio del flow marca a los custodios residentes en la UE para revisión de manejo de datos antes de exportar a un workspace de e-discovery fuera de la UE.
+
+## Stack
+
+El bundle vive en `apps/web/public/artifacts/evidence-collection-ediscovery-n8n/`:
+
+- `evidence-collection-ediscovery-n8n.json` — el export del flow (skeleton — los connectors reales por fuente son específicos de la firma)
+- `_README.md` — credenciales, schema de la tabla de auditoría, notas de connectors por fuente, plantilla de cadena de custodia
+
+Tools: [n8n](/es/tools/n8n/), [Relativity](/es/tools/relativity/) (o [Everlaw](/es/tools/everlaw/) / [Logikcull](/es/tools/logikcull/)), [Slack](/es/tools/slack/) (solo notificación). Connectors de plataforma fuente: Google Workspace Vault, Microsoft 365 Compliance, Slack Discovery, SaaS custom según el stack de la firma.
+
+Relacionado: [ediscovery](/es/learn/ediscovery/), [EDRM model](/es/learn/edrm-model/), [matter management](/es/learn/matter-management/), [privilege review](/es/learn/privilege-review/).
