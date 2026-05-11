@@ -11,44 +11,96 @@ difficulty: intermediate
 time_to_setup: 60min
 human_tested: false
 translated_from: en/deal-desk-pricing-skill.mdx
-translated_at: "2026-05-02T00:00:00Z"
+translated_at: "2026-05-11T17:30:00Z"
 translation_model: claude-opus-4-7
-source_sha256: "ce2680403be9e28624d0104a407dfd3802557226764c129eee2451bbeba53740"
+source_sha256: "a268213b330a6080cf15cb69a19450d856652feb4511bcc34c5f1b6ed7b7252c"
 ---
 
-Um Claude Skill que revisa um deal proposto contra sua política de pricing e desconto e devolve uma resposta estruturada: que termos estão dentro da política, quais precisam de aprovação, qual é o counter recomendado e que análogos históricos respaldam a estrutura proposta. Reduz o turnaround do deal desk de dias para minutos para os pedidos rotineiros.
+Um Claude Skill que revisa um deal não-padrão contra seu rubric de desconto e seu histórico de deals comparáveis, depois devolve uma recomendação estruturada em Markdown: a counter recomendada, as seções do rubric que justificam ela, os análogos históricos que a suportam, e um flag de escalação explícito quando o ask fica fora do que o rubric cobre. O skill é decision support para o reviewer do deal desk; nunca auto-aprova, nunca auto-desconta, e nunca substitui o aprovador nomeado na matriz de DOA. Ele existe para encurtar o tempo entre "AE submeteu o ask" e "reviewer tem o contexto para counter inteligentemente" — tipicamente de dias para minutos para asks rotineiros — sem tirar a decisão do humano.
 
-## O que você vai precisar
+O bundle do artefato vive em [`/artifacts/deal-desk-pricing-skill/`](/artifacts/deal-desk-pricing-skill/SKILL.md): o `SKILL.md` é o ponto de entrada e os três arquivos sob `references/` são o scaffolding editável que o skill carrega em toda corrida — o rubric de desconto, o schema de deal comparável, e os critérios de escalação que o skill checa antes de renderizar.
 
-- Salesforce com objetos Quote e Opportunity Line Item
-- Claude Code com o Skill instalado
-- Sua política de pricing e desconto como doc Markdown
-- Um set de referência de deals passados aprovados para matching de análogos
-- Um template padrão de quote (PDF ou DOCX)
+## Quando usar
+
+Solte esse skill quando um AE submete um ask de pricing não-padrão e um reviewer do deal desk tem que decidir com o que counter:
+
+- Uma request de desconto multi-ano que empilha incentivo de prazo em cima de um desconto de volume.
+- Um swap de pagamento-upfront-por-desconto ou uma concessão de pagamento Net-60/Net-90.
+- Uma estrutura de ramp (Y1 50% / Y2 100%, formatos custom) que precisa do prazo contratual rechecado contra o rubric.
+- Um co-term contra um contrato existente onde o buyer quer o desconto efetivo ponderado através dos contratos joined.
+- Um deal competitivo onde o AE nomeou um competidor e uma close date apertada, e o reviewer precisa dos análogos que fecharam sob pressão similar.
+
+O skill devolve uma recomendação em Markdown com a counter recomendada, as §s do rubric e IDs de análogo que justificam ela, e um bloco de escalação no topo que dispara quando o ask fica fora da cobertura do rubric. O reviewer lê, edita, e decide.
+
+## Quando NÃO usar
+
+Não use esse skill — e não wire ele em nada que faça essas coisas automaticamente:
+
+- **Aprovação final.** O skill recomenda; não aprova. A autoridade de aprovação fica com o humano nomeado na matriz de DOA (`references/1-discount-rubric.md` §8). O output do skill é um input para essa decisão, não um substituto. Wirear aprovação em cima de uma recomendação de LLM é exatamente o lugar errado para remover um checkpoint.
+- **Auto-discounting na quote.** O skill nunca escreve um desconto num registro de CPQ ou numa Salesforce Quote. Ele produz uma recomendação que o reviewer digita na quote (ou rejeita). Auto-aplicar uma recomendação de LLM numa quote ao vivo é o failure mode que esse skill é desenhado para evitar.
+- **Qualquer coisa que pule a review humana do deal desk.** Se seu time tem um fast-path para deals in-policy — single-year, list-price, sem exceções — rode esse fast-path através de regras de CPQ. CPQ é a ferramenta certa para enforcement determinístico in-policy; é mais rápido, mais barato, e audit-friendly. Esse skill existe para os asks que precisam de julgamento, e nesses asks pular o humano é exatamente o lugar errado para remover um checkpoint.
+- **Vendors de AI não-Tier-A.** Rode no Claude (workspace ou team plan cuja postura de data-handling você revisou). Rubrics de pricing e históricos de deal comparável são comercialmente sensíveis; não cano-pe eles através de LLMs consumer-grade.
 
 ## Setup
 
-1. **Codifique a política.** Edite `references/pricing-policy.md` com seus tiers de desconto, a math de incentivos multi-ano, os limites de payment terms e os thresholds de aprovação. Seja explícito: que níveis de desconto precisam de qual aprovação (gestor, VP, CRO).
-2. **Instale o Skill.** Coloque `deal-desk-pricing.skill` em `~/.claude/skills/`. Defina `SFDC_TOKEN`.
-3. **Carregue análogos.** Coloque um CSV dos últimos 50 deals não-padrão aprovados em `references/analogs.csv` com colunas para ACV, desconto, tamanho do term, payment terms e aprovador.
-4. **Rode.** O AE envia um deal via comando do Slack ou um form que chega no Skill: `review_deal(opp_id="...")`. O Skill devolve uma revisão de uma página.
-5. **Roteamento de aprovação.** Se tudo está dentro da política, o Skill auto-aprova. Se algo precisa de revisão, roteia para o aprovador certo com o gap visível.
+1. **Solte o bundle.** Copie [`/artifacts/deal-desk-pricing-skill/`](/artifacts/deal-desk-pricing-skill/SKILL.md) no seu diretório de skills do Claude Code em `~/.claude/skills/deal-desk-pricing/` (ou faça upload como um Skill num projeto Claude.ai). O `SKILL.md` é o ponto de entrada; o Claude carrega os três arquivos sob `references/` automaticamente quando o skill roda.
+2. **Codifique seu rubric.** Edite [`references/1-discount-rubric.md`](/artifacts/deal-desk-pricing-skill/references/1-discount-rubric.md) com suas definições reais de segmento, tabela de term-incentive, tiers de desconto de volume, fronteiras de payment-term, formatos de ramp, ceilings de desconto empilhado, e matriz de DOA. Seja explícito em todo threshold. O skill aplica o rubric deterministicamente — ele lê o que você escreveu, e nada mais, ao classificar in-policy vs exception-needed vs out-of-policy.
+3. **Construa o CSV de deal comparável.** Solte um arquivo sibling em `references/comparable-deals.csv` matching o schema em [`references/2-comparable-deal-format.md`](/artifacts/deal-desk-pricing-skill/references/2-comparable-deal-format.md). Backfille os últimos 8 trimestres de deals não-padrão — incluindo deals rejeitados, perdidos, e withdrawn, não só `won`. Anonimize nomes de cliente. O skill é só tão bom quanto esse CSV, e um CSV cheio de deals `won` treina o skill para carimbar.
+4. **Tune triggers de escalação.** Edite [`references/3-escalation-criteria.md`](/artifacts/deal-desk-pricing-skill/references/3-escalation-criteria.md) para casar com sua matriz de DOA e sua lista de strategic-accounts. Comece conservador (os defaults vão sobre-escalar) e afrouxe trimestralmente depois de assistir o que é flaggeado.
+5. **Wire com o Salesforce.** O skill espera um input `deal_record` — ou um JSON estruturado colado do Salesforce, ou um Salesforce Opportunity ID resolvido via o MCP/connector preferido do seu time. Defina `SFDC_TOKEN` se invocando via um connector. O skill em si é read-only contra o Salesforce; nunca escreve de volta.
+6. **Teste contra três deals que você já revisou.** Pegue dois in-policy e um exception-needed. Rode o skill, compare a recomendação dele contra com o que o time de fato countereou, e tune o rubric ou critérios de escalação até o output do skill se ler como o próprio pensar do deal desk.
 
-## Como funciona
+## O que o skill realmente faz
 
-O Skill puxa os line items do quote proposto e os termos do contrato do Salesforce, e depois avalia cada um contra o doc de política. Computa desconto efetivo, ACV ajustado por term, custo de payment terms e qualquer drift em termos custom. Cada avaliação devolve um de: dentro-da-política, exceção-necessária, fora-da-política.
+`SKILL.md` roda cinco etapas em ordem. As escolhas de engenharia são nomeadas para cada etapa; o formato de duas passadas — puxar comparáveis e carregar o rubric primeiro, depois avaliar; depois rechecar contra triggers de escalação — é a escolha de design load-bearing.
 
-Para exceções, puxa os cinco análogos históricos mais próximos do CSV e mostra se pedidos similares foram aprovados — e se foram, por quem e sob quais condições. Isso converte o deal desk de gatekeeper em provedor de contexto; o aprovador vê precedente de relance.
+1. **Carregar o rubric e puxar comparáveis, nessa ordem.** O skill queryia o histórico de deal comparável para os 5-10 análogos mais próximos por segmento, banda de ACV, prazo, e contexto competitivo *antes* de avaliar o ask. Puxar comparáveis primeiro previne a recomendação de ancorar na resposta nominal do rubric. Um tier de rubric pode dizer "10% para 3 anos," mas se os últimos oito deals de 3 anos nesse segmento todos fecharam em 14-16%, o ask está em linha com precedente mesmo quando fica fora do tier nominal. O reviewer precisa dos dois sinais para counter inteligentemente.
+2. **Aplicar o rubric deterministicamente.** Cada linha da quote proposta é percorrida contra o rubric. Para cada dimensão (% desconto, prazo, payment terms, ramp, co-term) o skill computa in-policy / exception-needed / out-of-policy e cita a § específica do rubric. O skill não reinterpreta thresholds; ele renderiza o veredito do rubric com citações. Quando o rubric está silencioso, a linha lê "rubric não endereça" em vez do skill improvisar um número.
+3. **Computar a counter recomendada.** Dado o veredito do rubric e a evidência comparável, o skill produz uma única counter expressa como um delta do ask do AE. Duas rules: bate o target de effective price do buyer (ou pousa dentro de dois pontos) quando o rubric suporta uma estrutura que chega lá; nunca recomenda uma counter que empilha toda concessão disponível ao ceiling do rubric — isso é matematicamente correto contra o rubric e comercialmente terrível.
+4. **Check de escalação.** A recomendação renderizada é re-lida contra os critérios de escalação. Triggers duros (desconto acima-do-ceiling, prazo enterprise sub-12-meses, termos legais custom, cliente strategic-logo, threshold de AE-pattern) setam `escalation: required` e nomeiam o aprovador. Evidência fina (menos de três análogos) num ask out-of-policy também escala, com razão "outlier — evidência de análogo insuficiente." Outliers vão para um humano que consegue raciocinar sobre eles; o skill não inventa precedente.
+5. **Renderizar a recomendação estruturada.** Markdown com header, bloco de escalação, tabela de ask-summary, seção de counter recomendada, tabela de evidência de deal comparável, racional, e notas para o reviewer. Toda linha cita ou uma § do rubric ou um ID de análogo. O header sempre inclui "Decision support, not approval."
 
-O counter recomendado é uma saída pequena mas de alto valor. O Skill sugere uma estrutura que bate no target de preço efetivo do buyer respeitando a política: trocar mais desconto por term mais longo, trocar desconto upfront por ramp.
+## Realidade de custo
+
+Custo de tokens é a variável dominante, e escala com o tamanho do rubric e o número de comparáveis puxados, não com o deal em si. Uma corrida típica carrega um rubric de 2-3k tokens, puxa 5-10 linhas de análogo do CSV (≈ 500-1.5k tokens), recebe um `deal_record` de 1-2k tokens, e renderiza um output de 1-2k tokens.
+
+| Perfil | Tokens aprox. por revisão | Custo por revisão (Sonnet) | Custo por revisão (Opus) |
+|---|---|---|---|
+| Rubric compacto, 5 análogos | ~6k in / 1.5k out | ~$0.03 | ~$0.16 |
+| Rubric padrão, 8 análogos | ~10k in / 2k out | ~$0.05 | ~$0.25 |
+| Rubric pesado + contexto competitivo, 10 análogos | ~16k in / 2k out | ~$0.07 | ~$0.36 |
+
+Tempo economizado por deal é a parte que paga a conta de tokens. Um ask não-padrão típico consome 30-90 minutos de tempo de deal desk: puxar o rubric, achar análogos no Salesforce, sanity-check contra a matriz de DOA, draftar o racional da counter. O skill colapsa o prep para abaixo de cinco minutos; o reviewer gasta o tempo economizado em julgamento, não em retrieval.
+
+Num volume típico de revops mid-market de 60 asks não-padrão por mês (40 exception-needed, 15 out-of-policy, 5 strategic), o custo mensal em Sonnet roda em torno de $3-5; em Opus em torno de $15-25. Ambas as faixas arredondam para ruído contra o custo de salário de uma hora de reviewer de deal desk.
+
+## Métrica de sucesso
+
+Trackeie duas métricas. Elas deveriam se mover em direções opostas; se ambas se movem para o mesmo lado, você tem um problema de calibração.
+
+1. **Tempo-até-counter.** Wall-clock de "AE submeteu ask" até "reviewer mandou counter para AE." Baseline antes desse skill é tipicamente 4-48 horas (fila, retrieval, drafting). Mira depois da adoção é abaixo de 30 minutos para asks rotineiros (corrida do skill + edit do reviewer + send).
+2. **Taxa de escalação em asks não-triviais.** Dos asks que o skill flagga como exception-needed ou out-of-policy, que fração chega ao aprovador nomeado na matriz de DOA? Isso deveria *subir* quando o skill é calibrado corretamente — os triggers de escalação existem para superficializar asks que precisam de um olho sênior que antes eram carimbados porque ninguém tinha tempo de puxar os análogos. Se a taxa cai, o skill está sobre-pavimentando e os critérios em `references/3-escalation-criteria.md` precisam ser apertados.
+
+Se o tempo-até-counter cai *e* a taxa de escalação sobe, o skill está funcionando. Se só o primeiro acontece, você construiu uma máquina de confiança que está escondendo risco de margem.
+
+## vs alternativas
+
+- **Regras de CPQ (Salesforce CPQ, DealHub, etc.).** CPQ é a ferramenta certa para enforcement determinístico in-policy: catálogos de list-price, roteamento de aprovação em tiers de desconto, validação automática de configuração. Use CPQ para o fast-path. Use esse skill em cima do CPQ para os asks que o CPQ flagga como precisando de aprovação — onde a decisão é "com o que counter," não "isso é in-policy." O CPQ te diz que o ask está out-of-policy; o skill te ajuda a counter ele.
+- **Flows de Discount Approval do Salesforce.** Flows de aprovação nativos roteiam uma exceção para o aprovador certo. Eles não produzem a counter recomendada ou superficializam a evidência de deal comparável. Use flows de aprovação como a camada de roteamento; use esse skill para popular o contexto que o aprovador lê antes de decidir.
+- **Review manual do deal desk.** Um reviewer treinado de deal desk produz a melhor counter quando dado tempo de puxar os análogos e re-ler o rubric. O constraint é throughput: um reviewer típico cuida de 8-15 asks não-padrão por dia antes do trabalho de retrieval expulsar o trabalho de julgamento. Use o skill como a camada de retrieval-e-first-draft; o reviewer gasta o tempo dele na counter, não em montar os inputs para ela.
+- **Calculadora de rubric em spreadsheet.** Alguns times constroem uma planilha Excel que pega ACV, prazo, e desconto e devolve "in-policy / exception." Barato, rápido, e frágil: não sabe de análogos, contexto competitivo, ou triggers de AE-pattern, e morre na primeira vez que o rubric cresce uma dimensão nova. Use a planilha para AE self-service; use o skill quando o ask alcança o deal desk.
 
 ## Pontos de atenção
 
-- **Drift de política.** A política de pricing é atualizada trimestralmente. O Skill é só tão fresco quanto o doc. Coloque um lembrete para refrescar references num cronograma.
-- **Viés na seleção de análogos.** Se seu CSV está cheio de deals "aprovamos tudo," o Skill vai carimbar pedidos futuros. Cure os análogos.
-- **Escopo de auto-aprovação.** Comece estreito. Só auto-aprove o verdadeiramente trivial — um único ano, dentro da política, deals a list-price. Expanda o escopo depois de observar algumas semanas de decisões.
+- **Recomendação over-discounting.** O skill pode produzir uma counter que fecha o gap até o target do buyer empilhando toda concessão disponível (desconto máximo, term incentive máximo, concessão de payment-term máxima). Isso é matematicamente correto contra o rubric e comercialmente terrível — não deixa nada na mesa para a negociação. Guard: a recomendação capa as concessões empilhadas totais no menor de (ceiling do rubric) ou (mediana comparável + um desvio padrão). Qualquer coisa acima disso dispara o flag de escalação com razão "concessões empilhadas excedem precedente."
+- **Rubric estagnado.** Política de pricing muda trimestralmente, às vezes mais rápido (um packaging novo lança, um competidor se move em preço, um segmento é re-cortado). Um skill rodando contra um rubric de seis meses vai recomendar uma counter que o time não oferece mais. Guard: o skill checa a data `last_edited` no frontmatter do rubric e antepõe uma warning "Rubric pode estar estagnado (última edição YYYY-MM-DD)" nas notas do reviewer quando tem mais de 90 dias. O reviewer é responsável por refrescar o rubric numa cadência de calendário; o skill superficializa o staleness para que não se esconda.
+- **Contexto competitivo perdido.** Um deal onde o buyer nomeou um competidor e uma close date apertada merece uma counter diferente que um deal num vácuo, mesmo quando os veredictos do rubric são idênticos. Guard: quando `competitive_context` é provido, a seção de racional referencia ele explicitamente e a recomendação checa se algum análogo sob pressão competitiva comparável tomou um formato diferente. Se `deal_record` flagga um competidor mas `competitive_context` está vazio, o skill devolve um prompt pedindo o reviewer para re-rodar com o contexto preenchido em vez de produzir uma counter context-blind.
+- **Viés de seleção de análogo.** Um CSV de deal comparável cheio de "aprovamos tudo" treina o skill para carimbar asks futuros. Guard: todo análogo na tabela de evidência inclui o status de aprovação dele (approved, rejected, lost-to-competitor, withdrawn). O reviewer vê o mix de aprovação e consegue pegar o problema de curadoria; o skill também flagga "nenhum análogo rejeitado nos últimos 20" como uma nota de calibração nas notas do reviewer.
+- **Recomendação citada de volta como aprovação.** Leitores downstream (AE, cliente, às vezes o manager do AE) às vezes tratam a recomendação como a counter aprovada. Guard: todo header de output inclui "Decision support, not approval." e o bloco de escalação nomeia o aprovador real na matriz de DOA. Se a recomendação é encaminhada como a counter sem passar pelo reviewer humano, a linha do named-approver torna o gap de processo self-evident.
 
 ## Stack
 
-- **Salesforce** — dados de quote e oportunidade
-- **Claude** — avaliação de política, recomendação de counter, matching de análogos
+Combine com [contract redline com Claude](/pt-BR/workflows/contract-redline-claude-skill/) para o workflow de stage-de-negociação que roda depois da counter ser acordada, e com [contract summary com Claude](/pt-BR/workflows/contract-summary-skill/) para o sumário audience-tuned pós-assinatura. O skill do deal desk fica no meio: depois do CPQ flaggar o ask, antes do redline.
+
+- **Salesforce** — dados de opportunity e quote, roteamento de aprovação
+- **Claude** — avaliação do rubric, pulling de deal comparável, recomendação de counter, check de escalação
