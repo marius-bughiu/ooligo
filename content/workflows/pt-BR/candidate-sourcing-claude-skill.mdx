@@ -1,0 +1,98 @@
+---
+slug: candidate-sourcing-claude-skill
+canonical_slug: candidate-sourcing-claude-skill
+locale: pt-BR
+verticals: [recruiting]
+title: Sourcing de candidatos com AI usando Claude
+artifact_type: claude-skill
+tools_used: [claude, juicebox, gem, ashby]
+roles: [recruiter, sourcer, talent-acquisition]
+difficulty: intermediate
+time_to_setup: 45min
+human_tested: false
+translated_from: en/candidate-sourcing-claude-skill.mdx
+translated_at: "2026-05-11T05:30:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "def2cbd8e628fc153a90e76ddc330a22e60225d20ddc5482a91620d7c13f2eb4"
+---
+
+Uma Claude Skill que pega um perfil de vaga mais uma rubrica de ICP, constrói uma query de [AI sourcing](/pt-BR/learn/ai-sourcing/) contra [Juicebox](/pt-BR/tools/juicebox/), [hireEZ](/pt-BR/tools/hireez/), ou LinkedIn Recruiter, recupera até 200 candidatos, pontua cada um contra a rubrica com evidência citada, e draft outreach personalizado para o top-N — e então para num gate de revisão humana. O recrutador lê a shortlist, edita as mensagens e envia. Substitui o loop de 3 horas de Boolean + scoring + outreach por um loop de revisão de 30 minutos.
+
+## Quando usar
+
+- Você faz sourcing para uma vaga que roda mais de uma vez por trimestre e a rubrica de ICP é estável o suficiente para colocar no papel.
+- Você tem uma rubrica de ICP com âncoras comportamentais por dimensão (não só labels vagos). O template de rubrica no bundle em `references/1-icp-rubric-template.md` mostra o formato; se você não consegue preencher, ainda não tem uma rubrica que esta skill consiga pontuar.
+- Você tem acesso à API do [Juicebox](/pt-BR/tools/juicebox/) PeopleGPT, [hireEZ](/pt-BR/tools/hireez/), ou LinkedIn Recruiter. A skill se recusa a fazer fallback para scraping de URLs públicas do LinkedIn.
+- Um recrutador ou sourcer humano revisa toda shortlist antes de qualquer outreach ser enviado. A skill escreve drafts em disco e para.
+
+## Quando NÃO usar
+
+- **Auto-rejeição no loop.** A skill ranqueia; não rejeita. Os candidatos "pulados" são surfaceados com motivos para o recrutador anular. Wiring de uma ação `reject` num threshold de score transforma isso em tomada de decisão automatizada e dispara obrigações do [EU AI Act](/pt-BR/learn/eu-ai-act-for-legal-teams/) Annex III high-risk mais obrigações de bias audit do NYC LL 144 dentro de um ano antes do uso. Se você precisa disso, faça um bias audit, não esta skill.
+- **Scoring em proxies de classe protegida.** Tier de escola como dimensão standalone, origem do nome, presença de foto, penalização por gaps de emprego, idade inferida pelo ano de graduação, "culture fit" sem âncoras comportamentais. A fairness checklist da skill se recusa a rodar se algum desses aparecer na rubrica. Não edite a checklist para fazer uma rubrica enviesada passar.
+- **Recomendações de faixa salarial.** NYC LL 32-A, Colorado, Califórnia e Washington exigem faixas postadas e obrigações de bias audit em decisões automatizadas de pay. Use uma ferramenta de benchmarking de comp, não uma skill de sourcing.
+- **Buscas one-off de C-suite.** Uma busca retida para um indivíduo nomeado específico ou um exec tightly-defined sai mais rápido feita por um humano com network. A skill é feita para sourcing repetível de IC e nível manager, onde a calibração da rubrica paga o custo de setup.
+- **Reference checks ou backchannel research.** Postura de consentimento diferente. Workflow diferente.
+
+## Setup
+
+1. **Solte o bundle.** Coloque `apps/web/public/artifacts/candidate-sourcing-claude-skill/SKILL.md` no diretório de skills do Claude Code (ou nas custom Skills do claude.ai).
+2. **Preencha a rubrica.** Copie `references/1-icp-rubric-template.md` para um arquivo por vaga sob seu próprio repo. Substitua todo `{placeholder}`. A skill captura o SHA-256 da rubrica em seu audit log por run, então edições subsequentes são visíveis em retro.
+3. **Configure o canal de fonte.** Adicione sua chave de API do Juicebox ou hireEZ na config da skill. Para LinkedIn, configure credenciais da Recruiter API — a skill se recusa a fazer scraping de URLs públicas de perfil.
+4. **Escreva as do-not-poach e exclude lists.** Um CSV de domínios de clientes (do-not-poach) e um CSV de URLs `exclude_list` (recentemente rejeitados, em silent period, com opt-out). O pré-filtro determinístico no passo 3 da skill aplica esses antes do LLM ver qualquer candidato.
+5. **Faça dry-run numa vaga fechada.** Rode numa vaga que você fez sourcing manual no trimestre passado. Compare o top-25 da skill com seu top-25 manual. Calibre as âncoras da rubrica se a skill calibrar diferente — as âncoras, não a query de busca, geralmente são o que está errado.
+
+## O que a skill realmente faz
+
+Seis passos, em ordem. A ordem importa: filtros determinísticos e pré-flight de fairness vêm antes do ranking do LLM, porque soltar um LLM em cima de um pool contaminado produz output rápido, confiante e inutilizável.
+
+1. **Valida a rubrica** contra `references/2-fairness-checklist.md`. Para se a rubrica contém proxies de classe protegida. A escolha de falhar antes da retrieval em vez de depois é deliberada — uma rubrica enviesada carregada na API de uma ferramenta de sourcing já deixa um registro que conta como processamento automatizado sob GDPR Art. 22.
+2. **Constrói a query de busca** no formato nativo do canal. Cap em 5 sinônimos por dimensão; cap no pool recuperado em 200. Pools maiores degradam o ranking porque o contexto do modelo enche de candidatos de baixa relevância.
+3. **Pré-filtro determinístico.** Dropa matches do `exclude_list`, empresas do-not-poach, mismatches de localização e perfis com mais de 18 meses de obsolescência. Esses são filtros auditáveis; o LLM não os reabre.
+4. **Ranking baseado em rubrica.** Pontua 1-5 em skill, nível, padrão de empresa, response-likelihood. Toda nota acima de 1 cita uma string verbatim do perfil. Sem citação → nota 1. A exigência de citação é o que mantém o modelo aterrado no texto do perfil em vez de inferir a partir de nome, foto ou escola.
+5. **Gate de revisão humana.** Escreve `shortlist.md` e arquivos `outreach/<id>.md` por candidato. Para. A skill não define nenhuma ação `send`.
+6. **Audit log.** Anexa uma linha JSONL por run com `run_id`, `rubric_sha256`, tamanhos de pool, canal, modelo. Sem PII. É isso que torna o run defensável sob NYC LL 144 ou questionamento do EU AI Act.
+
+O formato da shortlist e o layout de evidência por candidato vivem em `references/3-shortlist-format.md` no bundle. O formato é fixo porque os consumidores downstream — recrutador, hiring manager, audit reviewer — precisam de colunas previsíveis.
+
+## Realidade de custo
+
+Por shortlist de 25 a partir de um pool de 200 candidatos, no Claude Sonnet 4.5:
+
+- **Custo de retrieval** — depende do canal. O PeopleGPT do Juicebox conta contra sua cota mensal de queries (planos starter de 200 buscas estouram rápido se você roda múltiplas vagas por semana). Unlocks-per-month do hireEZ é o constraint que prende lá. A API do LinkedIn Recruiter tem suas próprias cotas de InMail e busca por seat. Nada disso muda com a skill no loop; você gasta a mesma cota de canal que gastaria fazendo Boolean manual.
+- **Tokens de LLM** — tipicamente 80-120k tokens de input (rubrica + 200 excerpts de perfis de candidatos + instruções da skill) e 8-15k tokens de output (shortlist + 25 drafts de outreach). No Sonnet 4.5 isso é aproximadamente $0.50-0.80 por shortlist. O mês inteiro de um sourcer rodando ~80 shortlists chega em $40-65 em custo de modelo.
+- **Tempo do recrutador** — o ganho está aqui, não no custo de modelo. Boolean manual + scoring + outreach para 25 candidatos são 2-3 horas. Revisar a shortlist da skill e editar os drafts são 25-40 minutos, que é o que torna o workflow vale a pena rodar.
+- **Tempo de setup** — 45 minutos para a rubrica e exclude lists se a rubrica já existe em alguma forma; mais se a rubrica é nova (caso em que [structured interviewing](/pt-BR/learn/structured-interviewing/) é o pré-requisito, não esta skill).
+
+## Métrica de sucesso
+
+Acompanhe três números por vaga por mês, no ATS:
+
+- **Taxa de resposta ao outreach** — deve igualar ou exceder a baseline manual do recrutador. Se cair, os drafts de outreach estão genéricos — geralmente a rubrica está grosseira demais, não o modelo.
+- **Taxa de shortlist-to-screen pass** — a fatia de candidatos da shortlist que o hiring manager concorda que valem um screen. Deve ser ≥70% numa vaga estável. Abaixo disso, a rubrica de ICP está descalibrada; re-rode numa vaga fechada e calibre.
+- **Tempo de role-open até primeiro screen qualificado** — a métrica de throughput que a skill foi feita para mover. A redução de 3 horas para 30 minutos aparece aqui, não no gasto de modelo.
+
+## vs alternativas
+
+- **vs [Gem AI Sourcing](/pt-BR/tools/gem/)** — Gem possui o workflow do recrutador end-to-end (UI de sourcing, sequências, analytics, integração com ATS via [Ashby](/pt-BR/tools/ashby/) e outros). Escolha Gem se você quer um produto gerenciado e seu time vai morar na UI dele. Escolha esta skill se você quer a rubrica, lógica de pré-filtro e audit log no seu próprio repo, version-controlled, com o modelo trocável.
+- **vs ranking nativo de AI do hireEZ** — o AI Match do hireEZ é bom em retrieval; o gap está na camada da rubrica. Com esta skill você mantém o hireEZ como canal de retrieval e traz sua própria rubrica + scoring com evidência citada por cima. Se os defaults do hireEZ batem com seu ICP, você não precisa desta skill.
+- **vs Boolean manual + scoring em planilha** — manual é certo para buscas one-off ou de exec, onde a rubrica está na cabeça do recrutador e escrevê-la é overhead que não paga de volta. A skill paga seu custo de setup em vagas que repetem.
+- **vs script DIY em Python contra as APIs do LinkedIn / Juicebox** — mesma qualidade de ranking se você construir o prompt com cuidado, mas você também constrói a fairness checklist, o audit log e o gate de revisão humana sozinho. O bundle entrega esses prontos.
+
+## Pontos de atenção
+
+- **Amplificação de viés** — guardado pela fairness checklist em `references/2-fairness-checklist.md`, que para o run se a rubrica contém proxies de classe protegida. O audit log captura `rubric_sha256` por run para que a rubrica usada numa dada data seja reproduzível sob review do [EU AI Act](/pt-BR/learn/eu-ai-act-for-legal-teams/) ou NYC LL 144.
+- **Dados desatualizados de LinkedIn / Juicebox** — guardado pelo filtro determinístico no passo 3 (dropa perfis com mais de 18 meses de obsolescência) e pela dimensão response-likelihood no scoring (que pesa freshness). Candidatos em cold storage não tomam espaço dos que estão ativamente procurando.
+- **Exposição a ToS do LinkedIn** — guardado pela recusa de fazer scraping de URLs públicas de perfil. A skill usa a Recruiter API, Juicebox ou hireEZ, que carregam seu próprio licenciamento de dados. Se `linkedin_recruiter` é selecionado e a API não está configurada, a skill aborta com setup-error em vez de cair em fallback.
+- **Drift de auto-send** — guardado pelo gate de revisão humana (passo 5) e pela ausência de qualquer ação `send` na skill. Drafts são escritos em arquivos `outreach/<id>.md` para o recrutador colar no ATS / outbox da ferramenta de sourcing. AI-drafted-and-sent sem revisão produz volume sem qualidade e estraga a [candidate experience](/pt-BR/learn/candidate-experience/).
+- **Transparência de comp** — drafts de outreach nunca citam um número; eles referenciam a banda como "faixa competitiva divulgada no screen" para que o recrutador permaneça a fonte de afirmações de pay-band (NYC LL 32-A, Colorado, Califórnia, Washington pay-transparency requirements).
+
+## Stack
+
+O bundle da skill vive em `apps/web/public/artifacts/candidate-sourcing-claude-skill/` e contém:
+
+- `SKILL.md` — a definição da skill
+- `references/1-icp-rubric-template.md` — preenchimento por vaga
+- `references/2-fairness-checklist.md` — checks de pré-flight (não edite para fazer rubricas enviesadas passarem)
+- `references/3-shortlist-format.md` — o formato literal de output
+
+Ferramentas que o workflow assume que você já usa: [Claude](/pt-BR/tools/claude/) (o modelo), [Juicebox](/pt-BR/tools/juicebox/) ou [hireEZ](/pt-BR/tools/hireez/) (o canal de retrieval), [Ashby](/pt-BR/tools/ashby/) (o ATS para write-back uma vez que o recrutador aprovou um candidato). [Gem](/pt-BR/tools/gem/) é a alternativa de build-vs-buy se você não quer possuir a rubrica e o audit log você mesmo.
