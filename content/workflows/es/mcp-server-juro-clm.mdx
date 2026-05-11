@@ -1,0 +1,102 @@
+---
+slug: mcp-server-juro-clm
+canonical_slug: mcp-server-juro-clm
+locale: es
+verticals: [legal-ops]
+title: Servidor MCP de Juro CLM para workflows de legal-ops
+artifact_type: mcp-server
+tools_used: [juro, claude]
+roles: [legal-ops, contracts-engineer, in-house-counsel]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+translated_from: en/mcp-server-juro-clm.mdx
+translated_at: "2026-05-11T01:23:44Z"
+translation_model: claude-opus-4-7
+source_sha256: "a2a68a8879e0085ed891d18ec8e6078657b34dd389f87e317a5f27f2dcb3e906"
+---
+
+Un servidor Model Context Protocol (MCP) que expone [Juro](/es/tools/juro/) CLM como tools mayoritariamente de lectura para Claude Desktop / Claude Code / cualquier cliente compatible con MCP. Cinco tools de lectura cubren las preguntas diarias de contratos ("¿qué acuerdos renuevan en los próximos 60 días?", "¿cuál es el estado del deal de Acme?", "muéstrame la historia de redlines de este contrato") y una tool de escritura cauta para attachear notas a registros de contratos. Diseñado para el lead de legal-ops o el contracts engineer que vive en Claude y quiere el estado de Juro sin context-switch, complementando el [MCP de Ironclad](/es/workflows/mcp-server-ironclad-legal/) para firms que corren Juro junto a o en vez de Ironclad.
+
+El scaffold se entrega como un paquete Python importable desde disco. **NO está runtime-testeado contra un tenant en vivo de Juro.** El disclaimer se repite en el README y al inicio de `server.py`. El uso en producción requiere que el contracts engineer cablee credenciales, valide las queries GraphQL contra la instancia de Juro del equipo, y pacee contra los rate limits contratados.
+
+## Cuándo usarlo
+
+- El lead de legal-ops o el contracts engineer quiere el estado de Juro disponible en conversaciones de Claude y está dispuesto a instalar un servidor MCP.
+- El equipo tiene acceso a la API de Juro (la API de Juro es GraphQL — confirma que tu tier de plan incluye API).
+- Acceso mayoritariamente de lectura encaja con el caso de uso. Las escrituras del servidor están limitadas a una tool cauta (`attach_note`); por defecto no se exponen mutaciones de estado de contrato.
+- El equipo de contracts engineering o IT tiene la postura de seguridad para manejar credenciales de la API de Juro con scope de lectura.
+
+## Cuándo NO usarlo
+
+- **Necesitas un setup production-ready, runtime-testeado, hoy.** Esto es un scaffold.
+- **Uso SaaS multi-tenant.** Single-tenant por diseño; multi-tenant requiere un reshape no trivial.
+- **Workflows write-heavy.** El servidor es intencionalmente mayoritariamente de lectura. Mutar el estado del contrato necesita una revisión de seguridad separada por-tool según la [cursor rule del CLM engineer](/es/workflows/cursor-rules-clm-engineer/).
+- **Saltarse el dual-control.** Los contratos de Juro incluyen registros ejecutados de obligación legal. Las mutaciones a través de MCP comprometerían la postura de dual-control del firm; el scaffold no expone tools de mutación más allá de la excepción `attach_note`.
+
+## Setup
+
+1. **Instala el paquete.** Desde `apps/web/public/artifacts/mcp-server-juro-clm/`:
+   ```bash
+   pip install -e .
+   ```
+2. **Configura credenciales.** `JURO_API_KEY` (desde Juro Settings → API; ver al admin de tu tenant) y `JURO_USER_EMAIL` (el usuario al que se le atribuirán las escrituras).
+3. **Registra con el cliente MCP.** Misma forma que el [MCP de Greenhouse](/es/workflows/mcp-server-greenhouse-recruiting/); ver la sección de setup de ese workflow para los patrones de config de Claude Desktop / Claude Code.
+4. **Sanity check contra staging.** Juro no siempre ofrece tenants de staging — si no está disponible, el camino recomendado es registrar con credenciales de producción pero limitar el scope a tools de lectura primero (el servidor lo hace fácil: las tools de lectura requieren solo la key con scope de lectura).
+5. **Pasaje a producción.** Después de verificar las tools de lectura, opcionalmente habilita la tool de escritura. La key de escritura tiene un scope separado; rótala trimestralmente.
+
+## Qué expone el servidor
+
+Seis tools — cinco de lectura, una escritura cauta.
+
+### Tools de lectura
+
+1. **`list_contracts`** — lista contratos filtrados por status (draft, in_negotiation, executed, expired), contraparte u owner.
+2. **`get_contract`** — registro completo del contrato por ID, incluyendo la versión actual del documento, custom fields y datos de las partes.
+3. **`list_renewing_soon`** — contratos donde la fecha de renovación cae dentro de N días. Default N=60.
+4. **`get_redline_history`** — historia de versiones para un contrato, incluyendo autor y timestamp por versión.
+5. **`search_contracts_by_clause`** — búsqueda a través de contratos por un patrón de cláusula (e.g. "force majeure", "limitation of liability"). Útil para encontrar todos los contratos afectados por un cambio de precedente.
+
+### Tool de escritura
+
+6. **`attach_note`** — agrega una nota privada a un registro de contrato. Audit-attributed vía el `JURO_USER_EMAIL` configurado al startup. Se usa para loggear "Claude marcó este contrato para revisión de renovación" para que la acción sea visible en el audit trail de Juro.
+
+## Realidad de costo
+
+- **Cuota de API de Juro** — varía por tier de plan. El servidor incluye un rate limiter de token-bucket (default 30 req/min; aprieta si otros sistemas comparten la API key).
+- **Tokens de LLM** — dependen del presupuesto de prompt de la sesión de Claude que llama.
+- **Hosting del servidor** — corre localmente; costo ongoing cero para setups single-user.
+- **Tiempo de setup** — 60 minutos incluyendo credenciales y registro del cliente MCP.
+
+## Métrica de éxito
+
+- **Conteo de sesiones que usan el MCP por semana** — señal cualitativa; si el lead de legal-ops no lo está usando ≥5 veces/semana después de un mes, el caso de uso no está.
+- **Eficiencia de sesión de Claude del contracts engineer** — la lectura cualitativa de "¿con qué frecuencia el engineer tira del estado de Juro directamente durante una sesión de Claude vs. context-switching?".
+
+## vs alternativas
+
+- **vs la UI de Juro directamente.** La UI es la opción correcta cuando el usuario ya está en Juro. El MCP se gana su costo de setup cuando el usuario está en Claude (redactando un redline, resumiendo el status de un matter) y tirar del estado del CLM sería un context switch.
+- **vs la integración de Slack de Juro.** Elige Slack-nativo si el equipo vive en Slack. Elige el MCP si el equipo vive en Claude.
+- **vs script Python DIY contra el GraphQL de Juro.** Los mismos datos, pero el MCP los hace disponibles a CUALQUIER cliente MCP.
+
+## Watch-outs
+
+- **No runtime-testeado.** *Guarda:* explícitamente disclaimeado en el README y `server.py`. El deployment a producción requiere validación por-tool contra el tenant de Juro del firm.
+- **Agotamiento del rate limit.** *Guarda:* token-bucket en 30 req/min por default.
+- **Contenido contract-confidential en el contexto del chat-model.** *Guarda:* el servidor devuelve los datos de Juro incluyendo términos del contrato, que son commercial-confidential. La postura de manejo de datos de la sesión es responsabilidad del lead de legal-ops. El README dice explícitamente: no pegues transcripts de sesión en canales compartidos de Slack.
+- **Drift en las write tools.** *Guarda:* solo `attach_note` está expuesta como escritura. Las nuevas write tools requieren justificación por-tool según la guía de la cursor rule del CLM engineer.
+- **Scope creep en la API key.** *Guarda:* el README documenta los scopes mínimos de Juro necesarios.
+- **Drift del schema de GraphQL.** *Guarda:* el servidor usa schemas de Pydantic para validar las respuestas de GraphQL; el schema drift falla-fuerte en lugar de corromper silenciosamente.
+
+## Stack
+
+El bundle vive en `apps/web/public/artifacts/mcp-server-juro-clm/`:
+
+- `pyproject.toml`
+- `README.md`
+- `src/juro_clm_mcp/__init__.py`
+- `src/juro_clm_mcp/server.py`
+
+Tools: [Juro](/es/tools/juro/) (el CLM), [Claude](/es/tools/claude/) (el cliente MCP). Para guardrails más amplios de CLM-engineering, ver la [cursor rule del CLM engineer](/es/workflows/cursor-rules-clm-engineer/). Para el servidor MCP paralelo de Ironclad, ver el [servidor MCP de Ironclad](/es/workflows/mcp-server-ironclad-legal/).
+
+Relacionados: [contract lifecycle management](/es/learn/contract-lifecycle-management/), [clm vs cms](/es/learn/clm-vs-cms/), [SOP de revisión de contratos](/es/learn/contract-review-sop/).
