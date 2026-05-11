@@ -3,7 +3,7 @@ slug: mcp-server-salesforce-revops
 canonical_slug: mcp-server-salesforce-revops
 locale: es
 verticals: [revops]
-title: MCP server que expone lectura y escritura de Salesforce a Claude
+title: Servidor MCP que expone Salesforce read y write a Claude
 artifact_type: mcp-server
 tools_used: [salesforce, claude]
 roles: [revops, gtm-engineer]
@@ -11,43 +11,103 @@ difficulty: advanced
 time_to_setup: 90min
 human_tested: false
 translated_from: en/mcp-server-salesforce-revops.mdx
-translated_at: "2026-05-02T00:00:00Z"
+translated_at: "2026-05-11T01:26:04Z"
 translation_model: claude-opus-4-7
-source_sha256: "04785315c525e395979503c0954816c958a8e8326c4226ba8f53319fabb53cc9"
+source_sha256: "3d13285d829a587542bc683ab40ad07d2289a03f3a02970b824c4877bc6c5e33"
 ---
 
-Un MCP server que le da a Claude acceso scoped de lectura y escritura a Salesforce, con tiers de permisos, audit logging y un cap duro sobre escrituras en bulk. Ponlo frente a Claude Code o Claude.ai y tu equipo puede preguntar "muéstrame todos los deals atorados sobre cincuenta mil y actualiza sus close dates" sin salir del chat.
+Un servidor Model Context Protocol que le da a Claude acceso scopeado y consciente de auditoría a tu org de Salesforce. Lecturas de objeto, un endpoint SOQL solo-SELECT, tres helpers de RevOps (`pipeline_by_stage`, `stale_opps`, `at_risk_commits`), más dos escrituras que siempre pasan por un pipeline de justificación-y-auditoría. Méteselo a Claude Desktop o Claude Code y tu equipo puede preguntar "muéstrame las opps en stage Commit sin actividad esta semana" y "actualiza la close date en la opp 0061a, justificación: empujada por el cliente" sin salir del chat — y sin entregarle al modelo un botón de delete. El scaffold completo vive en el bundle de artefacto en `apps/web/public/artifacts/mcp-server-salesforce-revops/`, que entrega un `README.md`, `pyproject.toml`, y `src/salesforce_revops_mcp/server.py` listos para instalar con `pip install -e .`.
 
-## Lo que vas a necesitar
+## Cuándo usar esto
 
-- Una Connected App de Salesforce con scopes de API y refresh-token
-- Un host que pueda correr un proceso de larga duración (Node, Python o el container de tu elección)
-- Claude Code, Claude Desktop o cualquier cliente compatible con MCP
-- Un doc de política de permisos acordado con tu equipo de seguridad
+Recurre a esto cuando tu trabajo de RevOps y forecasting tiene un ritmo semanal claro — pipeline review, limpieza de higiene de stage, inspección de deals, correcciones de campos individuales — y el costo de context-switch a Salesforce por cada pregunta domina al costo de escribir el SOQL o encontrar el reporte correcto. El patrón funciona particularmente bien para dos roles. El lead de RevOps que solía vivir en una pestaña de browser con búsquedas guardadas ahora le pregunta a Claude en lenguaje natural, recibe una respuesta estructurada, y pega el resultado en un doc de forecast. El GTM engineer que solía escribir un bloque Apex anónimo one-off para empujar un par de campos viejos ahora le pide a Claude que llame a `update_field` con una justificación que aterriza como una fila en un objeto de auditoría custom, con los valores old y new preservados para el siguiente ciclo de auditoría.
+
+También es el patrón correcto si ya lanzaste una versión de este workflow en HubSpot (la estructura del bundle del artefacto espeja el [piloto del servidor CS de HubSpot](/es/r/cs/)) y quieres simetría entre sistemas-de-registro para que los prompts de Claude de tu equipo sean portables. Misma forma de tools, mismo estilo de respuesta, misma postura de auditoría.
+
+## Cuándo NO usar esto
+
+Sáltatelo si cualquiera de los siguientes es cierto:
+
+- **Tu org no ha acordado una policy de auditoría para escrituras dirigidas por AI.** El scaffold hace que la auditoría sea barata; no la hace opcional. Si "quién cambió este campo y por qué" no es una conversación que Security ha tenido, lanza el subset solo-lectura (omite `add_note` y `update_field` de la lista de tools) y revísalo cuando aterrice la policy.
+- **Necesitas DML masivo.** Este servidor capea-fuerte las lecturas a 200 registros por request y expone solo escrituras de un registro. Updates masivos de miles de filas pertenecen a un job de Data Loader o un batch Apex apropiadamente gobernado — no a una herramienta de chat. El cap es un feature: detiene a Claude de "ayudosamente" reescribir la mitad de tu pipeline porque malinterpretó una pregunta.
+- **Tu modelo de forecasting vive en una herramienta de terceros (Clari, BoostUp, Gong Forecast).** Los hechos interesantes ya no están en Salesforce. Claude consultando el SoR devolverá rebanadas viejas de verdad y confundirá en vez de ayudar. Apunta a Claude a la API de la herramienta de forecasting en su lugar, o espera hasta que esa herramienta lance su propio MCP.
+- **Solo tienes una o dos preguntas de pipeline-review por semana.** El valor amortizado está por debajo del costo de setup y de tokens ongoing. Quédate con reportes guardados.
+- **El régimen de compliance prohíbe el acceso del LLM a PII.** Las industrias reguladas (salud, finanzas) frecuentemente prohíben empujar registros de clientes a un LLM de terceros, full stop. Esta es una pregunta de policy, no de arquitectura.
 
 ## Setup
 
-1. **Levanta el server.** La implementación de referencia es un MCP server en Node con tres familias de herramientas: `query`, `read_record` y `write_record`. Clona, instala, configura las variables de entorno con las credenciales de la Connected App.
-2. **Define la política de permisos.** Un archivo YAML lista qué objetos son legibles, qué campos son escribibles y qué operaciones requieren un paso de confirmación explícita. La política por defecto es solo lectura. Las escrituras requieren un allowlist.
-3. **Agrega el server a tu cliente MCP.** En Claude Code, agrega una entrada en tu config de cliente apuntando al proceso local. El server anuncia sus herramientas al arrancar.
-4. **Conecta el audit logging.** Cada llamada a herramienta produce una entrada de log estructurada: usuario, herramienta, argumentos, hash del resultado. Pipe a tu stack de logging de elección. Esto es no negociable para operaciones de escritura.
-5. **Prueba primero con solo lectura.** Corre "muéstrame mi pipeline" antes que "actualiza cincuenta deals". La confianza viene de unas semanas de operación en solo lectura.
+El `README.md` del bundle es la fuente de verdad; los pasos abajo son la orientación. Tiempo total hasta tener una tool registrada funcionando: cerca de noventa minutos si tu Connected App y objeto `Cleanup_Audit__c` ya existen, dos a tres horas si necesitas construirlos.
 
-## Cómo funciona
+1. **Instala el paquete.** Clona el bundle, `python -m venv .venv`, activa, `pip install -e .`. Las dependencias son `mcp>=1.2.0`, `httpx`, `pydantic`, y `simple-salesforce` (mantenida disponible para el TODO de refresh-token).
+2. **Crea un Connected App en Salesforce Setup.** Habilita OAuth, scopes `api` y `refresh_token, offline_access`, callback URL `http://localhost:1717/callback` (o donde sea que viva tu helper de OAuth). Espera los diez minutos mandados por Salesforce para propagación. Copia el Consumer Key y Consumer Secret.
+3. **Acuña un access token.** Este scaffold lee `SFDC_ACCESS_TOKEN` directamente del entorno y documenta el flujo de refresh-token como un TODO; para desarrollo el camino fácil es `sfdx auth:web:login` seguido de `sfdx force:org:display --verbose`. Para producción, envuelve el servidor en un sidecar que maneje refresh y escriba el token actual al env.
+4. **Crea el objeto custom `Cleanup_Audit__c`.** Fields: `Object_Name__c` (text), `Record_Id__c` (text 18), `Field_Name__c` (text), `Old_Value__c` (long text), `New_Value__c` (long text), `Justification__c` (long text), `Performed_By__c` (text). Otorga CRUD al integration user en este objeto.
+5. **Define env vars y registra con Claude Desktop.** `SFDC_INSTANCE_URL`, `SFDC_ACCESS_TOKEN`, `SFDC_API_VERSION` (default `v60.0`), `SFDC_AUDIT_OBJECT` (default `Cleanup_Audit__c`), `SFDC_COMMIT_STAGE_NAME` (default `Commit`). Agrega el bloque JSON del README a `claude_desktop_config.json`. Reinicia Claude Desktop.
+6. **Sanity check.** Pídele a Claude "Muéstrame pipeline by stage para los próximos noventa días" y compáralo contra el reporte de Pipeline equivalente en Salesforce. Después corre `update_field` contra una opportunity en sandbox con una justificación real y verifica que una fila de `Cleanup_Audit__c` fue escrita antes de que el campo cambiara.
 
-El MCP server traduce llamadas de herramienta de Claude en queries SOQL y llamadas REST a Salesforce. Las lecturas pasan por el filtro de política y devuelven JSON. Las escrituras pasan por un paso de confirmación: el server devuelve un preview "qué haría", Claude lo muestra al usuario, el usuario confirma, el server hace commit.
+## Qué expone
 
-Las escrituras en bulk son especiales. El server pone un cap duro sobre cualquier operación de update a veinticinco registros por defecto. Operaciones más grandes requieren una herramienta `bulk_write` separada que está apagada por defecto y solo se habilita para identidades de usuario específicas.
+Diez tools, agrupadas por intención para que Claude (y tú) puedan razonar sobre cuál usar.
 
-## Cuídate de
+- **Lecturas de objeto:** `get_account`, `get_opportunity`, `get_contact`, `get_lead`. Campos estándar más owner donde sea relevante.
+- **SOQL:** `query(soql, bypass_sharing=False)`. Solo un SELECT. Auto-inyecta `WITH SECURITY_ENFORCED` si te olvidaste; auto-capea `LIMIT 200` si te olvidaste también de eso. Rechaza cualquier string que contenga `INSERT`, `UPDATE`, `DELETE`, `UPSERT`, `MERGE`, `FIND`, o `EXEC`. `bypass_sharing=True` raisea hoy, reservado para una futura integración con Tooling-API.
+- **Helpers de RevOps:** `pipeline_by_stage(close_date_window_days, owner_id?)`, `stale_opps(days_in_stage_threshold)`, `at_risk_commits(quarter_end_date)`. Cada uno compone un string SOQL parametrizado, lo pasa por el mismo validador `harden_soql`, y devuelve datos agregados o a nivel de fila dependiendo de la intención.
+- **Escrituras audit-aware:** `add_note(object_type, object_id, body)` crea un `ContentNote` y lo linkea vía `ContentDocumentLink`. `update_field(object_type, object_id, field_name, new_value, justification)` requiere una justificación ≥ 10 caracteres, escribe una fila de `Cleanup_Audit__c` con el valor old antes del cambio, y después realiza el PATCH de campo único. Si el insert de auditoría falla, el update del campo nunca corre.
 
-- **El audit logging es obligatorio.** Si una herramienta de escritura corre sin una entrada de log correspondiente, el server debe fallar cerrado. No hagas ship sin este guard.
-- **Drift de field-level security.** Los permisos de Salesforce cambian. El archivo de política del server puede salirse de sincronía. Corre un job semanal que haga diff de la política contra la FLS actual y alerte sobre mismatches.
-- **Rotación de tokens.** Los refresh tokens expiran. Construye el flujo de rotación antes del lanzamiento, no después del primer 401.
-- **UX de confirmación.** El preview "qué haría" debe ser inequívoco. "Actualiza cincuenta deals" no es suficiente; muestra los IDs y el diff a nivel de campo.
+No hay tool de `delete_*`, no hay DML masivo, no hay shortcut de transición de stage, no hay merge, no hay convert. Si quieres que el workflow haga esas cosas, escribes una tool separada, nombrada, con su propia historia de auditoría. El principio: cada acción irreversible se gana su propio botón, nunca un comando de texto libre.
+
+## Postura de ingeniería
+
+El scaffold hace unas pocas decisiones opinadas que vale la pena entender antes de adoptarlo.
+
+**Whitelist de SOQL por construcción, no regex.** La tool `query` rechaza cualquier cosa que no empiece con `SELECT`, después rechaza cualquier match palabra-completa contra una keyword de DML o SOSL. SOQL en sí es solo-lectura — no hay `UPDATE Opportunity SET …` en el lenguaje — pero el rechazo explícito hace la intención ruidosa y atrapa el caso donde alguien intenta meter apex anónimo a través de la tool.
+
+**WITH SECURITY_ENFORCED es mandatorio.** El endpoint REST `/query` de Salesforce salta silenciosamente la field-level security a menos que la pidas. El scaffold inyecta la cláusula si te olvidaste, así que un usuario sin read en un campo recibe un error claro de `INSUFFICIENT_ACCESS` en vez de una respuesta que silenciosamente omite la columna.
+
+**El cap de LIMIT es estructural.** Cada helper compone un string SOQL con un `LIMIT` explícito; la tool `query` inyecta `LIMIT 200` si falta. Las lecturas masivas que excedan doscientos registros pertenecen a la Bulk API, no acá. Esto a la vez mantiene los payloads de respuesta tratables para el modelo y hace predecible la cuota diaria de API.
+
+**Justificación obligatoria en escrituras.** `update_field` requiere una `justification` de al menos diez caracteres y escribe la fila de auditoría antes de tocar el campo. El orden audit-first significa que un update fallido deja un registro de intención sin un registro de acción; la alternativa — update primero, audit segundo — deja cambios sin razón documentada si la escritura de auditoría falla. Reconcilia las filas de intención-fallida semanalmente.
+
+**Sin tools de delete, nunca.** Los deletes se exponen solo a través de la propia UI de Salesforce y Data Loader, que ya tienen guardrails a nivel-de-organización. Agregar una tool de `delete_*` acá ruteara alrededor de esos guardrails por un ahorro de tiempo marginal. Vale menos que el blast radius.
+
+## Realidad de costo
+
+Tres líneas de costo. Ninguna es enorme en aislamiento; juntas son reales.
+
+- **Suscripción a Claude.** Lo que sea que tu equipo ya paga por Claude Desktop o Claude Code (Pro a $20/usuario/mes, tiers Max $100-200/usuario/mes, o consumo de API). El servidor MCP en sí no cambia esto.
+- **Self-host del servidor.** El scaffold corre como un proceso Python local por usuario de Claude Desktop. Costo cero de infra en un laptop de desarrollador. Si lo envuelves como un servicio compartido (FastAPI delante de la misma lógica de dispatch) para que no-desarrolladores puedan usarlo, presupuesta una VM chica — $20-50/mes en cualquier cloud, menos si ya tienes un cluster de Kubernetes.
+- **Cuota de API de Salesforce.** El default es 15.000 calls de API por 24 horas por org Enterprise, más asignaciones por-usuario encima. Un lead de RevOps típico tirando del pipeline una vez por día e inspeccionando veinte deals por semana consume tal vez 200-300 calls/día. Pipeline review masivo entre el equipo puede picar a 1.000-2.000 calls/día. Cómodo hasta el día que no lo es — el cap de 200-registros de los helpers existe en parte para mantener la cuota predecible.
+
+El costo de tokens del lado de Claude está dominado por los payloads de respuesta, no los prompts. Un pull de 200-registros de opportunity a tal vez 600 tokens por registro son ~120K tokens por call; al precio de Claude 3.5 Sonnet eso es alrededor de $0.36/call en input. Tres a cinco calls así por sesión de pipeline-review por lead de RevOps por semana, y estás mirando dólares de un dígito/usuario/mes encima de la suscripción. Redondea generosamente y llámalo $20/usuario/mes all-in.
+
+## Cómo se ve el éxito
+
+Una señal medible un mes después del rollout: time-to-answer en preguntas semanales de pipeline-review cae de "cambia pestañas, abre el reporte, filtra, exporta" (digamos cinco minutos) a "pregúntale a Claude, lee la respuesta" (bajo treinta segundos). Multiplica por cuantas preguntas así pregunta tu equipo por semana. La señal más difícil-de-medir pero más-load-bearing: el equipo deja de mantener un backlog paralelo de "preguntas para hacerle a la persona de datos" porque responderlas ahora es barato.
+
+Una segunda señal: la tabla `Cleanup_Audit__c` se llena con filas que parecen trabajo de cleanup real — correcciones de close-date, reasignaciones de owner, correcciones de stage — cada una con una justificación legible-por-humano del largo de una oración. Si esa tabla está vacía después de un mes, o nadie está usando las tools de escritura (bien — el valor solo-lectura por sí solo es real) o el requerimiento de justificación está siendo rodeado (no bien — investiga).
+
+## Versus las alternativas
+
+- **Salesforce Einstein / Agentforce.** First-party, se integra nativamente con la plataforma, sin proceso separado para hostear. Trade-off: el pricing es por-usuario-por-mes y empinado ($30-50/usuario/mes para los add-ons de Einstein; el pricing conversation-based de Agentforce varía), y la UX conversacional vive en Salesforce — tu equipo tiene que estar en Salesforce para usarla. El patrón del servidor MCP mantiene a Claude como la superficie de chat universal entre todos tus sistemas-de-registro. Elige Einstein si tu equipo vive en Salesforce; elige este servidor si vive en Claude.
+- **Endpoints custom de Apex / REST alimentando un chatbot.** Control máximo. También carga de mantenimiento máxima y sin historia de tool-discovery built-in. Tú construyes el JSON Schema para cada tool a mano, tú construyes el dispatch, tú construyes el sidecar de auth. El servidor MCP te da todo eso en ~400 líneas.
+- **Dashboard de Tableau o CRM Analytics.** Forma diferente de herramienta. Los dashboards sobresalen en el problema "quiero ver las mismas cinco vistas cada lunes"; este MCP sobresale en el problema "quiero hacer una pregunta para la que no he pre-construido una vista". Son complementos, no alternativas.
+- **Statu quo (reportes guardados + SOQL manual en la consola de desarrollador).** Gratis. Lento. Envejece mal cuando la persona que escribió los reportes guardados se va. El servidor MCP le gana en time-to-answer y le gana más a medida que tu biblioteca de helper tools crece.
+
+## Watch-outs
+
+El README los documenta en completo; la versión corta:
+
+- **Disciplina de scope del Connected App.** El token de OAuth puede leer todo lo que el usuario corriendo puede leer. Crea un integration user dedicado con un profile estrecho, revísalo trimestralmente. Guarda: fecha de revisión del profile del integration user escrita en el objeto de auditoría como una fila `Performed_By__c=policy-review`.
+- **Estallido de governor-limit en lecturas masivas.** El cap de 200-registros protege la cuota diaria de API, pero un `query` desconsiderado sobre una tabla de Lead de 500K-filas todavía puede masticar una porción de la cuota en unos minutos. Guarda: `harden_soql` inyecta `LIMIT 200` incondicionalmente; enseña al equipo a usar los helpers, no SOQL crudo, para trabajo de rutina.
+- **Riesgo de bypass de FLS.** El REST `/query` no enforza field-level security por default. Guarda: el scaffold agrega `WITH SECURITY_ENFORCED` a cada query que la omite. Deshabilita esto solo con un cambio explícito y justificado a `harden_soql`.
+- **Gap de audit-log en escrituras.** Si el update del campo falla después de que la fila de auditoría fue escrita, tienes una intención registrada sin un cambio real. Guarda: la fila de auditoría se queda en su lugar; reconcilia semanalmente. Agrega `Failed__c` al objeto de auditoría (TODO #6 en el README) para marcar estos explícitamente.
+- **Falla de refresh del token OAuth.** Los tokens long-lived expiran y un 401 un viernes a las 4pm es el peor modo de falla. Guarda: ponle un refresh sidecar delante al servidor; falla-fuerte en 401, no retries silenciosamente.
 
 ## Stack
 
 - **Salesforce** — sistema de registro
-- **MCP server** — capa de traducción, política y auditoría
-- **Claude** — interfaz de lenguaje natural, llamador de herramientas
+- **MCP Python SDK** — el paquete `mcp>=1.2.0`; provee `Server`, `stdio_server`, y los decoradores de tool-registry
+- **httpx** — cliente REST async
+- **simple-salesforce** — mantenida disponible para el TODO de refresh-token (el scaffold en sí usa httpx crudo)
+- **Claude Desktop o Claude Code** — interfaz de lenguaje natural, tool caller
+- **Cleanup_Audit__c** — tu objeto custom de auditoría, el canario que prueba que las escrituras están documentadas
