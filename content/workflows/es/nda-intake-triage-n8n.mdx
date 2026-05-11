@@ -1,0 +1,95 @@
+---
+slug: nda-intake-triage-n8n
+canonical_slug: nda-intake-triage-n8n
+locale: es
+verticals: [legal-ops]
+title: Triaje de recepción de NDAs con n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ironclad, slack, claude]
+roles: [legal-ops, contract-manager, paralegal]
+difficulty: intermediate
+time_to_setup: 60min
+human_tested: false
+translated_from: en/nda-intake-triage-n8n.mdx
+translated_at: "2026-05-11T05:10:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "a3db016cd6d095f1f9fe070fd8270e1edc3185d5da5b6660132a265382ffa7d0"
+---
+
+Un workflow de n8n que intercepta cada NDA entrante que llega a un buzón dedicado `nda-intake@`, clasifica el nivel de riesgo de la contraparte a partir de un registro en Postgres, procesa el documento con Claude Sonnet 4.6 contra tu [playbook de NDA](/es/learn/nda-playbook/) y, o bien aprueba automáticamente el contrato en Ironclad, o lo enruta a un revisor designado en Slack con el resumen cláusula por cláusula adjunto. Diseñado para equipos in-house que manejan más de 50 NDAs al mes, donde el triaje en el momento de recepción —no la negociación— es lo que consume las horas legales.
+
+El bundle descargable está en `apps/web/public/artifacts/nda-intake-triage-n8n/` y contiene el JSON completo del workflow más un README de configuración. El bundle es el entregable; esta página explica cuándo y cómo usarlo.
+
+## Cuándo usarlo
+
+Usa este workflow cuando se cumplan tres cosas a la vez. Primero, tu equipo procesa suficientes NDAs como para que el volumen mismo sea el problema —típicamente más de 40 al mes, donde el NDA marginal es esencialmente idéntico al anterior y el equipo legal actúa como cuello de botella para la velocidad comercial en lugar de como puerta estratégica. Segundo, tienes un playbook real —una lista escrita de familias de cláusulas, tu postura estándar en cada una, tus posiciones de fallback autorizadas y el umbral de walk-away. Si el playbook vive en la cabeza de alguien, el paso de IA no tiene contra qué comparar y obtendrás basura con alta confianza. Tercero, tienes un registro de contrapartes en alguna forma consultable —Postgres, Airtable, incluso una Google Sheet exportada cada noche— que mapea dominios de email a un nivel de riesgo. Sin él, cada contraparte cae en "desconocida" y el workflow no hace nada útil.
+
+El workflow brilla con papel de contraparte entrante de socios comerciales conocidos —los casos clásicos de NDA-de-proveedor-antes-de-RFP y NDA-de-prospect-antes-de-llamada-de-precio. También es útil como filtro de primera pasada sobre NDAs outbound que tu equipo de ventas dispara desde una plantilla activada en Salesforce, donde la única desviación posible es el redline que te devuelve la contraparte.
+
+## Cuándo NO usarlo
+
+Sáltate este workflow para cualquier tipo de contrato que no sea un NDA común. La taxonomía de cláusulas en el system prompt está calibrada solo para acuerdos de confidencialidad —alimentarlo con un MSA, DPA o contrato de servicios producirá output confiado contra el checklist equivocado, que es el peor modo de falla posible. Construye un workflow separado por cada familia de contrato si quieres extenderlo.
+
+Sáltatelo para NDAs de M&A, NDAs de contratación gubernamental y cualquier NDA atado a un litigation hold. Estos necesitan la atención del GC desde el primer minuto, y el tiempo que el workflow ahorra en triaje queda eclipsado por el costo político de una escalación que no se hizo. Enruta esos a través de un email de recepción separado que evite la automatización por completo.
+
+Sáltatelo durante el primer mes después de un cambio material en el playbook —adiciones de cláusulas, nuevas posiciones de fallback, un rebalanceo de niveles en el registro. El prompt de Claude codifica el playbook implícitamente a través del system message; necesitas una ventana de revisión manual para detectar dónde el modelo y la nueva política no están de acuerdo antes de volver a confiar en la auto-aprobación.
+
+Sáltatelo por completo si procesas menos de ~15 NDAs al mes. El tiempo de setup (60 minutos más el trabajo de codificación del playbook, que es el costo real) no se amortiza en un año a ese volumen. Un buzón compartido y un paralegal con un checklist es la mejor respuesta.
+
+## Setup
+
+Sigue el README en `apps/web/public/artifacts/nda-intake-triage-n8n/_README.md` para el walkthrough completo de credenciales y esquemas de tablas. La versión de 30 segundos: aprovisiona el buzón dedicado `nda-intake@`, crea las tablas Postgres `counterparty_registry` y `nda_audit_log` (el DDL se infiere de la lista de columnas en la sección de credenciales del README), pre-crea tres plantillas de workflow en Ironclad (`nda-review`, `nda-escalation` y un tipo de registro `nda`), invita a un bot de Slack a `#legal-ops-firehose`, `#legal-nda-queue` y `#legal-gc-escalations`, después importa `nda-intake-triage-n8n.json` en n8n y vincula las cinco credenciales por nombre.
+
+Ejecuta las cinco pruebas de smoke en la sección "First-run verification" del README antes de activar el workflow. La quinta prueba —romper temporalmente el prompt de Claude para confirmar que el fallback ante error de parser escala en vez de auto-aprobar silenciosamente— es la que la mayoría de los equipos se salta y la que más lamentan.
+
+## Qué hace el workflow
+
+El trigger es un poll de Gmail que dispara una vez por minuto contra el buzón de recepción, filtrado a mensajes con adjuntos PDF o DOCX y aún no etiquetados como `nda-processed`. Un nodo Code (`Normalize Intake`) extrae el remitente, codifica el adjunto en base64 y emite un envelope tipado; los mensajes sin adjunto utilizable son desviados a un estado `no_attachment` que las ramas downstream manejan elegantemente en vez de hacer crashear el workflow.
+
+Un nodo Postgres (`Counterparty Lookup`) consulta el registro por dominio del remitente y devuelve nivel de riesgo, papel preferido y notas en formato libre. Un segundo nodo Code (`Merge Counterparty Context`) deja por defecto las filas faltantes en `risk_tier = 'unknown'` en lugar de fallar —el override conservador más adelante captura este caso.
+
+La llamada a Claude (`Claude — Playbook Check`) envía el documento como un bloque base64 a Sonnet 4.6 junto con un system prompt que nombra diez familias de cláusulas (ley aplicable, plazo, mutualidad, carve-outs de IP, residuales, no-solicitación, indemnización, exclusión-de-daños-consecuentes, definición-de-información-confidencial, aviso-de-incumplimiento) y exige output JSON estricto con `position`, `quote`, `suggested_redline` y `confidence` por cada cláusula, además de una `recommendation` de nivel superior de `auto-approve`, `lawyer-review` o `escalate`.
+
+El siguiente nodo Code (`Apply Risk Rules`) es el cinturón de seguridad. Aplica tres overrides en orden de prioridad: cualquier cláusula de walk-away fuerza `escalate` sin importar lo que dijo Claude; una confianza global por debajo de 0.7 degrada cualquier `auto-approve` a `lawyer-review`; y cualquier nivel de riesgo no-bajo degrada `auto-approve` a `lawyer-review`. La razón del override queda estampada en la fila de auditoría para que puedas medir con qué frecuencia se dispara cada guarda.
+
+Un nodo Switch enruta a una de tres ramas —creación de registro en Ironclad (auto-approve), workflow de revisión en Ironclad + post de cola de abogados en Slack con resumen Block Kit (lawyer-review), o workflow de escalación en Ironclad + alerta al canal del GC (escalate). Cada rama converge en `Audit Log Write`, que inserta una sola fila keyada al message ID de Gmail (para que los reintentos sean idempotentes), y luego `Mark Gmail Processed`, que añade la etiqueta `nda-processed` para que el trigger no vuelva a dispararse.
+
+Las decisiones de ingeniería que vale la pena nombrar: Sonnet 4.6 sobre Haiku porque Haiku pierde cláusulas de fallback (más barato por llamada pero más caro por falsa aprobación); adjuntar el documento en base64 en lugar de extraer texto porque la extracción de texto en PDF pierde señales de formato que cambian el significado de una cláusula; override conservador en la capa del nodo Code en vez de en el prompt porque las salvaguardas que viven solo en el prompt son evadibles por papel adversarial de la contraparte; insert de auditoría idempotente vía `ON CONFLICT (message_id) DO NOTHING` porque n8n reintenta ante errores transitorios de Postgres y no quieres filas duplicadas; y Switch sobre IF porque Switch mantiene la topología de conexiones de cada rama visualmente obvia en el canvas de n8n.
+
+## Realidad de costos
+
+El costo por NDA de Anthropic es el gasto variable dominante. Un NDA típico de 4 páginas se serializa en aproximadamente 6,000-9,000 tokens de input (el documento más el system prompt y el contexto de la contraparte) y la respuesta estructurada cae en 800-1,200 tokens de output. Al precio de lista de Sonnet 4.6 de $3 por millón de tokens de input y $15 por millón de tokens de output, eso es $0.018-$0.027 input + $0.012-$0.018 output, o aproximadamente **$0.03-$0.045 por NDA**. A 100 NDAs al mes, eso son $3-$5 de gasto en API. A 1,000 NDAs al mes son $30-$45. Incluso con un multiplicador 3x por reintentos en documentos largos y el MSA ocasional de 10 páginas mal clasificado como NDA, la factura mensual se mantiene bajo $200 a volúmenes típicos.
+
+El hosting de n8n es el otro renglón. Auto-hospedado en un VPS de $20/mes maneja miles de ejecuciones por día. El plan Starter de n8n Cloud es $24/mes por 5,000 ejecuciones; si tu buzón de recepción dispara más de 5,000 polls + ejecuciones de mensajes procesados al mes (lo hará a 200+ NDAs/mes con polling de un minuto), necesitas el plan Pro a $60/mes o auto-hospedado.
+
+El costo que realmente importa es el costo de horas legales que evitas. Un paralegal triando un NDA manualmente promedia 12-15 minutos por contrato solo para el paso leer-clasificar-enrutar. A una tarifa fully-loaded de $90/hora de paralegal, son $18-$22 por NDA en tiempo humano. El workflow gasta $0.03 de API reemplazando $20 de tiempo de paralegal —una proporción de costos de 600x— pero solo si tu equipo realmente confía en la rama de auto-aprobación y deja de releer cada contrato detrás de ella. Los equipos que revisan dos veces cada auto-aprobación pierden los ahorros; el workflow se vuelve puro costo. Planea el rollout de construcción de confianza (punto 2 bajo "A vigilar" abajo) deliberadamente.
+
+## Métrica de éxito
+
+Rastrea dos números semanalmente. **Tiempo de ciclo desde recepción hasta disposición** (auto-approve, lawyer-review en cola, o escalación en cola) debe quedar bajo 5 minutos para cada rama —alerta de Slack en la cola, registro de Ironclad existe, fila de audit log escrita. Si se desvía por encima de 5 minutos, tu API de Anthropic está lenta o n8n está encolando ejecuciones; investiga. **Precisión de auto-approve** es el segundo número: de cada NDA que el workflow auto-aprobó, ¿qué porcentaje habría aprobado un revisor humano sin cambios? Apunta a 99% dentro de los 60 días posteriores al go-live. La revisión semanal de falsos positivos consulta `nda_audit_log WHERE recommendation = 'auto-approve' AND overall_confidence < 0.85`, muestrea 10 filas y las recorre a través del playbook a mano. Cualquier cosa por debajo de 99% de precisión significa que el prompt del playbook o los umbrales de override necesitan ajustarse antes de subir el volumen.
+
+Una métrica de apoyo útil: **tasa de escalación**. Por debajo de 5% significa que el workflow está haciendo trabajo real. Por encima de 15% significa o bien que el registro es insuficiente (demasiadas contrapartes "desconocidas") o que el playbook es demasiado agresivo clasificando cláusulas como walk-away. Por encima de 30% significa que el workflow está actuando como enrutamiento caro para lo que es efectivamente triaje manual; o arregla los inputs o apaga el workflow.
+
+## vs alternativas
+
+**vs triaje manual por un paralegal.** Un paralegal senior con un checklist escrito cuesta $18-$22 por NDA y toma 12-15 minutos. El workflow cuesta $0.03 y toma 90 segundos. El paralegal es dramáticamente mejor en casos límite (disparadores de litigación, jurisdicciones inusuales, estructuras de cláusula novedosas) y dramáticamente peor en consistencia y volumen. La arquitectura correcta es ambas —el workflow maneja el 80% de NDAs comunes que son papel-exacto o un-solo-fallback, y el paralegal posee la cola de lawyer-review con su juicio liberado para los contratos que lo necesitan. Reemplazar al paralegal por completo es el modo de falla; aumentarlo es la victoria.
+
+**vs un módulo de recepción de CLM listo para usar.** Ironclad, Icertis, ContractWorks y similares todos vienen con features de enrutamiento de recepción. Son excelentes en la mitad de "almacenar, versionar, enrutar al aprobador" del problema y débiles en la mitad de "clasificar contra nuestro playbook específico" —su IA incorporada tiende a ser un extractor genérico de cláusulas calibrado contra una librería genérica de cláusulas, no contra tus posiciones de fallback particulares. El workflow cambia la conveniencia de un producto integrado por la precisión de un prompt específico al playbook. Si tu playbook es genuinamente común (aceptas cualquier NDA mutual razonable), el módulo listo para usar está bien y no deberías construir esto. Si tu playbook tiene posiciones específicas sobre residuales, carve-outs de IP, o no-solicitaciones que importan, el prompt del workflow es lo que lo hace ganar su lugar.
+
+**vs una regla manual de enrutamiento Salesforce-a-Ironclad.** Un flow de Salesforce que crea un workflow de Ironclad cuando una oportunidad alcanza una etapa es puramente determinista —mismo enrutamiento, mismo revisor, sin importar el contenido del contrato. Eso está bien para papel outbound donde controlas el documento, pero inútil para papel de contraparte inbound donde la decisión de enrutamiento debería depender de lo que el contrato realmente dice. Usa ambos: Salesforce para triggers outbound, este workflow para clasificación inbound.
+
+## A vigilar
+
+**La cobertura del registro de contrapartes impulsa la tasa de auto-approve; sin ella el workflow degrada a lawyer-review-en-todo.** Modo de falla: la cobertura del registro está por debajo del 60% de remitentes entrantes, así que el 40%+ de los NDAs golpea el override de `non_low_risk_tier` y se enruta a revisión manual incluso cuando están limpios. Guarda: instrumenta `Counterparty Lookup` con una consulta semanal (`SELECT count(*) FROM nda_audit_log WHERE counterparty_id IS NULL AND processed_at > now() - interval '7 days'`) y alimenta la lista de dominios desconocidos de vuelta a quien sea dueño del registro. Trata el mantenimiento del registro como un rol nombrado, no como un proyecto secundario.
+
+**La deriva del playbook causa mala calibración silenciosa cuando la política cambia más rápido que el prompt.** Modo de falla: legal actualiza la posición sobre residuales, pero el system prompt en `Claude — Playbook Check` todavía codifica la posición vieja, y Claude auto-aprueba con confianza cláusulas que tu equipo acaba de decidir que son inaceptables. Guarda: encierra cada cambio de playbook detrás de una ventana de revisión manual de 30 días. El override que degrada cualquier `auto-approve` a `lawyer-review` cuando `risk_tier != 'low'` mitiga parcialmente al canalizar más contratos a través de ojos humanos; la mitigación más difícil es un chequeo trimestral de diff entre las descripciones de cláusulas del prompt y el documento canónico del playbook.
+
+**Las fallas de parseo siempre deben escalar, nunca caer por defecto a aprobar.** Modo de falla: un NDA largo o inusual hace que Claude envuelva su respuesta en cercas de markdown, el JSON.parse en `Apply Risk Rules` lanza una excepción, y una implementación ingenua podría caer a una rama por defecto y mal-enrutar. Guarda: el nodo Code `Apply Risk Rules` explícitamente captura la excepción de parseo y estampa `recommendation = 'escalate'` con `escalation_reason: 'parser_error'`. No edites esta guarda fuera, y corre la smoke test #5 del README cada vez que cambies el prompt de Claude para confirmar que el catch aún se dispara.
+
+**El contenido privilegiado puede filtrarse en la llamada a la API de Anthropic cuando los remitentes confunden el buzón de recepción con asesoría general.** Modo de falla: una unidad de negocio reenvía un hilo de email que incluye contexto de litigación pendiente más un NDA adjunto a `nda-intake@`, y el hilo entero (asunto, snippet del cuerpo, adjunto) termina en una request a la API de Anthropic. Guarda: el nodo Code actualmente limita `body_snippet` a 2,000 caracteres pero no elimina contenido del cuerpo; empareja el workflow con la [política de IA para equipos legales](/es/learn/ai-policy-for-legal-teams/) para autorizar el flujo de datos explícitamente, y considera un nodo IF previo a Claude que desvíe los mensajes con asuntos que coincidan con `/litigation|privileged|attorney-client/i` a la rama de escalación al GC sin llamada al LLM.
+
+**La disciplina del canal de email determina si el workflow alguna vez ve el trabajo.** Modo de falla: los equipos de negocio ignoran el buzón de recepción y envían NDAs directamente a los abogados porque el workflow es más rápido solo después del primer NDA, y el primer NDA siempre se envía como siempre se ha enviado. Guarda: un autoresponder en cada buzón individual de abogado (`legal-bd@`, `gc@`, etc.) que diga "gracias, por favor reenvía a nda-intake@" combinado con una regla de forwarding que auto-enruta cualquier cosa con adjuntos con forma de NDA. Impulsa la norma del canal en los primeros 30 días; revisita si el volumen mensual del workflow se estanca por debajo de tu estimación.
+
+## Stack
+
+[n8n](/es/tools/n8n/) para orquestación, [Claude](/es/tools/claude/) Sonnet 4.6 para clasificación de cláusulas, [Ironclad](/es/tools/ironclad/) (o tu [CLM](/es/learn/contract-lifecycle-management/) preferido) para el record-keeping y el workflow de firma downstream, [Slack](/es/tools/slack/) para la cola del revisor, Postgres para el registro de contrapartes y el audit log, Gmail para el buzón de recepción. Mira la [vertical de legal-ops](/es/r/legal-ops/) para workflows relacionados incluyendo el [SOP de revisión de contratos](/es/learn/contract-review-sop/) al que este workflow se conecta como la capa de triaje Tier 1-2.
