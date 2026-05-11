@@ -15,7 +15,7 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 - [x] Astro app skeleton with i18n routing (`/[locale]/...`)
 - [x] Content schema + validators (JSON Schema → TypeScript types)
 - [x] Cloudflare Pages + domain wired up (Supabase not yet in use)
-- [ ] Plausible analytics installed
+- [x] Google Analytics (GA4) installed — `G-W6BZJ1Q021` wired in `BaseLayout.astro`
 - [x] beehiiv newsletter set up (one publication, EN/RevOps)
 - [x] First commit pushed publicly
 
@@ -41,7 +41,7 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 - [x] Translation pipeline (Claude structured-output + glossary enforcement)
 - [x] Automated QA gates (back-translation similarity, schema validation, broken-link check)
-- [x] All EN content translated to ES + PT-BR
+- [ ] All EN content translated to ES + PT-BR (ES: 68 missing; pt-BR: 100 missing + 20 stale — translation queue drain in progress)
 - [x] hreflang clusters validated; per-locale sitemaps live
 - [ ] Per-locale Google Search Console properties
 - [x] Locale switcher UX
@@ -91,7 +91,7 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 ## Phase 7 — Vertical 4 + scale (Month 8-12)
 
 - [ ] Marketing Ops vertical (or Customer Success — to be decided based on Phase 4-5 traction signal)
-- [ ] Add DE locale (or FR — to be decided based on which language showed strongest organic signal)
+- [ ] Add DE locale (or FR — to be decided based on which language showed strongest organic signal in GA4 segment data)
 - [ ] 6,000+ indexed pages total
 - [ ] First $10K MRR milestone
 
