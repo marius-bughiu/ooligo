@@ -1,0 +1,91 @@
+---
+slug: regulatory-change-monitor-n8n
+canonical_slug: regulatory-change-monitor-n8n
+locale: es
+verticals: [legal-ops]
+title: Monitor de cambios regulatorios con n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops, in-house-counsel, compliance, dpo]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/regulatory-change-monitor-n8n.mdx
+translated_at: "2026-05-11T09:35:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "aa78e16fd4585ec1bcc8e580247d3de5bd8e4abe11ee2b2c742e744d4326919c"
+---
+
+Un workflow de n8n que monitorea un conjunto curado de feeds regulatorios (novedades de la EU AI Act, decisiones de aplicación del GDPR, leyes estatales de privacidad de EE. UU., propuestas de reglas de la SEC, NYC LL 144 y otras leyes de IA en empleo, reglas sectoriales), clasifica cada ítem por relevancia respecto al perfil de exposición específico de la firma, puntúa la urgencia y publica un digest estructurado en el canal de Slack del equipo legal — agregado diario, más alertas inmediatas para los ítems `high_urgency`. Reemplaza el "cementerio de RSS y newsletters" del in-house counsel con una cola filtrada que solo saca a la luz aquello sobre lo que la firma realmente necesita actuar.
+
+## Cuándo usarlo
+
+- La firma opera en varios regímenes regulatorios (privacidad, empleo, sectoriales) y el equipo in-house no puede leer manualmente las actualizaciones de cada regulador.
+- El trabajo de compliance es lo bastante guiado por eventos como para que "se nos pasó este cambio de regla porque nadie lo vio" sea un modo de falla real.
+- La firma documentó su perfil de exposición regulatoria (qué jurisdicciones, qué sectores, qué tipos de datos) — el filtro de relevancia requiere ese perfil.
+
+## Cuándo NO usarlo
+
+- **Reemplazar la lectura del general counsel de la firma.** El workflow es soporte a la decisión; el counsel sigue leyendo los ítems de alta urgencia y define la respuesta de la firma. El workflow filtra; el counsel actúa.
+- **Producir asesoramiento legal sobre los cambios de regla.** El workflow resume. El counsel interpreta y decide la respuesta.
+- **Áreas de práctica muy especializadas** que requieren monitoreo de nivel practitioner dedicado (revisión regulatoria de M&A, fiscal complejo). La práctica especializada tiene fuentes a medida más allá de lo que un monitor de feeds captura.
+- **Geografías que el perfil de exposición no cubre.** Agregar una geografía requiere actualizar el perfil; el workflow no descubre automáticamente lo que le importa a la firma.
+
+## Setup
+
+1. **Importa el workflow** desde `apps/web/public/artifacts/regulatory-change-monitor-n8n/regulatory-change-monitor-n8n.json`.
+2. **Configura las credenciales.** Anthropic (clasificación con Claude), Slack (destino del digest), HTTP fetcher (sin auth para feeds RSS / API públicos).
+3. **Redacta el perfil de exposición de la firma.** Por área regulatoria, documenta: jurisdicciones aplicables, sectores, tipos de datos, exposición a sanciones, counsel responsable. Plantilla en `_README.md`.
+4. **Configura las fuentes de feeds.** El workflow incluido consulta 8 feeds por defecto (página de la EU AI Act de la Comisión Europea, página de NYC consumer affairs LL 144, lineamientos del EDPB, propuestas de reglas de la SEC, enforcement del ICO, lineamientos del EDPS, comunicados de prensa de la FTC, agregador de enforcement de privacidad de los state-AG). Agrega o quita según la exposición de la firma.
+5. **Ajusta los umbrales de urgencia.** Defaults: decisión de enforcement contra una firma comparable → `high`; propuesta de regla en jurisdicción dentro del alcance → `medium`; documento de consulta → `low`. Ajusta según la preferencia del counsel entre ruido y omisiones.
+6. **Dry-run por dos semanas.** Compara las clasificaciones del workflow con la lectura manual del counsel para el mismo período. Ajusta el filtro de relevancia y las reglas de urgencia.
+
+## Lo que hace el workflow
+
+Seis nodos. Polling por feed, luego clasificación por ítem, luego ensamblado del digest.
+
+1. **Cron Horario** — se dispara cada hora para consultar los feeds (el digest diario se ensambla a las 8 am hora de oficina).
+2. **Fetch Feeds** — peticiones HTTP a cada URL de feed configurada. Parsea RSS / Atom / JSON según el formato del feed. Deduplica por GUID del ítem contra los 30 días previos de ítems vistos.
+3. **Clasifica** — llamada a Claude por cada ítem nuevo. Devuelve `{relevant_to_profile, jurisdictions_implicated, regulatory_areas, urgency, summary, recommended_owner}`. Los ítems con `relevant_to_profile: false` se quitan del digest pero se registran en la tabla de auditoría.
+4. **Almacena** — escribe cada ítem clasificado en la tabla `regulatory_items`.
+5. **Alerta inmediata** — para ítems con `urgency: high`, publica inmediatamente en `#legal-alerts` con la clasificación + link.
+6. **Digest diario** — a las 8 am hora de oficina, ensambla los ítems de las últimas 24 horas en un digest agrupado por área regulatoria, publicado en `#legal-team`.
+
+## Costo real
+
+- **Tokens del LLM** — típicamente 1-2k de entrada + 0.5k de salida por ítem clasificado. Con ~20-50 ítems nuevos por día entre todos los feeds, ~$0.20-0.60/día en costo de modelo.
+- **Ejecuciones de n8n** — cron horario + procesamiento por ítem. Dentro del plan Starter para la mayoría de las firmas.
+- **Tiempo del counsel** — la ganancia. Monitorear a mano son 30-60 minutos/día por counsel para una cobertura exhaustiva; revisar el digest diario son 5-10 minutos más el tiempo de respuesta a las alertas inmediatas.
+- **Tiempo de setup** — 90 minutos incluida la redacción del perfil de exposición (45 minutos son el perfil).
+
+## Métrica de éxito
+
+- **Incidentes de "se me pasó" del counsel por trimestre** — incidentes en los que una indagación liderada por un regulador saca a la luz un cambio de regla que la firma debería haber conocido. Debería bajar a cero en las áreas monitoreadas.
+- **Relación señal/ruido del digest** — porcentaje de ítems del digest que el counsel marca como "relevante" vs "ignorar." Debería estar en 70-85% relevante; por debajo del 50% significa que el filtro de relevancia o el perfil de exposición necesitan ajuste.
+- **Tiempo desde la publicación de la regla hasta la postura de respuesta del counsel** — para áreas monitoreadas, debería caer de "semanas" (monitoreo pasivo por newsletter) a menos de 24 horas (el digest la captura en el primer poll).
+
+## vs alternativas
+
+- **vs servicios comerciales de monitoreo regulatorio** (LexisNexis State Net, Bloomberg Government, FiscalNote, Thomson Reuters Regulatory Intelligence). Elígelos si el presupuesto soporta la jugada de plataforma y quieres cobertura gestionada con resúmenes de calidad practitioner. El workflow es el punto medio liviano a menor costo y con el filtro de relevancia calibrado a tu perfil.
+- **vs in-house counsel leyendo newsletters.** El default y la fuente de las omisiones.
+- **vs sin monitoreo.** Modo de falla predecible en firmas más pequeñas; funciona hasta que deja de funcionar.
+
+## A qué prestar atención
+
+- **Drift de las fuentes de feed.** *Guarda:* health-check de feed en cada poll horario. Los ítems con fetch fallido aparecen como advertencias "feed source X lleva caído N horas" en el digest diario, en vez de descartarse en silencio.
+- **Falsos negativos del filtro de relevancia.** *Guarda:* la tabla de auditoría registra TODOS los ítems clasificados, incluidos los `relevant_to_profile: false`. El counsel revisa el bucket de falsos negativos semanalmente; las omisiones son señal para actualizar el perfil o el prompt del clasificador.
+- **Sobre-marcado de urgencia.** *Guarda:* la alerta inmediata publica solo en `#legal-alerts`; el digest diario absorbe la urgencia media y baja. Ajustar los umbrales de urgencia es la palanca si las alertas saturan.
+- **Falla de mapeo de jurisdicción.** *Guarda:* cada ítem se anota con `jurisdictions_implicated` con base en la autoridad del regulador + el alcance declarado de la regla. Los ítems donde la jurisdicción es ambigua quedan etiquetados "ambigua — counsel debe confirmar" en vez de adivinarse.
+- **Perfil de exposición desactualizado.** *Guarda:* el perfil lleva `last_updated` y dispara un "recordatorio de revisión del perfil" en el digest si tiene más de 6 meses.
+- **Antigüedad del contenido del feed vs fecha de publicación.** *Guarda:* el digest ordena por fecha de publicación, no de fetch. Los ítems viejos del feed vuelven a aparecer si el feed estuvo caído un rato.
+
+## Stack
+
+El bundle vive en `apps/web/public/artifacts/regulatory-change-monitor-n8n/`:
+
+- `regulatory-change-monitor-n8n.json` — el export del workflow
+- `_README.md` — credenciales, esquema del perfil de exposición, lista de feeds por defecto, procedimiento de dry-run
+
+Herramientas: [n8n](/es/tools/n8n/), [Claude](/es/tools/claude/), [Slack](/es/tools/slack/).
+
+Relacionados: [legal knowledge management](/es/learn/legal-knowledge-management/), [EU AI Act for legal teams](/es/learn/eu-ai-act-for-legal-teams/), [GDPR for legal teams](/es/learn/gdpr-for-legal-teams/), [AI policy for legal teams](/es/learn/ai-policy-for-legal-teams/).
