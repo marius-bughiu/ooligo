@@ -11,43 +11,91 @@ difficulty: intermediate
 time_to_setup: 30min
 human_tested: false
 translated_from: en/weekly-pipeline-report-skill.mdx
-translated_at: "2026-05-02T00:00:00Z"
+translated_at: "2026-05-11T17:30:00Z"
 translation_model: claude-opus-4-7
-source_sha256: "d144bfe5369900d9b793cb134ef212a5d0e54d9dff799d7aed20b19ea2baacdd"
+source_sha256: "545bdeb1825473592b9ffbd8a91b6954cde820837e0741199583b9e89a5e06dd"
 ---
 
-Una skill de Claude que extrae cada deal abierto de HubSpot, lo segmenta por stage y owner, y escribe un reporte de pipeline para el lunes en la mañana que tu líder de ventas puede leer en tres minutos. La salida es markdown, la entrada es un token de la API de HubSpot, y el loop se puede automatizar entero.
+Un Claude Skill que toma dos snapshots del pipeline de HubSpot — el de este lunes y el del lunes pasado — los corta por segmento, y escribe el brief de una página que el VP de ventas lee antes del pipeline review del lunes. Cada métrica lleva una palabra de dirección de movimiento. Cada afirmación es plana — hay un pase de remoción de hedges. El output queda al tope de `#pipeline-review` a las seis de la mañana del lunes y el thread de leadership ya está discutiendo lo correcto para cuando arranca la call.
 
-## Lo que vas a necesitar
+## Cuándo usar
 
-- HubSpot Sales Hub Pro o Enterprise con deals habilitado
-- Un token de Private App de HubSpot con scope `crm.objects.deals.read` y `crm.objects.owners.read`
-- Claude.ai o Claude Code con la Skill instalada
-- Un mapa de ownership (CSV o owner IDs de HubSpot) para que Claude sepa quién le reporta a quién
+Eres un RevOps lead o un sales operations manager y tu VP de ventas corre un pipeline review los lunes. Tienes un pipeline de HubSpot que puedes extraer vía la API de deals. Quieres que el brief estándar al tope del thread del lunes en la mañana esté escrito, no salteado, y no quieres escribirlo tú mismo cada semana.
+
+El skill asume que el equipo es segment-aware — Enterprise / Mid-Market / SMB, o algún slice equivalente — y que el VP quiere ver deltas a nivel segmento, no solo un número agregado de pipeline. Asume que tienes un snapshot del pipeline de la semana pasada guardado en algún lado accesible. La primera corrida produce un brief baseline; de la segunda corrida en adelante produce un WoW story real.
+
+El bundle está en `apps/web/public/artifacts/weekly-pipeline-report-skill/`. El cuerpo del skill es `SKILL.md`; los templates que el skill lee en cada corrida son `references/1-report-format-template.md`, `references/2-segment-mapping.md`, y `references/3-hedge-words-blocklist.md`.
+
+## Cuándo NO usar
+
+No uses este skill para materiales de board. El brief es operacional — usa deltas de la última semana y asunciones de una semana de antigüedad sobre qué es real en el pipe. Los reportes de board necesitan números reconciliados y auditados desde el sistema financiero, no desde un archivo Markdown del lunes en la mañana.
+
+No lo uses para reportes customer-facing. El brief nombra deals, owners, y riesgos en un lenguaje que se lee bien en un canal interno de Slack y es inseguro de compartir externamente. No hay pase de anonimización; construir uno está fuera de scope.
+
+No dejes que nadie cite el número de headline como el forecast real. El brief resume composición y movimiento del pipeline; no es un modelo de forecast. El forecast viene del forecast call del viernes, propiedad del VP de ventas y el RevOps lead. El footer del brief lleva este disclaimer en cada corrida — el disclaimer está en `references/1-report-format-template.md` y removerlo derrota el guard.
+
+Si tu equipo no segmenta su pipeline, no empieces adoptando este skill — empieza escribiendo `references/2-segment-mapping.md` para el equipo. El brief funciona sin segmentos solo como una corrida baseline agregada, que es menos útil que la misma data en el dashboard propio de HubSpot.
 
 ## Setup
 
-1. **Instala la Skill.** Coloca `weekly-pipeline.skill` en tu proyecto de Claude. Expone `fetch_open_pipeline`, `segment_by_owner` y `render_report`.
-2. **Agrega credenciales.** Configura `HUBSPOT_TOKEN` en el entorno de la Skill. La Skill pagina la API de deals y respeta los rate limits, así que un pipeline de mil deals tarda alrededor de un minuto.
-3. **Configura la segmentación.** La Skill acepta un archivo YAML que describe la estructura de tu equipo: regiones, segmentos, mapeo de managers. Sin él, recibes un reporte plano por owner.
-4. **Ajusta la forma del reporte.** Secciones por defecto: pipeline por stage, movimiento semana contra semana, deals con más de treinta días en stage, top diez por monto, owners sin movimiento esta semana. Edita la plantilla del prompt para agregar o quitar secciones.
-5. **Córrelo el lunes a las seis.** Pipe a Slack `#pipeline-review` o email a la lista de distribución de liderazgo.
+1. **Coloca el bundle dentro de tu carpeta de Skills.** Copia `apps/web/public/artifacts/weekly-pipeline-report-skill/` dentro de tu proyecto Claude bajo `.claude/skills/weekly-pipeline-report/`. Claude Code (o Claude.ai con un MCP montado en el proyecto) lo descubre en el próximo launch.
+2. **Reemplaza los tres archivos de referencia.** `references/1-report-format-template.md` es el layout literal que el brief sigue — edítalo para cambiar la forma del reporte, no edites `SKILL.md`. `references/2-segment-mapping.md` declara tus reglas de segmento; los placeholders vienen como Enterprise/Mid-Market/SMB y casi seguro vas a querer cambiarlos. `references/3-hedge-words-blocklist.md` es una lista de arranque; extiéndela cada vez que un hedge cae en producción.
+3. **Configura el extractor de snapshots.** El skill consume dos archivos de snapshot; no llama a la API de HubSpot él mismo. Levanta un extractor chico (cron job, n8n flow, scheduled GitHub Action) que pegue contra `/crm/v3/objects/deals` con las columnas que el skill espera (`deal_id`, `deal_name`, `owner_id`, `stage`, `amount`, `close_date`, `last_modified`, más lo que referencien tus reglas de segmento) y escriba un archivo CSV o JSON por lunes en un directorio conocido. El extractor es la parte de este stack que es específica de HubSpot.
+4. **Corre el skill los lunes a las 06:00.** Invócalo con dos paths (`pipeline_snapshot`, `previous_snapshot`) y el archivo de segmentos. Envía el output a `#pipeline-review` o a la lista de distribución de leadership. La primera corrida setea `comparison_mode = none` y emite un brief baseline en vez de fabricar deltas-cero.
+5. **Corre el review del pase de remoción de hedges semanalmente.** Lee el brief que aterrizó. Si un hedge se coló ("parece sugerir", "se ve como que podría"), agrégalo a `references/3-hedge-words-blocklist.md` para que el pase de la próxima semana lo agarre. El blocklist está pensado para evolucionar.
 
-## Cómo funciona
+## Qué hace el skill en realidad
 
-La Skill jala todos los deals abiertos, hace join con los registros de owner, y los acomoda por stage y segmento. Después Claude escribe la narrativa alrededor de los números: no solo "el pipeline en stage dos es de dos punto cuatro millones", sino "stage dos subió dieciséis por ciento semana contra semana, impulsado completamente por el equipo de Mid-Market que sumó ocho oportunidades nuevas".
+El método está en `SKILL.md` paso a paso. Las decisiones de ingeniería que vale la pena conocer antes de adoptarlo:
 
-La historia semana contra semana requiere un snapshot. La Skill escribe un CSV en tu store designado en cada corrida, así que de la segunda corrida en adelante hay datos de comparación. La primera corrida se lee como "todavía no hay datos históricos" y eso está bien.
+**Segment-aware, no agregado.** Un "pipeline arriba 4 por ciento" plano esconde el caso donde Enterprise está abajo 12 y SMB está arriba 30 — historias opuestas que demandan respuestas opuestas. El brief corta cada métrica por segmento y la lleva a un headline solo después. Si un deal no puede ser asignado a un segmento va a un bucket `unsegmented` visible; nunca se dropea silenciosamente.
 
-## Cuídate de
+**Dirección de movimiento estampada en cada métrica.** No solo en el headline. El VP escanea la página en una sola pasada — si solo el número de arriba lleva una palabra de dirección, el resto se lee como data y el ojo lo saltea. Cada celda en la tabla de segmento, cada bullet en la lista de headline, es `up +Z%` o `down -Z%` o `flat`.
 
-- **Deals zombies.** La mitad de cualquier pipeline en HubSpot son deals muertos que nadie cerró-perdido. La sección "treinta días en stage" del reporte los marca agresivamente. Los líderes de ventas van a empujar de regreso. Mantén la línea.
-- **Reasignaciones de owner.** Los cambios de ownership a mitad de trimestre rompen las matemáticas de semana contra semana. La Skill puede seguir al deal o seguir al owner; elige un lado y documéntalo.
-- **Moneda del monto del deal.** El mismo gotcha que Salesforce. Usa `hs_deal_amount_in_home_currency` si trabajas con más de una.
-- **Stages personalizados.** Si tu equipo renombró los stages por defecto, actualiza el YAML. La Skill no infiere el orden de stage desde las etiquetas.
+**Top deals moviendo el número, no top deals por tamaño.** Esta sección es sobre movimiento desde el lunes pasado — transiciones de stage, nuevos adds, cambios de scope, fechas de close que slippearon. Un deal estático de 500k que no hizo nada esta semana no está en la sección. Los deals que mueven el número esta semana son los que el VP necesita preguntar sobre.
+
+**Top risks son los deals que slippean en silencio.** Los riesgos ruidosos (email del CFO, "lo perdimos") se escalan por otros canales. El brief saca a la superficie deals que se ven bien en la vista de board pero fueron empujados dos veces, regresaron un stage, tuvieron el monto cortado en más de 25 por ciento, o estuvieron dormidos por 14+ días mientras siguen flaggeados como cerrando este trimestre.
+
+**Un patrón, un ask.** El brief nombra un solo patrón más grande y un solo ask. No cinco patrones y una lista de recomendaciones de cinco bullets. El brief se lee en tres minutos; un ask es un punto de vista, cinco es una lista, y la diferencia es si el VP entra al cuarto con una postura o con una encuesta.
+
+**Pase de remoción de hedges al final.** El modelo draftea el brief, después lo re-lee contra `references/3-hedge-words-blocklist.md` y reescribe cualquier oración que contenga un término bloqueado. El hedging se mete porque el modelo está siendo educado sobre data incierta; el brief es más útil cuando afirma el patrón observado planamente y el lector empuja en contra que cuando cada claim viene pre-hedged. El pase es mecánico y rehúsa shippear un brief que viole el blocklist.
+
+## Realidad de costo
+
+El costo de tokens por brief semanal es chico. Un pipeline de 1,000 deals serializa a unos 80-120k input tokens una vez que ambos snapshots y las referencias están cargados. El output anda en 600-900 tokens — el brief es de una página a propósito. Con pricing de Claude Sonnet, el costo por corrida cae en el rango de centavos de un solo dígito. Con pricing de Opus, dos dígitos bajos. A través de un año de lunes, esto es un error de redondeo contra el costo de cualquier otro line item de tooling de pipeline.
+
+El tiempo ahorrado por RevOps lead es el número más grande. El brief del lunes típicamente son 30-60 minutos de trabajo manual — sacar el reporte, mirar los deltas, escribir la narrativa, postear a Slack. Authoreado por skill, el ciclo cae a menos de 5 minutos (leer el draft, aceptar o reescribir el párrafo del patrón, postear). A través de 50 lunes en un año eso son unas 25 horas de vuelta, que es tiempo real incluso si el valor en dólares es difícil de fijar.
+
+El costo escondido es el extractor de snapshots. Levantar el cron job que escribe dos CSVs consistentes es más o menos medio día de trabajo de una vez. Si tu equipo no tiene ya un pipeline de extract, cuenta ese trabajo antes de afirmar que el skill es "gratis de adoptar".
+
+## Métrica de éxito
+
+La métrica que importa es si el brief del lunes se lee y se referencia en el pipeline review. Dos leading indicators que funcionan en la práctica:
+
+- **¿Citó el VP el párrafo del patrón del brief en el meeting?** Trackea esto cualitativamente las primeras seis semanas. Si el VP está nombrando el patrón de vuelta durante el review, el brief está haciendo su trabajo. Si el VP está leyendo dashboards de HubSpot e ignorando el thread de Slack, el brief no está aterrizando y el párrafo del patrón necesita trabajo.
+- **Tiempo hasta la primera pregunta en el pipeline review.** Antes del skill, los líderes pasaban los primeros 10 minutos orientándose en qué cambió. Después, deberían entrar ya discutiendo sobre el patrón que el brief nombró. Si el tiempo de orientación no bajó, o el brief no se está leyendo o el patrón no está nombrando lo correcto.
+
+La métrica lagging — accuracy del pipeline o accuracy del forecast — no se mueve por este skill. El brief no cambia qué hay en el pipe; cambia sobre qué habla el equipo el lunes en la mañana.
+
+## vs alternativas
+
+**Los dashboards built-in de HubSpot.** El Sales Hub de HubSpot tiene un dashboard de deals que muestra pipeline por stage y owner, con deltas WoW si construyes el reporte con cuidado. No produce una narrativa — no hay top-3-moving, no hay top-3-risk, no hay párrafo de patrón, no hay ask recomendado. Un equipo puede correr en dashboards solos y muchos lo hacen. El brief se gana su lugar cuando leadership quiere la narrativa pre-escrita en lugar de construida en vivo en el meeting.
+
+**Briefings semanales de Clari.** Clari (o Gong Forecast, o BoostUp) shippea una herramienta de forecast con capacidades de resumen semanal. Los briefings son creíbles y la capa de data subyacente es más confiable que un extractor hecho a mano. El trade-off: la licencia por seat de Clari está en el rango de cuatro dígitos por rep por año, los briefings siguen la forma opinionada de Clari en vez de la de tu VP, y no controlas el wording. El skill es la respuesta correcta cuando el presupuesto descarta un Clari y tu equipo ya tiene HubSpot.
+
+**Resumen manual escrito por RevOps.** El status quo para la mayoría de los equipos. La calidad es alta cuando el RevOps lead tiene tiempo de escribirlo, baja cuando no. El brief es consistente semana a semana — misma forma, mismas métricas, misma estructura de pattern-and-ask — lo que hace más fácil para el VP leerlo. Un RevOps lead senior puede escribir mejor que el skill en cualquier lunes dado; el skill gana en consistencia y en darle a ese lead 25 horas de vuelta por año para trabajo de mayor leverage.
+
+## Puntos de atención
+
+- **Data confident-pero-stale.** El snapshot de HubSpot es solo tan fresco como la última corrida del extractor. Si `last_modified` en el archivo de snapshot tiene más de 24 horas, el brief antepone una warning de una línea ("El snapshot tiene N horas de stale — los números pueden no reflejar la actividad del final de la semana del viernes"). Guard: el chequeo de freshness corre antes de cualquier cómputo; el skill rehúsa shippear el brief sin él.
+- **Lenguaje hedging colándose a pesar de la remoción.** El pase de remoción de hedges usa un blocklist fijo; nuevos fraseados de hedge que el modelo invente se van a colar. Guard: el blocklist en `references/3-hedge-words-blocklist.md` está pensado para ser extendido semanalmente. El primer mes corriendo el skill va a sacar a la superficie 5-10 fraseados de hedge nuevos; agrégalos a medida que los veas.
+- **Lectores downstream citando esto como el forecast.** El brief tiene como headline un número de pipeline abierto, que un lector casual va a redondear a "el forecast". Guard: el footer del brief siempre dice "Resumen operacional, no un forecast. El forecast es propiedad de &lt;nombre del VP&gt; y producido en la call del viernes." La línea está en `references/1-report-format-template.md` y removerla derrota el guard. No la remuevas.
+- **Reasignaciones de owner rompen la math de WoW.** Si un deal cambió de owner a mitad de semana, los deltas del owner viejo y del nuevo se disparan los dos — duplicando movimiento. Guard: el skill emite un footnote "deals reasignados esta semana: N" y excluye deals reasignados de la sección top-deals-moving, para que el movimiento no sea atribuido a ninguno de los dos owners. Elige un lado (follow-the-deal o follow-the-owner) y documéntalo en el playbook de tu equipo.
+- **Stages custom de HubSpot no en el archivo de segmento.** Si tu equipo renombró stages default, las reglas de segment-mapping que referencian nombres de stage se rompen silenciosamente. Guard: el validator de snapshot confirma que cada valor distinto de `stage` en el snapshot está referenciado por al menos una regla de segmento, y saca a la superficie stages no matcheados en el footer del reporte. Si un stage nuevo aparece ahí, actualiza `references/2-segment-mapping.md`.
 
 ## Stack
 
-- **HubSpot** — fuente de verdad del pipeline
-- **Claude** — generación de narrativa sobre los números
-- **Config YAML** — estructura de equipo y mapa de segmentación
+- **HubSpot** — pipeline como source of truth e input para el extractor de snapshots
+- **Claude Skill** — draftea el brief desde los dos snapshots y las referencias
+- **Extractor de snapshots (cron / n8n / GitHub Action)** — escribe el CSV semanal que el skill consume; la parte del stack que es específica de HubSpot
+- **Slack** — canal de distribución para el brief renderizado
