@@ -1,0 +1,107 @@
+---
+slug: mcp-server-ironclad-legal
+canonical_slug: mcp-server-ironclad-legal
+locale: es
+verticals: [legal-ops]
+title: Servidor MCP de Ironclad para Claude
+artifact_type: mcp-server
+tools_used: [claude, ironclad]
+roles: [legal-ops, in-house-counsel, contract-manager, legal-tech-engineer]
+difficulty: advanced
+time_to_setup: 120min
+human_tested: false
+translated_from: en/mcp-server-ironclad-legal.mdx
+translated_at: "2026-05-11T01:11:37Z"
+translation_model: claude-opus-4-7
+source_sha256: "236a0af2be7fca588e424f5ea1a03fd6b05e392100541e70a0d4d48704fe4485"
+---
+
+Un servidor Model Context Protocol (MCP) que expone [Ironclad](/es/tools/ironclad/) como superficie de herramientas para Claude — permite que abogados e ingenieros de legal-ops le pidan a Claude consultar un workflow, buscar en el repositorio de contratos ejecutados, traer un tipo específico de cláusula, resumir el metadata de un workflow, o anotar un registro, todo desde una conversación de Claude en vez de la UI de Ironclad. El scaffold está en `apps/web/public/artifacts/mcp-server-ironclad-legal/` y se entrega mayoritariamente de lectura por diseño: los borradores dentro de workflows activos son típicamente trabajo amparado por privilegio, así que el servidor trunca los cuerpos de documento por defecto y fuerza una segunda llamada explícita a una tool para recuperar el texto completo.
+
+## Cuándo usarlo
+
+Recurre a esto cuando tu equipo in-house ya está en [Ironclad](/es/tools/ironclad/) y puedes nombrar tres o más consultas recurrentes que los abogados corren clickeando por la UI de Ironclad varias veces por semana — ejemplos típicos: "lista todo MSA activo por encima de $500K", "trae la cláusula de indemnización de los últimos veinte deals cerrados", "muéstrame los workflows que han estado esperando a la contraparte por más de cinco días hábiles". Esas consultas son mecánicas: identificar un tipo de contrato, filtrar por una propiedad, devolver un campo de metadata. Son exactamente la forma de trabajo que se comprime bien en una conversación de Claude con tools.
+
+El argumento económico: un equipo de legal-ops en [Stage 4 Optimized](/es/learn/legal-ops-maturity-model/) que corre el equivalente a 200 consultas así por semana, a aproximadamente cuatro minutos por consulta end-to-end (abrir Ironclad, correr la búsqueda, filtrar, copiar el resultado, pegar en notas del matter), gasta cerca de 13 horas por semana en navegación de UI. Comprimir eso a ~30 segundos por turno de Claude pone el tiempo bajo dos horas. Las horas restantes vuelven al trabajo de revisión sustantiva — que es donde la hora marginal del equipo realmente escasea.
+
+## Cuándo NO usarlo
+
+Sáltatelo si el volumen de estas consultas recurrentes de tu equipo está bajo aproximadamente veinte por semana — el costo de setup (revisión legal de la postura de privilegio, revisión de seguridad del blast radius del bearer token, y el ciclo de validación sandbox-to-production) no se repaga a ese volumen. Clickea por la UI de Ironclad; revísalo cuando el volumen crezca.
+
+Sáltatelo si tu tenant está en un tier o región cuya superficie de API pública no ha sido validada contra el base path asumido por el scaffold (`https://ironcladapp.com/public/api/v1/`). El scaffold no está runtime-testeado; correrlo contra una base URL no verificada produce 404s que se disfrazan de "data faltante" dentro de conversaciones de Claude, que es exactamente el modo de falla que erosiona la confianza en herramientas legales mediadas por MCP.
+
+Sáltatelo si tu política de matter-management trata *todo* el contenido de workflows — borradores, redlines, audit logs, comentarios — como privilegiado sin excepción. La postura de truncate-by-default del servidor maneja el caso común, pero un régimen de privilegio estricto necesita una capa adicional de enforcement de privilege-tag (item 5 en la lista de TODOs del bundle) antes de cualquier deployment, incluso read-only.
+
+Finalmente, sáltatelo si todavía no tienes una [AI policy para equipos legales](/es/learn/ai-policy-for-legal-teams/) que cubra el acceso de Claude a datos de contratos. Levanta la política primero; después este servidor.
+
+## Setup
+
+El setup está documentado en detalle en `apps/web/public/artifacts/mcp-server-ironclad-legal/README.md`. Resumen:
+
+1. Clona el bundle en un repo privado. Corre `pip install -e .` dentro del virtualenv del bundle.
+2. Provisiona un API token de Ironclad en la consola de admin (Admin → API Keys → Create) con scope de lectura en workflows, records y documents. Agrega scope de comment-write solo si pretendes usar `add_comment`. Provisiona el role de service-account subyacente de forma acotada — el bearer token ve todo lo que ese role puede ver.
+3. Define variables de entorno: `IRONCLAD_API_TOKEN`, `IRONCLAD_TRUNCATE_AT` (default 4000 chars por cuerpo de documento en respuestas de resumen), `IRONCLAD_DEFAULT_WORKFLOW_TYPES` (e.g. `msa,nda,sow,dpa`).
+4. Registra con Claude Desktop vía el snippet JSON del README.
+5. Sanity-checkea pidiéndole a Claude que resuma un workflow ID conocido, después confirma que la respuesta es solo metadata con marcadores `_truncated_at` en cualquier campo body, después pide el cuerpo completo del documento y confirma que llega solo tras la llamada explícita a `get_document`.
+
+La recuperación en dos pasos es el punto — si el paso 5 devuelve el cuerpo completo del documento inline en la primera llamada, la guarda de truncación está mal configurada y deberías parar y arreglarla antes de exponer el servidor a alguien más allá del ingeniero que lo cableó.
+
+## Qué expone
+
+El servidor registra nueve tools, agrupadas por el modelo de privilegio:
+
+- **Lecturas de objeto (read-only):** `get_workflow`, `get_record`, `get_document`. Cada una devuelve el metadata del objeto pedido; solo `get_document` devuelve texto del cuerpo completo, y solo cuando se llama explícitamente.
+- **Búsqueda (read-only):** `search_records` (texto libre contra el repositorio de contratos ejecutados), `list_workflows` (filtrado por status y tipo).
+- **Helpers legales (read-only):** `clauses_by_type` devuelve cláusulas extraídas de un tipo específico (e.g. `indemnification`, `liability_cap`, `termination`) de los documentos de un workflow; `expiring_contracts` devuelve records que se acercan a renovación o vencimiento en una ventana.
+- **Audit-class (truncate-by-default):** `summarize_workflow` devuelve un resumen solo-metadata más IDs y títulos de documentos; los cuerpos de documento en el resumen están truncados a `IRONCLAD_TRUNCATE_AT` chars con un marcador `_truncated_at`.
+- **Escrituras ligeras (privilegiadas):** `add_comment` agrega un comentario a un record. El único path de escritura, a propósito. Los comentarios dentro de Ironclad son ellos mismos discoverables — no escribas aquí nada que no escribirías directamente en la UI de Ironclad.
+
+La lógica de dispatch, con el helper de truncación y el audit logger solo-metadata, vive en `apps/web/public/artifacts/mcp-server-ironclad-legal/src/ironclad_legal_mcp/server.py`.
+
+## Modelo de privilegio
+
+Tres decisiones de postura concretas, cada una con una guarda en el scaffold:
+
+1. **Mayoritariamente lectura.** No hay `delete_*`, no hay edición de borradores, no hay transiciones de stage de workflow, no hay cambios de signer. El único path de escritura es `add_comment`. Guarda: el dispatch en `server.py` simplemente no registra tools de escritura más allá de comentarios. Agregar cualquier tool que cambie estado requiere un cambio de código explícito con una revisión de privilegio.
+2. **Truncate-by-default.** `summarize_workflow` trunca los cuerpos de documento a `IRONCLAD_TRUNCATE_AT` (default 4000 chars) y taggea la respuesta con `_truncated_at` para que Claude sepa que tiene que emitir una llamada follow-up a `get_document` cuando el usuario lo pide explícitamente. Guarda: el helper `truncate_body()` en `server.py` es el único chokepoint; ensancharlo cambia la postura de privilegio para todos los call sites a la vez.
+3. **El metadata de query de búsqueda no se persiste.** El audit logger registra timestamp, usuario, nombre de tool y conteo de resultados — nunca el string de query. Guarda: el helper `log_invocation()` no tiene parámetro `query`; exponerlo requeriría un cambio de código revisado contra la política de privilegio.
+
+Combinadas, estas tres decisiones significan que Claude puede navegar el repositorio de contratos, exponer el metadata que un abogado necesita para tomar una decisión, y documentar una acción con un comentario — pero no puede exfiltrar inadvertidamente trabajo amparado por privilegio ni crear un record discoverable de las prioridades de revisión del equipo. La postura de privilegio es el producto; las tools son la superficie.
+
+## Realidad de costo
+
+Tres line items, todos reales:
+
+- **Suscripción a Claude.** Claude Desktop o Claude Code con MCP habilitado. Pro a $20/usuario/mes o Team a $25–30/usuario/mes cubren la mayoría de setups de equipos legales in-house; usuarios muy pesados pueden justificar Max.
+- **Hosting del servidor.** Proceso Python self-hosted. Córrelo localmente por abogado para desarrollo, o en una VM interna chica (1 vCPU / 1 GB RAM está bien para volumen sub-100-call/día) detrás de tu VPN para uso compartido. Aproximadamente $5–20/mes en un hyperscaler, gratis si ya tienes capacidad de Kubernetes interno.
+- **Cuota de API de Ironclad.** Ironclad rate-limita por-tenant; un equipo corriendo 200 queries/semana se mantiene bien dentro de las cuotas default, pero un equipo que construye una automatización que scanea el repositorio entero cada noche pegará los límites rápido. La lista de TODOs en el README del bundle marca los retries con exponential-backoff como tarea pre-producción — quema la cuota una vez y entenderás por qué.
+
+El line item sin presupuestar es el tiempo de revisión legal. Planea dos a cuatro horas de tiempo de in-house counsel sobre la postura de privilegio antes de cualquier deployment a producción, y otra una a dos horas por trimestre en re-review a medida que Ironclad lanza features que cambian la superficie de API.
+
+## Cómo se ve el éxito
+
+Mira tres números moverse:
+
+- **UI-time-per-query**, medido por muestreo: elige cinco queries recurrentes que el equipo corre semanalmente, mídelas en la UI de Ironclad antes del rollout, mide las mismas cinco vía conversación de Claude después del rollout, divide. Objetivo: 5x o mejor. Debajo de 2x y el costo de setup no se repaga.
+- **Truncation-trigger rate**, observable en el audit log: ¿con qué frecuencia un abogado sigue una llamada a `summarize_workflow` con un `get_document` explícito? La banda correcta es aproximadamente 20–50%. Por encima de 70% significa que el cap de truncación está muy agresivo y los abogados están siendo bloqueados; por debajo de 10% significa que están aceptando metadata que en realidad no responde la pregunta.
+- **Comentarios agregados por semana.** `add_comment` es el único path de escritura, y es la única señal de que un abogado actuó sobre lo que Claude expuso. Un conteo plano o cero a los dos meses del rollout significa que la herramienta se está usando como conveniencia solo-lookup, lo cual está bien, pero no justifica el costo de revisión de privilegio.
+
+## Versus las alternativas
+
+Tres opciones reales, cada una con un tradeoff distinto:
+
+- **Las features de AI nativas de Ironclad.** Ironclad trae features de extracción de cláusulas y resúmenes con AI dentro del producto. Elige esas si tu workflow se queda dentro de Ironclad y las respuestas le pertenecen al record. Elige este servidor MCP si la respuesta tiene que aterrizar en una conversación de Claude que también alcanza notas de matter-management, tus guardrails de AI-policy, el resto de tu superficie de herramientas — es decir, si la *integración con el razonamiento de Claude* es el valor, no el lookup del contrato en sí.
+- **AI legal de vendor (Harvey, EvenUp, etc.).** Esos vendors traen modelos pre-entrenados de dominio legal sobre sus propios pipelines de ingestion. Elige un vendor si necesitas workflows privileged-by-default, evaluación de retrieval de grado-abogado, y tienes el presupuesto (cifras de cinco dígitos medianas para arriba anuales). Elige este servidor MCP si tu preferencia de modelo es Claude, tu ingestion es nativa de Ironclad, y tu equipo es lo suficientemente chico como para que el pricing por-seat del vendor no cierre.
+- **Statu quo: los abogados clickean por la UI de Ironclad.** Este es el baseline honesto. El servidor MCP le gana solo cuando el volumen de queries es lo suficientemente alto como para amortizar el costo de revisión de privilegio y setup. Por debajo de ~20 queries/semana por abogado, el statu quo gana.
+
+## Watch-outs
+
+El README del bundle enumera la lista completa. Tres modos de falla vale la pena exponerlos acá, cada uno emparejado con la guarda específica que lo mitiga:
+
+- **Fuga de privilegio vía inclusión inadvertida del cuerpo.** Una implementación naive de `summarize_workflow` inlinearía el cuerpo del documento. Guarda: `summarize_workflow` rutea cada campo `body` a través de `truncate_body()`, que capea en `IRONCLAD_TRUNCATE_AT` y taggea la respuesta con `_truncated_at`. Ensanchar esto requiere editar un helper, que es el único chokepoint que un revisor de privilegio necesita auditar.
+- **Logging de query de búsqueda que revela estrategia de revisión legal.** Loggear el string de query de `search_records` crearía un record discoverable mostrando lo que el equipo está buscando — metadata privilegiado en sí mismo. Guarda: `log_invocation()` acepta solo nombre de tool y conteo de resultados; el string de query nunca se escribe a logs. Restaurarlo requeriría un cambio de código revisado contra la política de privilegio.
+- **Falta de OAuth refresh en el scaffold.** El scaffold usa un bearer token estático de Ironclad, que no puede ser revocado granularmente cuando un abogado deja el firm. Guarda (abierta): item 2 en la lista de TODOs del bundle marca OAuth-with-refresh como tarea pre-producción. Hasta que eso esté implementado, rota el token en cada cambio de personnel y trata el deployment con token estático como una postura development-only.
+
+## Stack
+
+Servidor MCP Python self-hosted (el scaffold usa el SDK oficial `mcp`, `httpx`, `pydantic`) hablando con la API pública de Ironclad en el backend; [Claude](/es/tools/claude/) Desktop o Code en el front end. Opcional: structured logging vía `python-json-logger` piped al audit trail de tu matter-management; export a Sentry u OpenTelemetry, con strings de query y cuerpos de documento scrubeados antes de la transmisión.
