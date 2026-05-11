@@ -11,45 +11,74 @@ difficulty: intermediate
 time_to_setup: 60min
 human_tested: false
 translated_from: en/stage-progression-validator-skill.mdx
-translated_at: "2026-05-02T00:00:00Z"
+translated_at: "2026-05-11T13:25:00Z"
 translation_model: claude-opus-4-7
-source_sha256: "d15e4ecd917a0f53eb861f17761d878d54b74225f141fd509490333e7278b54e"
+source_sha256: "08e338c0a100174b6ea43511b0953439aeea99787381a49d0c9b406a06c1a3ba"
 ---
 
-Un Claude Skill que valida si un deal genuinamente cumple los criterios de entrada de stage. Por cada deal que se movió a un stage posterior en la última semana, el Skill chequea los campos requeridos, la evidencia de respaldo en Gong y los next steps documentados. Flaggea deals que progresaron por optimismo del rep en lugar de compromiso del buyer.
+Un Claude Skill que audita qué oportunidades de Salesforce cumplen genuinamente los criterios de salida del stage al que acaban de moverse. Para cada opp que progresó la semana anterior, el Skill verifica las reglas determinísticas (campos requeridos, actividades registradas, roles de stakeholders), y luego cruza las afirmaciones cualitativas del rep contra las transcripciones de calls de Gong. El output es una cola de coaching para la revisión semanal de RevOps, no un mecanismo de enforcement que tire los deals atrás automáticamente.
 
-## Qué necesitas
+El bundle del artifact se entrega en `apps/web/public/artifacts/stage-progression-validator-skill/` y contiene `SKILL.md` más tres templates de referencia: `references/1-stage-criteria-template.md` (la rúbrica de stages de tu equipo), `references/2-methodology-mapping-template.md` (cómo MEDDPICC, MEDDIC, SPICED, BANT, o un framework custom se mapea a tus campos de Salesforce y a patrones de frases en Gong), y `references/3-sample-output-format.md` (el Markdown exacto que el Skill emite).
 
-- Salesforce con historial de progresión de stage (history tracking habilitado)
-- API key de Gong con acceso a calls a nivel deal
-- Claude Code con el Skill instalado
-- Tu definición de stages y criterios de salida como doc Markdown
-- Una cadencia de corrida semanal (cron o scheduler)
+## Cuándo usarlo
+
+Córrelo con la cadencia de tu reunión de forecast. El patrón canónico es un batch del domingo en la noche con clave `week_ending`, dejando el reporte en un canal de Slack antes del huddle de managers del lunes en la mañana. El modo single-opp también es válido — un revisor del deal desk puede correr el Skill contra un solo `Opportunity.Id` antes de una reunión de aprobación de pricing, o un manager puede correrlo contra un deal antes de un 1:1 para aterrizar la conversación en los gaps específicos en lugar de en una sensación vaga de "esto se siente atascado".
+
+El check de la afirmación cualitativa es la parte que paga sola. Salesforce ya hace cumplir las validation rules de campos requeridos; lo que no puede hacer es notar que el rep declaró "el buyer aceptó los criterios de éxito" y que ninguna call de Gong de los últimos 45 días capturó realmente esa conversación. El Skill es methodology-aware al buscar — para el economic buyer de MEDDPICC, busca el nombre del buyer dentro de doce tokens de lenguaje de decisión ("aprobar", "firmar", "dueño del presupuesto") en lugar de cualquier mención del nombre. Esa distinción es lo que separa un flag útil de un falso positivo que los reps aprenden a ignorar.
+
+## Cuándo NO usarlo
+
+- **Auto-rollback.** No conectes el output del Skill a un update de Salesforce que degrade deals cuando el veredicto sea `fail`. El veredicto es un input entre varios; el manager es dueño de la decisión de degradar con el contexto completo que el Skill no puede ver (reuniones fuera de Gong, compromisos por side channel, particularidades del procurement del lado del cliente).
+- **Performance management.** Un solo `fail` en un solo deal es ruido. La señal son los patrones a lo largo de semanas — el rep cuya tasa de `fail` sube de 5% a 30% en un trimestre mientras sus pares se mantienen estables. Usar un veredicto puntual en un PIP rompe la confianza del rep y el Skill deja de funcionar.
+- **Inputs de comp.** El stage maneja el forecast, a veces maneja accelerators. Si el output del validador entra en cálculos de comp, creaste un incentivo directo para que los reps manipulen los inputs — rechazar la grabación de Gong, omitir notas, guardar datos en spreadsheets paralelos. Mantén el output del validador en el canal de coaching y fuera del pipeline de comp.
+- **Stages sin rúbrica documentada.** Si `references/1-stage-criteria-template.md` no tiene entrada para el stage validado, el Skill emite `needs_methodology` en lugar de adivinar. No "tunees" el Skill para calificar esos stages con un default — arregla la rúbrica.
+- **Equipos que no guardan nada estructurado.** Un equipo corriendo MEDDPICC en slides y no en Salesforce va a fallar cada check cualitativo. Corre el Skill en modo dry-run durante dos semanas; si más del 40% de las opps cae en `needs_methodology` o saca menos de 0.2 en checks cualitativos transversalmente, el doc de methodology mapping es ficción. Arregla el doc o instrumenta los campos faltantes antes de salir live.
 
 ## Setup
 
-1. **Documenta los stages.** Edita `references/stage-criteria.md` con cada stage y sus requirements duros. Por ejemplo: "Para entrar al Stage 3 (Negociación), el deal debe tener un economic buyer identificado, criterios de éxito documentados, y al menos una call con el decisor grabada en Gong."
-2. **Instala el Skill.** Coloca `stage-validator.skill` en `~/.claude/skills/`. Define `SFDC_TOKEN` y `GONG_API_KEY`.
-3. **Ejecuta semanalmente.** `validate_progressions(week_ending="2026-05-02")`. El Skill jala cada deal que progresó en la ventana y valida cada uno contra los criterios.
-4. **Output a una cola.** Las validaciones fallidas van a una cola de "revisión de violación de stage." El manager del owner del deal recibe un digest semanal con rationale por deal.
-5. **Combina con coaching.** Esto no es una herramienta de castigo. El output es un trigger de coaching.
+1. **Documenta los stages.** Abre `references/1-stage-criteria-template.md` y reemplaza el contenido del template con la rúbrica real de tu equipo, stage por stage. Cada stage tiene tres buckets de reglas: `field_rules` (un campo de Salesforce debe tener un valor distinto al default), `activity_rules` (una actividad registrada de un tipo específico debe existir dentro de una ventana de recencia), y `stakeholder_rules` (`OpportunityContactRole` debe incluir un contacto con un rol que matchee una regex). Marca los campos como `evidence_required: gong` cuando quieras un cruce contra la transcripción de Gong sobre la afirmación cualitativa.
+2. **Mapea la metodología.** Edita `references/2-methodology-mapping-template.md` para que coincida con el framework de tu equipo. El archivo viene con ejemplos trabajados para MEDDPICC, MEDDIC y SPICED — copia el que aplique y ajusta los nombres de campos de Salesforce a los API names reales de tu org. La columna de patrones de frases es la que le dice al Skill qué cuenta como evidencia de Gong; no la dejes con el default del template a menos que tus campos realmente coincidan con los mappings de ejemplo.
+3. **Instala el Skill.** Pon el bundle en `~/.claude/skills/stage-progression-validator/`. Configura `SFDC_TOKEN` (solo lectura sobre `Opportunity`, `OpportunityFieldHistory`, `Task`, `Event`, `OpportunityContactRole`) y `GONG_API_KEY` (con scopes `calls/extensive` y `deals`). Solo lectura es el scope correcto; el Skill no debe escribir de vuelta a Salesforce.
+4. **Agenda el run semanal.** Un cron simple alcanza — `claude run stage-progression-validator week_ending=$(date -d 'sunday' +%F)` los domingos a las 22:00. Pipea el output a tu canal de Slack o a un email de digest semanal.
+5. **Acompáñalo con un ritual de coaching.** La cola de veredictos es inútil si nadie la abre. Slot fijo de 30 minutos el lunes, el manager recorre las filas `fail` y `needs_manager_review` con cada rep. Después de ocho semanas, el volumen en esos buckets debería bajar — esa es la métrica de éxito.
 
-## Cómo funciona
+## Qué hace el skill realmente
 
-El Skill jala el historial de stage e identifica progresiones en la ventana. Para cada una, chequea criterios determinísticos primero: valores de campos requeridos poblados, actividades requeridas logueadas, stakeholders esperados conectados. Esto es fácil.
+Para cada progresión en la ventana, el Skill calcula dos scores. El score determinístico es la fracción de reglas de metodología satisfechas — cinco reglas, tres pasan, el score es 0.6. Esto es rúbrica estructurada por diseño en lugar de lenguaje natural libre: los criterios libres fuerzan al modelo a interpretar casos límite de manera inconsistente entre runs y los reps no pueden predecir qué va a disparar un `fail`, lo cual mata la confianza de la que depende la herramienta.
 
-La parte difícil es cualitativa. ¿El rep declaró "buyer acordó criterios de éxito" cuando ninguna call de Gong capturó esa conversación? El Skill cruza notas del rep contra transcripts reales de calls y flaggea declaraciones no respaldadas por conversación grabada. Claude es conservador acá — flaggea solo cuando la ausencia es clara, no en cada ambigüedad.
+El score cualitativo es la fracción de afirmaciones `evidence_required: gong` que encuentran evidencia de soporte en la transcripción dentro de la ventana relevante. El matching de frases es methodology-aware. Para el economic buyer de MEDDPICC, el Skill busca el nombre del buyer dentro de doce tokens de lenguaje de decisión. Para el critical event de SPICED, busca lenguaje de urgencia acotado por fecha con verbos de consecuencia ("perder", "deslizar", "arriesgar") cerca. Un check ingenuo de "cualquier mención del nombre del buyer cuenta" produce demasiados falsos pases — el rep mencionando al buyer de pasada en una call con otro stakeholder no es evidencia del compromiso del buyer.
 
-El output por deal es un veredicto de una línea (`pass`, `flag`, `fail`) más una oración sobre el gap. Los managers priorizan desde arriba de la lista de fails.
+Los dos scores se combinan en uno de cinco veredictos: `pass` (ambos en 1.0), `flag` (un bucket fuerte, el otro débil), `fail` (ambos por debajo del umbral límite, default 0.6), `needs_manager_review` (la banda fronteriza entre `flag` y `fail` — ningún score claramente malo ni claramente bueno), o `needs_methodology` (la rúbrica no tiene entrada para este stage). El bucket `needs_manager_review` existe porque forzar cada deal fronterizo a un binario `flag` versus `fail` produce ruido que los reps aprenden a descartar; las filas fronterizas van a una cola separada que el manager resuelve a mano, lo que preserva la señal en los otros buckets.
 
-## A tener en cuenta
+## Realidad de costos
 
-- **El pushback del rep es normal.** "Tuve la conversación off-call." A veces verdad, seguido no. Combina la herramienta con una política de evidencia escrita: si no está en CRM o en una grabación, no pasó.
-- **No valides cada stage.** Valida las transiciones de alto valor — típicamente el stage donde arrancan los forecasts en commit. Si no, el ruido tapa la señal.
-- **Audita tus criterios.** Si 80% de los deals fallan validación, tus criterios están mal, no tus reps. Ajusta.
+Claude Sonnet 4 al pricing actual sale aproximadamente entre 15-25 centavos por oportunidad validada, dominado por la lectura de transcripciones de Gong (una ventana típica de 30 días cubre 4-8 calls por deal activo a 5-15K tokens cada una, más unos cientos de tokens de rúbrica de metodología cargados desde references). Un batch semanal de 50 deals cuesta alrededor de 7-12 USD en API spend.
+
+El tiempo ahorrado es el caso a favor del Skill. Un lead de RevOps haciendo esta auditoría a mano gasta 20-30 minutos por deal — sacando el historial de stage, abriendo cada call de Gong, escaneando por el nombre del buyer y la conversación de criterios de éxito. A 50 deals son dos días completos de auditoría manual por semana, razón por la cual casi ningún equipo realmente lo hace. El Skill colapsa eso a un pase de revisión del reporte de 4-6 minutos sobre el digest, con inspección más profunda solo en las filas de los buckets `fail` y `needs_manager_review` — típicamente 5-10 deals de 50, así que 30-60 minutos de revisión enfocada. Neto: 12-15 horas de RevOps por semana de vuelta, por menos de 15 USD en costo de API.
+
+## Métrica de éxito
+
+Trackea dos métricas a lo largo de una rampa de ocho semanas. Primero, la tasa de `fail` — la proporción de progresiones semanales que aterrizan en `fail`. Una rampa sana muestra una caída desde un baseline (frecuentemente 25-40% en el primer run) a menos de 10% a medida que los reps internalizan lo que la rúbrica exige antes de avanzar un deal. Si no baja, o la rúbrica es demasiado estricta (los reps físicamente no pueden satisfacerla sin conversaciones con el buyer para las que el deal aún no está listo) o el loop de coaching no está pasando. Segundo, la edad mediana en el stage inmediatamente anterior al gate más estricto. Si esa edad se infla — o sea, los reps están estacionando deals un stage por debajo de su realidad para esquivar el gate — la rúbrica está equivocada, no los reps. Afloja la rúbrica antes de seguir corriendo el Skill.
+
+## vs alternativas
+
+- **Validation rules de Salesforce** — hacen cumplir la presencia de campos a nivel de registro (no puedes guardar una opp en Stage 4 sin `Economic_Buyer__c` poblado). No pueden hacer el check cualitativo: un rep puede escribir cualquier nombre en el campo, las validation rules pasan, el Skill detecta que ninguna call de Gong soporta la afirmación. Las validation rules también son una herramienta tosca porque rechazan el save de cuajo; el Skill produce un veredicto graduado con el que el manager trabaja.
+- **Clari, Gong Forecast, y herramientas similares de AI-forecasting** — hacen validación de stage como parte de una superficie de producto mucho más grande (forecast, deal review, conversation analytics, coaching). Espera entre 50-150 USD por rep por mes versus el costo de API aproximado de 10-15 USD por semana de este Skill. Elige la plataforma si también necesitas su capa de forecasting y conversation analytics; elige este Skill si tu gap es específicamente la auditoría de progresión de stage y ya tienes Salesforce y Gong.
+- **Revisiones manuales de deal desk** — un lead de RevOps humano leyendo cada progresión. La herramienta correcta para equipos enterprise de high-ACV donde los deals son pocos y trascendentes. Herramienta equivocada para SMB o midmarket de volumen donde el costo de la auditoría (12-15 horas por semana) significa que no pasa para nada y las malas progresiones se cuelan al forecast.
+- **No hacer nada** — el baseline real en la mayoría de los equipos. La precisión del forecast en la mayoría de las orgs B2B SaaS está entre mediocre y vergonzosa precisamente porque los stages sobre los que se construye el forecast no están validados. El costo de no hacer nada aparece en la reacción del CFO frente a un cierre de trimestre malo, que es un peor momento para descubrir que los datos de input no eran confiables.
+
+## Cosas para cuidar
+
+- **Una validación excesivamente estricta empuja a los reps a manipular los stages.** Guardrail: instrumenta la edad mediana del stage inmediatamente anterior al gate más estricto. Si se dispara después de que el Skill sale live, la rúbrica está mal; afloja antes de continuar.
+- **Mismatch de metodología entre slides y Salesforce.** Guardrail: corre en dry-run dos semanas. Si `needs_methodology` más scores cualitativos bajos cubre más del 40% de las opps, arregla el methodology mapping o la instrumentación de campos subyacente antes de tratar cualquier veredicto como accionable.
+- **Drift del validador respecto a los criterios reales de salida.** Los líderes de ventas redefinen silenciosamente el significado de los stages en QBRs; el archivo de rúbrica no se actualiza. Guardrail: la rúbrica lleva un campo `last_reviewed`; el Skill antepone un warning a cada reporte cuando la fecha es mayor a 90 días.
+- **Gaps en la cobertura de grabación de Gong parecen deshonestidad del rep.** Guardrail: el archivo de methodology mapping declara un `recording_coverage_floor` por stage. Los deals por debajo del piso aterrizan en `needs_manager_review` con el gap de cobertura surfaceado explícitamente, no en `fail`.
+- **Pushback del rep ante un veredicto de `fail`.** Guardrail: el reporte incluye textualmente los misses de reglas determinísticas y los patrones de frases no matcheados. La conversación se aterriza en el gap específico, que el rep puede arreglar actualizando el campo y volviendo a correr, o rebatir con evidencia fuera de Gong que el manager acepte.
 
 ## Stack
 
-- **Salesforce** — historial de stage y campos del deal
-- **Gong** — evidencia de conversación grabada
-- **Claude** — evaluación cualitativa de criterios
+- **Salesforce** — historial de stage, campos del deal, contact roles, actividades registradas
+- **Gong** — transcripciones de conversaciones grabadas, listas de calls a nivel deal
+- **Claude (Sonnet 4)** — matching de frases methodology-aware contra transcripciones, síntesis de veredictos
+- **Cron / scheduler de tu elección** — el trigger semanal
+- **Slack o email** — el canal de digest donde aterriza el reporte antes del huddle del manager
