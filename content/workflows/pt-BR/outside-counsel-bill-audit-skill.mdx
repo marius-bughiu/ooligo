@@ -1,0 +1,91 @@
+---
+slug: outside-counsel-bill-audit-skill
+canonical_slug: outside-counsel-bill-audit-skill
+locale: pt-BR
+verticals: [legal-ops]
+title: Auditor de faturas de advogados externos com o Claude
+artifact_type: claude-skill
+tools_used: [claude]
+roles: [legal-ops, in-house-counsel, finance-business-partner]
+difficulty: intermediate
+time_to_setup: 60min
+human_tested: false
+translated_from: en/outside-counsel-bill-audit-skill.mdx
+translated_at: "2026-05-12T22:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "b350214bd2d8b285707e2816a77ef78396dba497208c8303817dbaa794d29441"
+---
+
+Um Claude Skill que audita faturas de advogados externos linha por linha contra as diretrizes de faturamento do escritório (block-billing, lançamentos de tempo vagos, partner fazendo trabalho de associate, dupla cobrança de despesas, cobranças de tempo premium que violam o limite). Retorna um relatório de auditoria estruturado com citações por linha, a diretriz violada, o ajuste recomendado e uma faixa de confiança — mas nunca reduz a fatura automaticamente. O lead de legal-ops revisa e decide quais ajustes negociar. Substitui a leitura manual linha por linha de uma fatura de 20 páginas por uma revisão de 15 minutos de um relatório estruturado.
+
+## Quando usar
+
+- O escritório tem diretrizes escritas de faturamento para advogados externos (proibição de block-billing, detalhamento mínimo de lançamento de tempo, índices de staffing partner/associate, regras de reembolso de despesas). Sem as diretrizes o skill não tem nada para auditar.
+- Faturas mensais de uma ou mais firmas externas nomeadas, no formato LEDES 1998B / 1998BI / 2000, ou como PDF / Excel que podem ser analisados linha por linha.
+- O lead de legal-ops ou advogado interno sênior revisa o relatório de auditoria antes de qualquer ajuste ser comunicado à firma externa. O skill escreve; os humanos decidem.
+
+## Quando NÃO usar
+
+- **Redução automática da fatura sem revisão.** O skill sinaliza; não ajusta. Deduzir automaticamente com base nos achados do skill prejudica o relacionamento com o advogado externo, pode violar o procedimento de disputa da carta de contratação e expõe o escritório a uma contra-reclamação de arbitragem de honorários. O output do skill é suporte à decisão.
+- **Contestar cada linha sinalizada.** O skill captura volume que um revisor humano pode perder. Escolher as batalhas é responsabilidade do lead de legal-ops; nem toda instância de block-billing vale o custo relacional de uma disputa.
+- **Faturas com estrutura de taxa fixa ou alternative-fee complexa.** O skill é calibrado para faturamento por hora. Contratações faturadas por AFA precisam de uma auditoria com formato diferente (conclusão do entregável, escopo creep) que este skill não cobre.
+- **Substituir validadores de plataformas de e-billing.** [Onit](/pt-BR/learn/legal-spend-management/), SimpleLegal, Brightflag, etc. têm validadores de motor de regras integrados. O skill é uma camada POR CIMA desses — para os achados em prosa estruturada que o motor de regras não consegue capturar ("lançamento de tempo vago: '0,6h pesquisa'" — muito vago, mas tecnicamente segue o formato).
+
+## Setup
+
+1. **Faça o drop do bundle.** Coloque `apps/web/public/artifacts/outside-counsel-bill-audit-skill/SKILL.md` no seu diretório de skills do Claude Code.
+2. **Crie as diretrizes de faturamento do escritório.** Copie `references/1-billing-guidelines-template.md`, substitua cada placeholder. As diretrizes devem incluir: requisitos de detalhamento de lançamento de tempo, proibição de block-billing, índices de staffing (partner / senior associate / junior associate / paralegal), regras de reembolso de despesas, limites de tempo premium, limites de escopo de trabalho.
+3. **Configure o parser LEDES** (ou parser de PDF para faturas não-LEDES). O bundle inclui um parser que lida com LEDES 1998B e 1998BI; para faturas em PDF, o skill espera um CSV de itens de linha pré-analisado.
+4. **Configure a calibração por firma.** Firmas externas diferentes têm comportamentos de linha de base diferentes. O output do skill inclui uma nota de calibração por firma ("a taxa de block-billing desta firma caiu de 18% para 9% em seis meses") que ajuda o lead de legal-ops a ler os achados em contexto.
+5. **Faça uma execução seca em um mês fechado.** Audite as faturas do mês passado. Compare os achados do skill com a revisão manual do lead de legal-ops das mesmas faturas. Ajuste as diretrizes se o skill sinaliza coisas que o lead não se importa, ou perde coisas que o lead se importa.
+
+## O que o skill faz
+
+Seis passos. Verificações determinísticas vêm antes da avaliação do LLM, porque violações determinísticas (formato de block-billing, dupla entrada de despesas) são reproduzíveis e não precisam de julgamento do modelo.
+
+1. **Valide o formato da fatura** — confirme que o arquivo LEDES parseia, ou que o CSV tem as colunas esperadas. Pare em caso de falha no parse.
+2. **Execute verificações determinísticas** — detecção de block-billing (único lançamento de tempo cobrindo >1 descrição de tarefa), dupla entrada de despesa (mesmo ID de despesa em duas linhas), violação de índice de staffing (horas de partner em um tipo de tarefa que as diretrizes nomeiam como trabalho de associate), violação de limite de tempo premium (sobretaxa fora do horário acima do limite contratual).
+3. **Leia as diretrizes de faturamento do escritório** e os termos específicos da carta de contratação. As diretrizes são a âncora de comparação; os overrides da carta de contratação são anotados por assunto.
+4. **Avaliação do LLM por linha** para os casos que verificações determinísticas não conseguem cobrir: descrições vagas de lançamento de tempo, sinais de escopo creep, trabalho que deveria ter sido incluído numa taxa fixa mas aparece como linha separada. Para cada achado, cite a seção das diretrizes e a linha específica.
+5. **Agregue por categoria de diretriz** — total de horas / dólares por tipo de violação. O agregado é a alavanca de negociação, não as linhas individuais.
+6. **Emita relatório + log de auditoria** — relatório em Markdown estruturado para o lead de legal-ops, mais uma entrada de log de auditoria em JSONL por execução de auditoria para o sistema de rastreamento de gastos do escritório.
+
+## Realidade de custos
+
+Por fatura (tipicamente 200-800 itens de linha), no Claude Sonnet 4.6:
+
+- **Tokens de LLM** — tipicamente 30-80k de input (fatura + diretrizes + instruções do skill) e 5-10k de output. Aproximadamente $0,30-0,80 por fatura. Faturas pesadas (>1.000 linhas) podem precisar de chunking.
+- **Tempo do lead de legal-ops** — o ganho. Auditoria manual linha por linha de uma fatura complexa é 2-4 horas. Revisar o relatório do skill e decidir quais achados contestar é 20-40 minutos.
+- **Tempo de setup** — 60 minutos uma vez para a criação das diretrizes; calibração por firma é 15 minutos por firma.
+
+## Métrica de sucesso
+
+- **Taxa de ajuste por auditoria** — proporção de faturas auditadas que resultam em uma redução negociada. Deve ficar em 5-15% (acima de 25% significa muito agressivo nos achados; abaixo de 2% significa que o skill está perdendo cobranças reais ou as diretrizes são muito brandas).
+- **Redução média por auditoria** — valor em dólares das reduções negociadas. Deve ser 1-4% do valor total da fatura na maioria das firmas externas.
+- **Tempo do lead de legal-ops por fatura** — deve cair de 2-4 horas para 30-60 minutos (revisão + preparação da negociação).
+
+## Versus as alternativas
+
+- **Versus motores de regras de plataformas de e-billing.** Onit / SimpleLegal / Brightflag lidam bem com a parte determinística e são a ferramenta certa para firmas de alto volume. O skill é uma camada POR CIMA para os achados de julgamento em prosa. Use ambos.
+- **Versus revisão manual.** Manual é certo para os departamentos jurídicos menores onde o volume de faturas é baixo. O skill ganha seu custo de setup a >5 faturas por mês.
+- **Versus ChatGPT no estilo "audite esta fatura".** O chat genérico retorna achados genéricos. O skill é estruturado: seção das diretrizes citada por achado, verificações determinísticas primeiro, sem ajuste automático.
+
+## Pontos de atenção
+
+- **Drift de ajuste automático.** *Guarda:* o output do skill termina com o relatório estruturado. Não há output de "fatura ajustada". O lead de legal-ops é a única autoridade de ajuste.
+- **Confidencialidade do conteúdo da fatura.** *Guarda:* faturas de advogados externos tipicamente contêm descrições de produto do trabalho do advogado que são privilegiadas. O skill processa localmente onde a sessão Claude que o chama roda — para o Claude SaaS, a postura de privilégio é responsabilidade do escritório (a maioria dos grandes escritórios de advocacia e departamentos jurídicos corporativos usa acesso à API com configuração de zero-retention).
+- **Custo relacional da firma por excesso de disputas.** *Guarda:* a nota de calibração por firma do skill rastreia o volume de disputas ao longo do tempo. Se as disputas subirem, o relatório sinaliza para o lead de legal-ops.
+- **Drift das diretrizes.** *Guarda:* o log de auditoria captura o SHA do arquivo de diretrizes por execução. Mudanças nas diretrizes são visíveis entre faturas.
+- **Citações alucinadas das diretrizes.** *Guarda:* todo achado cita uma seção específica das diretrizes por ID; achados sem uma seção citável são sinalizados como "sem diretriz correspondente" em vez de afirmados.
+
+## Stack
+
+O bundle fica em `apps/web/public/artifacts/outside-counsel-bill-audit-skill/`:
+
+- `SKILL.md` — a definição do skill
+- `references/1-billing-guidelines-template.md` — template preenchível por firma
+- `references/2-ledes-parser-notes.md` — notas de parsing do formato LEDES
+
+Ferramentas: [Claude](/pt-BR/tools/claude/) (o modelo). Opcional: uma plataforma de e-billing (Onit, SimpleLegal) para a camada do motor de regras.
+
+Relacionados: [gestão de gastos jurídicos](/pt-BR/learn/legal-spend-management/), [gestão de advogados externos](/pt-BR/learn/outside-counsel-management/), [arranjos de honorários alternativos](/pt-BR/learn/alternative-fee-arrangements/), [hora faturável vs AFA](/pt-BR/learn/billable-hour-vs-afa/).

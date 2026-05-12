@@ -1,0 +1,91 @@
+---
+slug: regulatory-change-monitor-n8n
+canonical_slug: regulatory-change-monitor-n8n
+locale: pt-BR
+verticals: [legal-ops]
+title: Monitor de mudanças regulatórias com n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops, in-house-counsel, compliance, dpo]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/regulatory-change-monitor-n8n.mdx
+translated_at: "2026-05-12T22:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "aa78e16fd4585ec1bcc8e580247d3de5bd8e4abe11ee2b2c742e744d4326919c"
+---
+
+Um flow n8n que monitora um conjunto curado de feeds regulatórios (atualizações do EU AI Act, decisões de enforcement do GDPR, leis de privacidade estaduais dos EUA, propostas de regras da SEC, NYC LL 144 e outras leis de IA em empregos, regras setoriais específicas), classifica cada item por relevância ao perfil de exposição específico do escritório, pontua urgência e posta um digest estruturado no canal do Slack da equipe jurídica — agregado diário, mais alertas imediatos para itens `high_urgency`. Substitui o "cemitério de feeds RSS e newsletters" do advogado interno por uma fila filtrada que surfaceia apenas o que o escritório realmente precisa agir.
+
+## Quando usar
+
+- O escritório opera em múltiplos regimes regulatórios (privacidade, trabalho, setoriais) e a equipe interna não consegue ler manualmente todas as atualizações dos reguladores.
+- O trabalho de compliance é orientado por eventos suficientemente para que "perdemos essa mudança de regra porque ninguém viu" seja um modo de falha real.
+- O escritório documentou seu perfil de exposição regulatória (quais jurisdições, quais setores, quais tipos de dados) — o filtro de relevância requer esse perfil.
+
+## Quando NÃO usar
+
+- **Substituir a leitura do conselho geral do escritório.** O flow é suporte à decisão; o advogado ainda lê os itens de alta urgência e define a resposta do escritório. O flow filtra; o advogado age.
+- **Produzir aconselhamento jurídico sobre as mudanças regulatórias.** O flow resume. O advogado interpreta e decide a resposta.
+- **Áreas de prática altamente especializadas** que precisam de monitoramento de tier de praticante (trabalho de clearance regulatório em M&A, tributário complexo). A prática especializada tem fontes dedicadas além do que um monitor de feeds captura.
+- **Geografias que o perfil de exposição não cobre.** Adicionar uma geografia requer atualização do perfil; o flow não descobre automaticamente o que o escritório se importa.
+
+## Setup
+
+1. **Importe o flow** de `apps/web/public/artifacts/regulatory-change-monitor-n8n/regulatory-change-monitor-n8n.json`.
+2. **Configure as credenciais.** Anthropic (classificação pelo Claude), Slack (destino do digest), HTTP fetcher (sem auth necessário para feeds RSS / API públicos).
+3. **Crie o perfil de exposição do escritório.** Por área regulatória, documente: jurisdições aplicáveis, setores, tipos de dados, exposição a penalidades, proprietário de advogado nomeado. Template no `_README.md`.
+4. **Configure as fontes de feeds.** O flow empacotado faz poll de 8 feeds padrão (página do EU AI Act da Comissão Europeia, página do NYC LL 144 de assuntos do consumidor, diretrizes do EDPB, propostas de regras da SEC, enforcement da ICO, diretrizes do EDPS, press releases da FTC, agregador de enforcement de privacidade do AG estadual). Adicione ou remova conforme a exposição do escritório.
+5. **Ajuste os limiares de urgência.** Padrões: decisão de enforcement contra uma empresa similar → `high`; proposta de regra em jurisdição em escopo → `medium`; documento de consulta → `low`. Ajuste conforme a preferência do advogado entre ruído e perda.
+6. **Execute em seco por duas semanas.** Compare as classificações do flow com a leitura manual do advogado do mesmo período. Ajuste o filtro de relevância e as regras de urgência.
+
+## O que o flow faz
+
+Seis nodes. Poll por feed, depois classificação por item, depois montagem do digest.
+
+1. **Cron Hourly** — dispara a cada hora para fazer poll dos feeds (o digest diário é montado às 8h do TZ do escritório).
+2. **Fetch Feeds** — requests HTTP para cada URL de feed configurada. Parse de RSS / Atom / JSON por formato de feed. Deduplicação por GUID do item contra os últimos 30 dias de itens vistos.
+3. **Classify** — chamada ao Claude por novo item. Retorna `{relevant_to_profile, jurisdictions_implicated, regulatory_areas, urgency, summary, recommended_owner}`. Itens com `relevant_to_profile: false` são descartados do digest mas registrados na tabela de auditoria.
+4. **Store** — escreva cada item classificado na tabela `regulatory_items`.
+5. **Immediate Alert** — para itens `urgency: high`, poste imediatamente em `#legal-alerts` com a classificação + link.
+6. **Daily Digest** — às 8h do TZ do escritório, monte os itens das últimas 24 horas em um digest agrupado por área regulatória, postado em `#legal-team`.
+
+## Realidade de custos
+
+- **Tokens de LLM** — tipicamente 1-2k de input + 0,5k de output por item classificado. Com ~20-50 novos itens por dia nos feeds, ~$0,20-0,60/dia em custo de modelo.
+- **Execuções n8n** — cron horário + processamento por item. Dentro do plano Starter para a maioria dos escritórios.
+- **Tempo do advogado** — o ganho. Monitoramento manual é 30-60 minutos/dia por advogado para cobertura completa; revisar o digest diário é 5-10 minutos mais tempo de resposta a alertas imediatos.
+- **Tempo de setup** — 90 minutos incluindo a criação do perfil de exposição (45 minutos é o perfil).
+
+## Métrica de sucesso
+
+- **Incidentes de "não vimos" do advogado por trimestre** — incidentes onde uma consulta do regulador surfaceia uma mudança de regra que o escritório deveria ter conhecido. Deve cair para zero nas áreas monitoradas.
+- **Proporção sinal-ruído do digest** — proporção de itens do digest que o advogado marca como "relevante" vs "ignorar". Deve ser 70-85% relevante; abaixo de 50% significa que o filtro de relevância ou o perfil de exposição precisa de ajuste.
+- **Tempo desde publicação da regra até postura de resposta do advogado** — para áreas monitoradas, deve cair de "semanas" (monitoramento passivo de newsletters) para menos de 24 horas (o digest captura no primeiro poll).
+
+## Versus as alternativas
+
+- **Versus serviços comerciais de monitoramento regulatório** (LexisNexis State Net, Bloomberg Government, FiscalNote, Thomson Reuters Regulatory Intelligence). Escolha esses se o orçamento suporta a aposta na plataforma e você quer cobertura gerenciada com resumos de nível de praticante. O flow é o meio-termo leve a custo menor e com o filtro de relevância calibrado para o seu perfil.
+- **Versus advogados internos lendo newsletters.** O padrão e a fonte das perdas.
+- **Versus nenhum monitoramento.** Modo de falha previsível em escritórios menores; funciona até não funcionar.
+
+## Pontos de atenção
+
+- **Drift de fonte de feed.** *Guarda:* verificação de saúde do feed em todo poll horário. Itens de fetch com falha surfaceiam como avisos "a fonte de feed X está fora do ar há N horas" no digest diário, não descartados silenciosamente.
+- **Falsos negativos do filtro de relevância.** *Guarda:* a tabela de auditoria registra TODOS os itens classificados, incluindo `relevant_to_profile: false`. O advogado revisa o bucket de falsos negativos semanalmente; perdas são sinal para atualizar o perfil ou o prompt do classificador.
+- **Over-flagging de urgência.** *Guarda:* posts de alerta imediato vão somente para `#legal-alerts`; o digest diário absorve urgência média e baixa. Ajustar os limiares de urgência é a alavanca se os alertas ficarem excessivos.
+- **Erro de mapeamento de jurisdição.** *Guarda:* cada item é anotado com `jurisdictions_implicated` baseado na autoridade do regulador + escopo declarado da regra. Itens onde a jurisdição é ambígua recebem a tag "ambígua — advogado confirmar" em vez de serem adivinhados.
+- **Perfil de exposição stale.** *Guarda:* o perfil traz `last_updated` e dispara um "lembrete de revisão do perfil" no digest se for mais antigo que 6 meses.
+- **Staleness do conteúdo do feed versus data de publicação.** *Guarda:* o digest ordena por data de publicação, não por data de fetch. Itens antigos no feed reaparece se o feed ficou fora do ar por um período.
+
+## Stack
+
+O bundle fica em `apps/web/public/artifacts/regulatory-change-monitor-n8n/`:
+
+- `regulatory-change-monitor-n8n.json` — a exportação do flow
+- `_README.md` — credenciais, esquema de perfil de exposição, lista de feeds padrão, procedimento de execução em seco
+
+Ferramentas: [n8n](/pt-BR/tools/n8n/), [Claude](/pt-BR/tools/claude/), [Slack](/pt-BR/tools/slack/).
+
+Relacionados: [gestão do conhecimento jurídico](/pt-BR/learn/legal-knowledge-management/), [EU AI Act para equipes jurídicas](/pt-BR/learn/eu-ai-act-for-legal-teams/), [GDPR para equipes jurídicas](/pt-BR/learn/gdpr-for-legal-teams/), [política de IA para equipes jurídicas](/pt-BR/learn/ai-policy-for-legal-teams/).

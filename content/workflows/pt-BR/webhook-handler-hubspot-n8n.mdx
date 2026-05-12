@@ -3,7 +3,7 @@ slug: webhook-handler-hubspot-n8n
 canonical_slug: webhook-handler-hubspot-n8n
 locale: pt-BR
 verticals: [revops]
-title: Webhook handler genérico do HubSpot em n8n
+title: Handler genérico de webhook HubSpot no n8n
 artifact_type: n8n-flow
 tools_used: [n8n, hubspot]
 roles: [revops, gtm-engineer]
@@ -11,43 +11,76 @@ difficulty: intermediate
 time_to_setup: 45min
 human_tested: false
 translated_from: en/webhook-handler-hubspot-n8n.mdx
-translated_at: "2026-05-02T00:00:00Z"
-translation_model: claude-opus-4-7
-source_sha256: "157bab04e48b89a93e8bb753a93d36829999f0a97f58718b9bc1780782d4163f"
+translated_at: "2026-05-12T22:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "65ddfff1804f408df00f8abc7bd4bcbd8690f717bd7e987c6a45ccb8e4caea9a"
 ---
 
-Um flow de n8n que recebe qualquer webhook de HubSpot Workflows, valida o payload, roteia por tipo de evento e faz fan-out pros sistemas downstream. Um handler, uma URL, todos os eventos do HubSpot que você se importa. Substitui uma pasta de Zaps one-off segurada com esperança.
+Um único workflow n8n que pega todo webhook de Workflows HubSpot que seu portal dispara, verifica a assinatura HMAC v3, deduplica contra um ledger Postgres, roteia por tipo de evento e dá ack rápido o suficiente para que o HubSpot nunca faça retry. Um handler, uma URL, todo evento que sua equipe se importa — substituindo a pasta de Zaps avulsos que ninguém confia e ninguém é dono.
 
-## O que você vai precisar
+A peça central da arquitetura não é o roteamento. É o ledger de deduplicação. O HubSpot faz retry de toda resposta 5xx por até 24 horas, seu handler vai cair em algum momento, e o mesmo evento chegará duas ou três vezes. Sem um ledger com chave no `eventId` do HubSpot, você dispara notificações do Slack em duplicata, cria registros duplicados no seu sistema downstream e corrompe as métricas do seu pipeline. Com um ledger, a segunda entrega retorna zero linhas no insert e o flow faz curto-circuito para um ack `200 OK`. O bundle em `apps/web/public/artifacts/webhook-handler-hubspot-n8n/webhook-handler-hubspot-n8n.json` é construído em torno dessa propriedade; todo o resto é fiação de fan-out.
 
-- n8n self-hosted ou cloud, com ao menos um worker ativo
-- HubSpot Workflows num tier pago (a action de webhook exige)
-- Um signing secret que você controle, configurado nos dois lados
-- Sistemas downstream com webhooks ou APIs alcançáveis (Slack, Salesforce, seu próprio serviço)
+## Quando usar
+
+Você tem três ou mais sistemas downstream que precisam reagir a eventos do HubSpot (Slack, seu warehouse, um serviço interno, uma sincronização para Zendesk ou Salesforce), os eventos se sobrepõem (mudanças de stage de deal também criam tickets, a criação de contato também dispara o Slack) e você atualmente tem um Zap ou ação de código customizado do HubSpot Operations Hub por par (evento × destino). Essa matriz cresce de forma multiplicativa e ninguém a refatora. Um handler com um Switch node e infraestrutura compartilhada (verificação de assinatura, dedup, captura de erro, replay) corta a matriz para um caminho por tipo de evento. Você também quer isso quando seus sistemas downstream têm rate limits ou cotas que você precisa throttlar centralmente, porque a lógica de retry por node do n8n e o modo de fila é o lugar certo para colocar essa lógica — não espalhada por dez Zaps.
+
+## Quando NÃO usar
+
+Se você só tem um consumidor downstream de eventos do HubSpot, pule o n8n completamente e use a ação de código customizado do HubSpot Operations Hub — ela roda dentro do próprio framework de retry do HubSpot e você não tem que operar um receptor de webhook. Se você tem orçamentos de latência estritos (ack sub-100ms necessário) e um caso de uso de alto volume (>100 eventos por segundo sustentado), o node webhook do n8n na frente de um único pool de conexão Postgres vai se tornar um gargalo; use AWS Lambda + API Gateway + DynamoDB em vez disso, onde a tabela de dedup é de latência de milissegundos e o compute é por request. Se sua equipe não tem apetite para operar um banco de dados Postgres pequeno, este workflow é um mau fit — o ledger não é negociável, e "vamos usar os dados estáticos do n8n" ou um cache em memória não vai sobreviver a um restart e vai silenciosamente disparar eventos em duplicata. Finalmente, se o seu tier do HubSpot é Marketing Hub Free / Sales Hub Starter, você não tem webhooks de Workflows de forma alguma; o pré-requisito é Operations Hub Professional ou Enterprise.
 
 ## Setup
 
-1. **Crie o nó de webhook do n8n.** Configure como POST, sem auth no nível do nó (vamos validar dentro do flow). Salve a URL de produção.
-2. **Configure o signing secret.** HubSpot Workflows pode incluir um header custom em webhooks de saída. Configure esse header com um shared secret. O primeiro nó do flow valida o header contra o secret armazenado nas credenciais do n8n.
-3. **Construa o router.** Um nó Switch sobre o campo de tipo de evento do payload. Cada saída é uma branch discreta: mudança de stage de deal, contato criado, update de ticket, evento custom.
-4. **Cabeie as branches.** Cada branch trata um tipo de evento com lógica própria e chamadas downstream. Mantenha as branches rasas; uma branch com mais de cinco nós merece o próprio flow.
-5. **Adicione captura de erros.** Um flow Error Trigger no final que loga rodadas falhas, posta no Slack e re-executa de uma dead-letter queue.
+1. Provisione uma instância Postgres (ou use uma existente). Execute os dois statements `CREATE TABLE` do `apps/web/public/artifacts/webhook-handler-hubspot-n8n/_README.md` — `hubspot_event_ledger` é a tabela de dedup; `hubspot_unhandled_events` estaciona eventos com tipos de assinatura que seu Switch ainda não lida.
+2. Na sua conta de desenvolvedor do HubSpot, encontre ou crie o app cujo client secret vai assinar webhooks outbound. O client secret é a chave HMAC — a assinatura de webhook do Workflows o usa diretamente. Anote o valor uma vez; o HubSpot não vai mostrá-lo novamente.
+3. Na instância n8n, configure duas variáveis de ambiente: `HUBSPOT_CLIENT_SECRET` (o valor do passo 2) e `N8N_WEBHOOK_PUBLIC_BASE_URL` (a origem pública da sua instalação n8n, ex.: `https://n8n.example.com` — sem barra no final). O Code node reconstrói a signing string contra esta origem exata, então um mismatch quebra toda assinatura.
+4. Importe `apps/web/public/artifacts/webhook-handler-hubspot-n8n/webhook-handler-hubspot-n8n.json` via **Workflows → Import from File**. Vincule as credenciais aos dois placeholders: `Postgres — hubspot-ledger` (uma credencial Postgres apontando para o banco do passo 1) e `Slack — bot token` (uma credencial `httpHeaderAuth` com `Authorization: Bearer xoxb-...`).
+5. Ative o workflow. Copie a URL de webhook de produção do Webhook node e registre-a na página de assinaturas de webhook do app HubSpot. Assine os tipos de evento específicos em que você roteia (`deal.propertyChange`, `contact.creation`, `ticket.propertyChange` são os branches empacotados; adicione ou remova para corresponder ao seu portal).
+6. Execute os quatro casos de verificação do `_README.md` do bundle (happy-path válido, rejeição de assinatura inválida, skip de event-id duplicado, fallback de tipo de assinatura desconhecido) antes que qualquer Workflow HubSpot de produção aponte para a URL.
 
-## Como funciona
+## O que o flow faz
 
-HubSpot Workflows dispara webhooks com um payload pequeno (object ID, tipo de evento, portal ID, timestamp). O primeiro trabalho do flow do n8n é enrichment: pega o object ID e faz uma leitura de follow-up no HubSpot pra obter o registro completo. O segundo trabalho é roteamento. O terceiro é ação downstream. O quarto é acknowledgement de volta pro HubSpot, idealmente com um 200 rápido antes do trabalho pesado começar pra que o HubSpot não retentre.
+O Webhook node aceita `POST /webhook/hubspot/events` com `rawBody: true`. Os bytes brutos são obrigatórios porque a assinatura v3 do HubSpot é calculada sobre o body exato do request — o parsing JSON padrão do n8n re-serializaria o payload e qualquer diferença de espaçamento em branco invalidaria a assinatura.
 
-O handoff async é o padrão-chave. Qualquer coisa além de uma leitura rápida de CRM deveria ir pra uma fila (nó Wait do n8n ou fila externa) pra que o webhook responda em menos de um segundo. O comportamento de retry do HubSpot é tolerante mas não infinito.
+`Verify HMAC + Parse` é um Code node que faz quatro coisas em ordem: rejeita requests onde o header de timestamp está a mais de 5 minutos do wall-clock (esta é a janela de replay), reconstrói a signing string `POST + URI + RAW_BODY + TIMESTAMP`, calcula `HMAC-SHA256(client_secret, signing_string)` e codifica em base64, e compara o resultado com `x-hubspot-signature-v3` em tempo constante usando `crypto.timingSafeEqual`. Na falha emite um item único sinalizado `__valid: false` com uma string de razão; no sucesso parseia o body e emite um item por evento no batch do HubSpot (o HubSpot batcheia até 100 eventos por entrega).
+
+`Dedupe Ledger Insert` é a pedra angular de idempotência. Todo evento acessa `INSERT INTO hubspot_event_ledger (...) VALUES (...) ON CONFLICT (event_id) DO NOTHING RETURNING event_id`. Um evento de primeira vez retorna seu `event_id` e prossegue. Um duplicata (retry do HubSpot, ataque de replay que de alguma forma passou na assinatura, ou sua própria importação acidental do workflow) retorna zero linhas. `If New Event` verifica esse resultado vazio e faz curto-circuito para `Respond 200 OK` sem re-disparar o branch downstream.
+
+`Switch — Event Type` tem chave em `subscriptionType`. Os branches empacotados são ilustrativos — `deal.propertyChange` posta uma mensagem no Slack, `contact.creation` faz POST para uma API interna, `ticket.propertyChange` sincroniza para uma URL de placeholder Zendesk. Substitua por seus destinos reais. O output de fallback escreve em `hubspot_unhandled_events` para que uma mudança de schema do HubSpot (novo tipo de evento adicionado a uma assinatura, nova propriedade adicionada a um payload de evento) estacione o evento para revisão humana em vez de travar o flow inteiro.
+
+`Respond 200 OK` é o node Respond-to-Webhook explícito — `responseMode: "responseNode"` no Webhook node significa que controlamos exatamente quando o ack vai de volta. Damos ack depois que o insert no ledger é bem-sucedido, não depois que o branch downstream completa. Esse trade-off é deliberado: o HubSpot considera o evento entregue assim que o ledger o tem, e qualquer falha de branch é recuperada out-of-band pelo sub-flow Error Trigger que posta em `#alerts-revops` mais suas próprias ferramentas de replay lendo do `hubspot_event_ledger`. A alternativa (ack somente depois que o branch completa) significa que uma API downstream lenta trava a fila do HubSpot e dispara retries que você então tem que deduplicar de qualquer forma.
+
+## Realidade de custos
+
+O n8n self-hosted numa única VM pequena (2 vCPU / 4GB, ~$20-30/mês no Hetzner / DigitalOcean) lida com dezenas de milhares de eventos por dia de um portal HubSpot sem dificuldades. O tier Starter do n8n Cloud é $24/mês para 2.500 execuções e fica caro rapidamente nesse volume — se você espera mais de ~10k entregas de webhook por mês, self-hosted é significativamente mais barato. Adicione um Postgres gerenciado pequeno ($15-25/mês no Supabase, RDS ou Neon) para o ledger.
+
+O tamanho de linha do ledger de dedup é de aproximadamente 2-4KB dependendo do tamanho do payload bruto (os payloads do HubSpot são pequenos — tipicamente ~500 bytes, JSONB comprime bem). A 30k eventos/mês com retenção de 30 dias, a tabela fica abaixo de 100MB. A 1M eventos/mês com retenção de 30 dias, você está em aproximadamente 3-4GB — ainda trivial para qualquer Postgres gerenciado. O job de poda (um `DELETE` por dia, indexado em `received_at`) não custa nada mensurável.
+
+O custo oculto são as cotas de API downstream. Um evento de schema-drift que inunda o fallback do switch pode ser uma surpresa; um Workflow HubSpot mal configurado que dispara 10.000 eventos em uma hora vai queimar qualquer rate limit do Slack e a maioria das cotas de API internas em minutos. Orce para ambos: caps de retry por branch (o bundle inclui `tryCount: 5, waitBetweenTries: 1000-2000ms`) e uma mentalidade de circuit-breaker onde suas APIs downstream rejeitam 429s de volta para o n8n de forma limpa para que o evento fique na fila em vez de ser perdido.
+
+## Métrica de sucesso
+
+Latência end-to-end do disparo do HubSpot ao efeito colateral downstream abaixo de 2 segundos no p95, medida comparando `occurred_at` (timestamp do HubSpot no evento) com o timestamp de criação/atualização do seu sistema downstream. Uma segunda métrica: zero disparos em duplicata por trimestre, medida como `count(*) GROUP BY event_id HAVING count(*) > 1` contra o log de auditoria do seu sistema downstream. Se você conseguir ambas, o handler está fazendo seu trabalho e você pode parar de olhar para ele.
+
+## Versus as alternativas
+
+Versus **ação de código customizado do HubSpot Operations Hub**: as ações de código customizado do HubSpot rodam no próprio framework de retry do HubSpot sem infraestrutura para você operar, o que é uma vitória real quando você tem um ou dois destinos simples. Ficam dolorosas a três ou mais destinos porque cada Workflow tem sua própria cópia de código customizado de sua lógica de signing/dedup/roteamento, e você não consegue compartilhar infraestrutura (sem Postgres ledger compartilhado, sem rotação de credencial do Slack compartilhada, sem tratamento central de erros). O ponto de break-even é aproximadamente 3 destinos ou qualquer necessidade de correlação entre eventos. Escolha o código customizado do HubSpot primeiro; migre para este handler n8n quando você superar isso.
+
+Versus **AWS Lambda + API Gateway + DynamoDB**: esta é a arquitetura mais escalável (conditional writes do DynamoDB são idempotência de latência de milissegundos, Lambda escala horizontalmente automaticamente, API Gateway dá throttling por rota de graça) mas custa um pipeline de deployment, IaC, stack de observabilidade e uma equipe que consegue debugar cold starts do Lambda. Para uma equipe de revops executando 10-100k eventos/mês, o n8n é mais simples de operar, mais fácil de modificar (Switch + nodes de branch vs código + redeploy) e o ledger vive no mesmo Postgres que suas outras automações de ops provavelmente já usam. Escolha Lambda quando você cruzar 100 eventos/segundo sustentado ou quando a latência importar em dígitos únicos de milissegundos.
+
+Versus **o status quo de um Zap por evento**: esta é a alternativa que todo mundo está realmente substituindo. Os Zaps disparam em duplicata no retry (a deduplicação do Zapier é best-effort e não é controlável pelo usuário), não têm verificação de assinatura compartilhada (qualquer pessoa com uma URL de webhook de Zap pode disparar eventos falsos) e ficam impossíveis de refatorar quando há vinte deles. O argumento para este workflow n8n é o mesmo argumento para qualquer infraestrutura centralizada: um lugar para corrigir o bug, um lugar para rotacionar o segredo, um lugar para ler o log de auditoria.
 
 ## Pontos de atenção
 
-- **Validação de assinatura precisa ser o primeiro nó.** Pular significa que qualquer um com a URL pode disparar eventos falsos. Construa uma vez, copie em todo flow de webhook.
-- **Tempestades de replay.** Um workflow do HubSpot mal configurado pode disparar dez mil eventos numa hora. O handler precisa rate-limitar por object ID ou você vai DDoSar seu próprio downstream.
-- **Drift de schema.** HubSpot adiciona campos nos payloads de webhook. O router deve ignorar campos desconhecidos, não crashear.
-- **Idempotência.** O mesmo evento pode chegar duas vezes. Cada ação downstream precisa de uma chave de dedupe (o ID do evento serve).
+- **Mismatches de assinatura HMAC que passam localmente e falham em produção.** A signing string inclui a URI, e a URI deve corresponder exatamente ao que o HubSpot postou. Configure `N8N_WEBHOOK_PUBLIC_BASE_URL` precisamente (sem barra no final, scheme correto, porta correta) — a falha de produção mais comum é um Cloudflare / load-balancer na frente do n8n mudando a URL que o HubSpot vê vs a URL que o n8n acha que tem. Guarda: logue a signing string reconstruída em nível debug e compare com o log de requests do HubSpot quando a primeira assinatura falhar; nunca habilite esse log em produção além do debug.
+- **Ataques de replay dentro da janela de 5 minutos.** A verificação de assinatura é necessária mas não suficiente — um request assinado capturado pode ser repetido dentro da janela de timestamp. Guarda: o `event_id` PRIMARY KEY do ledger de dedup torna isso um no-op (um replay retorna zero linhas no insert e faz curto-circuito para ack), mas apenas se `event_id` for de fato um identificador estável e único por evento. Verifique com o caso de teste de evento duplicado do README antes de ir ao vivo.
+- **Esgotamento de cota de API downstream sob burst.** Um Workflow HubSpot mal configurado pode disparar milhares de eventos por minuto. O `chat.postMessage` do Slack permite aproximadamente 1 mensagem por segundo por canal; muitas APIs internas têm cotas de 100 req/min por token. Guarda: caps de retry por branch no workflow (`tryCount: 5, waitBetweenTries`) mais modo de fila do n8n para que os eventos se acumulem na fila em vez de falhar rapidamente e serem perdidos. Para branches de genuinamente alto volume, troque o HTTP node direto por uma escrita de fila SQS/Redis e deixe um consumer separado drenar na velocidade respeitosa da cota.
+- **Schema drift do lado do HubSpot.** O HubSpot adiciona campos aos payloads de eventos e ocasionalmente introduz novos tipos de assinatura. Guarda: o output de fallback do Switch node estaciona tipos desconhecidos em `hubspot_unhandled_events` em vez de gerar erro; os branches downstream leem `propertyName`/`propertyValue` de forma defensiva em vez de afirmar a forma.
+- **Worker do n8n travando no meio de uma execução.** Se o worker morrer depois do insert no ledger mas antes do `Respond 200 OK`, o HubSpot faz retry porque nunca recebeu um ack, a segunda entrega bate na restrição do ledger e retorna zero linhas, e o branch downstream nunca re-dispara. Guarda: habilite `saveExecutionProgress: true` (já definido no bundle) e trate o ledger como fonte da verdade — ferramentas de replay leem o `hubspot_event_ledger` e re-executam branches contra payloads de eventos estacionados, não contra a API do HubSpot.
 
 ## Stack
 
-- **HubSpot Workflows** — fonte de eventos
-- **n8n** — receptor de webhook, router, fan-out
-- **Sistemas downstream** — Slack, Salesforce, serviços internos, o que seu time roda
+- **HubSpot Workflows** — fonte de eventos. Operations Hub Professional ou Enterprise necessário para a ação de webhook.
+- **n8n** (self-hosted recomendado) — receptor de webhook, verificador de assinatura, roteador, fan-out. Modo de fila fortemente recomendado para produção.
+- **Postgres** — ledger de dedup e estacionamento de eventos não tratados. Qualquer Postgres gerenciado funciona (Supabase, Neon, RDS, Cloud SQL).
+- **Slack** — alertas de falha e o branch de exemplo de mudança de stage de deal. Bot token com `chat:write`.
+- **Sistemas downstream** — suas APIs internas, Salesforce, Zendesk, warehouse, para o que os eventos fazem fan-out.

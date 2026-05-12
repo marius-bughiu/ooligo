@@ -1,0 +1,91 @@
+---
+slug: subpoena-triage-claude-skill
+canonical_slug: subpoena-triage-claude-skill
+locale: pt-BR
+verticals: [legal-ops]
+title: Triagem de intimação com o Claude
+artifact_type: claude-skill
+tools_used: [claude]
+roles: [legal-ops, in-house-counsel, paralegal]
+difficulty: intermediate
+time_to_setup: 30min
+human_tested: false
+translated_from: en/subpoena-triage-claude-skill.mdx
+translated_at: "2026-05-12T22:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "852686b1f8ba738182cf42658bbedea99c1d29541cc4e8c6efbfeef67e5ec07a"
+---
+
+Um Claude Skill que faz triagem de uma intimação recebida (ou pedido de documento de terceiro, ou pedido de autoridade policial) — extrai o emissor, jurisdição, custodiante, prazo de resposta, categorias de documentos solicitados e exposição a privilégio; classifica se o escritório tem legitimidade para objetar; estima o escopo (número de custodiantes implicados, volume esperado de documentos) — e produz um relatório de intake estruturado que o advogado interno usa para definir o escopo da resposta. Substitui a primeira leitura do paralegal de uma intimação de 12 páginas por uma revisão de 10 minutos de um relatório estruturado. Sempre escala para o advogado; nunca responde automaticamente, nunca reconhece o serviço automaticamente.
+
+## Quando usar
+
+- O escritório recebe intimações ou pedidos de autoridades policiais com frequência suficiente para que a triagem de intake seja em si um gargalo (tipicamente >5 por mês).
+- O escritório tem um procedimento escrito de resposta a intimações (owners de advogados nomeados, mapa de custodiantes de documentos, práticas de privilege log). O skill estrutura o intake; o procedimento é a substância.
+- O escritório distingue entre tipos de intimação (civil de terceiro, grand-jury, regulatória, processo legal estrangeiro) — caminhos de objeção e prazos diferentes se aplicam, e o skill precisa da rubrica de classificação do escritório.
+
+## Quando NÃO usar
+
+- **Reconhecer automaticamente o serviço.** As regras de serviço variam por jurisdição; em algumas, reconhecer o serviço dispara o relógio de resposta. O advogado decide sobre o reconhecimento.
+- **Substituir a análise de privilégio do advogado.** O skill sinaliza a exposição a privilégio (comunicações privilegiadas provavelmente em escopo, doutrina de work-product implicada). O advogado faz a análise.
+- **Cartas rogatórias estrangeiras ou pedidos da Convenção de Haia.** Procedimento diferente, prazo diferente, envolvimento do advogado diferente. O skill sinaliza mas não lida.
+- **Intimações de grand-jury.** Frequentemente confidenciais; o skill não deve escrever em sistemas de rastreamento padrão para esses — o advogado determina a postura de armazenamento por assunto.
+- **Substituir a emissão de litigation hold.** Uma intimação dispara um hold para os custodiantes relevantes; o skill sinaliza o trigger, mas o [fluxo de orquestração de litigation hold](/pt-BR/workflows/litigation-hold-orchestration-n8n/) é o fluxo de emissão.
+
+## Setup
+
+1. **Faça o drop do bundle.** Coloque `apps/web/public/artifacts/subpoena-triage-claude-skill/SKILL.md` no seu diretório de skills do Claude Code.
+2. **Crie a rubrica de classificação do escritório.** Por tipo de intimação, documente: quem é dono da resposta, quais regras da jurisdição se aplicam, prazo padrão, roteamento padrão do advogado. Template em `references/1-subpoena-classification.md`.
+3. **Configure a fonte do mapa de custodiantes.** O skill estima quais custodiantes estão implicados; isso requer um mapa atual. Puxe do HRIS / plataforma de eDiscovery / registro de legal-ops.
+4. **Configure as regras de flag de privilégio.** Quando o escopo de uma intimação provavelmente se sobrepõe a comunicações advogado-cliente, o skill sinaliza. As regras de sinalização variam por escritório (postura de GC interno vs advogado externo). Template em `references/2-privilege-flag-rules.md`.
+5. **Execute em seco em intimações fechadas.** Processe três intimações fechadas. Compare a classificação, estimativa de escopo e flags de privilégio do skill com o que o advogado realmente fez.
+
+## O que o skill faz
+
+Seis passos. Classificação antes da estimativa de escopo, porque o escopo depende de que tipo de intimação é.
+
+1. **Extraia metadados.** Emissor (tribunal, agência, parte solicitante), caption do caso, data de serviço, prazo de resposta, jurisdição. Pare se algum desses não puder ser determinado — o advogado precisa de todos os cinco antes que a triagem prossiga.
+2. **Classifique por tipo.** Civil de terceiro / grand-jury / regulatória (SEC, DOJ, AG estadual) / processo legal estrangeiro / autoridade policial. Conforme a rubrica do escritório, encaminhe ao owner de advogado apropriado e ao prazo.
+3. **Extraia as categorias de documentos solicitados.** Os pedidos da intimação são tipicamente itemizados; o skill extrai cada um e marca com a taxonomia de categorias de documentos do escritório (contratos, comunicações, financeiros, especificações técnicas, registros de RH, etc.). Sinalize pedidos excessivamente amplos (pedido solicitando "todos os documentos relacionados a X" sem limite temporal ou de escopo).
+4. **Estime as implicações de custodiantes.** A partir das categorias de documentos e do contexto do assunto, identifique quais custodiantes (indivíduos nomeados ou papéis) provavelmente possuem documentos responsivos. Output: lista de custodiantes, NÃO um pedido para emitir um hold (esse é o próximo passo, aprovado pelo advogado).
+5. **Sinalize exposição a privilégio.** Onde as categorias solicitadas se sobrepõem a comunicações provavelmente privilegiadas (aconselhamento jurídico, work-product, comunicações de interesse comum), sinalize com um guarda par ("sinalizando porque a categoria 'todas as comunicações com advogado' implica privilégio advogado-cliente; recomende preparação de privilege log como parte da resposta").
+6. **Emita relatório de triagem.** Markdown estruturado para o advogado + log de auditoria em JSONL por intake.
+
+## Realidade de custos
+
+- **Tokens de LLM** — tipicamente 8-15k de input (texto em PDF da intimação + instruções do skill) e 2-4k de output. ~$0,10-0,20 por intimação.
+- **Tempo do advogado / paralegal** — o ganho. Triagem manual de uma intimação complexa é 1-2 horas. Revisar o relatório do skill é 15-30 minutos. A maior economia de tempo está na consistência — toda intimação passa pela mesma estrutura.
+- **Tempo de setup** — 30 minutos mais criação de rubrica por escritório.
+
+## Métrica de sucesso
+
+- **Tempo de roteamento para o advogado** — deve cair de 4-24 horas (triagem manual do paralegal em fila) para menos de 30 minutos.
+- **Taxa de reclassificação pelo advogado** — proporção de intimações que o advogado reclassifica após o output do skill. Deve ser menor que 15%; acima disso, a rubrica precisa de ajuste.
+- **Cobertura de flags de privilégio** — na revisão retrospectiva, proporção de intimações onde questões de privilégio realmente surgiram versus proporção onde o skill as sinalizou. Perdas são sinal para atualizar as regras de privilégio.
+
+## Versus as alternativas
+
+- **Versus revisão de primeira passagem do paralegal.** A revisão do paralegal continua sendo a escolha certa para as intimações onde o julgamento com contexto importa (ex.: uma intimação referenciando um assunto em que o paralegal estava trabalhando). O skill complementa em vez de substituir — lida com o volume enquanto os paralegais lidam com as nuances.
+- **Versus intake de plataforma de eDiscovery** ([Relativity](/pt-BR/tools/relativity/), [Everlaw](/pt-BR/tools/everlaw/), Logikcull). Essas lidam com o lado de execução da resposta; o skill lida com o lado de triagem de intake. Use ambos.
+- **Versus o advogado lendo cada intimação fria.** O caminho mais preciso; também o mais lento. O skill ganha seu custo de setup em volume.
+
+## Pontos de atenção
+
+- **Alucinação de citação em classificações jurídicas.** *Guarda:* toda classificação cita a seção da rubrica do escritório; classificações sem uma regra citável são sinalizadas como "rubrica não cobre" em vez de afirmadas.
+- **Exposição a privilégio perdida.** *Guarda:* as regras de flag de privilégio são conservadoras — over-flag em vez de under-flag. O advogado aperta depois que os padrões emergem.
+- **Implicação de reconhecimento de serviço.** *Guarda:* o skill anota explicitamente "skill processado; serviço NÃO reconhecido" no log de auditoria. O advogado lida com o reconhecimento.
+- **Confidencialidade de intimações de grand-jury.** *Guarda:* a etapa de classificação do skill roteia intimações de grand-jury para um destino separado de acesso restrito conforme o procedimento do escritório. O advogado revisa antes de o skill escrever em qualquer sistema de rastreamento padrão.
+- **Drift de processo legal estrangeiro.** *Guarda:* cartas rogatórias e pedidos da Convenção de Haia disparam um output "skill não consegue fazer triagem — escale para advogado internacional" em vez de serem incorretamente categorizados como intimação doméstica.
+- **Superestimativa de custodiantes.** *Guarda:* a lista de custodiantes é um ponto de partida para o advogado; superestimativas são sinalizadas como tal. O skill não emite holds automaticamente.
+
+## Stack
+
+O bundle fica em `apps/web/public/artifacts/subpoena-triage-claude-skill/`:
+
+- `SKILL.md` — a definição do skill
+- `references/1-subpoena-classification.md` — rubrica de classificação por escritório
+- `references/2-privilege-flag-rules.md` — template de regra de flag de privilégio
+
+Ferramentas: [Claude](/pt-BR/tools/claude/). Para emissão de hold de acompanhamento, veja [orquestração de litigation hold](/pt-BR/workflows/litigation-hold-orchestration-n8n/). Para orquestração de coleta de documentos, veja [coleta de evidências para eDiscovery](/pt-BR/workflows/evidence-collection-ediscovery-n8n/).
+
+Relacionados: [intake jurídico](/pt-BR/learn/legal-intake/), [revisão de privilégio](/pt-BR/learn/privilege-review/), [eDiscovery](/pt-BR/learn/ediscovery/).
