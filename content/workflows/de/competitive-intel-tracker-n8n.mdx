@@ -1,0 +1,92 @@
+---
+slug: competitive-intel-tracker-n8n
+canonical_slug: competitive-intel-tracker-n8n
+locale: de
+verticals: [revops]
+title: Wettbewerber-Erwähnungen und -Änderungen automatisch verfolgen mit n8n und Claude
+artifact_type: n8n-flow
+tools_used: [n8n, slack, claude]
+roles: [revops, sales-enablement]
+difficulty: intermediate
+time_to_setup: 60min
+human_tested: false
+translated_from: en/competitive-intel-tracker-n8n.mdx
+translated_at: "2026-05-13T01:00:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: 99797c855ff069f2dd2d72788809cf4330112db2e3108b827aed745acfe5c99d
+---
+
+Die meisten Competitive Intelligence in B2B-Sales-Teams kommt auf die falsche Weise an: Ein Rep verliert einen Deal, postet in #lost-deals, dass der Prospect einen neuen Preistier eines Wettbewerbers erwähnt hat, und der Rest des Teams erfährt es drei Wochen später. Die Kosten der späten Entdeckung kumulieren – jeder Deal, der in diesem Fenster abgeschlossen wird, geht unvorbereitet in das Gespräch. Dieser Flow ist die günstige, langweilige Lösung. Ein täglicher Cron crawlt eine Liste von Wettbewerber-Seiten, um die Sie sich tatsächlich sorgen, normalisiert das HTML, um Deploy-Rauschen herauszufiltern, fragt Claude, was sich materiell geändert hat (und gibt `NO_CHANGE` zurück, wenn der Diff kosmetisch ist), und postet einen einzigen wöchentlichen Digest in Slack, damit der Channel signaldicht genug bleibt, dass Reps ihn nach einem Monat noch öffnen.
+
+Das Artifact-Bundle unter `apps/web/public/artifacts/competitive-intel-tracker-n8n/` enthält den importierbaren n8n-Workflow (`competitive-intel-tracker-n8n.json`, 20 Nodes über drei Trigger) und `_README.md` mit Credential-Setup, den zwei Postgres-Tabellen, die Sie erstellen müssen, und einer sechsstufigen Erstverifizierung, die sowohl den Materialitäts-Skip-Zweig als auch den On-Demand-Slack-Slash-Command prüft.
+
+## Wann einsetzen
+
+Sie haben fünf bis fünfzehn Wettbewerber, gegen die Sie aktiv positionieren, können drei bis fünf öffentliche Seiten pro Wettbewerber benennen, die sich auf wichtige Weise ändern (Preisgestaltung, Produkt-Positioning, Einstellungssignale, die auf Strategie hinweisen), und haben mindestens einen Slack-Channel, den das Sales-Team tatsächlich öffnet. Sie sind bereit, eine Liste verfolgter URLs zu pflegen, wenn Wettbewerber ihre Sites restrukturieren. Sie haben eine Postgres-Datenbank (oder einen anderen Store, an den Sie die Abfragen anpassen können) und eine n8n-Instanz, die vom öffentlichen Internet aus erreichbar ist, wenn der On-Demand-Slash-Command funktionieren soll.
+
+Dies ist auch die richtige Form, wenn Sie zuvor einen „Slack-Alert bei jedem Wettbewerber-Blogpost"-RSS-Apparat versucht haben und das Team ihn innerhalb einer Woche stummgeschaltet hat – der Materialitätsfilter und der wöchentliche Rhythmus hier sind direkte Antworten auf diesen Fehlerfall.
+
+## Wann NICHT einsetzen
+
+Stellen Sie das nicht auf, wenn Ihr Wettbewerbsset von JS-schweren Review-Aggregatoren wie G2, Capterra oder TrustRadius dominiert wird. Ihr öffentliches HTML ist eine Hülle – der eigentliche Review-Inhalt wird client-seitig oder hinter Authentifizierung gerendert, und respektvolles Crawlen wird Ihnen fast nichts zurückgeben. Kaufen Sie einen Anbieter, der damit umgehen kann (Crayon, Klue, Kompyte), oder überspringen Sie diese Quellen ganz.
+
+Verwenden Sie das nicht, wenn Ihr Team die Intelligence in Echtzeit braucht – zum Beispiel einen Deal-Zyklus, der sich innerhalb einer Woche dreht und dessen Discovery-Calls an der gestrigen Preiänderung eines Wettbewerbers hängen. Der Rhythmus hier ist tägliches Fetch, wöchentlicher Digest. Wenn Sie Latenz unter einer Stunde brauchen, kaufen Sie ein anderes Produkt (Klue-Alerts) oder bauen Sie einen anderen Workflow (Per-Page-Change-Webhooks, die in Rep-Slack-DMs gespeist werden, kein Digest).
+
+Verwenden Sie das nicht gegen private Wettbewerber-Oberflächen (gesperrte Trials, bezahlte Kundenportale, alles hinter Login). Das Crawlen dieser ist in einer anderen ethischen und rechtlichen Klasse als das Prüfen öffentlicher Marketing-Seiten, und dieser Flow ist nicht das richtige Substrat dafür.
+
+Verwenden Sie das nicht für weniger als drei Wettbewerber. Die Setup-Kosten (zwanzig bis dreißig Zeilen verfolgter Seiten, Schema, Credentials, Materialitäts-Tuning) amortisieren sich nicht, wenn Sie einen oder zwei beobachten – ein Google Alert und eine Kalender-Erinnerung ist die richtige Antwort in diesem Maßstab.
+
+## Setup
+
+Lesen Sie `apps/web/public/artifacts/competitive-intel-tracker-n8n/_README.md` von Anfang bis Ende, bevor Sie importieren. Die Kurzversion: `competitive-intel-tracker-n8n.json` via n8n's **Import from File** importieren, die zwei Postgres-Tabellen (`competitor_tracked_pages` und `competitor_change_log`) mit dem DDL im README erstellen, vier Credentials verdrahten (`PLACEHOLDER_POSTGRES_CRED_ID`, `PLACEHOLDER_ANTHROPIC_CRED_ID`, `PLACEHOLDER_SLACK_CRED_ID`, plus die optionale Slack-Slash-Command-Webhook-URL), die Workflow-Zeitzone explizit in **Settings** setzen, die Tracked-Pages-Tabelle mit zwanzig bis dreißig Zeilen besäen und die sechsstufige Erstverifizierung durchführen, bevor aktiviert wird. Die Verifizierung prüft absichtlich den no-prior-snapshot-Pfad, den cheap-no-change-Pfad, den forced-diff-Pfad, den materiality-skip-Pfad, den digest-Pfad und den on-demand-Webhook – sechs Zweige, sechs kleine Inputs.
+
+## Was der Flow tatsächlich tut
+
+Der Crawler ist eine `splitInBatches`-Schleife mit `batchSize: 1`, sodass ein einzelner Seitenausfall den Durchlauf nicht abbricht. Jede Iteration schläft vier Sekunden vor dem HTTP-Fetch – das verteilt dreißig Seiten über zwei Minuten, was Sie gut unter jedem vernünftigen Per-Host-Rate-Limit hält und als höflicher Bot in Server-Logs erscheint. Der `httpRequest`-Node setzt `neverError: true`, weil ein 403 von Anti-Bot-Abwehren aufgezeichnet und übersprungen werden sollte, nicht den Workflow abstürzen.
+
+Die Normalisierung geschieht in einem Code-Node, der `<script>`, `<style>`, `<noscript>` und HTML-Kommentare vollständig entfernt, dann vier Klassen flüchtiger Inhalte maskiert: ISO-Zeitstempel, US-Format-Daten, vierstellige Jahre und jeden Hex-String länger als 32 Zeichen (Build-IDs, Asset-Hashes). Ohne diesen Schritt würde jeder Astro/Next/Hugo-Deploy, der einen „© 2026"-Footer oder ein aktualisiertes `og:updated_time` neu rendert, als Änderung registriert, der wöchentliche Digest würde mit zwanzig bedeutungslosen Einträgen feuern, und der Channel würde sterben.
+
+Das Materialitäts-Gate ist ein Vier-Bedingung-AND: Fetch erfolgreich, Hash unterscheidet sich vom vorherigen Snapshot, ein vorheriger Snapshot existiert überhaupt, und das Längen-Delta überschreitet 0,5 %. Der Längen-Delta-Term ist der günstige Pre-Filter, der Claude-Aufrufe spart – einzelne Zeichen- oder Leerzeichen-Edits erreichen nie das Modell. Der „had-prior-snapshot"-Term macht den ersten jemals-Durchlauf günstig: Eine neue verfolgte Seite erfasst ihren Baseline-Hash und überspringt den Diff vollständig.
+
+Der Claude-Aufruf sendet beide Snapshots auf 6000 Zeichen gekürzt (etwa 1500 Token jeweils, plus Systemprompt und Overhead → rund 3500 Input-Token pro materieller Seite). Der Systemprompt erzwingt eine binäre Wahl: `NO_CHANGE` zurückgeben, wenn der Diff kosmetisch, navigations-only, footer-only oder nicht identifizierbar ist, oder genau zwei Sätze zurückgeben – was sich geändert hat und warum ein Verkäufer sich darum kümmern sollte. Der Parse-Node behandelt `NO_CHANGE` als Sentinel und setzt `is_material = false`, sodass die Zeile immer noch für den Audit protokolliert wird, aber nie den Digest erreicht.
+
+Der Montags-14:30-Digest-Aggregator führt eine SQL-Abfrage aus, die materielle Änderungen der letzten sieben Tage nach Wettbewerber gruppiert, und rendert dann eine Slack-Block-Kit-Nachricht pro Wettbewerber – nicht einen Mega-Post. Vertriebsmitarbeiter schalten lange ununterbrochene Digests stumm; Pro-Wettbewerber-Nachrichten sind scannbar und threadbar. Stille Wochen (keine materiellen Änderungen überall) posten nichts. Der On-Demand-Webhook ist ein dritter Trigger, vollständig unabhängig: Er konsumiert einen Slack-Slash-Command-POST, führt eine `LIKE`-Match-Abfrage gegen das Change-Log über die letzten 90 Tage aus und antwortet mit bis zu zehn formatierten Blöcken ephemer an den anfragenden Benutzer.
+
+## Kostenrealität
+
+Pro Crawl-Durchlauf mit 30 verfolgten Seiten und typischerweise 3–5 davon, die sich materiell ändern: rund 11.000 Input-Token und 1.000 Output-Token gegen `claude-sonnet-4-6`, was bei etwa $0,05 pro Durchlauf landet. Täglich für 30 Tage: ~$1,50/Monat in Claude-Ausgaben. n8n Self-Hosted: $0 inkrementell; n8n Cloud Starter: $20/Monat allein oder $0, wenn Sie es bereits für andere Flows betreiben. Postgres: ein paar Megabytes Speicher, wenn Sie das Change-Log auf unbestimmte Zeit aufbewahren (die `last_content_text`-Spalte ist die schwere – 30 Zeilen × ~50KB ≈ 1,5 MB gesamt, langsam wachsend).
+
+Wanduhr pro Durchlauf: ~2,5 Minuten (30 Seiten × 4s Drosselung + Claude-Latenz für die materiellen). Slack-Digest: unter 5 Sekunden. On-Demand-Webhook: unter 2 Sekunden für die Antwort.
+
+Betreiberzeit: 30–60 Minuten einmal pro Quartal, um die Tracked-Pages-Liste zu aktualisieren, wenn Wettbewerber ihre Sites restrukturieren, plus ~5 Minuten beim ersten Mal, wenn jemand ein False Positive meldet („der Digest sagte, die Preise haben sich geändert, aber das stimmt nicht"), um den Materialitäts-Schwellenwert abzustimmen oder ein Noise-Mask-Muster hinzuzufügen.
+
+## Wie Erfolg aussieht
+
+Konkrete Metrik für die ersten acht Wochen zu beobachten: Digest-Open-Rate oder Read-Receipt-Äquivalent in Slack (Sie können das durch Reaktions-Anzahl oder manuelles Befragen von Reps annähern). Wenn unter 30 % des Channels den Digest liest, ist das Signal-to-Noise-Verhältnis zu niedrig – den Materialitäts-Schwellenwert enger stellen (Längen-Delta-Gate von 0,5 % auf 1 % erhöhen), die Seitentypen mit dem niedrigsten Signal streichen (Einstellungsseiten von Wettbewerbern mit einer permanenten offenen-Jobs-Seite, die wöchentlich wechselt, sind üblicherweise Rauschen), oder Niedrigfrequenz-Wettbewerber in einen „Long-Tail"-Digest-Abschnitt zusammenführen. Wenn über 60 % konsistent lesen, haben Sie das Richtige gebaut und der nächste Schritt ist, einen On-Demand-Pfad für den Discovery-Call-Anwendungsfall hinzuzufügen (bereits verdrahtet – den Slash-Command nur öffentlich machen).
+
+Eine zweite Metrik: Wie oft pro Quartal zitiert ein Rep den Digest in einem `#won-deals`- oder `#lost-deals`-Thread. Fünf Zitate pro Quartal von einem 20-Rep-Team ist ein gutes Signal; null Zitate nach zwei Monaten bedeutet entweder, der Digest wird nicht gelesen oder der Inhalt ist nicht umsetzbar.
+
+## Vergleich mit Alternativen
+
+**Klue oder Crayon** ($30k–$80k/Jahr für den SMB-Tier beider, letzter Stand Q1 2026) verarbeitet die JS-schweren Review-Aggregator-Quellen, die Sie nicht selbst crawlen können, liefert eine polierte Kundenerfahrung für das Sales-Team (Battlecards, Win/Loss-Themen, Intel-Hub) und beinhaltet eine menschliche Kurationss-Schicht, die Nuancen erfasst, die Claude verfehlt. Wenn Ihre Competitive Intelligence kernig genug für einen Deal-Zyklus ist, dass Sie eine Vollzeit-CI-Person haben, kaufen Sie Klue oder Crayon. Dieser Flow ist die richtige Antwort, wenn Sie eine 20-Rep-Organisation ohne dedizierten CI-Mitarbeiter betreiben und aufhören müssen, Wettbewerber-Preis-Änderungen aus Ihren eigenen Lost-Deal-Threads zu erfahren – er bringt Ihnen 70 % des Wertes zu 1 % der Kosten.
+
+**Visualping oder Distill.io** (unter $10/Monat) erledigt die Page-Change-Detection-Schicht gut, hört aber bei „diese Seite hat sich geändert" auf und legt den Diff in Ihren Posteingang. Die interessante Arbeit – einen Diff in „hier ist, was Ihr Sales-Team anders sagen muss" umzuwandeln – ist genau das, was Claude hier tut. Sie könnten Visualping in n8n einbinden und die Crawler/Hasher-Hälfte dieses Flows umgehen, wenn Sie die höfliche-Crawler-Frage auslagern wollten; der Materialitätsfilter und die Claude-Diff-Stage sind die Teile, die tatsächlich wichtig sind.
+
+**Ein einziger Google-Alerts-Feed** ist das, was die meisten Teams standardmäßig tun und was die meisten Teams nach einem Monat still zu lesen aufhören. Google Alerts feuert auf Presse-Erwähnungen, nicht auf Seitenänderungen; es verfehlt Preisseitenbearbeitungen vollständig (die Seite bekommt keinen neuen News-Index-Eintrag); und das Volumen wird von syndiziertem Pressemitteilungs-Rauschen dominiert. Verwenden Sie Alerts als Ergänzung zu diesem Flow für Presse-Signal, nicht als Ersatz für das Seiten-Monitoring-Substrat.
+
+**Ein maßgeschneiderter Python-Crawler auf einem Cron-Job in Ihrem Data-Warehouse** ist das, was jeder Staff-Engineer bauen will. Er wird den Crawler in einem Sprint zum Laufen bringen, die Diff-Schicht in einem Sprint danach, die Slack-Formatierung in einem Sprint danach, und dann wird niemand ihn besitzen, wenn der Engineer das Team wechselt. Der Grund, hier n8n zu verwenden, ist, dass es den Workflow *sichtbar* macht (der Graph ist die Dokumentation), *von einem Nicht-Ingenieur editierbar* (die Marketing-Ops-Person kann eine verfolgte Seite hinzufügen, ohne einen PR), und *langweilig genug, um die Person zu überleben, die es gebaut hat.*
+
+## Wichtige Hinweise
+
+- **Anti-Bot-Sperren geben 403/503 zurück und Ihr Hash veraltet still.** Guard: Der `Fetch Page HTML`-Node setzt `neverError: true` und die Materialitäts-Gate-Bedingung `fetch_ok` (Status 200–399 UND Body-Länge > 200 Bytes) leitet fehlgeschlagene Fetches an den False-Zweig – sie werden protokolliert aber erreichen weder Claude noch den Digest. Fügen Sie eine wöchentliche Abfrage gegen `competitor_change_log` für Seiten hinzu, deren `last_seen_at` älter als 7 Tage ist, und behandeln Sie das als „veraltete verfolgte Seiten"-Bericht.
+- **Claude halluziniert eine Änderung, wenn der normalisierte Diff unordentlich ist** (z. B. ein CSS-Klassen-Umbenennung hat jeden `<div>` berührt und der gestrippte Text hat sich nicht ganz erholt). Guard: Das Fluchtventil des Systemprompts ist der wörtliche String `NO_CHANGE`, und der Parser behandelt alles, was `^NO_CHANGE\b` entspricht (case-insensitiv) als nicht-materiell. Wenn Sie einen offensichtlich-falschen Digest-Eintrag sehen, ist die Lösung, ein Noise-Mask-Muster im `Normalize + Hash`-Code-Node hinzuzufügen, nicht die Modell-Temperatur zu senken.
+- **Der Slack-Channel wird innerhalb von vier Wochen nach dem Live-Gang stummgeschaltet**, wenn auch nur 20 % der Digest-Einträge nicht-materiell sind. Guard: Wöchentlicher Rhythmus statt täglich (der gebündelte Digest-Cron ist `30 14 * * 1`, nur Montags 14:30), die Materialitäts-Längen-Delta-Untergrenze bei 0,5 %, der `NO_CHANGE`-Claude-Sentinel und das silent-weeks-stay-silent-IF-Gate, das den Digest vollständig unterdrückt, wenn kein Wettbewerber materielle Änderungen hat. Wenn Reps ihn immer noch stummschalten, ist die nächste Stellschraube das Entfernen der `page_type`-Werte mit dem niedrigsten Signal aus der Tracked-Pages-Liste – üblicherweise Einstellungsseiten.
+- **Lange Wettbewerber-Namen oder große Änderungsvolumen überschreiten Slacks 50-Block-Nachrichtenlimit.** Guard: Eine Nachricht pro Wettbewerber (kein Mega-Post), sodass das Cap Pro-Wettbewerber statt Pro-Woche ist. Wenn ein einzelner Wettbewerber genuinerweise mehr als ~15 materielle Änderungen in einer Woche hat, ist das selbst ein Signal, dass der Materialitäts-Schwellenwert für diesen Wettbewerber spezifisch erhöht werden muss.
+- **Der On-Demand-Slash-Command leckt Competitive Intelligence an jeden im Workspace**, weil Slack-Slash-Commands keine Channel-Mitgliedschaft erzwingen. Guard: Der `respondToWebhook` gibt `response_type: "ephemeral"` zurück, sodass nur der anfragende Benutzer das Ergebnis sieht, und die Abfrage ist auf das Change-Log beschränkt (kein rohes Seitentext zurückgegeben). Wenn Sie striktere Zugangskontrolle benötigen, sperren Sie den Slash-Command mit einer Slack-Benutzergruppen-ID im `Parse Slash Command`-Code-Node, bevor die SQL-Abfrage ausgeführt wird.
+
+## Stack
+
+- **n8n** — drei Trigger (täglicher Fetch-Cron, wöchentlicher Digest-Cron, On-Demand-Webhook), HTTP-Fetcher, Normalisierer, Materialitäts-Gate, Persistenz
+- **Postgres** — `competitor_tracked_pages` (die Source-of-Truth-Liste, 20–30 Zeilen) und `competitor_change_log` (Audit-Trail jeder erkannten Änderung, materiell oder nicht)
+- **Claude Sonnet 4.6** — die Diff-und-Zusammenfassen-Stage, mit `NO_CHANGE`-Sentinel als Fluchtventil
+- **Slack** — der Digest-Distributions-Channel und die On-Demand-Slash-Command-Oberfläche

@@ -1,0 +1,98 @@
+---
+slug: competitive-battlecard-skill
+canonical_slug: competitive-battlecard-skill
+locale: de
+verticals: [revops]
+title: Automatisch generierte Wettbewerber-Battlecards aus Gong
+artifact_type: claude-skill
+tools_used: [claude, gong]
+roles: [revops, ae]
+difficulty: intermediate
+time_to_setup: 60min
+human_tested: false
+translated_from: en/competitive-battlecard-skill.mdx
+translated_at: "2026-05-13T01:00:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: df8932e2e6a42ab8337155fd2400aaba17916dba940db82f32a0235ae37dc708
+---
+
+Eine Claude Skill, die Win/Loss-Gespräche in Gong durchsucht, sie gegen Salesforce-Deal-Ergebnisse abgleicht und eine interne Battlecard produziert, die ein Rep auf dem Weg ins Gespräch lesen kann. Die Karte ist strukturiert: Positioning-Zusammenfassung, wo Sie gewinnen, wo Sie verlieren, Talk-Tracks pro Einwand (jeweils als intern oder kundengerichtet markiert) und eine kurze „Fallen vermeiden"-Liste. Sie ersetzt die PMM-geschriebene Battlecard, die am Tag ihrer Erstellung aktuell war und beim nächsten Quartal veraltet ist.
+
+## Wann einsetzen
+
+Verwenden Sie diese Skill, wenn ein aktiver Deal in der Pipeline einen Wettbewerber benennt, den Sie bereits verfolgen, und die bestehende Karte älter als ~30 Tage ist. Der Rep braucht heute eine Einwandsbehandlungs-Übersicht, nicht beim nächsten Sprint. Die Skill läuft in etwa 90 Sekunden gegen ein 180-Tage-Gong-Fenster und produziert eine Markdown-Karte, die der Rep in den Deal-Datensatz einfügen kann.
+
+Das Bundle unter `apps/web/public/artifacts/competitive-battlecard-skill/` enthält:
+
+- `SKILL.md` — die Skill-Definition mit den Abschnitten `Wann aufrufen`, `Inputs`, `Methode`, `Ausgabeformat` und `Hinweise`.
+- `references/1-battlecard-format.md` — das wörtliche Markdown-Skelett, das die Skill füllt, mit Abschnittsreihenfolgern.
+- `references/2-objection-talk-track-library.md` — kanonische Handler für die fünf wiederkehrenden Einwandsmuster (Preis-Aggression, Integration-Tiefe, Migrations-Aufwand, Support-Qualität, Sicherheit und Compliance) plus die echte-Feature-Lücke-Ausnahme.
+- `references/3-internal-vs-external.md` — die Klassifikationsregeln, die entscheiden, welche Zeilen das Unternehmen jemals verlassen dürfen, einschließlich der Blocklist intern-exklusiver Metriken und des automatischen Schwärzungsverhalten.
+
+## Wann NICHT einsetzen
+
+Überspringen Sie die Skill in einem dieser Fälle – sie trotzdem auszuführen produziert ein Artifact, das die Zeit des Reps verschwendet oder, schlimmer, FUD verbreitet.
+
+- Der Wettbewerber hat weniger als ~5 Erwähnungen im Lookback-Fenster. Die Skill gibt „unzureichendes Signal" zurück statt aufzufüllen; führen Sie sie nicht mit einem weiteren Fenster in der Hoffnung auf mehr Daten erneut aus.
+- Sie benötigen eine kundengerichtete Vergleichsseite. Diese Skill gibt eine interne Battlecard aus. Die Klassifikationsregeln in `references/3-internal-vs-external.md` existieren genau dafür, dass interne Zeilen nie durchsickern; für kundengerichtete Vergleichsseiten erstellen Sie ein separates, von PMM und Legal überprüftes Artifact.
+- Der „Wettbewerber" ist der Status quo (Excel, internes Skript, kein Tool). Status-quo-Verkaufen ist eine andere Bewegung – es gibt kein benanntes Wettbewerber-Positioning zum Extrahieren. Verwenden Sie stattdessen ein Discovery-Skript.
+- Sie haben nur gewonnene Deals getaggt. Ohne Verlustdaten kann die Skill keine Verlustmuster extrahieren, und eine Battlecard, die nur Siege beschreibt, ist beruhigend aber nutzlos.
+
+## Setup
+
+1. **Deals taggen.** Jeder Closed Won und Closed Lost Deal der letzten 12 Monate muss mindestens einen Wettbewerber auf der Opportunity haben. Wenn die Abdeckung unter ~70 % liegt, einen einmaligen Backfill durchführen – Claude kann Deal-Notizen lesen und Wettbewerber-Tags für die menschliche Genehmigung vorschlagen. Das zuerst tun; alles Nachgelagerte ist davon abhängig.
+2. **Skill installieren.** Bundle in `~/.claude/skills/` ablegen (oder das Projekt-Äquivalent). `GONG_API_KEY` und `SFDC_TOKEN` in Ihrer Umgebung setzen. Mit `/skills` bestätigen, dass die `competitive-battlecard`-Skill aufgelöst wird und die Beschreibung rendert.
+3. **Scope konfigurieren.** `references/competitor-list.md` (die Sie aus dem Template-Stub erstellen) mit den 3–5 Wettbewerbern bearbeiten, die Sie aktiv verfolgen, deren Aliase (Case und Produktmodul-Varianten explizit behandeln – `Competitor X — Core` vs. `Competitor X — Enterprise`) und die Sales-Motion, mit der jeder führt.
+4. **Vorlagenreferenzen ersetzen.** Die gelieferte `objection-talk-track-library.md` und `internal-vs-external.md` sind Vorlagen mit Platzhalter-Handlern. PMM und Legal überprüfen und ersetzen sie durch die tatsächlichen Handler Ihres Teams und die tatsächliche Blocklist Ihres Teams vor der ersten Generierung. Nicht überspringen – die Skill füllt Vorlagen gerne mit halluzinierter Spezifität, wenn der Referenzinhalt generisch ist.
+5. **Generieren.** `competitive-battlecard(competitor="competitor-x", lookback_days=180)` aufrufen. `deal_id` übergeben, wenn die Karte für einen bestimmten Live-Deal ist, damit Talk-Tracks auf die in diesem Thread aufgeworfenen Einwände gewichtet werden. `prior_card_path` übergeben, um ein „Was hat sich seit der letzten Aktualisierung geändert"-Diff anzuhängen.
+6. **Alle 30 Tage pro Wettbewerber aktualisieren.** Die Generierung planen. Älter als 30 Tage und die Karte stellt ein „vor Nutzung verifizieren"-Banner voran – das ist eine Funktion, kein Fehler, aber es nervt Reps.
+
+## Was die Skill tatsächlich tut
+
+Fünf Schritte der Reihe nach, keine Parallelisierung – spätere Schritte hängen vom Kontext früherer ab.
+
+1. **Call-Korpus abrufen.** Gong für jeden Call im Lookback-Fenster abfragen, in dem der Wettbewerber oder einer seiner Aliase (per `references/competitor-list.md`) erwähnt wird. Ein 60-Sekunden-Transcript-Fenster auf jeder Seite der Erwähnung extrahieren. Hard Cap bei 200 Calls; darüber das Fenster verengen bevor Sampling.
+2. **Mit Salesforce-Ergebnissen abgleichen.** Die Deal-ID jedes Calls gegen Opportunity joinen. In `won`, `lost`, `open` und `unknown` (kein SFDC-Match) einteilen. Der `unknown`-Bucket wird aus der Synthese verworfen – Selection Bias ist zu hoch – aber die Anzahl wird als Datenqualitätsfußnote gemeldet.
+3. **Verlustmuster extrahieren.** Zwei-Pass. Erster Pass klassifiziert jeden Verlust-Deal-Snippet in eines der kanonischen Muster aus `references/2-objection-talk-track-library.md` oder `other`. Zweiter Pass fördert ein neues Muster nur, wenn dasselbe Thema in 3+ Deals erscheint; darunter werden die Zitate roh geliefert, nicht verallgemeinert. Der Drei-Deal-Schwellenwert ist die „Rauschen vs. Signal"-Grenze – alles darunter erfindet Muster aus einem oder zwei Anekdoten.
+4. **Gewinnmuster extrahieren.** Gleicher Zwei-Pass-Ansatz gegen den Won-Bucket. Das „Wir haben Sie gewählt, weil…"-Zitat ist das höchste Signal und wird verbatim mit der Call-ID geliefert.
+5. **Karte zusammenstellen und jede Zeile klassifizieren.** Das Skelett aus `references/1-battlecard-format.md` füllen. Jede Zeile mit `[INTERN]` oder `[EXTERN_OK]` per den Regeln in `references/3-internal-vs-external.md` stempeln. Interne Metriken aus `[EXTERN_OK]`-Zeilen automatisch schwärzen, damit der Talk-Track vor einem Kunden nutzbar bleibt, ohne die zugrundeliegende Zahl durchsickern zu lassen.
+
+## Kostenrealität
+
+Ein typischer Durchlauf zieht 50–150 Calls' 60-Sekunden-Transcript-Fenster plus die öffentlichen Wettbewerberseiten (Preise, Produkt, aktuelle Blogposts). Token-Kosten landen bei etwa **40–80k Input-Tokens und 8–15k Output-Tokens pro Battlecard**, oder etwa **$0,20–$0,50 von Claude Sonnet** zu aktuellen Preisen. Drei Wettbewerber, monatlich aktualisiert, sind deutlich unter $5/Monat; die Kostengeschichte wird von der eingesparten Menschenzeit dominiert (eine PMM-geschriebene Battlecard ist ein halber Arbeitstag), nicht vom Modell.
+
+Die nicht-triviale Kosten sind der **30-Tage-Aktualisierungs-Rhythmus pro verfolgtem Wettbewerber**. Wenn Sie 3 Wettbewerber verfolgen, ist das durchschnittlich eine Generierung alle zehn Tage. Planen Sie es; führen Sie es nicht on-demand aus, oder Sie vergessen es. Die Karte trägt ein „vor Nutzung verifizieren"-Banner, sobald eine öffentliche Quelle darin älter als 30 Tage ist, was der Watchdog für den Moment ist, wenn der Rhythmus ins Stocken gerät.
+
+Die versteckten Kosten sind die **PMM- und Legal-Überprüfung der Referenzen** vor dem ersten Durchlauf. Eine Erstinstallation erfordert ~2 Stunden PMM-Zeit, um die Talk-Track-Library-Vorlage durch die tatsächlichen Handler Ihres Teams zu ersetzen, und ~1 Stunde Legal-Zeit, um die intern-vs.-extern-Blocklist zu bestätigen. Überspringen Sie das, und die Skill liefert generische Handler mit überzeugend aussehender Spezifität, was der schlimmstmögliche Fehlerfall ist.
+
+## Erfolgsmetrik
+
+Zwei Metriken lohnen es zu verfolgen, keine davon „generierte Battlecards":
+
+- **Win-Rate gegen den benannten Wettbewerber**, quartalsweise gemessen, auf Deals beschränkt, bei denen der Rep die aktuellste Battlecard verwendet hat (verfolgen Sie über ein „Battlecard-Version"-Feld auf Opportunity). Die Baseline ist Ihre bestehende Win-Rate; die zu überschreitende Messlatte ist +5 Prozentpunkte innerhalb von zwei Quartalen nach der Adoption. Unter diesem Delta werden die Battlecards entweder nicht gelesen oder die zugrundeliegenden Daten sind zu dünn – diagnostizieren Sie, bevor Sie weitermachen.
+- **Zeit-bis-Battlecard-Aktualisierung**, gemessen als medianes Alter der Karte, die bei einem Deal verwendet wurde, zum Zeitpunkt des Deal-Abschlusses. Vor der Skill ist dieser Median der PMM-Rhythmus – üblicherweise Quartale. Danach sollte er unter 30 Tagen liegen. Wenn nicht, ist der Zeitplan kaputt und das „vor Nutzung verifizieren"-Banner wird ignoriert.
+
+## Vergleich mit Alternativen
+
+**vs. Klue / Crayon (Off-the-shelf-Competitive-Intelligence-Plattformen):** Klue und Crayon sind stärker auf der öffentlichen Quellseite – sie crawlen Wettbewerber-Pricing- und Feature-Seiten planmäßig und zeigen Diffs auf, ohne dass Sie es verdrahten müssen. Sie sind schwächer auf der internen Call-Korpus-Seite; Integration mit Gong + Salesforce existiert, aber ist nicht das Gravitationszentrum des Produkts, und die resultierenden Battlecards tendieren zu „was ihre Website sagt" statt „was Ihre Kunden tatsächlich im Gespräch gesagt haben". Diese Skill ist das Gegenteil: interner-Korpus-zuerst, öffentliche Quelle als Ergänzung. Die Wahl ist, welcher Datenseite Sie mehr vertrauen – für eine Sales-Motion, bei der der entscheidende Faktor intern-evidenz-basiertes Einwandshandling ist, ist das diese Skill. Für eine 50-Wettbewerber-Competitive-Landscape, bei der Breite mehr zählt als Tiefe pro einzelnem, sind das Klue oder Crayon.
+
+**vs. PMM-geschriebene Battlecards in Notion/Confluence:** Die PMM-geschriebene Karte hat bessere Prosa und engeres Positioning. Sie veraltet auch vierteljährlich im besten Fall und repräsentiert, was PMM denkt, was Kunden sagen, nicht was Kunden tatsächlich gesagt haben. Verwenden Sie den Skill-Output als Input zur PMM-geschriebenen Karte – lassen Sie PMM Stimme und Struktur kuratieren, aber verankern Sie jeden Anspruch in den Mustern + Zitaten + Gong-Call-IDs der Skill. Die kombinierte Bewegung ist stärker als beides allein.
+
+**vs. DIY (Analysten in einem Google Doc):** Sie können das mit Menschen und einem Nachmittag pro Wettbewerber pro Quartal tun. Der Grund zu automatisieren ist der Rhythmus – einmal-pro-Quartal-Battlecards sind im zweiten Monat veraltet – nicht die Pro-Karten-Kosten.
+
+## Wichtige Hinweise
+
+- **Verleumdungsrisiko.** Jeder vergleichende Anspruch über das Produkt, die Preisgestaltung oder den Support des Wettbewerbers muss auf eine öffentliche Quelle zurückgehen, die der Wettbewerber veröffentlicht hat. Guard: Die Skill lehnt jede `[EXTERN_OK]`-Zeile ab, die keine Quell-URL trägt, die im aktuellen Durchlauf abgerufen wurde; sie wechselt die Zeile zu `[INTERN]` und protokolliert den Grund im Audit-Anhang.
+- **Veraltete öffentliche Daten.** Wettbewerber-Preisseiten ändern sich ohne Vorankündigung. Eine Battlecard, die auf einem 6 Monate alten Screenshot aufgebaut ist, blamiert den Rep im Gespräch. Guard: Jede öffentliche Quell-URL in der Karte trägt ein `abgerufen`-Datum; wenn eine Quelle zum Zeitpunkt der Generierung älter als 30 Tage ist, stellt die Karte ein „vor Nutzung verifizieren"-Banner voran.
+- **FUD vs. Fakten.** Reps wollen Einzeiler, die den Wettbewerber vernichten; Claude liefert gerne, wenn es nicht eingeschränkt wird. Guard: Die Skill lehnt jeden Handler ab, dessen Subjekt der Wettbewerber ist und dessen Prädikat nicht direkt einem Kundenzitat oder einer öffentlichen Wettbewerberquelle zuzuschreiben ist. Wenn keines existiert, wird der Handler produktpositiv umgeschrieben („so machen wir X") statt wettbewerber-negativ („sie können X nicht tun").
+- **Intern-vs.-extern-Leck.** Ein als `[EXTERN_OK]` markierter Handler kann immer noch einen intern-exklusiven Datenpunkt enthalten (Deal-Zahlen, Win-Rates, interne Preis-Benchmarks). Guard: Der Klassifikations-Pass scannt jede `[EXTERN_OK]`-Zeile gegen die Blocklist in `references/3-internal-vs-external.md` und schwärzt automatisch Übereinstimmungen als `[GESCHWÄRZT — interne Metrik]`, damit der Talk-Track nutzbar bleibt, ohne die Zahl durchsickern zu lassen.
+- **Selection Bias beim Loss-Tagging.** Reps protokollieren den Wettbewerber bei verlorenen Deals zu wenig – die schmerzhaften Verluste werden am wenigsten getaggt. Guard: Die Datenqualitätsfußnote meldet immer die `unknown`-Anzahl; wenn sie 20 % der abgerufenen Calls überschreitet, stellt die Karte ein „Wettbewerber-Tagging-Abdeckung ist niedrig – Verlustmuster mit Vorsicht interpretieren"-Banner voran.
+- **Zitiergenauigkeit.** Gong-Transkription verstümmelt technische Begriffe. Guard: Die Skill markiert jedes Zitat, dessen Gong-Konfidenz-Score unter 0,85 liegt, mit `[niedrig-konfidentes Transcript]`; Reps werden im Format-Header angewiesen, diese vor der Nutzung zu verifizieren.
+- **Battlecard-Wildwuchs.** Drei bis fünf aktive Wettbewerber sind genug. Darüber hinaus produzieren Sie Artifacts, die kein Rep liest, und die Kosten der Aktualisierung übersteigen die Win-Rate-Steigerung. Begrenzen Sie die Wettbewerber-Liste explizit und bereinigen Sie jährlich.
+
+## Stack
+
+- **Gong** — Call-Korpus und Kundenstimme; die `won`/`lost`-Zitatbelege kommen von hier.
+- **Salesforce** — Deal-Ergebnis-Ground-Truth; das Einteilen von Calls in won/lost/open/unknown hängt von Opportunity-Daten ab.
+- **Claude** — Extraktion, Klassifikation, Talk-Track-Adaption, intern-vs.-extern-Stempelung.
+- **Notion oder Confluence (optional)** — Ziel für die PMM-kuratierte Karte, wenn Sie den Skill-Output durch eine menschlich bearbeitete Schicht führen; die Skill gibt Markdown aus, das sauber in beide einfügt.
