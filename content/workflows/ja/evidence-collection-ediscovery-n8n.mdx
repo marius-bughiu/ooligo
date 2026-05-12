@@ -1,0 +1,95 @@
+---
+slug: evidence-collection-ediscovery-n8n
+canonical_slug: evidence-collection-ediscovery-n8n
+locale: ja
+verticals: [legal-ops]
+title: n8nによるeディスカバリーの証拠収集オーケストレーション
+artifact_type: n8n-flow
+tools_used: [n8n, relativity, slack]
+roles: [legal-ops, ediscovery-lead, in-house-counsel]
+difficulty: advanced
+time_to_setup: 180min
+human_tested: false
+translated_from: en/evidence-collection-ediscovery-n8n.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "d7c698322bd644f099fdad13e759f4d734c2f574e00390d4c745a0dee3b99a46"
+---
+
+[eディスカバリー](/ja/learn/ediscovery/)の収集フェーズ（EDRM「収集」ステージ）をオーケストレーションするn8nフローです — 会社のHRISから保管人リストデータを取得し、会社のデータソース（Google Workspace、Microsoft 365、Slack、ファイル共有、カスタムSaaS）に対して保管人ごとの収集リクエストを生成し、収集の完了とchain-of-custodyを追跡し、収集されたデータを処理のために[Relativity](/ja/tools/relativity/)ワークスペース（または[Everlaw](/ja/tools/everlaw/)/[Logikcull](/ja/tools/logikcull/)）に送信します。すべてのステップは、顧問が収集の適切性を弁護するために使用する不変の監査ログに書き込みます。法務オペレーション管理者のスプレッドシートとスクリーンショットによる手動収集を決定論的フローに置き換えます。
+
+## 使う場面
+
+- 定期的なeディスカバリーがある会社 — 通常、収集が年に複数回発生するアクティブな訴訟ポートフォリオを持つ会社。
+- 案件ごとの保管人数が手動収集が操作上実行不可能なほど大きい場合（通常、案件ごとに5名以上の保管人）。
+- コネクタレイヤーを接続するITエンジニアリング能力がある場合（Google Workspace Vault、M365 eDiscovery、Slack Discovery APIなど）。フローがオーケストレーションであり、コネクタはシステムごとです。
+- 顧問が保管人ごとの収集スコープを承認します；フローは承認されたスコープに対して実行されます。
+
+## 使わない場面
+
+- **単一保管人の収集** — 手動で問題ありません；フローのセットアップコスト（180分プラスコネクタ接続）は回収できません。
+- **chain-of-custody文書化の専門知識の置き換え。** フローは監査記録を生成します；eディスカバリーリードが記録が法域のchain-of-custody基準を満たすかどうかを検証します。法域によって要件が異なります。
+- **収集スコープの自動定義。** 顧問が案件ごとにスコープを定義します；フローはスコープに対して実行し、それを作成しません。
+- **確立された収集手順ベースラインのない初めての案件。** フローは手順をエンコードします；エンコードすべき手順がない場合は、まず定義してください。
+
+## セットアップ
+
+1. **フローをインポートする。** `apps/web/public/artifacts/evidence-collection-ediscovery-n8n/evidence-collection-ediscovery-n8n.json` をn8nインスタンスにドロップします。
+2. **認証情報を接続する。** ソースごとに：Google Workspace（Vault API；委任権限を持つサービスアカウント）、Microsoft 365（Compliance Center API；テナントごとのアプリ登録）、Slack（Discovery API — Enterprise Gridのみ利用可能）、HRIS（保管人ソース）。プラスRelativity/Everlaw/Logikcull（eディスカバリープラットフォーム）とPostgres（監査ログ）。
+3. **ソースごとの収集スコープテンプレートを作成する。** データソースごとに文書化します：収集可能なスコープ（日付範囲、検索語、保管人固有のフィルター）、ソースごとのレートリミット、期待される出力フォーマット。
+4. **chain-of-custodyテンプレートを設定する。** 案件ごと、保管人ごとに：誰が収集したか（サービスアカウント名＋人間のレビュアー）、いつ、何を収集したか、完了時の収集のハッシュ。テンプレートは `_README.md` にあります。
+5. **eディスカバリープラットフォームインテグレーションを設定する。** Relativity Processing APIまたはEverlaw/Logikcullの同等物。フローはケースごとのワークスペースにアップロードします；処理パイプライン（重複排除、OCRなど）はプラットフォームで実行されます。
+6. **クローズされた案件でドライラン。** 先四半期に完了した案件の収集を再生します。収集されたボリュームが元々生成されたものとマッチし、chain-of-custody記録が顧問が認証したものとマッチすることを確認します。
+
+## フローが行うこと
+
+8ノード。すべてのステップでchain-of-custodyを伴う、保管人ごとソースごとのオーケストレーション。
+
+1. **収集リクエストトリガー** — 顧問が収集スコープを承認とマークした時の法務オペレーションプラットフォームからのWebhook。
+2. **保管人＋スコープをロード** — 案件の収集計画から保管人リスト＋保管人ごとソースごとのスコープを取得します。
+3. **ソースごとのディスパッチ** — データソースごと保管人ごとに1つのブランチにファンアウト。フローの最も複雑な部分 — 各ソースは独自のAPIと独自のレートリミット制約を持ちます。
+4. **ソース：Google Workspace Vault** — Vaultケースが作成（または再利用）され、ホールドが発行され、スコープ内の保管人のGmail/Drive/Calendarに対して検索が実行され、結果がエクスポートされます。
+5. **ソース：M365 Compliance** — スコープ内の保管人のメールボックス/OneDrive/Teamsに対してコンテンツ検索が実行され、Compliance Center経由で結果がエクスポートされます。
+6. **ソース：Slack Discovery** — Slack Enterprise Grid Discovery API；スコープ内の保管人ごとチャンネルごとのエクスポート。
+7. **ハッシュ＋Chain-of-Custody追記** — 各ソースごとのエクスポートはハッシュ化（SHA-256）され、chain-of-custody記録が監査テーブルに追記されます：`{matter_id, custodian_id, source, scope_summary, collected_at, collected_by_service_account, hash, file_count, byte_count}`。
+8. **eディスカバリープラットフォームにアップロード** — エクスポートを案件ごとのRelativityワークスペースにプッシュ；処理ジョブをトリガー；プラットフォーム側のロードIDを追跡可能性のために監査ログに記録します。
+
+## コストの実態
+
+- **コネクタ/ソースプラットフォームのコスト** — Google Vault、M365 E5（Advanced eDiscovery付き）、Slack Enterprise Gridはすべてシートごとのコストがあります。フローはそれらを削減しません；効果的に使用させます。
+- **n8n実行** — 長時間実行（大きなエクスポートには時間がかかります）；本番環境ではn8nのキューモードを使用します。
+- **eディスカバリープラットフォームの処理コスト** — Relativity/Everlaw/LogikcullはすべてGBあたりの処理料金を請求します；フローはその計算を変えません。
+- **法務オペレーション管理者の時間** — 本当の勝ち。4つのソースにわたる10保管人収集の手動オーケストレーションは数日の作業です；フローは無人で数時間で実行されます。
+- **セットアップ時間** — フロー自体に180分＋重要なソースごとのコネクタ接続（コネクタが実際のセットアップの大部分です）。
+
+## 成功指標
+
+- **顧問承認から収集完了までの時間** — 手動の場合の数日/数週間から（ソースプラットフォームのエクスポートジョブの期間を除いて）数時間に落とすべきです。
+- **Chain-of-custodyの完全性** — 案件ごとに100%であるべきです。ギャップは弁護可能性のリスクです。
+- **ボリュームのドリフト** — フローの収集ボリューム対顧問の期待されるスコープ。10%以内は通常（フィルターの調整）；25%超は再スコープのレビューを引き起こします。
+
+## 代替手段との比較
+
+- **eディスカバリープラットフォームのネイティブ収集モジュール対比**（[Relativity](/ja/tools/relativity/) Collect、[Everlaw](/ja/tools/everlaw/) Collections）。チームがプラットフォームで生活しており、プラットフォームのコネクタがソースをカバーしている場合はそれらを選びます。フローはカスタムソースの案件または単一プラットフォームがネイティブにカバーするより多くのソースにわたる案件向けです。
+- **商業的な収集オーケストレーションツール対比**（Reveal Brainspace、OpenText EnCase、Cellebrite、Onna）。最上位の案件にはフォレンジックグレードの要件があるためそれらを選びます。フローは通常の企業eディスカバリーの軽量な中間地点です。
+- **手動収集対比。** 小規模では実行可能；マルチ保管人の案件にはスケールしません。
+
+## 注意点
+
+- **Chain-of-custodyの整合性。** *ガード：* 各ソースごとのエクスポートは収集時とeディスカバリープラットフォームへのアップロード前に再度ハッシュ化されます。ハッシュの不一致はアップロードを停止しeディスカバリーリードにアラートします。
+- **自動収集でのスコープクリープ。** *ガード：* フローのスコープは顧問承認の収集計画から読み取られます；実行中のスコープの拡大はフローの調整ではなく計画の修正が必要です。監査ログは実行ごとの計画SHAをキャプチャします。
+- **ソースプラットフォームのレートリミット枯渇。** *ガード：* フローのソースごとのノードのソースごとのレートリミッター。Slack Discovery APIは特にアグレッシブなレートリミットがあります — フローはそれに合わせてペーシングします。
+- **収集中の特権の露出。** *ガード：* 収集はスコープ内のすべてをキャプチャします；特権レビューはeディスカバリープラットフォームのダウンストリームで行われます（[特権レビューバッチスキル](/ja/workflows/privilege-review-batch-skill/)が次のステージです）。フローは特権コンテンツを事前フィルタリングしません — それはダウンストリームの決定です。
+- **保管人のプライバシーへの懸念。** *ガード：* フローは保管人が業務に使用するシステムに対して動作します；個人アカウント（個人Gmail、個人Slack）は顧問が明示的に指名しない限りスコープ外です。収集計画が境界を文書化します。
+- **クロス法域のデータローカライゼーション。** *ガード：* EU居住保管人のデータはGDPRのデータローカライゼーションの考慮事項の対象となる場合があります；フローの保管人ごとのスコープはEU居住保管人をEU以外のeディスカバリーワークスペースへのエクスポート前にデータ取り扱いレビューのためにフラグします。
+
+## スタック
+
+バンドルは `apps/web/public/artifacts/evidence-collection-ediscovery-n8n/` にあります：
+
+- `evidence-collection-ediscovery-n8n.json` — フローエクスポート（スケルトン — 実際のソースごとのコネクタは会社固有）
+- `_README.md` — 認証情報、監査テーブルスキーマ、ソースごとのコネクタノート、chain-of-custodyテンプレート
+
+ツール：[n8n](/ja/tools/n8n/)、[Relativity](/ja/tools/relativity/)（または[Everlaw](/ja/tools/everlaw/)/[Logikcull](/ja/tools/logikcull/)）、[Slack](/ja/tools/slack/)（通知のみ）。ソースプラットフォームコネクタ：Google Workspace Vault、Microsoft 365 Compliance、Slack Discovery、会社のスタックに応じたカスタムSaaS。
+
+関連：[eディスカバリー](/ja/learn/ediscovery/)、[EDRMモデル](/ja/learn/edrm-model/)、[案件管理](/ja/learn/matter-management/)、[特権レビュー](/ja/learn/privilege-review/)。
