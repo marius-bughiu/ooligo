@@ -1,0 +1,95 @@
+---
+slug: contract-redline-claude-skill
+canonical_slug: contract-redline-claude-skill
+locale: fr
+verticals: [legal-ops]
+title: Première passe de redlining NDA/MSA avec Claude
+artifact_type: claude-skill
+tools_used: [claude, ironclad]
+roles: [legal-ops, in-house-counsel, contract-manager]
+difficulty: intermediate
+time_to_setup: 45min
+human_tested: false
+translated_from: en/contract-redline-claude-skill.mdx
+translated_at: "2026-05-13T02:15:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "b86635322283ef4f7d95b9c5552b41717d264c856a395af798e0636757f20573"
+---
+
+Un Claude Skill qui prend le NDA ou le MSA d'une contrepartie en format `.docx`, classifie chaque clause contre le playbook rouge/jaune/vert de votre cabinet, propose des redlines issues d'une bibliothèque de positions de repli pré-rédigées, et signale tout ce qui sort du playbook pour un avocat humain. Le skill produit un document Word avec suivi des modifications ainsi qu'un résumé de dérogations d'une page que l'équipe juridique interne peut coller dans le canal de la transaction. Déposez le playbook une fois ; exécutez-le sur chaque contrat entrant ensuite.
+
+## Quand utiliser
+
+Utilisez ce skill lorsqu'un NDA, MSA, DPA, bon de commande, ou accord fournisseur entrant arrive et que vous souhaitez que la première passe de redlining soit fondée sur la politique avant qu'un avocat ouvre le fichier. L'économie fonctionne lorsque le volume de contrats est suffisamment élevé pour que le gain de temps par transaction se cumule — typiquement une équipe legal-ops traitant 30+ contrats entrants par mois au niveau Tier 2-3 d'un [SOP de révision contractuelle](/fr/learn/contract-review-sop/). En dessous de ce volume, la charge de maintenance du playbook dépasse le gain.
+
+Le skill suppose que vous disposez déjà d'un playbook documenté (voir le [playbook NDA](/fr/learn/nda-playbook/) et le [référentiel de redlining MSA](/fr/learn/msa-redlining-rubric/) pour la structure attendue). Si le playbook n'existe pas encore, construisez-le d'abord — le skill amplifie la politique, il ne l'invente pas.
+
+## Quand NE PAS utiliser
+
+- **Approbation finale ou envoi du redline à la contrepartie.** Le skill propose ; un avocat nommé révise chaque modification avant qu'elle parte. La sortie est un point de départ, pas une validation.
+- **Modifications de votre propre modèle de contrat comme source de vérité.** Les modifications de modèle constituent une mise à jour du playbook — modifiez directement `references/1-playbook-template.md` afin que chaque exécution future prenne la nouvelle position. Ne lancez pas le skill sur votre propre modèle « pour le rafraîchir ».
+- **Instruments très spécifiques.** Contrats définitifs M&A, cessions IP complexes, avenants à secteur régulé — le playbook ne peut pas encoder ceux-ci. Le skill signalera chaque clause comme hors politique et brûlera des tokens pour rien.
+- **Brouillons de négociation en tour final.** Au troisième tour, les redlines sont des concessions spécifiques à la transaction que le playbook ne peut pas anticiper. Le skill est uniquement pour la position d'ouverture.
+- **Produit du travail privilégié routé par un fournisseur IA non-Tier-A.** Si la politique IA de votre cabinet exclut le modèle que le skill appellerait, faites remonter à un avocat humain plutôt que d'assouplir la politique. Le secret professionnel ne vaut pas la rapidité.
+
+## Configuration
+
+1. **Déposer le bundle.** Placez le contenu de `apps/web/public/artifacts/contract-redline-claude-skill/` dans votre répertoire de skills Claude Code (`~/.claude/skills/contract-redline/`) ou téléversez le dossier dans un projet Claude.ai. Le skill expose un point d'entrée unique qui classifie et redline un contrat passé.
+2. **Remplacer les modèles.** Le bundle est livré avec trois fichiers modèles dans `references/`. Remplacez chacun par le contenu réel de votre cabinet avant la première exécution :
+   - `references/1-playbook-template.md` — vos positions rouge/jaune/vert par type de clause.
+   - `references/2-fallback-positions.md` — des paragraphes de remplacement approuvés par le conseil que le skill substitue verbatim (sans paraphrase).
+   - `references/3-escalation-criteria.md` — les règles qui décident quand une clause est routée vers un humain plutôt que de recevoir un redline proposé. Critiquement, c'est aussi là que vous listez les fournisseurs IA que vous autorisez pour le produit du travail juridique — le skill refuse de s'exécuter sinon.
+3. **Tester sur un contrat connu.** Exécutez contre un contrat que vous avez déjà redliné manuellement et comparez les sorties. Affinez le playbook là où les positions du skill vous semblent incorrectes ; affinez les paragraphes de position de repli là où la formulation paraît maladroite. Deux ou trois itérations suffisent pour atteindre une bonne référence.
+4. **Connecter à l'intake.** Quand un nouveau contrat arrive via l'intake [Ironclad](/fr/tools/ironclad/) ou par email, le réviseur assigné dépose le `.docx` dans le skill et récupère la sortie redlinée en environ 60 secondes. Le réviseur ouvre le `.docx` dans Word, parcourt les modifications suivies (chacune porte un commentaire Word citant l'ID de section du playbook correspondant), et renvoie à la contrepartie seulement après sa propre révision.
+
+## Ce que le skill fait réellement
+
+Le skill exécute quatre sous-tâches dans l'ordre ; elles ne sont pas parallélisées car chaque étape dépend du contexte de la précédente. La méthode complète, avec la justification d'ingénierie, vit dans `apps/web/public/artifacts/contract-redline-claude-skill/SKILL.md`. En résumé :
+
+1. **Classifier le type de contrat.** NDA (mutuel / unilatéral), MSA, DPA, bon de commande, accord fournisseur, ou « autre ». Si « autre », arrêter et émettre un seul bloc d'escalade. Le skill ne tente pas de redliner des types de contrats que le playbook n'adresse pas — c'est le mode d'échec de dérive silencieuse le plus courant.
+2. **Classification clause par clause.** Diviser le contrat par en-tête (repli sur l'analyse de section numérotée). Pour chaque clause, correspondre à une entrée du playbook par heuristique de type de clause et classifier en `green` (acceptable), `yellow` (substitution de repli), `red` (réécriture obligatoire), ou `out-of-playbook` (escalader). Chaque classification cite l'ID de section du playbook correspondant dans la sortie afin que le réviseur puisse auditer les décisions en quelques secondes.
+3. **Proposition de redline.** Pour chaque clause jaune, coller verbatim le paragraphe de repli correspondant de `references/2-fallback-positions.md`. Pour chaque clause rouge, coller le paragraphe obligatoire. Pourquoi des paragraphes pré-rédigés plutôt que des réécritures libres : le conseil a déjà revu ce langage. Les réécritures libres introduiraient une formulation nouvelle à chaque exécution et forceraient le réviseur à relire chaque repli depuis le début — annulant le gain de temps.
+4. **Signalement d'escalade.** Chaque clause hors-playbook et chaque clause correspondant à une règle dans `references/3-escalation-criteria.md` reçoit un bloc d'escalade plutôt qu'un redline. Le skill ne devine pas.
+
+## Réalité des coûts
+
+Le coût en tokens par contrat dépend de la longueur et du nombre de clauses. Chiffres concrets :
+
+- **NDA typique (3-5 pages, ~2 000 mots).** Entrée ~6 000 tokens (contrat + playbook + bibliothèque de repli + critères d'escalade), sortie ~4 000 tokens (justification par clause + résumé). Au tarif de Claude Sonnet 4.5 (3 $ / MTok en entrée, 15 $ / MTok en sortie), cela représente environ 0,08 $ par contrat.
+- **MSA typique (15-25 pages, ~10 000 mots).** Entrée ~14 000 tokens, sortie ~10 000 tokens. Environ 0,20 $ par contrat.
+- **Volume mensuel sur 100 contrats (50 NDAs + 50 MSAs).** Environ 14 $ en coût de tokens — un ordre de grandeur inférieur au gain de temps humain (une heure de paralégal à 90 $ / h entièrement chargé couvre ~640 contrats de coût de skill).
+
+Le coût réel est la maintenance du playbook : le conseil doit maintenir `references/1-playbook-template.md` et `references/2-fallback-positions.md` à jour. Prévoyez deux heures de temps de conseil senior par trimestre pour rafraîchir les deux, plus une heure par trimestre pour trier les patterns d'escalade et réintégrer les clauses récurrentes hors-playbook dans le playbook.
+
+## Mesure de succès
+
+Deux métriques, suivies ensemble, vous disent si le skill est rentable :
+
+- **Réduction du délai de cycle sur les redlines de première passe.** Référence : délai médian entre la réception du contrat et « la redline de première passe est prête pour révision humaine ». Objectif : réduire la médiane de 60 à 75 %. Une équipe avec une référence de 90 minutes par redline de première passe devrait atteindre 25 à 35 minutes (le skill produit en 60 secondes ; la révision humaine prend le reste).
+- **% de clauses signalées pour révision humaine.** Plage cible : 15 à 25 % des clauses par contrat. En dessous de 10 %, le playbook est trop permissif (le skill entérine le langage de zone jaune comme vert) — resserrez le référentiel. Au-dessus de 35 %, le playbook ne couvre pas assez de types de clauses — étendez-le.
+
+Si la métrique de délai de cycle ne bouge pas dans les 30 jours suivant le démarrage, le goulot d'étranglement est l'étape de révision humaine, pas le redlining. Cause fréquente : le réviseur ne fait pas confiance aux chaînes de justification et relit chaque clause depuis le début. Correctif : faire en sorte que les chaînes de justification citent les IDs de section du playbook (ce que le skill fait par défaut) et former les réviseurs à scanner les IDs.
+
+## Par rapport aux alternatives
+
+Le choix est entre ce skill et un spécialiste construit par un fournisseur :
+
+- **vs [LawGeex](/fr/tools/lawgeex/) ou [BlackBoiler](/fr/tools/blackboiler/).** Ce sont des produits SaaS fournisseurs avec des modèles pré-entraînés sur des millions de contrats. Ils gagnent sur les NDAs Tier 1 (approbation automatique contre un playbook standard) et sur la rapidité de déploiement si vous n'avez pas encore de playbook documenté. Ils perdent quand votre playbook a des positions inhabituelles que le fournisseur n'a pas vues, quand la transparence au niveau des tokens compte (le skill cite les IDs de section de votre playbook ; les fournisseurs citent le score de confiance de leur propre modèle), et sur le prix (les sièges fournisseurs coûtent 500 à 2 000 $/siège/mois contre le coût de tokens du skill de ~0,20 $/contrat plus l'amortissement du temps paralégal).
+- **vs [Ironclad AI Assist](/fr/tools/ironclad/) ou [Spellbook](/fr/tools/spellbook/).** Intégrés respectivement dans le CLM / Word ; meilleure expérience utilisateur dans l'outil que vous utilisez déjà ; moins solides pour faire respecter votre playbook spécifique car leur ancrage est en partie la formation générale du fournisseur. Choisissez ces options si vous souhaitez zéro effort de déploiement et n'avez pas besoin de l'auditabilité citation-vers-ID-de-section.
+- **vs redlines manuelles pilotées par paralégal.** Le statu quo dans la plupart des cabinets. Qualité supérieure sur les clauses nouvelles (les humains reconnaissent mieux les patterns sur un langage inhabituel), coût bien plus élevé par contrat, délai d'exécution plus long. Le skill ne remplace pas le paralégal — il déplace le temps du paralégal de la saisie vers le jugement.
+
+Le créneau du Claude Skill est le contrat mi-risque à haut volume où l'équipe juridique interne veut que l'IA fasse la première passe mais attend une révision humaine sur chaque sortie et exige que chaque redline trace vers une position de playbook documentée. Si vous ne pouvez pas pointer vers l'entrée du playbook derrière un redline, le redline ne part pas.
+
+## Points de vigilance
+
+- **Dérive silencieuse du playbook.** Un playbook vieux de plusieurs mois produit des redlines confiants à partir de positions obsolètes. Garde : chaque sortie écrit la date `last_reviewed` du playbook dans l'en-tête du résumé. Le réviseur rejette toute sortie où cette date est antérieure à 90 jours, et le playbook est rafraîchi avant de ré-exécuter.
+- **Clause nouvelle manquée à cause d'une inadéquation heuristique.** Les en-têtes se ressemblent : « non-sollicitation » vs « non-concurrence », « Limitation of Liability » vs « Cap on Damages ». Garde : chaque classification de clause cite l'ID de section du playbook correspondant dans la sortie. Le réviseur scanne les IDs cités et corrige les inadéquations avant que le redline parte. Sans la citation, le réviseur ne peut pas savoir si le skill a mal correspondu.
+- **Fuite de secret professionnel via des fournisseurs non-Tier-A.** Les brouillons de contrepartie contiennent un contexte couvert par le secret avocat-client, notamment dans les DPAs et les avenants. Garde : le skill refuse de s'exécuter sauf si le modèle configuré figure dans la liste des fournisseurs autorisés en haut de `references/3-escalation-criteria.md`. Condition préalable stricte ; aucun flag CLI ne la contourne.
+- **La qualité du playbook est tout.** Un playbook vague produit des redlines vagues. Codifiez explicitement les positions, avec des exemples de langage de repli dans `references/2-fallback-positions.md`, pas seulement des principes abstraits dans `references/1-playbook-template.md`.
+- **Pas un substitut à la révision juridique.** Chaque sortie de redline est révisée par un humain avant de retourner à la contrepartie. Le skill économise du temps sur le premier brouillon, pas sur le jugement.
+
+## Stack
+
+- [Claude](/fr/tools/claude/) — runtime du Skill (Claude Code ou Claude.ai avec Skills personnalisés activés).
+- [Ironclad](/fr/tools/ironclad/) — CLM pour l'intake et le stockage de la version redlinée résultante. Optionnel mais couplage typique pour une équipe legal-ops exécutant cela à volume.
+- Microsoft Word — pour ouvrir le `.docx` redliné. Les modifications suivies natives portent les chaînes de justification comme commentaires Word.

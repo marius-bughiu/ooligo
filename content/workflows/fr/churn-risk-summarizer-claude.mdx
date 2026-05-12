@@ -1,0 +1,82 @@
+---
+slug: churn-risk-summarizer-claude
+canonical_slug: churn-risk-summarizer-claude
+locale: fr
+verticals: [revops]
+title: Synthèse quotidienne des risques de churn avec Claude
+artifact_type: claude-skill
+tools_used: [claude, gainsight]
+roles: [csm, revops]
+difficulty: beginner
+time_to_setup: 30min
+human_tested: false
+translated_from: en/churn-risk-summarizer-claude.mdx
+translated_at: "2026-05-13T02:15:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "2283a0d691f8c919bacc83d4209cbb52f4ed6bf9da8c5d150357f8fd5968f7bd"
+---
+
+Un Claude Skill qui s'exécute chaque matin, récupère tous les comptes ayant franchi un seuil de risque de churn dans les 24 dernières heures, et publie un digest d'une page dans un canal Slack : nom du compte, ARR à risque, l'événement déclencheur, le responsable, et une action concrète à entreprendre. Il remplace le digest email bruyant de Gainsight que la plupart des CSMs filtrent déjà dans un dossier, par quelque chose d'assez concis pour se lire entre le standup et le premier appel client.
+
+Le bundle se trouve dans `apps/web/public/artifacts/churn-risk-summarizer-claude/` — `SKILL.md` ainsi que trois fichiers de référence (`1-risk-signal-weights.md`, `2-sample-digest.md`, `3-escalation-criteria-thresholds.md`) que le Skill charge à chaque exécution.
+
+## Quand utiliser
+
+Vous disposez de Gainsight (ou d'une plateforme CS comparable) qui produit des deltas de score de risque fiables au niveau *directionnel*, mais le digest existant est trop long à lire ou trop générique pour agir dessus. Votre équipe CSM se réunit chaque matin et bénéficierait d'une lecture commune de trois minutes sur ce qui a changé du jour au lendemain. Vous souhaitez que le raisonnement « ce qui a changé et quoi faire » soit uniforme entre les CSMs, plutôt que chacun invente son propre cadrage.
+
+Le skill est adapté lorsque l'exécution quotidienne produit 5 à 15 comptes après filtrage. En dessous de 5, vous n'avez pas besoin d'un skill — consultez directement la vue Gainsight. Au-dessus de 15, les seuils dans `references/3-escalation-criteria-thresholds.md` doivent être relevés avant que le digest ait une quelconque utilité.
+
+## Quand NE PAS utiliser
+
+- **Vous n'avez pas de scores de risque fiables.** Données corrompues en entrée, résultats corrompus en sortie. Ce skill synthétise les scores que vous lui fournissez ; il ne les calcule ni ne les corrige. Si votre modèle de risque Gainsight est défaillant, commencez par le corriger.
+- **Vous souhaitez un déclencheur d'action CSM automatisé.** Le skill est un signal en lecture seule. Publier un digest dans un canal est approprié ; créer des tâches automatiquement, envoyer des emails de playbook, ou ouvrir des tickets est hors périmètre et vous causera rapidement des problèmes (voir « alert fatigue » ci-dessous).
+- **Vous souhaitez du contenu destiné aux clients.** Rien de ce que le skill produit n'est autorisé à être envoyé au client. Traitez toute sortie comme interne.
+- **Vous souhaitez une analyse de churn longitudinale.** Le prompt est calibré pour les 24 à 168 dernières heures. Pour « que s'est-il passé sur l'ensemble du T3 », utilisez la BI sur l'entrepôt Gainsight.
+- **Votre équipe CSM compte deux personnes.** Le coût de mise en place est supérieur au coût que représente la lecture de la vue Gainsight à 7h par l'une d'entre vous. Cela devient rentable à partir de quatre CSMs, là où l'uniformité du cadrage commence à faire boule de neige.
+
+## Configuration
+
+1. **Définir le seuil.** Décidez concrètement ce que « franchir le risque de churn » signifie. Les valeurs par défaut dans `references/3-escalation-criteria-thresholds.md` utilisent `signal_score >= 12` pour Rouge et une baisse de `health_score` de `-15` pour Amber. Ajustez ces chiffres à partir de deux semaines de données historiques avant la mise en production.
+2. **Installer le Skill.** Déposez le bundle dans `~/.claude/skills/churn-risk-summarizer/`. Définissez `GAINSIGHT_TOKEN` et `SLACK_WEBHOOK_CHURN_DIGEST` dans votre environnement.
+3. **Configurer le périmètre.** Modifiez `references/3-escalation-criteria-thresholds.md` avec votre plancher `min_arr` (la plupart des équipes utilisent 50 000 $ pour un digest quotidien) et votre liste `segments` (la plupart des équipes exécutent quotidiennement sur enterprise + mid-market, et séparément chaque semaine sur SMB).
+4. **Affiner les pondérations.** Modifiez `references/1-risk-signal-weights.md` pour correspondre à l'opinion de votre équipe sur ce qui compte. Les pondérations livrées sont des valeurs par défaut raisonnables, pas les vôtres.
+5. **Planifier l'exécution.** 7h heure locale en semaine via cron, n8n, ou une tâche planifiée Claude. Publie dans votre canal CS.
+6. **Itérer sur le rapport signal/bruit.** Les deux premières semaines seront bruyantes. Ajustez un seuil à la fois et observez deux jours de résultats avant de modifier à nouveau. Ne modifiez pas les pondérations et les seuils dans la même exécution — vous ne pourrez jamais savoir quel changement a eu un impact.
+
+## Ce que le skill fait réellement
+
+Le Skill prend une liste JSON de comptes et une liste JSON d'événements de la fenêtre temporelle (les schémas sont documentés dans `SKILL.md` sous « Inputs »). Il exécute cinq étapes séquentielles : agrégation des signaux (somme de `severity * weight` par compte, avec un plafond de 5 par événement pour éviter qu'une escalade unique domine) ; segmentation par seuil en Rouge, Amber et Watch ; narration par compte fondée sur les résumés d'événements réels (sans paraphrase — « les sièges actifs sont passés de 142 à 89 sur 7 jours », pas « l'engagement est en déclin ») ; priorisation par ARR décroissant puis date de renouvellement croissante ; et rendu selon la mise en page exacte de `references/2-sample-digest.md`.
+
+Le choix d'ingénierie à signaler : les pondérations sont explicites et modifiables plutôt que laissées au modèle pour décider de ce qui est important à chaque exécution. Lorsqu'un responsable CSM est en désaccord avec ce qui a été remonté, il peut modifier un nombre dans `references/1-risk-signal-weights.md` et voir l'effet sur le digest du lendemain. Un jugement de modèle par exécution ne peut pas être modifié ; il ne peut être que re-prompté, ce qui est plus difficile à auditer.
+
+Le champ Action dispose d'une garde stricte : si l'action suggérée contient `engage`, `reach out`, `touch base`, `align`, ou `socialize` sans nommer une personne ou un artefact précis, il est remplacé par `needs human review`. Mieux vaut le silence que le bruit.
+
+## Réalité des coûts
+
+Un digest quotidien sur ~150 comptes enterprise + mid-market avec les événements en cours génère environ 18 à 25 000 tokens en entrée (JSON comptes + JSON événements + les trois fichiers de référence) et 1 à 3 000 tokens en sortie. Au tarif catalogue de Claude Sonnet 4.5 (~3 $ / MTok en entrée, 15 $ / MTok en sortie), cela représente environ **0,10 à 0,15 $ par exécution**, soit **2 à 4 $ par mois** en semaine uniquement. Négligeable. Le coût qui compte vraiment est de 10 à 15 minutes par semaine de temps du responsable CSM, consacrées à l'ajustement des pondérations et des seuils pendant le premier mois.
+
+Si votre liste de comptes se compte en milliers plutôt qu'en centaines, segmentez par catégorie et exécutez trois ou quatre digests ciblés plutôt qu'un seul — le coût par token est identique mais la lisibilité par digest reste intacte.
+
+## Mesure de succès
+
+Suivez le pourcentage de comptes en zone Rouge ayant une action enregistrée par un CSM dans les 48 heures suivant le digest. S'il dépasse 70 %, le digest remplit son rôle : la zone Rouge est suffisamment courte et fiable pour que les responsables agissent dessus. S'il descend en dessous de 50 %, soit les seuils sont trop permissifs (la zone Rouge déborde et est ignorée), soit les actions suggérées sont trop génériques (effondrement de la spécificité des actions — voir les points de vigilance). N'optimisez pas pour « plus de comptes remontés » — moins de comptes Rouge, mieux étayés, est l'objectif.
+
+## Par rapport aux alternatives
+
+- **Gainsight Health Scorecards 2.0 + email digest natif.** Le digest intégré dispose des données mais pas de la couche éditoriale — chaque compte à risque reçoit le même modèle, sans narration par compte ni action concrète suivante. Fonctionne comme système d'enregistrement ; échoue comme quelque chose que les CSMs ouvrent réellement. Choisissez cette option si votre équipe préfère moins de pièces mobiles et dispose des effectifs pour lire la version longue.
+- **Tableaux de bord BI personnalisés sur l'entrepôt Gainsight (Looker, Mode, Hex).** Meilleurs pour les questions transversales « montre-moi la rétention par segment », moins adaptés pour « que doit faire l'équipe aujourd'hui ». Un tableau de bord qui nécessite un clic est un tableau de bord qui ne sera pas consulté à 7h. Utilisez les deux — le tableau de bord pour la revue mensuelle, le skill pour l'action quotidienne.
+- **Revue manuelle CSM du lundi matin.** Ce que font la plupart des équipes aujourd'hui. Fonctionne à quatre CSMs, s'effondre au-delà car chaque CSM invente son propre cadrage de « ce qui est risqué ». Le skill existe pour donner à l'équipe un cadrage commun sur lequel elle peut s'appuyer en modifiant le fichier de pondérations, plutôt que de se disputer en standup.
+
+## Points de vigilance
+
+- **Alert fatigue.** Un digest qui dépasse systématiquement 15 comptes finit dans un dossier filtré en moins d'une semaine. Garde : plafonnement strict à 15 comptes avec un compteur de débordement honnête dans le pied de page, et si Rouge dépasse le plafond trois fois consécutives, un avertissement est ajouté au début indiquant que le seuil est peut-être trop permissif. Implémenté dans `references/3-escalation-criteria-thresholds.md` sous « Self-tuning trigger ».
+- **Inondation de faux positifs.** Une pondération mal calibrée d'un type d'événement peut produire une zone Rouge dominée par, par exemple, tous les comptes ayant récemment eu une escalade support. Garde : le pied de page du digest inclut une ligne de pourcentage de mix de types d'événements afin que l'équipe puisse repérer un signal dominant avant que la confiance s'érode. Exemple travaillé dans `references/2-sample-digest.md` (« Event-type mix this week : »).
+- **Dérive de la pondération des signaux.** Le fichier de pondérations devient obsolète à mesure que le produit et la clientèle évoluent. Garde : le skill émet le SHA court de `references/1-risk-signal-weights.md` dans le pied de page du digest. Si le hash n'a pas changé depuis 90 jours, le digest affiche une invitation à recalibrer.
+- **Obsolescence des responsables.** Un digest qui interpelle le mauvais CSM est pire qu'aucun digest. Garde : les comptes dont `owner_email` ne peut être résolu sont remontés sous un bucket distinct `*Ownership broken (n)*` avec un lien vers l'éditeur de propriété Gainsight — ils ne peuvent pas silencieusement tomber dans Rouge ou Amber.
+
+## Stack
+
+- **Gainsight** — source des scores de risque, contexte compte, événements timeline
+- **Claude (Sonnet 4.5)** — synthèse, segmentation, rédaction des actions
+- **Slack** — canal de destination ; sortie mrkdwn, sans pièces jointes
+- **Cron / n8n / tâches planifiées Claude** — déclencheur quotidien à 7h

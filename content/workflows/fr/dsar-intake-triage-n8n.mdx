@@ -1,0 +1,90 @@
+---
+slug: dsar-intake-triage-n8n
+canonical_slug: dsar-intake-triage-n8n
+locale: fr
+verticals: [legal-ops]
+title: Triage d'intake DSAR / demande d'exercice des droits avec n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops, privacy-counsel, dpo]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/dsar-intake-triage-n8n.mdx
+translated_at: "2026-05-13T02:15:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "4399840da13687b5c80f9b702bd4136e2f0c5a20f1a9c3455a906e404a8e6246"
+---
+
+Un flow n8n qui reçoit les demandes d'exercice des droits des personnes concernées (RGPD Art. 15-22, CCPA-CPRA §1798.100-105, équivalents sous UK GDPR / LGPD / VCDPA) dans une boîte mail dédiée `privacy@` ou un formulaire web, les classifie par type (accès / suppression / rectification / portabilité / opposition / limitation / décision automatisée), les route par juridiction vers le bon conseil, ouvre un enregistrement de suivi avec l'horloge du délai de réponse en cours, et envoie une demande de vérification à la personne concernée. Remplace la feuille de calcul manuelle de suivi des DSAR qui laisse silencieusement passer les délais du mois du RGPD / des 45 jours du CCPA.
+
+## Quand utiliser
+
+- Le cabinet traite des données personnelles UE/UK (déclencheurs RGPD / UK GDPR) OU des informations personnelles californiennes au seuil CCPA-CPRA OU est soumis aux équivalents LGPD / VCDPA / CPA / CDPA.
+- Les DSAR entrants ont une fréquence où le suivi manuel commence à déraper (généralement >5 par mois).
+- Le cabinet dispose d'un [workflow de droits des personnes concernées](/fr/learn/gdpr-for-legal-teams/) défini — ce qui compte comme vérification, qui répond, de quelles sources de données extraire. Le flow est l'orchestration ; le workflow est la substance.
+
+## Quand NE PAS utiliser
+
+- **Réponse automatique aux DSAR sans révision du conseil.** Le flow ouvre l'enregistrement de suivi et vérifie l'identité. La réponse substantielle (données extraites, décision sur le périmètre, communication à la personne) est la responsabilité du conseil.
+- **Contournement de l'étape de vérification.** Agir automatiquement sur un DSAR non vérifié est le mode d'échec DSAR le plus courant — la demande peut provenir de quelqu'un d'autre que la personne concernée, ou peut être une demande malveillante pour extraire les données d'une autre personne. L'étape de vérification du flow est non optionnelle.
+- **Remplacement du travail d'extraction des données sous-jacent.** Le flow suit ; il n'extrait pas les données des systèmes. Chaque système que le cabinet utilise a besoin de son propre chemin d'extraction (manuel ou automatisé) ; le flow remonte ce qu'il faut extraire depuis où.
+- **DSAR soumises à des règles sectorielles spécifiques** (demandes de dossiers médicaux HIPAA, demandes de dossiers étudiants FERPA, demandes de dossiers financiers GLBA). Des procédures de vérification et de réponse différentes s'appliquent ; les valeurs par défaut de ce flow sont RGPD + CCPA-CPRA.
+
+## Configuration
+
+1. **Importer le flow** depuis `apps/web/public/artifacts/dsar-intake-triage-n8n/dsar-intake-triage-n8n.json`.
+2. **Câbler les credentials.** Cinq requis : IMAP / Gmail (boîte mail `privacy@`), Anthropic (classification Claude), Postgres (table de suivi DSAR), SMTP (envoi de vérification), Slack (notification au conseil).
+3. **Provisionner la table de suivi.** Schéma dans `_README.md` — clé sur `dsar_id`, capturant le timestamp de réception, la juridiction, le type de demande, le délai, le statut.
+4. **Rédiger le modèle de vérification.** Par juridiction (RGPD vs CCPA-CPRA ont des standards de vérification différents), rédigez un modèle sous `n8n/data/verification/<jurisdiction>.md`.
+5. **Configurer le routage.** Routage du conseil par juridiction (UE → DPO, US → conseil en protection des données, etc.) et routage par type de demande (accès vs suppression emprunte des chemins différents).
+6. **Exécution à blanc sur des DSAR clôturées.** Rejouer les DSAR du trimestre dernier (avec les identités des personnes anonymisées). Confirmer que la classification et le routage correspondent à ce que le conseil en protection des données a réellement fait.
+
+## Ce que le flow fait
+
+Six nœuds. Classification avant routage car le routage dépend de la classification.
+
+1. **Sondage de boîte mail / Webhook** — sonde la boîte mail `privacy@` toutes les 5 minutes OU reçoit des webhooks d'un formulaire web de droits à la vie privée. Extrait l'objet, le corps, l'expéditeur, le timestamp.
+2. **Classifier** — appel Claude. Retourne `{request_type, jurisdiction, subject_email, urgency_signal, malicious_signal}`. Le malicious_signal est non nul sur les patterns comme « Je suis l'avocat de X » ou « c'est pour une découverte en contentieux » — ceux-ci ont un routage différent et ne suivent pas le chemin DSAR consommateur.
+3. **Ouvrir l'enregistrement de suivi** — INSERT dans la table DSAR avec délai calculé selon la juridiction (RGPD : 1 mois à compter de la réception ; CCPA-CPRA : 45 jours à compter de la réception ; etc.).
+4. **Envoyer la demande de vérification** — envoie un email de vérification à la personne concernée avec le modèle par juridiction. La vérification demande une preuve d'identité suffisante pour agir sur un DSAR — ce qui compte varie selon la juridiction (le RGPD exige « nécessaire et proportionné » ; le CCPA-CPRA exige une vérification à un « degré raisonnable de certitude »).
+5. **Notifier le conseil** — DM Slack au conseil routé avec : classification, juridiction, compte à rebours du délai, lien vers l'enregistrement de suivi. Le travail du conseil à partir de là est de superviser l'extraction des données et la réponse substantielle.
+6. **Ajout d'audit** — une ligne par DSAR par intake dans la table d'audit.
+
+## Réalité des coûts
+
+- **Tokens LLM** — typiquement 2 à 4 000 tokens en entrée + 0,5 à 1 000 tokens en sortie par DSAR. ~0,02 à 0,04 $ par demande. Négligeable.
+- **Nombre d'exécutions n8n** — ~5 à 15 / jour en moyenne pour un cabinet de taille intermédiaire ; bien dans le plan Starter.
+- **Temps du conseil** — le gain porte sur la charge de suivi et de délai, pas sur le travail substantiel. Le suivi manuel des délais coûte ~30 minutes par DSAR chaque semaine ; le fonctionnement du flow remonte les problèmes à l'intake et libère le temps du conseil pour la réponse.
+
+## Mesure de succès
+
+- **Taux de respect des délais** — part des DSAR auxquelles il est répondu dans le délai légal. Devrait être 100 % ; en dessous, le cabinet est exposé aux amendes RGPD Art. 83 (plafond de 4 % du chiffre d'affaires mondial pour les manquements systématiques) et à l'application CCPA-CPRA.
+- **Délai de réponse à la vérification** — devrait descendre à moins de 24 heures à compter de l'intake (l'email de vérification part immédiatement à la réception).
+- **Taux d'erreur de classification lors de la révision du conseil** — part des DSAR que le conseil reclassifie. Devrait être sous 10 % ; au-dessus, le prompt de classification ou la table de routage nécessite un réglage.
+
+## Par rapport aux alternatives
+
+- **vs modules DSAR OneTrust / TrustArc / Securiti.** Ces produits gèrent les DSAR de bout en bout incluant les intégrations d'extraction des systèmes. Choisissez-les pour les cabinets à haut volume ou les cabinets ayant besoin de la plateforme complète de programme de confidentialité. Le flow est le juste milieu léger.
+- **vs Excel + règles Outlook.** La valeur par défaut et la source des délais manqués.
+- **vs le conseil révise chaque email d'intake.** Gérable à très faible volume ; le flow justifie son coût de configuration au-delà de ~5 DSAR/mois.
+
+## Points de vigilance
+
+- **Classification sur les demandes limites.** *Garde :* `urgency_signal` et `malicious_signal` sont remontés comme bandes de confiance ; les classifications ambiguës sont routées vers le conseil en protection des données pour re-classification plutôt que de deviner.
+- **Dérive des standards de vérification.** *Garde :* les modèles par juridiction épinglent le standard de vérification. La vérification UE demande moins que la vérification CCPA-CPRA.
+- **Usurpation d'identité du demandeur.** *Garde :* l'email de vérification va à l'email enregistré (le cas échéant) — pas à l'email depuis lequel la demande est arrivée. Si la demande provient de `attaquant@exemple.com` prétendant être `victime@cabinet.com`, la vérification atteint victime@cabinet.com.
+- **Manque de routage juridictionnel croisé.** *Garde :* les demandes avec plusieurs juridictions plausibles sont routées vers TOUS les conseils applicables, pas vers le premier correspondant. La réponse substantielle sélectionne la juridiction de contrôle.
+- **Erreur de calcul du calendrier des délais.** *Garde :* le calcul des délais s'exécute dans le fuseau horaire du workflow ; le journal d'audit capture le timestamp du délai explicitement afin qu'un conseil puisse vérifier contre le calendrier du cabinet.
+- **Stockage des données DSAR non vérifiées.** *Garde :* l'enregistrement de suivi stocke uniquement l'email de la personne et le type de demande jusqu'à ce que la vérification soit confirmée ; le corps complet de la demande n'est pas propagé aux systèmes au-delà du journal d'audit jusqu'à ce que la vérification confirme l'identité.
+
+## Stack
+
+Le bundle se trouve dans `apps/web/public/artifacts/dsar-intake-triage-n8n/` :
+
+- `dsar-intake-triage-n8n.json` — l'export du flow
+- `_README.md` — schéma, credentials, modèles de juridiction
+
+Outils : [n8n](/fr/tools/n8n/), [Claude](/fr/tools/claude/), [Slack](/fr/tools/slack/).
+
+Connexe : [RGPD pour les équipes juridiques](/fr/learn/gdpr-for-legal-teams/), [legal intake](/fr/learn/legal-intake/), [gestion des connaissances juridiques](/fr/learn/legal-knowledge-management/).

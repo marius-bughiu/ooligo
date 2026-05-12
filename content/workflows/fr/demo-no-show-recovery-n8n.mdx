@@ -1,0 +1,73 @@
+---
+slug: demo-no-show-recovery-n8n
+canonical_slug: demo-no-show-recovery-n8n
+locale: fr
+verticals: [revops]
+title: Flow de récupération des no-shows de démo dans n8n
+artifact_type: n8n-flow
+tools_used: [n8n, hubspot, gmail]
+roles: [revops, sdr-leader]
+difficulty: beginner
+time_to_setup: 45min
+human_tested: false
+translated_from: en/demo-no-show-recovery-n8n.mdx
+translated_at: "2026-05-13T02:15:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "3ed2082e3291c985d037af8a1c044304ebe53a5586cf74f2e68f98a2b71bb4c1"
+---
+
+Un no-show de démo est l'événement le plus coûteux dans un cycle de vente B2B que personne ne possède. Le commercial a bloqué trente minutes, le SDR a pris le rendez-vous, le prospect a exprimé une vraie intention à un moment donné, et ensuite rien ne s'est passé. La plupart des équipes gèrent cela avec un rappel Slack au commercial et une vague intention de « faire un suivi ». Le suivi arrive soit des jours plus tard quand le moment d'achat s'est refroidi, soit jamais parce que le commercial est dans son prochain appel. Ce flow n8n fait que la récupération se passe le même jour, à chaque fois, sans qu'un SDR effectue le travail — et s'arrête dès qu'une réponse humaine rend l'automatisation redondante.
+
+## Quand utiliser
+
+Vous avez au moins 30 no-shows de démo par mois dans l'équipe. En dessous de ce volume, le commercial peut les récupérer à la main et vous n'avez pas besoin d'automatisation ; le mode d'échec de l'automatisation (un email légèrement décalé au mauvais moment) devient pire que le mode d'échec de la récupération manuelle (l'oubli). Vous êtes déjà sur HubSpot pour les réunions (ou Chili Piper écrit en retour dans HubSpot) et les boîtes mail des commerciaux sont sur Google Workspace. Vous avez un signal de no-show honnête — ce qui signifie que HubSpot marque réellement les réunions comme `no_show` plutôt que de les laisser vides — et vos commerciaux ont des liens de planification fonctionnels.
+
+## Quand NE PAS utiliser
+
+N'activez pas ce flow si l'un des éléments suivants est vrai. Votre « détection » de no-show n'est que des résultats de réunion vides — vous enverrez des emails de récupération à des personnes qui sont arrivées deux minutes en retard et que le commercial a oublié d'enregistrer, ce qui est pire que ne rien faire. Le domaine du commercial n'a pas SPF, DKIM, et DMARC correctement configurés — l'envoi délégué depuis un domaine non authentifié atterrira dans les spams, conditionnera Gmail à continuer à y atterrir, et endommagera le vrai outbound du commercial. Vous envoyez un outbound froid à haut volume depuis les mêmes boîtes mail des commerciaux (plus de ~50 actions d'envoi par jour par boîte mail combinées avec cela) — les emails de récupération concurrenceront le cold outbound et les deux en souffriront. Vous n'avez pas de chemin d'opt-out propre à honorer — envoyer un « soft close » à quelqu'un qui a déjà répondu STOP est illégal dans la plupart des juridictions et désastreux dans toutes.
+
+## Configuration
+
+Le bundle complet est livré dans `apps/web/public/artifacts/demo-no-show-recovery-n8n/`. Deux fichiers : `demo-no-show-recovery-n8n.json` (l'export n8n) et `_README.md` (procédure d'import, les quatre placeholders de credentials, le schéma Postgres pour les deux tables que le flow lit et écrit, et une vérification du premier démarrage en neuf étapes qui teste chaque branche incluant la garde d'éligibilité, la division de ton, le repli Claude, le cron de balayage, et le chemin de sortie de réponse). Suivez le README de bout en bout avant de passer le workflow en Actif. Le SQL de création de schéma doit être exécuté avant le premier déclenchement du webhook ou le nœud `Postgres — Init Recovery State` va échouer et laisser le contact dans un état à demi-séquencé sans ligne pour récupérer depuis.
+
+## Ce que le flow fait réellement
+
+Le webhook est la source de vérité. Un Workflow HubSpot surveille `meetingOutcome = no_show` et POST `{ meetingId, contactId, ownerId }` vers l'endpoint `hubspot-no-show`. n8n acquitte 202 immédiatement (afin que la nouvelle tentative de HubSpot ne se déclenche pas si une étape en aval est lente) et en parallèle extrait la réunion, le contact, et l'enregistrement du commercial. La garde d'éligibilité est trois conditions explicites reliées par ET : pas d'opt-out, dispose d'une adresse email réelle, et l'heure de début de la réunion est au moins cinq minutes dans le passé. Cette dernière condition est la sécurité contre le mode d'échec « ils ont rejoint en retard et le commercial n'a pas remarqué » — voir les points de vigilance ci-dessous.
+
+La branche de ton est décidée par une seule recherche Postgres contre `hubspot_meetings_raw` : si le contact a une réunion avec `outcome = 'completed'` dans les 90 derniers jours, le ton est `we_missed_you` ; sinon c'est `lets_reschedule`. Ceci est passé à Claude avec le résumé de formulaire du contact et le nom du commercial. Claude retourne une phrase — plafonnée à 22 mots, voix entre pairs — et le prompt a un contrat de repli explicite : si le résumé de formulaire est vide ou générique, le modèle retourne la chaîne littérale `FALLBACK` et l'étape JS dans `Compose Step 1 Email` substitue une ouverture de modèle sûre au lieu d'envoyer une ligne sur-personnalisée construite sur rien. Seule l'ouverture est générée. Le corps, les deux créneaux horaires pré-sélectionnés, et l'appel à l'action avec le lien de planification sont déterministes. C'est le choix d'ingénierie qui sépare ce flow du pattern typique « laisser un LLM écrire tout l'email » : la majorité de l'email est un modèle, la personnalisation est une phrase, et il y a un repli strict quand la personnalisation n'est pas prudemment possible.
+
+Après l'envoi de l'étape 1, une ligne va dans `recovery_state` avec `next_due_at = now() + 2 jours`. Un nœud cron séparé balaie toutes les 15 minutes pendant les heures ouvrées, récupère les lignes dues, et route les lignes d'étape-1 vers un email de valeur ajoutée référençant une ressource pertinente (mappée par ton) et les lignes d'étape-2 vers un soft-close. Un troisième déclencheur indépendant surveille la boîte mail du commercial pour tout nouvel email entrant, le classe comme `opt_out`, `rescheduled_or_replied`, ou `human_reply` basé sur la correspondance de pattern de sujet et d'extrait, sort de la séquence, et écrit la raison de sortie en retour dans le contact HubSpot via PATCH afin que le reporting puisse agréger les sorties aux côtés des réunions.
+
+## Réalité des coûts
+
+Par no-show récupéré : environ 1 appel API Claude à ~600 tokens en entrée et ~80 tokens en sortie, ce qui sur Sonnet représente environ 0,003 $. Plus 2 à 3 envois Gmail (gratuits pour le quota de la boîte mail du commercial). Plus 4 appels API HubSpot (bien sous toute limite quotidienne raisonnable d'un org ; les Apps Privées HubSpot autorisent 100 requêtes par 10 secondes). Plus le coût n8n auto-hébergé, soit ~5 $/mois sur un Hetzner CX22 si vous n'exécutez pas déjà n8n. À 200 no-shows par mois, le coût marginal est d'environ 0,60 $ en charges Claude et zéro pour tout le reste. Si même 10 % d'entre eux récupèrent et se convertissent en opportunité, l'économie unitaire est absurde — le coût est dominé par les 30 à 45 minutes de configuration, pas par le coût d'exécution.
+
+## À quoi ressemble le succès
+
+Trois chiffres à surveiller dans HubSpot une fois que le flow tourne depuis au moins 30 jours. Premièrement, le taux de réunion récupérée : parmi les contacts qui atteignent le flow, quel pourcentage réserve soit une nouvelle réunion (via la sortie `rescheduled_or_replied`) soit répond au commercial dans la fenêtre de sept jours. Sain est 25 à 35 % ; en dessous de 15 % signifie que l'ouverture est générique, que le résumé de formulaire n'est pas capturé, ou que le domaine du commercial a des problèmes de délivrabilité. Deuxièmement, le taux d'opt-out : pourcentage de contacts qui sortent via `opt_out`. Sain est sous 3 % ; au-dessus de 5 % signifie que le ton est incorrect ou que vous incluez des segments qui ne devraient pas être dans le flow de récupération du tout. Troisièmement, le taux de faux positifs : pourcentage d'envois de l'étape 1 où le commercial confirme ultérieurement que le contact était présent (échantillonnez 20 par mois manuellement). Devrait être sous 2 % ; si c'est plus élevé, la détection de no-show est défaillante en amont et vous devriez mettre en pause le flow.
+
+## Par rapport aux alternatives
+
+Par rapport à une séquence HubSpot Workflows uniquement : HubSpot peut gérer le timing et l'envoi email, mais HubSpot ne peut pas appeler Claude pour la personnalisation de l'ouverture, ne peut pas appliquer un contrat de repli sur la sortie de personnalisation, et ne peut pas router les réponses via une classification basée sur du code. La version HubSpot uniquement envoie la même ouverture à tout le monde dans le segment. Cela vous donne peut-être 15 % de récupération au lieu de 25 à 35 % — utile si vous n'avez pas n8n, pas utile si vous l'avez.
+
+Par rapport à une plateforme outbound comme Smartlead ou Outreach : ces outils supposent que vous envoyez du cold à une liste et que vous souhaitez optimiser la délivrabilité sur des centaines de boîtes mail. Ils sont excessifs pour ce volume (quelques centaines de no-shows par mois par équipe) et ils ne lisent pas nativement les résultats de réunions HubSpot, donc vous auriez encore besoin d'une couche d'intégration. Le prix n'a pas non plus de sens — 100 $/commercial/mois ou plus pour ce qui représente au maximum 2 à 3 envois par commercial par jour depuis ce flow.
+
+Par rapport à ne rien faire : le statu quo. La plupart des équipes ont un taux de récupération de no-show de 5 à 10 % — le commercial se souvient de faire un suivi sur les prospects à fort potentiel et oublie le reste. Le delta de 5 à 10 % vers 25 à 35 % est le ROI réel de ce flow.
+
+## Points de vigilance
+
+**Retardataires comptés comme no-shows.** Le faux positif le plus courant : le prospect rejoint six minutes après le début, le commercial est déjà parti ou a marqué la réunion comme terminée. La troisième condition de la garde d'éligibilité (`meeting_start_time` au moins 5 minutes dans le passé) est la garde spécifique, mais elle n'aide pas si HubSpot marque les réunions comme `no_show` immédiatement quand le commercial clique « no-show » sans vérifier. Corrigez cela en amont en demandant au commercial d'attendre une fenêtre configurable avant de pouvoir marquer `no_show` dans HubSpot, ou en passant à un détecteur automatique de no-show qui surveille la présence Zoom/Google Meet.
+
+**Ouverture sur-personnalisée.** Claude tentera, avec n'importe quel contexte, de personnaliser. Si le résumé de formulaire est « Veut une démo », la personnalisation sera une chose spécifique inventée. La garde est le contrat `FALLBACK` explicite dans le prompt système — Claude retourne la chaîne littérale quand le contexte est insuffisant et `Compose Step 1 Email` substitue une ouverture de modèle sûre. Surveillez la métrique `used_fallback` sur `recovery_state` pendant le premier mois ; si elle n'est jamais vraie, le contrat ne se déclenche pas et Claude invente du contenu d'ouverture.
+
+**Effondrement de la réputation de l'expéditeur.** L'envoi délégué depuis la boîte mail du commercial est le bon choix pour les taux de réponse mais un mauvais choix si le domaine du commercial n'authentifie pas. La garde est opérationnelle, pas dans le flow : avant l'activation, exécutez `mail-tester.com` contre un envoi test et confirmez un 10/10 avec SPF, DKIM, et DMARC tous au vert. Si l'un d'eux échoue, corrigez le DNS d'abord ou envoyez depuis un sous-domaine (`replies.<domaine>.com`) avec sa propre authentification.
+
+**Contacts ayant répondu maintenus en séquence.** Le déclencheur de réponse scrute Gmail chaque minute, mais le scraping Gmail a une latence non nulle et le cron de balayage s'exécute aussi toutes les 15 minutes. Il y a une fenêtre où un envoi d'étape-2 pourrait se déclencher après que l'acheteur a déjà répondu. La garde est le filtre `status = 'active'` dans `Postgres — Pull Due Recoveries` plus la mise à jour `Postgres — Exit Sequence` qui bascule le statut dès qu'une réponse arrive. Les conditions de concurrence sont encore possibles à la limite de la minute ; si cela compte pour votre équipe, passez le déclencheur de réponse à une notification push Gmail (Pub/Sub) au lieu du scraping.
+
+## Stack
+
+- **n8n** — orchestration, les trois déclencheurs indépendants (webhook, cron, Gmail), et les nœuds de code JS pour le contexte de personnalisation et la classification des réponses.
+- **HubSpot** — source de vérité des réunions et contacts, enregistrements des commerciaux, écriture de la raison de sortie via token Private App.
+- **Gmail** — envoi délégué depuis la boîte mail du commercial ; déclencheur de réponse surveillant la même boîte de réception.
+- **Claude (Sonnet)** — personnalisation de la ligne d'ouverture avec un contrat `FALLBACK` strict pour quand le contexte est insuffisant.
+- **Postgres** — table `recovery_state` pour l'état de séquence et `hubspot_meetings_raw` pour la recherche de réunion précédente sur 90 jours qui pilote la branche de ton.
