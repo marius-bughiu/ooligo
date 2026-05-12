@@ -1,0 +1,101 @@
+---
+slug: inbound-applicant-triage-n8n
+canonical_slug: inbound-applicant-triage-n8n
+locale: pt-BR
+verticals: [recruiting]
+title: Triagem de candidatos inbound com n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, slack]
+roles: [recruiter, sourcer, talent-acquisition]
+difficulty: intermediate
+time_to_setup: 60min
+human_tested: false
+translated_from: en/inbound-applicant-triage-n8n.mdx
+translated_at: "2026-05-12T21:45:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "8c8d5a8e567b8c63ba327409dc2c0dd6f35b44497392df61114f82f4c1f1ae8a"
+---
+
+Um flow n8n que escuta novas candidaturas no [Ashby](/pt-BR/tools/ashby/), busca o registro do candidato mais o rubric de must-haves da vaga, pede ao [Claude](/pt-BR/tools/claude/) para pontuar a candidatura contra o rubric com evidências citadas do currículo, e roteia o resultado para um de três canais Slack: `#review-needed` (a maioria), `#fast-track` (decil superior, por pontuação agregada e recência), ou `#surfaced-not-rejected` (abaixo do limiar mas mantido visível — o flow nunca rejeita automaticamente). Substitui a hora diária de poda de inbox do recrutador por uma fila classificada no Slack que leva 12-15 minutos para percorrer.
+
+## Quando usar
+
+- Você recebe ≥30 candidaturas inbound por vaga por semana, e o recrutador está gastando mais de uma hora por dia lendo currículos que em sua maioria não são adequados.
+- A vaga tem um rubric escrito com âncoras comportamentais por dimensão (match de skill, nível, localização/autorização de trabalho, likelihood de resposta). O template de rubric está no `_README.md` do bundle. Sem ele, o flow pontua por feeling.
+- Você usa [Ashby](/pt-BR/tools/ashby/) ou outro ATS que tem webhook por candidatura. Greenhouse, Lever, Workable todos qualificam; o nó de intake do flow é substituível. Plataformas ATS com apenas polling funcionam mas com um piso de 5 minutos de latência.
+- Um recrutador percorre a fila `#review-needed` pelo menos diariamente e descarta cada entrada. O flow não move candidatos para um estágio no ATS.
+
+## Quando NÃO usar
+
+- **Rejeição automática no loop.** O flow classifica e roteia; nunca rejeita. Conectar uma ação `reject` a um limiar de pontuação transforma isso em tomada de decisão automatizada — isso aciona obrigações de auditoria de viés da NYC Local Law 144 em até um ano de implantação, e obrigações de sistema de alto risco do Anexo III do EU AI Act para qualquer candidato residente na UE. O terceiro bucket do flow (`#surfaced-not-rejected`) existe precisamente para que o recrutador veja quem teria sido rejeitado e possa sobrescrever.
+- **Dados demográficos como input de pontuação.** O flow recusa pontuar por nome, foto, nome da escola como sinal isolado, endereço, idade inferida pelo ano de formatura, pronomes de gênero, penalidades por lacunas de emprego ou "culture fit" sem âncoras comportamentais. O checklist de fairness no `_README.md` do bundle executa como pre-flight no rubric.
+- **Substituir o julgamento do recrutador em casos limítrofes.** Pontuação agregada dentro de 15% do corte vai para `#review-needed`, não para nenhuma das extremidades. Esta é uma faixa de buffer de discrição deliberada.
+- **Vagas onde você recebe menos de 10 candidaturas por semana.** A triagem manual é mais rápida do que ajustar um rubric e uma fila Slack. O custo de configuração do flow (60 minutos mais autoria do rubric) se paga na marca de 30 candidaturas por semana, não na de 5 por semana.
+- **Vagas confidenciais / executivas.** Postura de consentimento diferente. Cadeia de auditoria diferente. Roteamento diferente — essas vão diretamente para um recrutador nomeado, não para um canal Slack compartilhado.
+
+## Configuração
+
+1. **Importe o flow.** Importe `apps/web/public/artifacts/inbound-applicant-triage-n8n/inbound-applicant-triage-n8n.json` para sua instância n8n. Cada nó tem `notesInFlow: true` para que as notas no canvas expliquem as escolhas.
+2. **Configure as credenciais.** O flow precisa de três: `PLACEHOLDER_ASHBY_CRED_ID` (chave API do Ashby, apenas escopo de leitura), `PLACEHOLDER_ANTHROPIC_CRED_ID` (chave API do Claude), `PLACEHOLDER_SLACK_CRED_ID` (token de bot Slack com `chat:write` para os três canais). Cada seção no `_README.md` mostra onde encontrar o valor.
+3. **Crie o rubric.** Por vaga, escreva um arquivo JSON em `n8n/data/rubrics/<role-slug>.json` com as quatro dimensões (skill, nível, localização, likelihood de resposta) e âncoras comportamentais por dimensão. O flow busca o rubric pelo `role_slug` do payload de candidatura do Ashby. Sem rubric para uma vaga → o flow para com uma entrada de log `missing_rubric` em vez de pontuar contra padrões.
+4. **Configure os limiares de roteamento.** No nó IF `Route by Aggregate`: `aggregate >= 16` roteia para `#fast-track`, `12-15` para `#review-needed`, qualquer coisa abaixo de 12 para `#surfaced-not-rejected`. Ajuste após uma semana de dry-run.
+5. **Dry-run em uma vaga fechada.** Replay da última semana de candidaturas para uma vaga que você sourciou manualmente. Compare o bucket `#fast-track` do flow com sua lista real de aprovados em triagem. Ajuste as âncoras do rubric se divergirem — as âncoras, não o modelo, geralmente estão erradas.
+6. **Ative o trigger.** Mude o webhook do Ashby de `disabled` para `enabled` apenas depois que o dry-run estiver correto. Tráfego de webhook em produção é mais difícil de depurar do que histórico replay.
+
+## O que o flow faz
+
+Oito nós, em ordem. O flow mantém pre-flights de fairness e filtros determinísticos antes da chamada ao LLM, porque deixar o modelo livre em um payload contaminado produz pontuação rápida, confiante e inutilizável.
+
+1. **Ashby Webhook** — recebe eventos `application.created`. A assinatura do webhook é verificada no próximo passo; um payload não verificado é descartado.
+2. **Verify Signature** — HMAC-SHA256 contra o segredo de webhook configurado. Assinatura incorreta → log + parada. A verificação de assinatura é obrigatória porque os webhooks do Ashby são acessíveis pela internet aberta.
+3. **Fetch Application + Rubric** — extrai o registro completo de candidato + candidatura de `/candidate.info` (o Ashby usa apenas POST, mesmo para leituras — veja o `_README.md` do bundle), e carrega o arquivo de rubric da vaga. Para em `missing_rubric` em vez de usar um padrão.
+4. **Fairness Pre-Flight** — executa o rubric em um checklist de proxies de classe protegida. Pontuação por tier de escola, filtragem por nome, penalidades por lacunas de emprego, presença de foto, "culture fit" sem âncoras → para e surfacea para o autor do rubric. A escolha de falhar antes da chamada ao LLM é intencional: um rubric enviesado carregado em uma API de pontuação deixa uma entrada de log que já conta como processamento automatizado sob o GDPR Art. 22.
+5. **Deterministic Pre-Filter** — verifica autorização de trabalho contra o requisito de localização da vaga, descarta candidaturas da lista de recentemente rejeitados (período de silêncio de 6 meses), confirma que a candidatura tem os documentos necessários (currículo, carta de apresentação opcional). Esses filtros são auditáveis e o LLM não os re-debate.
+6. **Claude Score** — envia rubric + currículo + dados do formulário de candidatura ao Claude. Retorna um objeto JSON com pontuações 1-5 por dimensão, uma string de evidência verbatim por dimensão acima de 1 e um agregado. Pontuações sem string de evidência padrão para 1. O requisito de evidência é o que mantém o modelo ancorado no texto do currículo em vez de inferir por nome ou escola.
+7. **Route by Aggregate** — nó IF. Três ramificações por faixa de pontuação conforme configurado no passo 4 da configuração.
+8. **Slack Notify + Audit Append** — posta no canal Slack apropriado com um link de volta para a página do candidato no Ashby, os trechos de evidência por dimensão e um link `view-rubric`. Adiciona uma linha JSONL a `audit/<YYYY-MM>.jsonl` com `application_id`, `role_slug`, `rubric_sha256`, pontuações por dimensão, agregado, rota, modelo. Sem PII. O log de auditoria é o que torna o workflow defensável sob questionamento da NYC LL 144 ou EU AI Act.
+
+## Realidade de custos
+
+Por 100 candidaturas pontuadas, com Claude Sonnet 4.5:
+
+- **Tokens API Anthropic** — tipicamente 8-12k tokens de input por candidatura (rubric ~1k + currículo + dados do formulário) e 400-700 tokens de output (JSON pontuado + evidência). Pelo preço de lista do Sonnet 4.5, isso fica em aproximadamente US$0,05-0,08 por candidatura. Uma equipe pontuando 1.000 candidaturas inbound por semana roda US$50-80 por semana em custo de modelo.
+- **Custo n8n** — n8n self-hosted é gratuito em container. O plano Starter do n8n Cloud cobre ~5k execuções de workflow por mês a US$20; equipes de volume médio (>5k/semana) precisam do Pro ou self-hosted.
+- **Cota API Ashby** — apenas chamadas de leitura. O flow faz 1 `/candidate.info` por candidatura; bem dentro do padrão de 100 req/min do Ashby.
+- **Tempo do recrutador** — a vitória. Ler 100 candidaturas à mão é ~8 horas; percorrer a fila Slack `#review-needed` com a evidência e links pré-preparados é ~20-30 minutos. A fila fast-track leva mais 5-10 minutos para outreach de toque mais alto.
+- **Tempo de configuração** — 60 minutos para o flow em si, mais 30-60 minutos por vaga para o rubric. O rubric é o custo fixo; reutilização entre famílias de vagas amortiza.
+
+## Métrica de sucesso
+
+Acompanhe três números por vaga por mês, no ATS:
+
+- **Taxa de aprovação em triagem do recrutador de `#fast-track`** — deve ser ≥75% em um rubric calibrado. Abaixo disso, o rubric ou o limiar está frouxo; aperte as âncoras antes de elevar o limiar.
+- **Taxa de aprovação em triagem do recrutador de `#review-needed`** — deve ser 25-40%. Se cair abaixo de 20%, a faixa de buffer de discrição está larga demais e você está lendo muita coisa. Se subir acima de 50%, o corte de fast-track está alto demais e candidatos qualificados estão sendo perdidos.
+- **Tempo de candidatura até primeiro toque do recrutador** — deve cair de dias para menos de 4 horas. Esta é a métrica de experiência do candidato, e é o que torna o flow defensável para o head de TA.
+
+## vs alternativas
+
+- **vs pontuação nativa do Ashby (ou Greenhouse Predictive Hire)** — a pontuação nativa do ATS é adequada para a questão binária de "probabilidade de match", mas a pontuação é uma caixa preta e o rubric não é seu. Escolha o flow se precisar de uma pontuação por dimensão com evidência verbatim (defensável sob a NYC LL 144), um rubric com controle de versão ou um modelo que possa trocar. Escolha o nativo do ATS se a sua equipe não vai manter o rubric.
+- **vs [Eightfold](/pt-BR/tools/eightfold/) / [Findem](/pt-BR/tools/findem/) inbound matching** — esses são produtos mais profundos: eles re-pontuam contra suas contratações históricas, lidam com outbound, têm um grafo de candidatos. Escolha-os se o orçamento suportar o play de plataforma e você quiser um produto gerenciado. Escolha o flow se quiser o rubric e o log de auditoria no seu repo e o resto do seu stack já conectado.
+- **vs script Python DIY fazendo polling da API do Ashby** — mesma qualidade de pontuação se você construir o prompt com cuidado, mas você também constrói a verificação de assinatura de webhook, o pre-flight de fairness, o carregador de rubric, o log de auditoria, o roteamento Slack e a UX do debugger n8n você mesmo. O bundle os inclui.
+- **vs status quo (recrutador lê tudo)** — manual é correto com menos de 10 candidaturas por semana por vaga, onde um rubric é overhead e a cabeça do recrutador já está calibrada. O flow recupera seu custo de configuração em vagas que escalam.
+
+## Pontos de atenção
+
+- **Amplificação de viés.** *Proteção:* o pre-flight de fairness no passo 4 para o flow se o rubric contiver proxies de classe protegida. O log de auditoria captura `rubric_sha256` por candidatura pontuada, então o rubric usado em uma data específica é reproduzível sob revisão do [EU AI Act](/pt-BR/learn/eu-ai-act-for-legal-teams/) ou NYC Local Law 144.
+- **Replay de webhook / pontuação duplicada.** *Proteção:* a assinatura do webhook do Ashby inclui `application.created.id`. O log de auditoria do flow é chaveado em `application_id`; uma segunda chegada é detectada e pulada sem re-pontuação.
+- **Drift de output do modelo em edições de rubric.** *Proteção:* `rubric_sha256` no log de auditoria torna mudanças de rubric entre duas execuções visíveis. Se uma pontuação agregada para uma candidatura re-pontuada diverge, o diff está no hash do rubric, não em não-determinismo do modelo.
+- **Drift de auto-rota-para-rejeição.** *Proteção:* o flow não tem ramificação `reject`. O terceiro bucket é `#surfaced-not-rejected`, e a mensagem Slack inclui um botão "promover para revisão" que re-roteia a candidatura para `#review-needed`. O recrutador é a única autoridade de rejeição.
+- **PII do currículo na mensagem Slack.** *Proteção:* a mensagem Slack inclui apenas o primeiro nome do candidato, cargo atual e os trechos de evidência por dimensão (máx 200 chars cada). O conteúdo completo do currículo fica no ATS. Os canais Slack têm retenção mais curta do que o Ashby; o flow não transforma o Slack em um banco de dados de candidatos.
+- **Risco de candidatos-da-UE não testado.** *Proteção:* o nó `Verify Signature` do flow também verifica a localização declarada da candidatura. Candidaturas com códigos de localização de residente na UE são roteadas para `#review-needed` independentemente da pontuação, e a mensagem Slack sinaliza `Candidato da UE — confirme que o aviso de triagem por AI foi servido`. Triagem por AI de residentes na UE sem aviso é uma violação de sistema de alto risco do EU AI Act.
+
+## Stack
+
+O bundle de artefatos está em `apps/web/public/artifacts/inbound-applicant-triage-n8n/` e contém:
+
+- `inbound-applicant-triage-n8n.json` — o export do flow n8n (cada nó configurado, sem parâmetros stub)
+- `_README.md` — configuração de credenciais, formato de rubric, checklist de fairness, procedimento de dry-run
+
+Ferramentas que o workflow assume que você usa: [Ashby](/pt-BR/tools/ashby/) (o ATS — troque para [Greenhouse](/pt-BR/tools/greenhouse/) ou [Lever](/pt-BR/tools/lever/) substituindo o nó de intake), [Claude](/pt-BR/tools/claude/) (o modelo de pontuação), [n8n](/pt-BR/tools/n8n/) (a orquestração), [Slack](/pt-BR/tools/slack/) (a superfície de fila do recrutador). Para o flow paralelo de sourcing, veja a [Claude Skill de sourcing de candidatos](/pt-BR/workflows/candidate-sourcing-claude-skill/); para o build de loop de entrevista por vaga, veja o [interview loop builder](/pt-BR/workflows/interview-loop-builder-skill/).
+
+Conceitos relacionados: [AI screening bias](/pt-BR/learn/ai-screening-bias/), [candidate experience](/pt-BR/learn/candidate-experience/), [recruiting funnel metrics](/pt-BR/learn/recruiting-funnel-metrics/), [structured interviewing](/pt-BR/learn/structured-interviewing/).

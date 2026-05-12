@@ -1,0 +1,81 @@
+---
+slug: legal-spend-anomaly-n8n
+canonical_slug: legal-spend-anomaly-n8n
+locale: pt-BR
+verticals: [legal-ops]
+title: Detecção de anomalias em faturas de escritórios externos com n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/legal-spend-anomaly-n8n.mdx
+translated_at: "2026-05-12T21:45:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "4268621eb555a5f9ad87bf06bd9f9bb3d53c94849b54e55d4074540b625f680c"
+---
+
+Um flow de n8n que extrai faturas de escritórios externos do seu sistema de e-billing, analisa itens de linha LEDES 1998B, aplica suas diretrizes de faturamento como regras determinísticas, pede ao Claude uma segunda passagem sobre anomalias que resistem às regras (timekeeper duplicados, desvio de escopo, trabalho fora da carta de engajamento) e depois roteia cada fatura para um de quatro buckets — aprovação automática, dedução automática com aviso, fila de revisão no Slack ou escalação para o diretor — com cada decisão gravada em um log de auditoria idempotente. Recupera os 5-15% dos gastos com escritórios externos que a revisão manual linha por linha perde, ao custo de aproximadamente $0,04 de inferência do Claude por fatura.
+
+O workflow completo é entregue em `apps/web/public/artifacts/legal-spend-anomaly-n8n/legal-spend-anomaly-n8n.json` (15 nós, único trigger). As notas de setup e instruções de credenciais estão no `_README.md` adjacente.
+
+## Quando usar
+
+Você tem um volume constante de faturas de escritórios externos — pelo menos 50 por mês em mais de três escritórios — fluindo por um sistema de e-billing que expõe LEDES via API (Brightflag, Onit, BusyLamp, SimpleLegal ou equivalente self-hosted). Você tem diretrizes de faturamento escritas e uma tabela de rates por escritório, e alguém na equipe já faz revisão linha por linha bem o suficiente para validar os flags do flow contra o que encontraria. O ganho é mudar esse revisor de "escanear cada linha" para "decidir sobre os itens sinalizados", o que tipicamente resulta em três a cinco vezes mais throughput por hora de revisor.
+
+## Quando NÃO usar
+
+Pule se o volume de faturas for menor que vinte por mês — o overhead de calibração supera o gasto recuperável. Pule se você não tiver uma tabela de rates e lista de timekeepers aprovados por matter; o flow depende dessas tabelas para os checks baseados em regras, e sem elas a passagem de AI está fazendo todo o trabalho e vai alucinar violações. Pule se seus escritórios enviam faturas somente em PDF; este flow assume LEDES, e a variante de extração de PDF é um workflow diferente com recall muito mais fraco. Pule se sua função de legal-ops é uma pessoa que revisa tudo pessoalmente e confia mais no próprio reconhecimento de padrões do que em um modelo ajustado — nesse caso o flow adiciona latência sem adicionar julgamento.
+
+## Setup
+
+O flow assume quatro tabelas Postgres de suporte (`matters`, `matter_approved_timekeepers`, `firm_billing_guidelines`, `invoice_audit_log`) — o README detalha as colunas e os índices que tornam os upserts e o watermark baratos. Configure-as primeiro, popule-as a partir do seu sistema de gestão de matters ou planilhas de tabela de rates, depois importe `legal-spend-anomaly-n8n.json` no n8n. Conecte as quatro credenciais placeholder (Brightflag/seu sistema de e-billing, Postgres, Anthropic, Slack) conforme o README. Execute a sequência de verificação de seis etapas no README antes de ativar o cron trigger; não pule o check de idempotência, pois uma linha duplicada no log de auditoria vai bagunçar o próximo watermark.
+
+A calibração é a parte que a maioria das equipes subestima. Extraia cem faturas históricas que sua equipe já revisou manualmente, rode-as pelo flow com o cron desativado e compare a `decision` do flow com a disposição real da sua equipe. Espere ajustar o system prompt de AI em `Claude — Anomaly Detection` e os thresholds em `Score + Route` pelo menos duas vezes antes de a distribuição de roteamento parecer com a da sua equipe. Os thresholds do bundle são pontos de partida (severidade de AI >= 0,8 escala, participação de valor de regra >= 15% escala, contagem de flags de AI > 0 roteia para a fila de revisor) — eles vão mudar depois que você ver sua distribuição.
+
+## O que o flow faz
+
+`Daily Cron — 7am Mon-Fri` dispara a execução. `Lookup Watermark` lê o `checked_at` mais recente do `invoice_audit_log` e volta para sete dias se a tabela estiver vazia, para que reexecuções após uma falha não processem em duplicata. `Brightflag — List New Invoices` consulta o sistema de e-billing por faturas enviadas desde o watermark; `Split Invoices` divide em uma execução por fatura. `Fetch LEDES File` baixa o blob LEDES 1998B e `Parse LEDES` (um nó de Código) divide em itens de linha estruturados — id do timekeeper, classificação, rate, unidades, código de tarefa, código de atividade, narrativa, total da linha. `Load Matter + Rate Card` extrai o matter, a lista de timekeepers aprovados com caps de rate e as diretrizes de faturamento do escritório em um único round-trip.
+
+`Rule-Based Checks` é uma passagem determinística: sinaliza timekeepers não aprovados, rates acima da tabela, block-billing (unidades acima do threshold do escritório com narrativa curta), descrições vagas correspondendo à lista de palavras-chave do escritório e tempo de viagem classificado como sócio quando a regra de não-faturar-viagem do escritório se aplica. Cada flag carrega uma severidade (0-1) e um impacto estimado em dólares, somados em `rule_value_cents`. `Claude — Anomaly Detection` então faz uma única chamada à API da Anthropic contra `claude-sonnet-4-6` com os itens de linha, o escopo do matter e as diretrizes do escritório como contexto, retornando um array JSON de achados que as regras não conseguem expressar facilmente — timekeepers duplicados na mesma tarefa no mesmo dia, tempo desproporcional ao escopo, narrativa de desvio de escopo, trabalho fora da carta de engajamento. O system prompt proíbe explicitamente inventar índices de linha ou alegar violações não vinculadas a uma linha específica, que é o modo de falha mais comum da revisão de faturas baseada em LLM.
+
+`Score + Route` combina as duas passagens em uma única decisão. Os quatro buckets — `auto_approve`, `auto_deduct`, `reviewer_queue`, `escalate_director` — são roteados via dois nós `if`. Escalações chegam em `#legal-ops-escalations` com um payload Slack Block Kit mostrando os cinco principais achados de regra e AI; decisões de fila de revisão e dedução automática chegam em `#legal-ops-invoice-review`; aprovações automáticas escrevem apenas no log de auditoria. Cada branch termina em `Audit Log Insert`, que faz upsert em `invoice_id` para que reexecuções sejam seguras.
+
+## Custo real
+
+Por fatura: uma chamada ao Claude Sonnet 4.6 com aproximadamente 4-6k tokens de input (itens de linha + matter + diretrizes) e 500-1000 tokens de output, então cerca de $0,04 cada no preço atual. A 500 faturas por mês, são aproximadamente $20 de inferência. As consultas Postgres são baratas (leituras de linha única em colunas indexadas mais um upsert). A API de e-billing e o fetch LEDES estão no lado gratuito do seu contrato existente com o fornecedor. O n8n self-hosted é o custo linear-fixo; o n8n Cloud Starter a $24/mês cobre esse volume com folga.
+
+A matemática trabalhista é o que torna isso compensatório. Um revisor fazendo revisão linha por linha leva 10-15 minutos por fatura; o flow reduz isso para 2-4 minutos nos itens em fila (ler o resumo do Slack, clicar no log de auditoria, decidir) e zero nos caminhos de aprovação automática e dedução automática. A 500 faturas por mês com uma divisão 60/30/10 entre aprovação automática, fila de revisor e escalação, o flow economiza aproximadamente 50 horas de tempo de revisor por mês contra um custo de inferência de $20 mais uma hora ou duas de tempo de operador ajustando thresholds. O gasto recuperado em si é a linha maior: 5-15% dos gastos mensais com escritórios externos é a faixa relatada em estudos de caso de fornecedores (Brightflag, Onit) e nossos próprios back-tests, e isso supera o custo operacional em duas ordens de magnitude em qualquer portfólio acima de $200k/mês.
+
+Seja honesto sobre o tempo de retorno. O primeiro mês é calibração, não recuperação. Os meses dois e três são quando a distribuição de roteamento se estabiliza e o gasto recuperado começa a aparecer na sua variação de AP.
+
+## Métrica de sucesso
+
+Acompanhe o gasto recuperado por mês — o valor em dólares de `auto_deduct` mais o valor em dólares das deduções confirmadas pelo revisor da fila, dividido pelos gastos totais com escritórios externos naquele mês. O número a superar é o que era o seu baseline manual. Se o flow não estiver puxando pelo menos 3% no terceiro mês, você tem um problema de calibração, não um problema de flow; extraia o log de auditoria, amostre 30 faturas e compare com as notas manuais da sua equipe.
+
+Métrica secundária: tempo de revisor por fatura sinalizada. Se estiver aumentando em vez de diminuir, as mensagens do Slack não estão dando ao revisor contexto suficiente para decidir rapidamente — ajuste o payload Block Kit em `Slack — Reviewer Queue` para incluir os números específicos de linha e deltas em dólares, não apenas as categorias de flag.
+
+## vs alternativas
+
+Versus o motor de conformidade built-in do fornecedor de e-billing (a "revisão AI" do Brightflag, o motor de regras do Onit): as regras do fornecedor são competentes, mas a passagem de AI é opaca, você não pode ajustar o prompt e não pode adicionar checks personalizados sem pagar por um engajamento de serviços profissionais. Este flow dá o prompt, os thresholds e o log de auditoria — todos editáveis. Versus um script Python DIY: mesma lógica, carga operacional muito maior (você é dono do cron, das retries, da rotação de credenciais, da observabilidade) e sem depurador visual quando um arquivo LEDES de um novo escritório é analisado de forma estranha. Versus o status quo de um paralegal lendo cada fatura: o paralegal é mais preciso em padrões novos no primeiro mês, após o qual o recall do flow nas regras codificadas é maior e o tempo do paralegal é liberado para os itens genuinamente de julgamento.
+
+O caso para a versão n8n especificamente sobre uma build Lambda ou Make.com é o grafo visual mais a semântica de retry por nó — quando a API da Anthropic rate-limita você em uma manhã movimentada, o retry automático com backoff do n8n no nó `httpRequest` lida com isso sem código, e você pode ver o retry acontecer.
+
+## Pontos de atenção
+
+**Deduções automáticas comunicadas mal danificam o relacionamento com os escritórios.** Proteção: o payload `Slack — Reviewer Queue` sempre inclui a cadeia de raciocínio tanto da passagem de regras quanto da passagem de AI, e o log de auditoria retém o `rule_flags_json` e o `ai_flags_json` completos. Antes de qualquer dedução automática ser comunicada ao escritório, gere a nota voltada ao escritório a partir da linha do log de auditoria, não de uma mensagem templada de "deduzimos X" — os escritórios aceitam reduções quando veem a linha específica, a diretriz específica e o impacto específico em dólares.
+
+**O ajuste de threshold é sensível ao tipo de matter.** Faturas de litígio têm padrões diferentes (grandes lotes de discovery parecem block-billing mas não são) das transacionais (qualquer block-billing é suspeito). Proteção: a query `Load Matter + Rate Card` retorna `matter_type`, e o nó de Código `Rule-Based Checks` é o lugar para ramificar nele. Entregue o flow v1 com thresholds globais, depois especialize em quatro semanas.
+
+**Novos escritórios produzem falsos positivos até você ter um baseline.** Proteção: adicione um check `WHERE invoices_seen_count < 5` antes e force `decision = reviewer_queue` para qualquer escritório abaixo desse threshold, independentemente do que as regras e AI digam. O bundle não inclui esse check por padrão; adicione-o antes de entrar ao vivo se você integra novos escritórios mais de uma vez por trimestre.
+
+**A análise de LEDES falha silenciosamente quando um escritório envia um arquivo malformado.** Proteção: o nó de Código `Parse LEDES` retorna `parse_error: 'empty_or_malformed_ledes'` em vez de lançar uma exceção, e os nós downstream vão gravar uma linha no log de auditoria com `decision: auto_approve` (o padrão) — o que está errado. Adicione um nó `if` após `Parse LEDES` que roteia erros de análise para `#legal-ops-escalations` com o nome do escritório e o id da fatura para que um humano possa solicitar um arquivo limpo ao escritório.
+
+**O Claude pode alucinar violações em uma fatura movimentada.** Proteção: o system prompt proíbe inventar índices de linha; o nó `Score + Route` trata achados de AI como consultivos a menos que a severidade seja >= 0,8 (escalação) ou a contagem de AI > 0 junto com achados de regra (fila de revisor). Nunca deixe um flag somente-de-AI acionar um `auto_deduct`.
+
+## Stack
+
+n8n (cloud ou self-hosted) é o orquestrador. [Claude](/pt-BR/tools/claude/) Sonnet 4.6 via Anthropic Messages API faz a passagem de anomalias. Postgres mantém o banco de dados de matters, tabelas de rates, diretrizes de faturamento e log de auditoria. Slack recebe a fila de revisores e escalações para o diretor. Seu sistema de e-billing (Brightflag nos padrões do bundle; troque o host e o caminho para Onit, BusyLamp, SimpleLegal ou um endpoint self-hosted) é a fonte da verdade para novas faturas e o eventual alvo de write-back se você estender o flow para enviar deduções de volta em vez de e-mailá-las.
+
+Este flow é a camada operacional de [gestão de gastos jurídicos](/pt-BR/learn/legal-spend-management/); a camada de política são suas [diretrizes de escritórios externos](/pt-BR/learn/outside-counsel-management/) escritas, que os checks baseados em regras codificam. As duas só funcionam juntas — as diretrizes sem o flow são aspiracionais; o flow sem as diretrizes é um modelo tentando inventar sua política.

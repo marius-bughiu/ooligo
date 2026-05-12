@@ -1,0 +1,96 @@
+---
+slug: litigation-hold-orchestration-n8n
+canonical_slug: litigation-hold-orchestration-n8n
+locale: pt-BR
+verticals: [legal-ops]
+title: Orquestração de litigation hold com n8n
+artifact_type: n8n-flow
+tools_used: [n8n, slack, claude]
+roles: [legal-ops, in-house-counsel, ediscovery-lead]
+difficulty: advanced
+time_to_setup: 120min
+human_tested: false
+translated_from: en/litigation-hold-orchestration-n8n.mdx
+translated_at: "2026-05-12T21:45:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "995fc46e9a102ae7bcc4ee64605d3e667802b7999cee0717b04a555d094609cd"
+---
+
+Um flow de n8n que orquestra um ciclo de emissão de litigation hold — emitindo o aviso de hold por e-mail e Slack para os custodiantes nomeados, rastreando confirmações com lembretes em cadência configurável, escalando não-confirmadores para o responsável de legal-ops e para o gestor do custodiante, registrando cada ação em uma tabela de auditoria imutável que a empresa usa se a adequação do hold for questionada posteriormente. Substitui o ciclo manual de planilha-e-regras-no-Outlook do admin de legal-ops (tipicamente um ônus contínuo de 2-4 horas por semana quando alguns holds estão ativos) por um flow determinístico que não consegue deixar cair um custodiante.
+
+## Quando usar
+
+- A empresa emite litigation holds com uma frequência em que o rastreamento manual começa a falhar — geralmente >3 holds ativos a qualquer momento.
+- Você tem uma fonte de custodians de registro: uma tabela de gestão de custodiantes na plataforma de e-discovery ([Relativity](/pt-BR/tools/relativity/), [Everlaw](/pt-BR/tools/everlaw/), [Logikcull](/pt-BR/tools/logikcull/)) ou em um CSV de legal-ops mantido.
+- A empresa precisa de uma trilha de auditoria defensável para adequação do hold. A tabela de auditoria do flow é a resposta a "mostre-nos que agiu razoavelmente para preservar."
+- O responsável de legal-ops e o advogado externo aprovam a emissão do hold; o flow lida com o rastreamento contínuo, não com a decisão de emitir.
+
+## Quando NÃO usar
+
+- **Engajamentos de hold único onde o rastreamento manual é suficiente.** O custo de setup (120 minutos, mais integração com a fonte de custodiantes) se paga a partir do ~3 holds ativos, não a partir de um.
+- **Escalação automática que ignora o advogado.** Os caminhos de escalação do flow são configuráveis, mas o padrão envia para o responsável de legal-ops, NÃO diretamente para o GC ou advogado externo. O responsável aplica julgamento sobre quais não-confirmações merecem atenção do advogado.
+- **Avisos de hold que precisam de linguagem personalizada por custodiante.** O flow utiliza templates por matter; se cada aviso precisa de linguagem artesanal, o gargalo não é a orquestração.
+- **Substituir o julgamento do advogado sobre o escopo do hold.** O flow rastreia o hold para os custodiantes que o advogado nomeou. Adicionar ou remover custodiantes é uma decisão do advogado, não do flow.
+
+## Setup
+
+1. **Importe o flow.** Coloque `apps/web/public/artifacts/litigation-hold-orchestration-n8n/litigation-hold-orchestration-n8n.json` na sua instância de n8n.
+2. **Conecte as credenciais.** Quatro obrigatórias: `PLACEHOLDER_CUSTODIAN_DB_CRED_ID` (acesso de leitura à fonte de custodiantes), `PLACEHOLDER_SMTP_CRED_ID` (SMTP para e-mail do aviso de hold), `PLACEHOLDER_SLACK_CRED_ID` (Slack para notificação no canal), `PLACEHOLDER_AUDIT_DB_CRED_ID` (acesso de escrita à tabela de auditoria imutável).
+3. **Crie o template do aviso de hold.** Por matter, escreva um template Markdown em `n8n/data/hold-notices/<matter-id>.md`. O template inclui linguagem aprovada pelo advogado sobre escopo de preservação, ações proibidas (exclusão, alteração) e instruções de confirmação.
+4. **Configure os caminhos de escalação.** O padrão do flow: lembrete em +3, +7, +14 dias; escalação para o responsável de legal-ops em +14; escalação para o gestor do custodiante em +21. Ajuste conforme o perfil de risco da empresa.
+5. **Configure a tabela de auditoria.** Uma tabela Postgres/Snowflake com chave em `(hold_id, custodian_id, action, timestamp)` com uma restrição de apenas-append aplicada no nível do banco (imutável; o advogado precisa demonstrar que o log de auditoria não pode ser editado retroativamente).
+6. **Execute um dry-run em um hold fechado.** Reproduza a lista de custodiantes de um hold fechado. Confirme que os tempos de notificação, lembrete e escalação correspondem ao que o admin de legal-ops fazia manualmente antes.
+
+## O que o flow faz
+
+Sete nós, em duas fases. A Fase 1 (emissão) dispara uma vez por hold. A Fase 2 (rastreamento) é um cron diário verificando não-confirmadores e despachando lembretes/escalações.
+
+1. **Issue Trigger** — trigger manual ou webhook da plataforma de legal-ops quando o advogado marca um hold como pronto para emitir.
+2. **Load Custodian List** — extrai a lista de custodiantes da fonte configurada para o matter.
+3. **Send Hold Notice** — e-mail + Slack para cada custodiante. O e-mail inclui o template do aviso de hold e um link de confirmação único por custodiante. Log de auditoria: uma linha por custodiante por `notice_sent`.
+4. **Daily Cron Tracker** (trigger de workflow separado) — segunda a sexta às 9h no fuso horário do escritório. Verifica a tabela de auditoria por custodiantes que não confirmaram dentro da janela configurada.
+5. **Determine Action** — nó de Código. Para cada não-confirmador, determina: enviar lembrete (+3, +7), escalar para o responsável de legal-ops (+14), escalar para o gestor (+21).
+6. **Dispatch Reminder / Escalation** — envia e-mail de lembrete ou escalação, conforme a ação determinada. Entrada no log de auditoria por despacho.
+7. **Acknowledgement Webhook** — webhook separado que recebe o clique de confirmação do custodiante. Registra na tabela de auditoria; interrompe lembretes adicionais para aquele custodiante.
+
+## Custo real
+
+- **Custo de n8n** — self-hosted gratuito; n8n Cloud na contagem de execuções de workflow que isso gera (~3-5/dia por hold ativo) está confortavelmente no plano Starter.
+- **Tokens de LLM** — nenhum. O flow é determinístico.
+- **SMTP/Slack** — dentro das cotas padrão.
+- **Tempo de admin de legal-ops** — o ganho. O rastreamento manual de 5-10 holds ativos é de 4-8 horas/semana. A operação do flow é monitorar a tabela de auditoria por verdadeiras exceções, ~30 min/semana.
+- **Tempo de setup** — 120 minutos incluindo o provisionamento da tabela de auditoria, mais 30-60 minutos por matter para a criação do template do aviso de hold.
+
+## Métrica de sucesso
+
+- **Tempo de emissão desde a decisão "emitir" do advogado** — deve cair para menos de 1 hora (o manual costuma ser um dia para listas grandes de custodiantes).
+- **Taxa de confirmação em +14 dias** — deve superar 95% em holds de rotina. Abaixo disso, o template do aviso precisa ser refeito ou a lista de custodiantes tem registros desatualizados.
+- **Completude da auditoria na revisão do advogado** — participação de holds onde o advogado consegue produzir uma cadeia de auditoria completa e defensável sob demanda. Deve ser 100%; a tabela de auditoria é a fonte.
+
+## vs alternativas
+
+- **vs módulo de hold built-in da plataforma de e-discovery** ([Relativity](/pt-BR/tools/relativity/) Legal Hold, [Logikcull](/pt-BR/tools/logikcull/), [Everlaw](/pt-BR/tools/everlaw/)). Escolha o módulo da plataforma se você vive na ferramenta de e-discovery. Escolha o flow se seus custodiantes abrangem Slack, e-mail e sistemas de RH e você precisa de superfícies de notificação além dos padrões da plataforma.
+- **vs ferramentas SaaS de gestão de hold** (Onna, Exterro Legal Hold). Escolha essas para self-service avançado de custodiantes e preservação integrada. Escolha o flow se você quer a orquestração na sua própria infraestrutura com o log de auditoria no seu próprio banco de dados.
+- **vs planilha + regras do Outlook.** O padrão e a fonte de custodiantes abandonados em escala. O flow é o substituto determinístico.
+
+## Pontos de atenção
+
+- **Deriva da lista de custodiantes.** *Proteção:* o flow re-extrai a lista de custodiantes por verificação, com o `last_updated_at` da fonte verificado. Se a lista derivou (custodiante adicionado/removido) sem aprovação do advogado, o flow apresenta o diff para o responsável de legal-ops em vez de agir silenciosamente na nova lista.
+- **Mutabilidade da tabela de auditoria.** *Proteção:* a tabela de auditoria deve ser apenas-append no nível do banco de dados (Postgres: `REVOKE UPDATE, DELETE FROM ALL`). O flow não aplica isso — o banco aplica. O README documenta o schema com a restrição inline.
+- **Deriva do texto do aviso.** *Proteção:* templates de aviso por matter são hashados no momento da emissão; o log de auditoria captura o hash. Se o advogado quiser alterar o aviso, a alteração é uma ação separada no flow, não uma re-emissão silenciosa.
+- **Opt-out ou ignorância silenciosa do custodiante.** *Proteção:* a escalação para o gestor em +21 dias converte o problema de um problema do custodiante em um problema de gestão. Além disso, o responsável de legal-ops pode precisar envolver o advogado externo — o flow apresenta mas não age.
+- **Diferenças de hold entre jurisdições.** *Proteção:* o flow assume a semântica de litigation hold no estilo dos EUA. O "dever de preservar" no estilo europeu sob o AI Act e o GDPR tem escopo diferente; o template de aviso por matter lida com esses casos.
+- **Postura de privacidade no e-mail do custodiante.** *Proteção:* avisos de hold podem sinalizar a existência de um matter de litígio para o custodiante; o caminho SMTP usa o relay de e-mail da empresa (não um SaaS de terceiros) para confidencialidade.
+
+## Stack
+
+O bundle fica em `apps/web/public/artifacts/litigation-hold-orchestration-n8n/`:
+
+- `litigation-hold-orchestration-n8n.json` — o export do flow
+- `_README.md` — setup de credenciais, schema da tabela de auditoria, procedimento de dry-run
+- `audit-table-schema.sql` — DDL para a tabela de auditoria imutável
+- `hold-notice-template.md` — template de aviso de hold preenchível por matter
+
+Ferramentas: [n8n](/pt-BR/tools/n8n/) (orquestração), [Slack](/pt-BR/tools/slack/) (notificação no canal), [Claude](/pt-BR/tools/claude/) (opcional — para o resumo diário da atividade do log de auditoria para o responsável de legal-ops, não para nenhuma etapa de decisão).
+
+Relacionados: [ediscovery](/pt-BR/learn/ediscovery/), [modelo EDRM](/pt-BR/learn/edrm-model/), [gestão de matters](/pt-BR/learn/matter-management/).

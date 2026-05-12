@@ -1,0 +1,105 @@
+---
+slug: headcount-plan-reconciliation-n8n
+canonical_slug: headcount-plan-reconciliation-n8n
+locale: pt-BR
+verticals: [recruiting]
+title: Reconciliação de plano de headcount com n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, slack]
+roles: [recruiter, talent-acquisition, finance-business-partner]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/headcount-plan-reconciliation-n8n.mdx
+translated_at: "2026-05-12T21:45:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "d17279f5ceace94c8721ec7f68141c40283e6983820c40774b5f29d1c6111672"
+---
+
+Um flow n8n que reconcilia o plano de headcount da empresa (as contratações aprovadas por trimestre, por equipe, por nível, com datas de início) com as requisições abertas no ATS e as contratações reais registradas no HRIS — e posta um relatório semanal de desvio no Slack com as variâncias linha a linha. Substitui a planilha de "qual é a lacuna?" da sexta-feira do líder recrutador por um digest estruturado que o financeiro consegue validar. Captura os modos de falha que silenciosamente custam um trimestre — reqs abertas contra equipes que já estavam no plano, contratações registradas sob a equipe errada, conversões de prestadores contadas como novas contratações.
+
+## Quando usar
+
+- A empresa tem um plano de headcount escrito com granularidade de equipe / nível / data de início (não "vamos contratar 50 no Q3" — "12 em eng, dos quais 4 IC sênior, 2 IC pleno, com 6 começando até a semana 6").
+- Você tem pelo menos dois de: o plano de headcount em uma fonte estruturada (Carta, módulo de plano do BambooHR, planilha do financeiro), reqs abertas no [Ashby](/pt-BR/tools/ashby/) ou outro ATS, e contratações registradas no HRIS.
+- Você está fechando um trimestre e precisa ver a variância do forecast cedo o suficiente para fazer algo a respeito (não no dia anterior à reunião do conselho).
+- O plano tem rótulos de equipe que correspondem aos rótulos de equipe do ATS, OU você tem uma tabela de mapeamento que consegue manter.
+
+## Quando NÃO usar
+
+- **Sem plano estruturado.** Um plano que vive em um deck de slides ou em um documento de notas de reunião não é reconciliável. Coloque o plano em uma fonte estruturada primeiro; o flow não lê PowerPoint.
+- **O gestor de contratação é a fonte de verdade.** Se as contratações são registradas em planilhas informais de gestor por gestor, a reconciliação não tem significado porque o "real" é o que cada gestor diz que é. O valor do flow depende do HRIS ser o real.
+- **Empresas pré-Series-B com menos de 30 contratações por ano.** O overhead de reconciliação supera o valor em pequena escala; um líder recrutador e o CEO conseguem manter o plano na cabeça.
+- **O plano muda semanalmente.** Se o plano está sendo constantemente revisado no meio do trimestre, o sinal de variância é dominado pelo ruído de revisão de plano. Estabilize primeiro a cadência de mudanças de plano.
+
+## Configuração
+
+1. **Importe o flow.** Importe `apps/web/public/artifacts/headcount-plan-reconciliation-n8n/headcount-plan-reconciliation-n8n.json` para sua instância n8n. Cada nó tem `notesInFlow: true` para que as notas no canvas expliquem a lógica de reconciliação.
+2. **Configure as credenciais.** Três obrigatórias: `PLACEHOLDER_PLAN_DB_CRED_ID` (acesso de leitura para onde o plano está — Postgres, Snowflake ou um conector Sheets), `PLACEHOLDER_ASHBY_CRED_ID` (escopo de leitura do Ashby), `PLACEHOLDER_HRIS_CRED_ID` (escopo de leitura do HRIS; BambooHR / Workday / Rippling têm formato pré-definido, outros precisam de um conector).
+3. **Crie o mapeamento de equipe.** Um arquivo YAML em `n8n/data/team_mapping.yml` mapeia rótulos de equipe do plano para rótulos de equipe do ATS e do HRIS. Sem isso, o flow não consegue reconciliar entre sistemas. A criação do mapeamento é o custo único; a manutenção contínua é baixa (apenas quando equipes são criadas ou fundidas).
+4. **Configure o destino no Slack.** Relatórios de variância por equipe para canais por equipe, mais um relatório agregado para um canal de liderança de recrutamento. O nó `Compose Variance Report` do flow cria o template da mensagem; ajuste conforme a preferência da sua equipe por concisão ou detalhe.
+5. **Agende.** O padrão é segunda-feira às 8h no horário local. O nó Cron tem `timezone` definido explicitamente — ajuste para o fuso horário do seu escritório.
+6. **Dry-run no último trimestre.** Replay contra o plano e os reais do último trimestre. Confirme se os números de variância do flow correspondem ao que o seu parceiro de financeiro tinha no final do trimestre. Se não, o mapeamento de equipe ou a classificação de prestador-vs-CLT está errada.
+
+## O que o flow faz
+
+Oito nós. A lógica de reconciliação é determinística; o LLM entra apenas no passo de narrativa de variância (5), e apenas para redigir um resumo legível por humanos dos resultados determinísticos.
+
+1. **Cron Trigger** — Segundas-feiras 8h no fuso horário do escritório (fuso configurado explicitamente nas configurações do nó).
+2. **Fetch Plan** — extrai o plano de headcount do trimestre atual da fonte do plano. Schema: `team`, `level`, `count`, `target_start_date`, `req_status` (`approved` / `pending`).
+3. **Fetch Open Reqs (Ashby)** — extrai todas as reqs abertas do Ashby. Schema: `req_id`, `team`, `level`, `opened_at`, `target_start_date`.
+4. **Fetch Hires (HRIS)** — extrai as contratações feitas neste trimestre do HRIS. Schema: `hire_id`, `team`, `level`, `start_date`, `employment_type` (`fte` / `contractor` / `intern`).
+5. **Reconcile** — Nó de código. Faz join do plano + reqs + contratações por equipe/nível. Para cada célula (equipe, nível):
+   - **Aberto contra o plano** — contagem de reqs abertas vs meta do plano.
+   - **Contratado contra o plano** — contagem de contratações CLT vs meta do plano. Prestadores e estagiários NÃO são contados (o bucket de conversão de prestadores do flow é separado).
+   - **Variância** — `(plano - contratações - reqs_abertas)`. Negativo = acima do plano. Positivo = lacuna.
+   - **Sinal de drift** — sinaliza células onde a variância mudou >3 desde a última execução, sugerindo uma aprovação não planejada ou uma contratação perdida.
+   - **Células de anomalia**: reqs abertas sem entrada no plano (req rogue?), contratações registradas em equipes não presentes no plano (mal classificadas?), conversões de prestadores reportadas como novas contratações (contagem dupla?).
+6. **Claude Compose Narrative** — pega o output de reconciliação estruturado e escreve um resumo de variância de 200 palavras por canal de equipe + um resumo agregado de 400 palavras para a liderança. O LLM NÃO calcula variâncias; ele narra os resultados determinísticos. O prompt proíbe explicitamente o modelo de inferir causas ("a equipe está atrasada porque…") porque esse é o trabalho do leitor.
+7. **Post Per-Team** — mensagem Slack por canal de equipe com a variância apenas daquela equipe. Postura de privacidade: cada equipe vê apenas seus próprios números.
+8. **Post Aggregate** — mensagem Slack para o canal de liderança de recrutamento com a tabela entre equipes. Inclui células de anomalia com um link de volta para os registros de origem.
+
+## Realidade de custos
+
+Por execução semanal, com Claude Sonnet 4.6:
+
+- **Tokens LLM** — a composição de narrativa é o único passo com LLM. Tipicamente 2-4k tokens de input (tabela de reconciliação estruturada + instruções de skill) e 1-2k de output (resumos por equipe + agregado). Cerca de US$0,02-0,04 por execução. Negligível na cadência semanal.
+- **Custos de API do plano / ATS / HRIS** — chamadas de leitura apenas. Dentro das cotas gratuitas para Ashby e a maioria dos provedores de HRIS.
+- **Tempo do líder recrutador** — a vitória. A reconstrução da planilha na sexta à tarde leva 60-120 minutos semanais quando feita com cuidado; ler o digest de segunda leva 5-10 minutos. O maior ganho de tempo é nas células de anomalia, que frequentemente passam despercebidas na reconciliação manual até o final do trimestre.
+- **Tempo de configuração** — 90 minutos incluindo a criação do mapeamento de equipe. O mapeamento de equipe é o custo fixo de configuração.
+
+## Métrica de sucesso
+
+Acompanhe três coisas, mensalmente:
+
+- **Acurácia do plano no final do trimestre** — no final do trimestre, qual foi a diferença entre as contratações projetadas (semana 8 do trimestre) e as contratações reais (semana 13)? Deve cair do drift histórico da empresa para dentro de 5%. O alerta antecipado é o que torna a variância acionável.
+- **Tempo de resolução de anomalias** — tempo de "célula de anomalia sinalizada" até "anomalia resolvida" (corretamente classificada, plano atualizado ou contratação re-atribuída). Deve cair de "descoberta no final do trimestre" para menos de 5 dias.
+- **Frequência de revisão do plano** — com que frequência o plano muda no meio do trimestre. O flow surfacea isso; se as revisões são semanais, a estabilidade do plano em si é o problema e o sinal de variância é ruído.
+
+## vs alternativas
+
+- **vs dashboards nativos do ATS (Ashby Hiring Plan, Greenhouse Headcount Planning).** Os dashboards nativos do ATS funcionam se o ATS é tanto a fonte do plano quanto a fonte do real. Escolha-os se conseguir consolidar. Escolha o flow se seu plano está no sistema do financeiro, suas reqs estão no ATS e suas contratações estão no HRIS — três sistemas que precisam de join e que nenhum dashboard único do ATS consegue ver.
+- **vs módulos de planejamento de headcount do Carta / Pave / Lattice.** O mesmo que acima; se a plataforma é sua fonte única, use-a. O flow é para o caso multi-sistema.
+- **vs um dashboard construído pelo financeiro.** Dashboards de BI construídos pelo financeiro (Looker, Mode, Hex) lidam bem com os joins. Escolha BI se tiver capacidade analítica. Escolha o flow se não tiver, ou se quiser a variância sendo empurrada via Slack em vez de puxada por dashboard.
+- **vs a planilha manual de sexta-feira.** O padrão. Modo de falha previsível: o autor da planilha sai, a metodologia deriva e as variâncias no final do trimestre surpreendem o conselho. O flow é a correção leve.
+
+## Pontos de atenção
+
+- **Drift de mapeamento de equipe.** *Proteção:* o primeiro passo de reconciliação do flow verifica que toda equipe do plano e toda equipe do ATS e toda equipe do HRIS aparecem no arquivo de mapeamento. Entidades sem mapeamento aparecem como células de anomalia; o relatório as sinaliza explicitamente em vez de descartá-las silenciosamente.
+- **Contagem dupla de conversão de prestador.** *Proteção:* a consulta ao HRIS filtra por `employment_type = 'fte'`. Conversões de prestadores existentes para CLT aparecem em uma seção separada de "conversões neste trimestre", não na contagem de novas contratações.
+- **Revisão de plano no meio do trimestre apagando a variância.** *Proteção:* o relatório mostra os números do plano atual E os números do plano original do início do trimestre, com o delta surfaceado. O leitor vê ambos os sinais.
+- **Contratações fora de ciclo (equipes adquiridas, estagiário-para-CLT).** *Proteção:* o flow sinaliza qualquer contratação com `start_date` anterior ao início do trimestre como "fora de ciclo" e a surfacea separadamente. Estes são comuns (acqui-hire, fechamento tardio) e precisam de leitura diferente das contratações regulares do plano.
+- **Privacidade: canais por equipe vendo os números de outras equipes.** *Proteção:* o template de post Slack por equipe referencia apenas a linha de variância dessa equipe. O post agregado (entre equipes) vai apenas para o canal de liderança de recrutamento, não para canais por equipe.
+- **Fonte do plano desatualizada.** *Proteção:* o flow verifica o `last_updated_at` da fonte do plano. Se tiver mais de 14 dias, emite um cabeçalho de aviso no relatório ("Plano atualizado há >14 dias — a variância pode refletir desatualização do plano, não lacuna real").
+
+## Stack
+
+O bundle de artefatos está em `apps/web/public/artifacts/headcount-plan-reconciliation-n8n/` e contém:
+
+- `headcount-plan-reconciliation-n8n.json` — o export do flow n8n com todos os nós configurados
+- `_README.md` — configuração de credenciais, formato de mapeamento de equipe, procedimento de dry-run
+- `team-mapping-template.yml` — o YAML de mapeamento de equipe para copiar e preencher
+
+Ferramentas que o workflow assume que você usa: [n8n](/pt-BR/tools/n8n/) (a orquestração), [Ashby](/pt-BR/tools/ashby/) (o ATS — troque para [Greenhouse](/pt-BR/tools/greenhouse/) substituindo o nó de busca de reqs), [Claude](/pt-BR/tools/claude/) (composição de narrativa), [Slack](/pt-BR/tools/slack/) (o destino do relatório). O conector HRIS é por empresa.
+
+Conceitos relacionados: [workforce planning](/pt-BR/learn/workforce-planning/), [recruiting funnel metrics](/pt-BR/learn/recruiting-funnel-metrics/), [cost per hire](/pt-BR/learn/cost-per-hire/).
