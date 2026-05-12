@@ -1,0 +1,107 @@
+---
+slug: privilege-review-batch-skill
+canonical_slug: privilege-review-batch-skill
+locale: de
+verticals: [legal-ops]
+title: Batch-Privilege-Review mit Claude
+artifact_type: claude-skill
+tools_used: [claude, relativity]
+roles: [legal-ops, in-house-counsel, paralegal]
+difficulty: advanced
+time_to_setup: 90min
+human_tested: false
+translated_from: en/privilege-review-batch-skill.mdx
+translated_at: "2026-05-13T02:15:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "25551f8efe1ae929299cdbae44488a013ebc082ee8a528b4da156b4e818af3f1"
+---
+
+Ein Claude Skill, der einen Batch von Dokumenten nimmt — typischerweise einen Ordner aus E-Mails und Anhängen, exportiert von einer [eDiscovery](/de/learn/ediscovery/)-Prüfplattform, oder ein Verzeichnis von Verträgen aus einem CLM — und einen Erstdurchgangs-[Privilege-Review](/de/learn/privilege-review/) ausführt. Für jedes Dokument gibt er eines von `privileged`, `not-privileged` oder `borderline-needs-attorney` aus, gestützt durch zitationsbasierte Belege, plus einen Entwurf für einen [Privilege-Log](/de/learn/privilege-log-format/)-Eintrag für jedes als `privileged` klassifizierte Dokument.
+
+Dies ist eine Triage-Schicht, keine Bestimmungsschicht. Der Skill komprimiert den ersten Durchgang eines Anwalts über ein fünfstelliges Dokumentenuniversum in eine Routing-Entscheidung: 70–80% offensichtlich nicht privilegiert, 10–15% offensichtlich privilegiert mit vorab erstellten Log-Eintragentwürfen, 10–20% in einer Grenzfall-Queue mit dem spezifischen Anliegen (Anwaltsrolle unklar, Dritter anwesend, Teilprivileg, Verzichtindikator) benannt, damit der prüfende Anwalt seine Zeit mit den Datensätzen verbringt, die tatsächlich Urteil erfordern. Endentscheidungen bleiben Anwaltsarbeit.
+
+Das Bundle unter `apps/web/public/artifacts/privilege-review-batch-skill/` enthält `SKILL.md` sowie drei Referenzvorlagen, die das Fallteam vor dem Ausführen auf Produktionsdokumenten befüllt: `references/1-privilege-rubric.md`, `references/2-privilege-log-format.md` und `references/3-jurisdictional-tests.md`.
+
+## Wann verwenden
+
+- **eDiscovery-Erstdurchgang.** Ein 5.000–50.000-Dokument-Review-Universum landet nach Sammlung und Deduplizierung beim Team. Rein-Anwalt-Review kostet 10–30 Minuten pro Dokument bei $400–700/Stunde für Vertrags-Anwälte und weit mehr für Associate-Zeit. Das Ausführen dieses Skills zuerst bedeutet, dass Anwälte die Grenzfall-Queue und eine Stichprobe des hochkonfidenten Sets berühren, nicht jedes Dokument.
+- **CLM-Privilege-Audit.** Eine Regulierungsanfrage, M&A-Due-Diligence oder internes Audit benötigt das Vertragsrepository, das auf Dokumente durchsucht wird, die fälschlicherweise als „privilegiert" getaggt sind (Überforderung) oder das Tag fehlt, wo es angewendet werden sollte (Unterforderung). Der Skill batchet das Korpus und hebt die Diskrepanzen für die Anwaltsprüfung hervor.
+- **Ermittlungs-Triage.** Bevor das Postfach eines Custodians an externe Anwälte zur Produktion übergeben wird, klassifiziert der Skill intern, sodass privilegierter Inhalt durch Counsel geroutet wird statt in einer Massenübergabe enthalten zu sein.
+- **Kalibrierung einer neuen Rubrik.** Wenn das Mandat neu ist und das Team die Privilege-Rubrik noch nicht gesperrt hat, den Skill auf einer 200–500-Dokument-Stichprobe ausführen, seine Entscheidungen mit Anwaltsentscheidungen vergleichen, die Rubrik in `references/1-privilege-rubric.md` abstimmen, wiederholen. Der Kalibrierungsmodus (Schritt 4 in `SKILL.md`) ist für diese Schleife konzipiert.
+
+## Wann NICHT verwenden
+
+- **Endgültige Privilege-Entscheidungen.** Die Ausgabe ist eine Empfehlung. Ein hier als `privileged` markiertes Dokument braucht noch Anwaltsgenehmigung vor dem Einbehalten aus der Produktion; ein als `not-privileged` markiertes Dokument braucht noch eine Anwalts-Stichprobe vor der Freigabe. Privilegiertes Material zu produzieren, weil der Skill es als sauber bezeichnete, ist eine Malpraktik-Exposition, gegen die kein Konfidenzscore isoliert.
+- **Nicht-Tier-A-KI-Anbieter.** Privilegierter Inhalt darf nicht durch Consumer-Tier-Claude, einen allgemeinen Chatbot, ein Browser-Plugin oder einen ungeprüften SaaS-Wrapper geroutet werden. Der Skill überprüft den konfigurierten Endpunkt beim Start gegen die Allowlist in `references/3-jurisdictional-tests.md` und weigert sich auszuführen, wenn der Endpunkt nicht auf der Liste steht. Siehe [KI-Policy für Legal-Teams](/de/learn/ai-policy-for-legal-teams/) für den zugrundeliegenden Rahmen.
+- **Automatisierte Produktionsentscheidungen.** Kein Dokument sollte allein auf Basis der Skill-Ausgabe an eine anfordernde Partei freigegeben werden. Produktion ist eine Anwaltsentscheidung gegen den vollständigen Datensatz.
+- **In-Flight-Verhandlungsentwürfe mit externen Anwälten.** Die meisten Kanzlei-KI-Policys schließen Live-Entwürfe von KI-Tooling aus. Auf ausgeführten und eingehenden Dokumenten ausführen, nicht auf dem, was derzeit redigiert wird.
+- **Gescannte Bild-PDFs ohne OCR-Schicht.** Der Skill bricht mit `error: "ocr_required"` ab, statt leeren Text zu erzeugen und das Dokument still als nicht-privilegiert zu klassifizieren. OCR ist eine separate vorgelagerte Concern.
+
+## Setup
+
+1. **Den Skill ablegen.** `privilege-review-batch.skill` in Ihr Claude Code-Skills-Verzeichnis oder Ihren Enterprise-Claude-Tenant kopieren. Der Skill legt einen Einstiegspunkt frei, der den vollständigen Batch ausführt: `process_batch(batch_path, metadata_csv, rubric_path, jurisdiction, prior_decisions_csv?, borderline_threshold?)`.
+2. **Die Rubrik befüllen.** `references/1-privilege-rubric.md` bearbeiten mit: der Mandats-ID, dem geltenden Privilege-Standard (`attorney-client`, `work-product` oder `both`), der Liste der Inhouse- und Außenkanzlei-Anwalt-Custodians mit E-Mail-Adressen (kleingeschrieben, passend zu Produktionsmetadaten), dem sachlichen Umfang, dem Privilege-Kreis (welche internen Mitarbeiter im Empfängerfeld sein können, ohne das Privileg zu brechen), Verzichtindikatoren spezifisch für das Mandat und das Anticipation-of-Litigation-Datum für Arbeitsprodukte, falls zutreffend.
+3. **Das Log-Format auswählen.** `references/2-privilege-log-format.md` bearbeiten, um es an das vom Gericht vorgeschriebene Schema anzupassen (Federal Rule 26(b)(5)(A) ist der Standard; Delaware Court of Chancery und SDNY/EDNY haben Variationen, die die Datei dokumentiert). Der Skill entwirft Einträge in Markdown; das Produktionstool des Mandats exportiert in das erforderliche Format des Gerichts.
+4. **Die Jurisdiktion festlegen.** `references/3-jurisdictional-tests.md` bearbeiten, um zu bestätigen, dass die Jurisdiktion des Mandats auf der genehmigten Liste steht (`us-federal`, `us-state-CA`, `uk`, `eu` sind vordefiniert; weitere mit Anwaltsgenehmigung hinzufügen). Die `ALLOWED_ENDPOINTS`-Allowlist mit den Tier-A-Endpunkten befüllen, die die Kanzlei genehmigt hat.
+5. **Gegen eine Anwaltsgekennzeichnete Stichprobe kalibrieren.** 50–100 Dokumente ziehen, die bereits von einem Anwalt für dieses oder ein ähnliches Mandat geprüft wurden. Die vorherigen Entscheidungen als `prior_decisions_csv` übergeben. Den Skill ausführen. Den Kalibrierungsbericht inspizieren (Schritt 4 der Methode): Übereinstimmung sollte mindestens 90% betragen, bevor auf die breitere Ausgabe vertraut wird. Wenn niedriger, Rubrik abstimmen — typischerweise ist die Anwalt-Custodian-Liste, der Sachgebietsumfang oder der Privilege-Kreis die Lücke — und wiederholen.
+6. **Den vollständigen Batch ausführen.** Das Exportverzeichnis verarbeiten; die Grenzfall-Queue zuerst prüfen, die hochkonfidenten Stichprobenabrufe danach, dann die Log-Eintragentwürfe abschließen.
+
+## Was der Skill tatsächlich tut
+
+Für jedes Dokument im Batch vier geordnete Schritte:
+
+1. **Zwei-Durchgangs-Extraktion.** Durchgang A extrahiert Text und bewahrt Absatzindizes; für `.eml` und `.msg` parst er den MIME-Baum und gibt einen Datensatz pro Teil aus, damit das Privilege von Anhängen unabhängig von der Deck-E-Mail bewertet werden kann. Durchgang B verbindet das Dokument mit seiner Zeile in der Metadaten-CSV und löst jede Partei gegen die Anwalt-Custodian-Liste der Rubrik auf (`is_attorney: true | false | unknown`). Das explizite Aufdecken von metadatengetriebenen Anwalt-Flags als Vorklassifizierungskontext verhindert, dass das Modell sie lautstark aus dem Body ableitet, und bedeutet, dass ein Nur-Metadaten-Fallback-Pfad existiert, wenn die Textextraktion fehlschlägt.
+2. **Zitationsbasierte Klassifizierung, ein Durchlauf pro Dokument.** Der Per-Dokument-Prompt kodiert den Privilege-Standard der Rubrik, den Jurisdiktionstest aus `references/3-jurisdictional-tests.md`, die aufgelöste Parteiliste und den Dokumenttext. Claude gibt zurück: Klassifizierung, Basis (welcher Testprong ausgelöst hat), Belege (ein bis drei verbatim Spannweiten mit Zitationskoordinaten), Konfidenz und ein optionales `concern`-Feld für Grenzfall-Aufrufe, das den Zweifel benennt. Per-Dokument-Prompts (statt einem Mega-Prompt) lassen nur Fehler wiederholen, decken Token pro Aufruf ab und isolieren Halluzinationen auf einen einzelnen Datensatz.
+3. **Grenzfall-Routing.** First-Match-Wins-Regeln: Konfidenz unter Schwellenwert; jede Partei markiert `is_attorney: unknown`; Dritter Empfänger außerhalb des Privilege-Kreises; oder Dokumenttyp, der einem konfigurierten Always-Route-Muster entspricht. Eine gut abgestimmte Rubrik produziert 10–20% Grenzfall-Rate.
+4. **Log-Eintragentwürfe für das privilegierte Set.** Für jedes `privileged`-Dokument einen Log-Eintrag aus dem Schema in `references/2-privilege-log-format.md` entwerfen, mit dem Feld `attorney_review_status` fest kodiert auf `draft — pending attorney review`.
+
+Der Halluzinationsschutz sitzt in Schritt 2: Jede vom Modell zurückgegebene Belegspannweite, die nicht byte-identisch mit einem Teilstring der Dokumentteile ist, wird abgelehnt, und das Dokument wird in die Grenzfall-Queue gezwungen mit `concern: "evidence_not_grounded"`, statt einen zuversichtlichen-aber-fiktiven Datensatz auszugeben.
+
+## Kostenrealität
+
+Zu Anthropic-API-Listenpreisen für Claude Sonnet 4.5 ist der Per-Dokument-Token-Spend ungefähr:
+
+- Input: 3.000–15.000 Token pro Dokument (Text + Teile + Rubrik + Jurisdiktionstest). Lange Verträge und Mehrfachanhang-E-Mails liegen am oberen Ende. Bei etwa $3 pro Million Input-Token sind das $0,009–$0,045 pro Dokument.
+- Output: 200–600 Token pro Dokument (Klassifizierungsdatensatz + Belege + Log-Eintragentwurf, wo zutreffend). Bei etwa $15 pro Million Output-Token sind das $0,003–$0,009 pro Dokument.
+
+Gesamt: ungefähr $0,012–$0,054 pro Dokument vor Prompt-Caching. Prompt-Caching der Rubrik und des Jurisdiktionstests (die über den Batch konstant sind) reduziert typischerweise die Input-Kosten um 60–80% — die Rubrik allein ist 1.500–3.000 Token, die sonst bei jedem Dokument erneut abgerechnet würden.
+
+Im eDiscovery-Maßstab mit Caching:
+
+- 5.000 Dokumente: $30–$120
+- 20.000 Dokumente: $120–$480
+- 100.000 Dokumente: $600–$2.400
+
+Im Vergleich dazu: Rein-Anwalt-Erstdurchgang bei $400–700/Stunde für Vertrags-Anwälte, die 30–60 Dokumente pro Stunde prüfen: 20.000 Dokumente sind ungefähr 333–667 Anwaltsstunden oder $133.000–$467.000 reine Prüfarbeit. Der Skill beseitigt keine Anwaltsstunden — Grenzfall-Review und Finalisierung bleiben — konzentriert sie aber auf Datensätze, die Urteil brauchen, mit realisierten Review-Durchsatzverbesserungen typischerweise 4–8x bei erstdurchgang-berechtigten Batches.
+
+## Erfolgsmetrik
+
+Eine einzige Zahl, die im Zeitverlauf zu beobachten ist: **Grenzfall-Queue-Übereinstimmungsrate** — der Anteil der Dokumente, die der Skill in die Grenzfall-Queue geroutet hat und die der Anwalt letztlich als privilegiert oder nicht-privilegiert mit hoher Zuversicht entschieden hat. Das Ziel ist ungefähr 60–80%. Eine Queue, bei der Anwälte 95% der Dokumente auf `privileged` (oder 95% auf `not-privileged`) mit wenig Zögern umschlagen, ist eine Queue, die der Skill selbst hätte klassifizieren sollen; Rubrik oder Schwellenwerte abstimmen. Eine Queue, bei der jedes Dokument langer Beratung bedarf, ist korrekt abgestimmt.
+
+Sekundärmetriken, pro Batch verfolgt:
+
+- **Falsch-nicht-privilegiert-Rate** (Skill sagte `not-privileged`, Anwalt sagte `privileged` — der Produktionsrisiko-Fehler). Ziel unter 1%. Über 2% ist ein Halt-und-Abstimm-Signal.
+- **Falsch-privilegiert-Rate** (Überforderungsrisiko, Sanktionsexposition wenn ein Gericht zwingt). Ziel unter 5%. Über 10% ist ein Halt-und-Abstimm-Signal.
+- **Durchsatz** — Dokumente pro Anwaltsstunde nach Skill-Lauf, einschließlich Grenzfall-Review und Log-Finalisierungsarbeit. Pre-Skill-Baseline ist typischerweise 30–60 Docs/Stunde; Post-Skill sollte bei 150–300 Docs/Stunde für die Grenzfall-Queue plus Finalisierungsarbeit landen.
+
+## Vergleich mit Alternativen
+
+- **vs. Relativity Active Learning.** Relativitys kontinuierliches Active Learning rankt Dokumente nach wahrscheinlicher Reaktionsfähigkeit oder Privilege unter Verwendung eines Modells, das auf Anwaltskodierungsentscheidungen für das Mandat trainiert wurde. Es ist ausgezeichnet beim Ranking und Priorisieren; es ist schwächer beim Produzieren verteidigbarer Per-Dokument-Erklärungen und beim Entwerfen des Log-Eintrags. Dieser Skill produziert einen zitationsbasierten Datensatz pro Dokument und einen Log-Eintragentwurf — nützlich wenn das Team einen Audit-Trail braucht oder wenn der Log der Engpass ist statt der Review-Queue. Die beiden ergänzen sich, sind keine Ersätze: Active Learning rankt die Queue, der Skill entwirft die Datensätze und den Log.
+- **vs. Everlaws Privilege-Detection-ML.** Everlaw und ähnliche Plattformen liefern In-Produkt-Privilege-Detektoren, die auf breiten Prozessführungskorpora trainiert wurden. Sie funktionieren ohne die mandatsspezifische Rubrik, die dieser Skill erfordert, was schneller zu starten ist, aber weniger präzise bei mandatsspezifischen Fakten (das E-Mail-Handle des General Counsels, der Privilege-Kreis dieses Mandats, die spezifischen Themen im Umfang). Für ein einmaliges kleines Mandat ohne Rubrik-Arbeitsbereitschaft ist der In-Produkt-Detektor die richtige Wahl. Für Mandate, bei denen die Rubrik existiert und das Team die Log-Einträge entworfen haben muss, produziert dieser Skill eine mandatspassendere Ausgabe.
+- **vs. manueller Vertrags-Anwalt-Erstdurchgang.** Die historische Baseline. Zuverlässig, verteidigbar und ungefähr 100–1000x teurer im oben genannten Maßstab. Der Skill ersetzt den Vertrags-Anwalt nicht; er verschiebt die Anwaltsstunden von „jedes Dokument ansehen" auf „über die Grenzfall-Queue entscheiden und den Log abschließen", was die Arbeit ist, die tatsächlich rechtliches Urteil erfordert.
+
+## Fallstricke
+
+- **Privilege-Überforderung.** Aufgeblähte Logs ziehen Zwangsanträge und Sanktionsrisiken an. Schutz: Wenn `prior_decisions_csv` bereitgestellt wird, berechnet der Skill `false_privileged_rate` gegen Anwaltsentscheidungen und warnt, wenn sie 5% überschreitet; ohne vorherige Entscheidungen sampelt er 10% der `privileged`-Aufrufe in die Grenzfall-Queue für Anwalt-Stichprobe, bevor der Batch abschließt.
+- **Teilprivileg-Dokumente.** Eine einzelne E-Mail kann teilweise privilegiert sein (Rechtsberatungsabsatz) und teilweise nicht-privilegiert (weitergeleitetes Geschäftsupdate). Das Dokument als einen Aufruf zu behandeln ist das Fehlermuster. Schutz: Extraktion gibt einen Datensatz pro MIME-Teil aus; Klassifizierung läuft pro Teil; Dokumente mit gemischten Klassifizierungsteilen routen in die Grenzfall-Queue mit `concern: "partial_privilege"` und `redaction_required: true`. Schwärzung selbst ist Anwaltsarbeit.
+- **Arbeitsprodukt vs. Attorney-Client-Konfusion.** Die Arbeitsprodukt-Doktrin schützt andere Dinge (Prozesserwartung, anwaltliche Gedankenimpressionen) als das Attorney-Client-Privileg (vertrauliche anwaltliche Rechtsberatung), und der Arbeitsprodukt-Test erfordert keinen Anwalt in der Kommunikation. Schutz: Die Rubrik benennt, welcher Standard gilt; das `basis`-Feld in der Ausgabe benennt den ausgelösten Prong; wenn der Skill nicht auflösen kann, welcher Standard gilt, routet er in die Grenzfall-Queue mit `concern: "standard_resolution_required"`.
+- **Verzicht durch Drittempfänger.** Eine privilegierte Kommunikation, die einen nicht-mandanten Dritten in CC setzt, verzichtet im Allgemeinen auf das Privileg. Schutz: Der Grenzfall-Router prüft jeden Empfänger gegen den Privilege-Kreis der Rubrik und routet jedes Dokument mit einem Außenempfänger in die Grenzfall-Queue mit dem benannten Dritten im `concern`-Feld, damit der Anwalt die Common-Interest-Ausnahme oder eine ähnliche Doktrin bei der Prüfung anwenden kann.
+- **Tier-A-Anbieter-Enforcement.** Das Routing privilegierter Dokumente durch einen nicht genehmigten KI-Endpunkt kann das Privileg aufheben. Schutz: Der Startup-Hook des Skills liest die `ALLOWED_ENDPOINTS`-Allowlist aus `references/3-jurisdictional-tests.md` und weigert sich auszuführen, wenn der konfigurierte Endpunkt nicht auf der Liste steht. Der Allowlist-Eigentümer ist in der KI-Policy benannt; Änderungen erfordern Genehmigung.
+- **Gerichtliche Offenlegungsnormen variieren.** KI-gestützte Privilege-Review wird zunehmend akzeptiert, aber ortsspezifische Offenlegungspflichten bestehen (einige Richter erwarten eine Beschreibung der KI-Methodik im Produktionsprotokoll). Mit lokalem Anwalt verifizieren, bevor der Skill in einem strittigen Mandat eingesetzt wird.
+
+## Stack
+
+- [Claude](/de/tools/claude/) — nur Tier-A-Endpunkt (Anthropic API Enterprise-Tier oder Ihr Enterprise-Claude-Tenant)
+- [Relativity](/de/tools/relativity/), [Everlaw](/de/tools/everlaw/) oder [DISCO](/de/tools/disco/) — Quelle des Dokument-Exports und der Metadaten-CSV
+- Das Skill-Bundle unter `apps/web/public/artifacts/privilege-review-batch-skill/`
+- Verwandte Lektüre: [eDiscovery](/de/learn/ediscovery/), [privilege review](/de/learn/privilege-review/), [privilege log format](/de/learn/privilege-log-format/), [EDRM model](/de/learn/edrm-model/), [AI policy for legal teams](/de/learn/ai-policy-for-legal-teams/)

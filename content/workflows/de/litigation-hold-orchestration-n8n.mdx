@@ -1,0 +1,96 @@
+---
+slug: litigation-hold-orchestration-n8n
+canonical_slug: litigation-hold-orchestration-n8n
+locale: de
+verticals: [legal-ops]
+title: Litigation-Hold-Orchestrierung mit n8n
+artifact_type: n8n-flow
+tools_used: [n8n, slack, claude]
+roles: [legal-ops, in-house-counsel, ediscovery-lead]
+difficulty: advanced
+time_to_setup: 120min
+human_tested: false
+translated_from: en/litigation-hold-orchestration-n8n.mdx
+translated_at: "2026-05-13T02:15:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "995fc46e9a102ae7bcc4ee64605d3e667802b7999cee0717b04a555d094609cd"
+---
+
+Ein n8n-Flow, der einen Litigation-Hold-Ausgabezyklus orchestriert — die Hold-Mitteilung per E-Mail und Slack an benannte Custodians ausstellt, Bestätigungen mit Erinnerungen in einem konfigurierbaren Rhythmus verfolgt, Nicht-Bestätigende an den Legal-Ops-Leiter und den Vorgesetzten des Custodians eskaliert und jede Aktion in einer unveränderlichen Audit-Tabelle protokolliert, die die Kanzlei verwendet, wenn die Angemessenheit des Holds später in Frage gestellt wird. Ersetzt den manuellen Zyklus des Legal-Ops-Administrators mit Tabellenkalkulation und Outlook-Regeln (typischerweise eine laufende Belastung von 2–4 Stunden pro Woche bei wenigen aktiven Holds) durch einen deterministischen Flow, der keinen Custodian fallen lassen kann.
+
+## Wann verwenden
+
+- Die Kanzlei stellt Litigation Holds mit einer Häufigkeit aus, bei der manuelle Verfolgung zu Fehlern führt — üblicherweise bei mehr als 3 aktiven Holds gleichzeitig.
+- Sie haben eine Custodian-of-Record-Quelle: eine Custodian-Verwaltungstabelle in der E-Discovery-Plattform ([Relativity](/de/tools/relativity/), [Everlaw](/de/tools/everlaw/), [Logikcull](/de/tools/logikcull/)) oder in einem gepflegten Legal-Ops-CSV.
+- Die Kanzlei benötigt einen verteidigbaren Audit-Trail für die Hold-Angemessenheit. Die Audit-Tabelle des Flows ist die Antwort auf „zeigen Sie uns, dass Sie vernünftig gehandelt haben, um Daten zu erhalten".
+- Der Legal-Ops-Leiter und externe Anwälte genehmigen die Hold-Ausstellung; der Flow übernimmt die laufende Verfolgung, nicht die Entscheidung zur Ausstellung.
+
+## Wann NICHT verwenden
+
+- **Einzelne Holds, bei denen manuelle Verfolgung in Ordnung ist.** Die Einrichtungskosten (120 Minuten plus Integration mit der Custodian-Quelle) amortisieren sich ab der ~3-aktive-Holds-Marke, nicht bei einem.
+- **Auto-Eskalation, die Counsel umgeht.** Die Eskalationspfade des Flows sind konfigurierbar, aber der Standard sendet an den Legal-Ops-Leiter, NICHT direkt an den GC oder externe Anwälte. Der Leiter wendet Urteilsvermögen an, welche Nicht-Bestätigungen Aufmerksamkeit von Counsel verdienen.
+- **Hold-Mitteilungen, die maßgeschneiderte Sprache pro Custodian erfordern.** Der Flow erstellt Vorlagen pro Mandat; wenn jede Mitteilung handgeschriebene Sprache braucht, ist der Engpass nicht die Orchestrierung.
+- **Ersatz des Urteils von Counsel bezüglich Hold-Umfang.** Der Flow verfolgt den Hold für die Custodians, die Counsel benannt hat. Custodians hinzuzufügen oder zu entfernen ist eine Entscheidung von Counsel, keine Flow-Entscheidung.
+
+## Setup
+
+1. **Importieren Sie den Flow.** Legen Sie `apps/web/public/artifacts/litigation-hold-orchestration-n8n/litigation-hold-orchestration-n8n.json` in Ihre n8n-Instanz.
+2. **Verdrahten Sie die Credentials.** Vier erforderliche: `PLACEHOLDER_CUSTODIAN_DB_CRED_ID` (Lesezugriff auf Custodian-Quelle), `PLACEHOLDER_SMTP_CRED_ID` (SMTP für Hold-Mitteilungs-E-Mail), `PLACEHOLDER_SLACK_CRED_ID` (Slack für In-Channel-Benachrichtigung), `PLACEHOLDER_AUDIT_DB_CRED_ID` (Schreibzugriff auf unveränderliche Audit-Tabelle).
+3. **Verfassen Sie die Hold-Mitteilungsvorlage.** Pro Mandat schreiben Sie eine Markdown-Vorlage unter `n8n/data/hold-notices/<matter-id>.md`. Die Vorlage enthält von Counsel genehmigte Sprache zum Erhaltungsumfang, verbotene Aktionen (Löschung, Änderung) und Bestätigungsanweisungen.
+4. **Konfigurieren Sie die Eskalationspfade.** Standard des Flows: Erinnerung bei +3, +7, +14 Tagen; Eskalation an Legal-Ops-Leiter bei +14; Eskalation an Vorgesetzten des Custodians bei +21. Passen Sie je nach Risikobereitschaft der Kanzlei an.
+5. **Richten Sie die Audit-Tabelle ein.** Eine Postgres/Snowflake-Tabelle, die nach `(hold_id, custodian_id, action, timestamp)` kodiert ist, mit einer Append-Only-Einschränkung auf DB-Ebene (unveränderlich; Counsel muss nachweisen können, dass das Audit-Log nachträglich nicht bearbeitet werden kann).
+6. **Trockenlauf bei einem abgeschlossenen Hold.** Replizieren Sie die Custodian-Liste eines abgeschlossenen Holds. Bestätigen Sie, dass die Benachrichtigungs-, Erinnerungs- und Eskalations-Timings dem entsprechen, was der Legal-Ops-Administrator zuvor manuell getan hat.
+
+## Was der Flow tut
+
+Sieben Knoten in zwei Phasen. Phase 1 (Ausstellung) feuert einmalig pro Hold. Phase 2 (Verfolgung) ist ein täglicher Cron, der auf Nicht-Bestätigende prüft und Erinnerungen/Eskalationen versendet.
+
+1. **Issue Trigger** — manueller oder Webhook-Trigger von der Legal-Ops-Plattform, wenn Counsel einen Hold als ausstellungsbereit markiert.
+2. **Load Custodian List** — lädt die Custodian-Liste aus der konfigurierten Quelle für das Mandat.
+3. **Send Hold Notice** — E-Mail + Slack an jeden Custodian. Die E-Mail enthält die Hold-Mitteilungsvorlage und einen eindeutigen Bestätigungslink pro Custodian. Audit-Log: eine Zeile pro Custodian pro `notice_sent`.
+4. **Daily Cron Tracker** (separater Workflow-Trigger) — Montag bis Freitag um 9 Uhr Bürozeitzone. Prüft die Audit-Tabelle auf Custodians, die innerhalb des konfigurierten Fensters nicht bestätigt haben.
+5. **Determine Action** — Code-Knoten. Bestimmt für jeden Nicht-Bestätigenden: Erinnerung senden (bei +3, +7), an Legal-Ops-Leiter eskalieren (bei +14), an Vorgesetzten eskalieren (bei +21).
+6. **Dispatch Reminder / Escalation** — sendet Erinnerungs-E-Mail oder Eskalation je nach bestimmter Aktion. Audit-Log-Eintrag pro Versand.
+7. **Acknowledgement Webhook** — separater Webhook, der den Bestätigungsklick des Custodians empfängt. Schreibt in die Audit-Tabelle; stoppt weitere Erinnerungen für diesen Custodian.
+
+## Kostenrealität
+
+- **n8n-Kosten** — selbst gehostet kostenlos; n8n Cloud beim Workflow-Ausführungsvolumen, das dieser erzeugt (~3–5/Tag pro aktivem Hold) liegt bequem im Starter-Plan.
+- **LLM-Token** — keine. Der Flow ist deterministisch.
+- **SMTP / Slack** — innerhalb der Standardkontingente.
+- **Legal-Ops-Admin-Zeit** — der Gewinn. Manuelle Verfolgung von 5–10 aktiven Holds ist 4–8 Stunden/Woche. Flow-Betrieb bedeutet das Überwachen der Audit-Tabelle auf echte Ausnahmen, ~30 Min./Woche.
+- **Einrichtungszeit** — 120 Minuten einschließlich der Audit-Tabellen-Bereitstellung, plus 30–60 Minuten pro Mandat für das Verfassen der Hold-Mitteilungsvorlage.
+
+## Erfolgsmetrik
+
+- **Zeit von der „Ausstellen"-Entscheidung von Counsel bis zur tatsächlichen Ausstellung** — sollte auf unter 1 Stunde sinken (manuell ist es bei großen Custodian-Listen oft ein Tag).
+- **Bestätigungsrate bei +14 Tagen** — sollte bei Routine-Holds über 95% liegen. Darunter muss die Mitteilungsvorlage überarbeitet werden oder die Custodian-Liste hat veraltete Einträge.
+- **Audit-Vollständigkeit bei Counsel-Überprüfung** — Anteil der Holds, für die Counsel bei Bedarf eine vollständige verteidigbare Audit-Kette vorlegen kann. Sollte 100% betragen; die Audit-Tabelle ist die Quelle.
+
+## Vergleich mit Alternativen
+
+- **vs. integriertem Hold-Modul der E-Discovery-Plattform** ([Relativity](/de/tools/relativity/) Legal Hold, [Logikcull](/de/tools/logikcull/), [Everlaw](/de/tools/everlaw/)). Wählen Sie das Plattformmodul, wenn Sie in der E-Discovery-Plattform leben. Wählen Sie den Flow, wenn Ihre Custodians Slack, E-Mail und HR-Systeme umfassen und Sie Benachrichtigungsoberflächen jenseits der Plattform-Standardwerte benötigen.
+- **vs. SaaS-Hold-Management-Tools** (Onna, Exterro Legal Hold). Wählen Sie jene für erweitertes Custodian-Self-Service und integrierte Erhaltung. Wählen Sie den Flow, wenn Sie die Orchestrierung in Ihrer eigenen Infrastruktur mit dem Audit-Log in Ihrer eigenen DB wünschen.
+- **vs. Tabellenkalkulation + Outlook-Regeln.** Der Standard und die Ursache verlorener Custodians im großen Maßstab. Der Flow ist der deterministische Ersatz.
+
+## Fallstricke
+
+- **Custodian-Listen-Drift.** *Schutz:* Der Flow zieht die Custodian-Liste bei jeder Prüfung erneut, mit dem `last_updated_at` der Quelle geprüft. Wenn die Liste ohne Genehmigung von Counsel gedriftet ist (Custodian hinzugefügt/entfernt), stellt der Flow die Diff dem Legal-Ops-Leiter vor, anstatt still auf der neuen Liste zu handeln.
+- **Mutierbarkeit der Audit-Tabelle.** *Schutz:* Die Audit-Tabelle muss auf DB-Ebene Append-Only sein (Postgres: `REVOKE UPDATE, DELETE FROM ALL`). Der Flow erzwingt das nicht — die DB tut es. Das README dokumentiert das Schema mit der Einschränkung inline.
+- **Mitteilungstext-Drift.** *Schutz:* Mandatsbezogene Mitteilungsvorlagen werden zum Zeitpunkt der Ausstellung gehasht; das Audit-Log erfasst den SHA. Wenn Counsel die Mitteilung ändern möchte, ist die Änderung eine separate Aktion im Flow, keine stille Neuausstellung.
+- **Custodian-Opt-out / stilles Ignorieren.** *Schutz:* Die Eskalation an den Vorgesetzten bei +21 Tagen verwandelt das Problem von einem Custodian-Problem in ein Management-Problem. Darüber hinaus muss der Legal-Ops-Leiter möglicherweise externe Anwälte einbeziehen — der Flow stellt das dar, handelt aber nicht.
+- **Unterschiede bei Holds über Jurisdiktionen hinweg.** *Schutz:* Der Flow geht von US-amerikanischer Litigation-Hold-Semantik aus. EU-spezifische „Duty to Preserve" unter dem kommenden AI Act und DSGVO hat einen anderen Umfang; die mandatsbezogene Mitteilungsvorlage behandelt diese Fälle.
+- **Datenschutzposition bei Custodian-E-Mail.** *Schutz:* Hold-Mitteilungen können dem Custodian das Vorhandensein eines Rechtsstreits signalisieren; der SMTP-Pfad nutzt das Mail-Relay der Kanzlei (kein Drittanbieter-SaaS) zur Wahrung der Vertraulichkeit.
+
+## Stack
+
+Das Bundle befindet sich unter `apps/web/public/artifacts/litigation-hold-orchestration-n8n/`:
+
+- `litigation-hold-orchestration-n8n.json` — der Flow-Export
+- `_README.md` — Credential-Setup, Audit-Tabellen-Schema, Trockenlauf-Prozedur
+- `audit-table-schema.sql` — DDL für die unveränderliche Audit-Tabelle
+- `hold-notice-template.md` — ausfüllbare Hold-Mitteilungsvorlage pro Mandat
+
+Tools: [n8n](/de/tools/n8n/) (Orchestrierung), [Slack](/de/tools/slack/) (In-Channel-Benachrichtigung), [Claude](/de/tools/claude/) (optional — für die tägliche Zusammenfassung der Audit-Log-Aktivität an den Legal-Ops-Leiter, nicht für Entscheidungsschritte).
+
+Verwandt: [ediscovery](/de/learn/ediscovery/), [EDRM model](/de/learn/edrm-model/), [matter management](/de/learn/matter-management/).

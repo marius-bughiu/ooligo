@@ -1,0 +1,91 @@
+---
+slug: regulatory-change-monitor-n8n
+canonical_slug: regulatory-change-monitor-n8n
+locale: de
+verticals: [legal-ops]
+title: Regulatorischer Änderungsmonitor mit n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops, in-house-counsel, compliance, dpo]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/regulatory-change-monitor-n8n.mdx
+translated_at: "2026-05-13T02:15:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "aa78e16fd4585ec1bcc8e580247d3de5bd8e4abe11ee2b2c742e744d4326919c"
+---
+
+Ein n8n-Flow, der eine kuratierte Auswahl regulatorischer Feeds überwacht (Aktualisierungen zum EU AI Act, DSGVO-Durchsetzungsentscheidungen, US-Datenschutzgesetze auf Bundesstaatenebene, SEC-Regelvorschläge, NYC LL 144 und andere KI-Beschäftigungsgesetze, branchenspezifische Vorschriften), jeden Eintrag nach Relevanz für das spezifische Risikoprofil des Unternehmens klassifiziert, die Dringlichkeit bewertet und einen strukturierten Digest an den Slack-Kanal des Legal-Teams postet — als tägliche Zusammenfassung sowie als sofortige Benachrichtigung bei `high_urgency`-Einträgen. Ersetzt den „RSS-Feed-und-Newsletter-Friedhof" des Unternehmensjuristen durch eine gefilterte Queue, die nur das an die Oberfläche bringt, worauf das Unternehmen tatsächlich reagieren muss.
+
+## Wann Sie dies verwenden
+
+- Das Unternehmen ist in mehreren regulatorischen Regimen tätig (Datenschutz, Beschäftigung, Branchenspezifika) und das interne Team kann nicht alle Aktualisierungen der Behörden manuell lesen.
+- Compliance-Arbeit ist ereignisgesteuert genug, dass „wir haben diese Regeländerung verpasst, weil niemand sie gesehen hat" ein reales Versagensszenario ist.
+- Das Unternehmen hat sein regulatorisches Risikoprofil dokumentiert (welche Jurisdiktionen, welche Branchen, welche Datentypen) — der Relevanzfilter setzt dieses Profil voraus.
+
+## Wann Sie dies NICHT verwenden
+
+- **Ersatz für die allgemeine Lektüre des General Counsel.** Der Flow ist Entscheidungsunterstützung; der Counsel liest die High-Urgency-Einträge weiterhin selbst und legt die Reaktion des Unternehmens fest. Der Flow filtert; der Counsel handelt.
+- **Erstellung von Rechtsberatung zu Regeländerungen.** Der Flow fasst zusammen. Der Counsel interpretiert und entscheidet über die Reaktion.
+- **Hochspezialisierte Praxisbereiche**, die ein dediziertes Monitoring auf Practitioner-Niveau erfordern (regulatorische M&A-Freigaben, komplexes Steuerrecht). Spezialisierte Praxis erfordert maßgeschneiderte Quellen, die ein Feed-Monitor nicht erfasst.
+- **Geografien, die das Risikoprofil nicht abdeckt.** Das Hinzufügen einer Geografie erfordert eine Aktualisierung des Profils; der Flow erkennt nicht automatisch, was das Unternehmen interessiert.
+
+## Setup
+
+1. **Den Flow importieren** aus `apps/web/public/artifacts/regulatory-change-monitor-n8n/regulatory-change-monitor-n8n.json`.
+2. **Credentials einrichten.** Anthropic (Claude-Klassifizierung), Slack (Digest-Ziel), HTTP-Fetcher (keine Auth für öffentliche RSS-/API-Feeds erforderlich).
+3. **Das Risikoprofil des Unternehmens erstellen.** Pro regulatorischem Bereich: anwendbare Jurisdiktionen, Branchen, Datentypen, Haftungsrisiko, zuständiger Counsel-Eigentümer. Vorlage in `_README.md`.
+4. **Die Feed-Quellen konfigurieren.** Der mitgelieferte Flow pollt standardmäßig 8 Feeds (EU-Kommission AI Act, NYC Consumer Affairs LL 144, EDPB-Leitlinien, SEC-Regelvorschläge, ICO Enforcement, EDPS-Leitlinien, FTC-Pressemitteilungen, State-AG Privacy Enforcement Aggregator). Nach Bedarf des Unternehmens ergänzen oder entfernen.
+5. **Dringlichkeitsschwellen anpassen.** Standards: Durchsetzungsentscheidung gegen ein vergleichbares Unternehmen → `high`; Regelvorschlag in einer relevanten Jurisdiktion → `medium`; Konsultationspapier → `low`. Je nach Präferenz des Counsels für Rauschen vs. Verpasstes anpassen.
+6. **Zwei Wochen Probelauf.** Klassifizierungen des Flows mit der manuellen Lektüre des Counsels für denselben Zeitraum vergleichen. Relevanzfilter und Dringlichkeitsregeln anpassen.
+
+## Was der Flow tut
+
+Sechs Nodes. Feed-Polling pro Feed, dann Klassifizierung pro Eintrag, dann Digest-Zusammenstellung.
+
+1. **Cron Hourly** — feuert stündlich, um Feeds zu pollen (der tägliche Digest wird um 8 Uhr Bürozeitzone zusammengestellt).
+2. **Fetch Feeds** — HTTP-Anfragen an jede konfigurierte Feed-URL. Parsing von RSS / Atom / JSON je nach Feed-Format. Deduplizierung nach Item-GUID gegen die letzten 30 Tage gesehener Einträge.
+3. **Classify** — Claude-Aufruf pro neuem Eintrag. Gibt `{relevant_to_profile, jurisdictions_implicated, regulatory_areas, urgency, summary, recommended_owner}` zurück. Einträge mit `relevant_to_profile: false` werden aus dem Digest entfernt, aber in der Audit-Tabelle protokolliert.
+4. **Store** — jeden klassifizierten Eintrag in die Tabelle `regulatory_items` schreiben.
+5. **Immediate Alert** — bei `urgency: high`-Einträgen sofort in `#legal-alerts` posten mit Klassifizierung + Link.
+6. **Daily Digest** — um 8 Uhr Bürozeitzone die Einträge der letzten 24 Stunden nach regulatorischem Bereich gruppiert in `#legal-team` posten.
+
+## Kostenrealität
+
+- **LLM-Tokens** — typischerweise 1–2k Input + 0,5k Output pro klassifiziertem Eintrag. Bei ~20–50 neuen Einträgen pro Tag über alle Feeds: ~0,20–0,60 USD/Tag an Modellkosten.
+- **n8n-Ausführungen** — stündlicher Cron + Verarbeitung pro Eintrag. Im Rahmen des Starter-Plans für die meisten Unternehmen.
+- **Counsel-Zeit** — der eigentliche Gewinn. Manuelle Überwachung kostet 30–60 Minuten/Tag pro Counsel für gründliche Abdeckung; der tägliche Digest benötigt 5–10 Minuten plus Reaktionszeit auf sofortige Alerts.
+- **Setup-Zeit** — 90 Minuten inklusive Risikoprofil-Erstellung (45 Minuten entfallen auf das Profil).
+
+## Erfolgskennzahlen
+
+- **„Verpasste" Vorfälle des Counsels pro Quartal** — Vorfälle, bei denen eine behördliche Anfrage eine Regeländerung aufdeckt, die das Unternehmen hätte kennen müssen. Sollte in überwachten Bereichen auf null sinken.
+- **Signal-Rausch-Verhältnis des Digests** — Anteil der Digest-Einträge, die der Counsel als „relevant" gegenüber „ignorieren" markiert. Sollte 70–85 % relevant sein; unter 50 % bedeutet, dass der Relevanzfilter oder das Risikoprofil überarbeitet werden muss.
+- **Zeit von der Regelveröffentlichung bis zur Reaktionshaltung des Counsels** — für überwachte Bereiche sollte diese von „Wochen" (passives Newsletter-Monitoring) auf unter 24 Stunden sinken (der Digest erfasst es beim ersten Poll).
+
+## Im Vergleich zu Alternativen
+
+- **vs. kommerzielle Regulatory-Monitoring-Dienste** (LexisNexis State Net, Bloomberg Government, FiscalNote, Thomson Reuters Regulatory Intelligence). Diese wählen, wenn das Budget die Plattformlösung trägt und Sie eine verwaltete Abdeckung mit Zusammenfassungen auf Practitioner-Niveau wünschen. Der Flow ist die schlanke Mittellösung zu geringeren Kosten mit einem auf das eigene Profil kalibrierten Relevanzfilter.
+- **vs. manuelles Lesen von Newslettern durch den Unternehmensjuristen.** Der Standard und die Quelle von Versäumnissen.
+- **vs. kein Monitoring.** Vorhersehbares Versagen bei kleineren Unternehmen; funktioniert, bis es nicht mehr funktioniert.
+
+## Risiken
+
+- **Feed-Quellen-Drift.** *Schutzmaßnahme:* Feed-Health-Check bei jedem stündlichen Poll. Fehlgeschlagene Fetch-Einträge erscheinen als „Feed-Quelle X ist seit N Stunden nicht erreichbar"-Warnungen im täglichen Digest, werden nicht still verworfen.
+- **False Negatives des Relevanzfilters.** *Schutzmaßnahme:* Die Audit-Tabelle protokolliert ALLE klassifizierten Einträge, einschließlich `relevant_to_profile: false`. Counsel prüft wöchentlich den False-Negative-Bucket; Versäumnisse sind Signal, das Profil oder den Classifier-Prompt zu aktualisieren.
+- **Übermäßige Dringlichkeits-Flags.** *Schutzmaßnahme:* Sofortige Alerts gehen nur in `#legal-alerts`; der tägliche Digest absorbiert mittlere und niedrige Dringlichkeit. Die Dringlichkeitsschwellen sind der Hebel, wenn Alerts überfordern.
+- **Jurisdiktions-Mapping-Fehler.** *Schutzmaßnahme:* Jeder Eintrag wird mit `jurisdictions_implicated` annotiert, basierend auf der Autorität des Regulators und dem erklärten Geltungsbereich der Regel. Einträge mit mehrdeutiger Jurisdiktion werden mit „mehrdeutig — Counsel zur Bestätigung" gekennzeichnet, nicht geraten.
+- **Veraltetes Risikoprofil.** *Schutzmaßnahme:* Das Profil trägt `last_updated` und löst eine „Profil-Überprüfungserinnerung" im Digest aus, wenn es älter als 6 Monate ist.
+- **Feed-Inhaltsveralterung vs. Veröffentlichungsdatum.** *Schutzmaßnahme:* Der Digest sortiert nach Veröffentlichungsdatum, nicht nach Fetch-Datum. Alte Einträge im Feed tauchen erneut auf, wenn der Feed selbst für eine Zeit ausgefallen war.
+
+## Stack
+
+Das Bundle befindet sich unter `apps/web/public/artifacts/regulatory-change-monitor-n8n/`:
+
+- `regulatory-change-monitor-n8n.json` — der Flow-Export
+- `_README.md` — Credentials, Risikoprofil-Schema, Standard-Feed-Liste, Probelauf-Prozedur
+
+Tools: [n8n](/de/tools/n8n/), [Claude](/de/tools/claude/), [Slack](/de/tools/slack/).
+
+Verwandte Inhalte: [Legal Knowledge Management](/de/learn/legal-knowledge-management/), [EU AI Act für Legal-Teams](/de/learn/eu-ai-act-for-legal-teams/), [DSGVO für Legal-Teams](/de/learn/gdpr-for-legal-teams/), [KI-Richtlinien für Legal-Teams](/de/learn/ai-policy-for-legal-teams/).
