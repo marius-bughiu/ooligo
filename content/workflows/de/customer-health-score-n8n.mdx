@@ -1,0 +1,83 @@
+---
+slug: customer-health-score-n8n
+canonical_slug: customer-health-score-n8n
+locale: de
+verticals: [revops]
+title: Zusammengesetzter Kunden-Health-Score in n8n
+artifact_type: n8n-flow
+tools_used: [n8n, gainsight, hubspot, gong]
+roles: [revops, csm]
+difficulty: advanced
+time_to_setup: 120min
+human_tested: false
+translated_from: en/customer-health-score-n8n.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: 1b69d99a5c33cace494a8b2dc4eed347e85cabece2b41edc6e613bb5e175da58
+---
+
+Der Standard-Gainsight-Health-Score ist eine farbige Pille, die bedeutet, was immer Sie ihr beimessen, und die meisten CS-Teams gewichten sie nach dem, was sich aus den zuerst angebundenen Integrationen am schnellsten laden lässt. Das Ergebnis ist ein Score, der sich in Richtung der Daten bewegt — nicht in Richtung Churn. Dieser Workflow ersetzt ihn durch einen zusammengesetzten Score, den das CS-Team tatsächlich verteidigen kann: Nutzung gemessen an der 28-Tage-Baseline jedes Accounts, CSM-Aktivität mit Recency-Decay gewichtet und ein Sentiment-Signal aus echten Gong-Transkripten mit einem expliziten Konfidenz-Floor. Der zusammengesetzte Score wird mit einer von Claude generierten Erklärung in einem Satz geliefert, die beschreibt, was sich bewegt hat — so sieht ein CSM, der den Account-Datensatz öffnet, nicht nur „62, gelb", sondern „Composite um 14 Punkte gesunken, weil die Produktnutzung trotz drei aktueller Meetings 38 % unter der 28-Tage-Baseline liegt." Dieser Satz macht den Score handlungsfähig.
+
+Das Artefakt-Bundle liegt unter `apps/web/public/artifacts/customer-health-score-n8n/`. Der n8n-Export ist `customer-health-score-n8n.json`, der Credential- und Verifikationsleitfaden ist `_README.md`. Beide sind Pflichtlektüre, bevor der Schedule aktiviert wird.
+
+## Wann dieser Workflow eingesetzt wird
+
+Verwenden Sie diesen Workflow, wenn Ihre CS-Organisation mindestens 100 verwaltete Accounts hat, über Gainsight oder ein ähnliches CSP als Write-Back-Ziel verfügt, Gong (oder ein vergleichbares Conversation-Intelligence-Tool, auf das der HTTP-Node umgeleitet werden kann) nutzt und einen CSM oder RevOps-Lead hat, der die Gewichtungsentscheidungen gegenüber dem Team vertreten kann. Das Modell ist am nützlichsten, wenn Sie Ground-Truth-Churn-Daten aus den letzten 12 Monaten haben — damit backtesten Sie die Gewichtungen. Ohne Backtest-Daten raten Sie, und ein zusammengesetzter Score, den Sie geraten haben, ist keine Verbesserung gegenüber dem Score, den Gainsight standardmäßig liefert.
+
+Es passt auch zum Moment, in dem der vorhandene Health-Score das Vertrauen verloren hat. Das häufigste Signal ist, dass CSMs den Score bei der QBR-Vorbereitung ignorieren und selbst rohe Nutzungsdaten abrufen. Wenn das passiert, lautet die Frage nicht „Wie bringen wir sie dazu, den Score zu verwenden?", sondern „Was müsste der Score leisten, damit sie ihn verwenden?" Die Antwort dieses Flows: Eine Zahl und eine Baseline nennen und den größten Treiber aufzeigen. Das ist es, was der Why-Changed-Satz liefert.
+
+## Wann dieser Workflow NICHT eingesetzt wird
+
+Überspringen Sie ihn, wenn Sie weniger als ~50 aktive Accounts haben. In diesem Maßstab kann ein CSM den Account selbst schneller lesen, als es dauert, einen Per-Batch-Wait-Node zu debuggen, und das Modell overfittet auf Small-n-Rauschen. Überspringen Sie ihn, wenn Ihre Nutzungstelemetrie in Gainsight nicht zuverlässig ist — die Per-Account-Baseline funktioniert nur, wenn Events konsistent getaggt sind, und ein Flow auf schmutzigen Daten erbt und verstärkt den Schmutz. Überspringen Sie ihn, wenn Ihre CS-Organisation keine klare Churn-Definition und eine gelabelte Historie hat; ohne diese können Sie die Gewichtungen nicht backtesten, und ein ungebacktestetes Modell ist schlimmer als gar keins, weil es die Autorität einer Zahl trägt. Überspringen Sie ihn, wenn in Ihrer Gong-Instanz Transkripte für die relevanten Calls nicht aktiviert sind — das Sentiment kollabiert bei jedem Account auf neutral, und das 20-%-Sentiment-Gewicht wird zu Dead Weight. Schließlich überspringen Sie ihn, wenn das eigentliche Problem des Teams darin besteht, dass CSMs keinen Workflow haben, um auf den Score zu reagieren; ein genauerer Score ohne angehängtes Playbook ändert nichts.
+
+## Einrichtung
+
+Die Einrichtung ist vollständig in `apps/web/public/artifacts/customer-health-score-n8n/_README.md` dokumentiert. Kurzfassung: Importieren Sie die JSON in n8n unter Einstellungen → Aus Datei importieren, erstellen Sie die fünf Platzhalter-Credentials (Postgres, Gainsight, HubSpot, Gong, Anthropic, Slack — insgesamt sechs), provisionieren Sie die sieben benutzerdefinierten Gainsight-Felder, auf die der Write-Back-Node zielt, führen Sie die acht-Schritt-Verifikationssequenz gegen einen einzigen Canary-Account durch, bevor Sie den Schedule aktivieren. Die Zeit bis zum ersten Write-Back ab einer sauberen n8n-Installation beträgt ungefähr zwei Stunden, die meiste davon wartet auf den HubSpot-Private-App-Token und die Gainsight-Custom-Field-Provisionierung.
+
+Die `accounts_in_scope`-Tabelle ist der Ort, an dem die Per-Segment-Gewichtung liegt. Enterprise-Accounts können Aktivität mit 0,4 und Sentiment mit 0,3 gewichten, weil die Beziehungsgesundheit die Verlängerung treibt; PLG-Accounts können Nutzung mit 0,7 gewichten, weil das Geschäft das Produkt ist. Gewichtungen als Tabellenspalten statt als hardcodierte Konstanten zu haben ist der Unterschied zwischen einem Modell, das Sie iterieren können, und einem Modell, das Sie alle sechs Monate ersetzen.
+
+## Was der Flow tatsächlich macht
+
+Der Cron feuert nächtlich um 02:00 Uhr in `America/New_York`. `Pull Accounts In Scope` zieht bis zu 500 Accounts, deren `last_scored_at` älter als 20 Stunden ist (die Lücke verhindert Doppel-Scoring bei Retries). `Batch Accounts (25/group)` chunked sie, damit die parallelen API-Calls unter den Provider-Rate-Caps bleiben. Pro Batch laufen drei Branches gleichzeitig: Gainsight gibt den 28-Tage-Nutzungs-Rollup zurück, HubSpot gibt die Engagements der letzten 90 Tage zurück, Gong gibt bis zu 30 Tage Call-Metadaten zurück.
+
+`Score Usage (vs baseline)` berechnet das Verhältnis der aktuellen 28-Tage-Events zur gespeicherten Baseline des Accounts. Ein Verhältnis von 1,0 entspricht 100, ein Verhältnis von 0,5 oder darunter entspricht 0, dazwischen ist es linear. Es gibt einen zusätzlichen Guard: Wenn die Anzahl der unterschiedlichen Nutzer in den letzten 28 Tagen unter drei sinkt, wird der Score unabhängig vom Event-Volumen auf 40 gedeckelt — Single-User-Abhängigkeit ist ein Churn-Risiko, das die Event-Zahl allein nicht sehen kann.
+
+`Score Activity (recency-weighted)` geht die Engagements-Liste durch und wendet einen exponentiellen Decay mit einer 21-Tage-Halbwertszeit an. Ein Meeting von gestern ist 5 Punkte wert, eines von vor 21 Tagen ist 2,5 Punkte wert, eines von vor 60 Tagen ist etwa 0,3 Punkte wert. E-Mails werden mit 1 gewichtet, Calls mit 4, Notizen mit 0,5. Die gewichtete Summe wird auf 0–100 abgebildet mit einem Hard Floor: null Meetings in den letzten 60 Tagen deckt den Score bei 25.
+
+`Claude — Score Sentiment` führt `claude-sonnet-4-6` gegen die bis zu sechs jüngsten Call-Transkripte pro Account aus, begrenzt auf 4.000 Zeichen pro Transkript. Der System-Prompt erzwingt striktes JSON, verlangt, dass das Modell die Konfidenz 0 zurückgibt, wenn das Transkript weniger als 200 Wörter enthält oder ein Single-Speaker-Monolog zu sein scheint, und verbietet erfundene Signale. `Score Sentiment (with confidence floor)` kollabiert jedes Ergebnis mit Konfidenz unter 0,4 zu einem neutralen 50 — eine Vermutung des Modells ist schlimmer als zuzugeben, dass wir es nicht wissen.
+
+`Compute Composite` nimmt die drei Sub-Scores und die Per-Account-Gewichtungen und produziert den Composite plus eine Band (`green` ≥ 75, `yellow` ≥ 50, `red` < 50). `Lookup Previous Score` joined gegen die `account_health_history`-Tabelle. Wenn das absolute Delta mindestens 5 Punkte beträgt, generiert `Claude — Why-Changed Sentence` eine einzeilige Erklärung, die den größten Treiber mit seiner konkreten Zahl nennt; andernfalls wird ein deterministischer Fallback-Satz verwendet. Das Payload wird in sieben benutzerdefinierte Gainsight-Felder zurückgeschrieben und in `account_health_history` mit einer `ON CONFLICT`-Klausel auf `(account_id, date_trunc('day', scored_at))` persistiert, sodass Retries idempotent sind. Drops in die Red Band oder Deltas von -10 oder schlimmer fächern in einen Slack-Alert in `#cs-health-alerts` mit dem zitierten Why-Changed-Satz.
+
+## Kostenrealität
+
+Pro Account pro Nacht macht der Flow drei externe Leseanrufe (Gainsight-Nutzung, HubSpot-Engagements, Gong-Calls), einen Claude-Sentiment-Call (max. 512 Token Output, ~6k Token Input für die Transkripte), einen optionalen Claude-Why-Changed-Call, wenn das Delta 5 Punkte überschreitet (max. 200 Token Output, ~400 Token Input), einen Gainsight-Write und zwei Postgres-Queries. Mit Sonnet 4.6 bei ungefähr 3 $ pro Million Input-Token und 15 $ pro Million Output-Token kostet der Sentiment-Call etwa 0,018 $ pro Account und der Why-Changed-Call etwa 0,005 $, wenn er ausgelöst wird. Für 500 Accounts, bei denen ~30 % den Why-Changed-Branch auslösen, beträgt die gesamten Anthropic-Ausgaben ungefähr 9,75 $ pro Nacht oder etwa 295 $/Monat. Der Gong-Read ist die größere Einschränkung: Bei drei Calls pro Sekunde pro Workspace benötigen 500 Accounts mindestens 167 Sekunden API-Zeit, daher sind der Per-Batch-Wait-Node und die 25-Account-Batch-Größe entsprechend dimensioniert. Die End-to-End-Laufzeit für 500 Accounts auf n8n Clouds kleinem Executor liegt zwischen 18 und 25 Minuten. Betriebskosten: ungefähr zwei Stunden CSM/RevOps-Zeit pro Quartal, um Backtest-Ergebnisse zu überprüfen und Gewichtungen neu zu justieren.
+
+## Wie Erfolg aussieht
+
+Beobachten Sie vier Zahlen in den ersten 90 Tagen. Erstens **Prozentsatz der Accounts, bei denen sich die Band in einer Weise geändert hat, die mit der Einschätzung des CSMs übereinstimmte** — befragen Sie das Team wöchentlich im ersten Monat und vergleichen Sie. Ziel: >70 % Übereinstimmung bis Woche vier. Unter 50 % bedeutet, dass die Gewichtungen falsch sind, nicht das Modell. Zweitens **die Vorlaufzeit, die der Score bei tatsächlichem Churn bietet** — schauen Sie für jeden Churn in den nächsten zwei Quartalen auf die Score-Trajektorie zurück und messen Sie, wie viele Tage vor der Churn-Benachrichtigung der Score in Rot gefallen ist. Ziel: Median-Vorlaufzeit >30 Tage. Drittens **die Qualität des Why-Changed-Satzes** — samplen Sie 20 Sätze pro Woche und bewerten Sie sie als handlungsfähig / genau-aber-vage / falsch. Ziel: >80 % handlungsfähig bis Woche sechs. Viertens **die False-Alarm-Rate bei Slack-Alerts** — zählen Sie Alerts, die keine Folgeaktion ausgelöst haben. Wenn sie über 30 % liegt, erhöhen Sie den Alert-Schwellenwert von -10 auf -15 und lassen Sie den Band-Drop-Branch mehr Arbeit übernehmen.
+
+## Vergleich mit Alternativen
+
+Die Standardlösung ist das **Gainsight Scorecards 2.0**-Produkt. Es ist wirklich gut in dem, was es tut — Metriken einlesen, Regeln anwenden, den Rollup aufzeigen — macht aber drei Dinge, die dieser Flow nicht macht. Es kann das Ergebnis einer LLM-Transkript-Klassifizierung nicht ohne eigene Integration in den Rollup einbringen, es schlussfolgert nicht nativ gegen die eigene historische Baseline des Accounts (Sie schreiben die Regeln Account für Account, Segment für Segment), und es produziert einen Score, keinen Satz. Wenn Ihre CS-Organisation einen Score möchte und CSMs zutraut, ihn zu interpretieren, ist Scorecards 2.0 weniger Aufwand und eine gute Wahl. Wenn das Problem darin besteht, dass CSMs ihn nicht interpretieren, ist der Why-Changed-Satz die entscheidende Änderung, die den Build rechtfertigt.
+
+Eine zweite Alternative ist ein **selbst gebautes Python-Script in einer Lambda oder einem Cron-on-EC2**. Das ist es, wonach die meisten engineering-geführten RevOps-Teams greifen. Es ist schneller, die erste Version zu schreiben als den n8n-Flow, aber schwieriger zu übergeben, schwieriger visuell zu debuggen und trägt die Credential-Rotations-Last als Code. Die n8n-Version tauscht rohe Flexibilität gegen eine Credential-UI, Retry-Semantik out of the box und einen visuellen Flow, den ein CSM-Lead ohne Engineering-Begleitung lesen kann. Wählen Sie selbst gebaut, wenn Sie einen permanenten Platform-Engineer haben; wählen Sie den n8n-Flow, wenn nicht.
+
+Eine dritte Alternative sind **die eingebauten Health-Scores von Catalyst, ChurnZero oder Vitally**. Das sind gute Produkte mit eigenen Scoring-Engines, aber sie setzen voraus, dass Sie auf deren CSP standardisiert haben. Wenn Sie bereits Catalyst-Kunde sind, verwenden Sie Catalysts Score und fügen Sie den Why-Changed-Claude-Call als Catalyst-Aktion hinzu; die Mathematik ist dieselbe. Dieser Workflow existiert, weil die meisten Teams in der Praxis noch auf Gainsight sind und der Gainsight-Write-Back der Teil ist, der das Bundle rechtfertigt.
+
+## Watch-outs
+
+- **Schlechtes Usage-Tagging produziert einen zuversichtlich falschen Score.** Wenn Ihre Gainsight-Events über Produktoberflächen hinweg inkonsistent getaggt sind, ist die Per-Account-Baseline bedeutungslos, und das Modell wird Drops aufzeigen, die eine Tagging-Änderung widerspiegeln, kein Verhaltensänderung. Guard: Bevor Sie den Flow aktivieren, fragen Sie die Event-Name-Verteilung pro Account für die letzten 90 Tage ab und bestätigen Sie, dass die fünf häufigsten Event-Typen konsistent sind. Die `Pull Accounts In Scope`-Query hat eine `baseline_usage_28d`-Spalte genau deshalb, damit die Baseline einmal berechnet, geprüft und eingefroren wird — nicht jede Nacht gegen driftende Event-Definitionen neu berechnet.
+- **Sentiment-Halluzination bei kurzen Transkripten.** Claude produziert eine zuversichtlich aussehende Sentiment-Zahl auf einem 50-Wort-Voicemail-Snippet, wenn es nicht eingeschränkt wird. Guard: Der `Claude — Score Sentiment`-System-Prompt verlangt `confidence: 0` bei Transkripten unter 200 Wörtern oder Single-Speaker-Monologen, und `Score Sentiment (with confidence floor)` kollabiert alles unter 0,4 Konfidenz auf neutral 50. Das 20-%-Sentiment-Gewicht wird bei diesen Accounts zu 0 % statt zu 20 % Müll.
+- **Why-Changed-Satz erfindet Kausalität.** Ein gewichtetes Summen-Delta hat keine „Ursache"; es hat den größten Treiber. Guard: Der Why-Changed-Prompt verbietet Spekulation über die Sub-Score-Inputs hinaus und verlangt, dass eine konkrete Zahl zitiert wird. Der deterministische Fallback läuft, wenn Claudes Antwort leer ist, sodass ein Claude-Ausfall den Satz auf eine numerische Zusammenfassung degradiert, anstatt den Write-Back zu blockieren.
+- **Schedule-Retries schreiben History doppelt.** Ein wiederholter Run könnte zwei History-Rows für denselben Tag einfügen. Guard: `account_health_history` hat eine Unique-Constraint auf `(account_id, date_trunc('day', scored_at))` und `Persist History` verwendet `ON CONFLICT ... DO UPDATE`, sodass der neueste Run für den Tag gewinnt. Idempotenz ist die Eigenschaft, die es Ihnen erlaubt, den Flow um 09:00 Uhr erneut auszuführen, wenn der Run um 02:00 Uhr fehlgeschlagen ist, ohne den Audit-Trail zu kontaminieren.
+- **Slack-Alert-Fatigue.** Zwanzig Red-Band-Alerts bei der ersten Aktivierung, weil jeder Account in der ersten Nacht unter 50 ist, werden CSMs trainieren, den Kanal zu stummschalten. Guard: Deaktivieren Sie bei der ersten Aktivierung den Slack-Node für die ersten drei Nächte, lassen Sie die History-Tabelle befüllen und aktivieren Sie ihn dann erneut. Der `Delta ≥ 5?`-Check filtert dann den Großteil des Rauschens, sobald eine Baseline existiert.
+
+## Stack
+
+- **n8n** — Orchestrierung, Retries, Credential-Management, visueller Workflow
+- **Gainsight** — Nutzungstelemetrie-Quelle und Ziel für die sieben benutzerdefinierten Felder
+- **HubSpot** — CSM-Aktivität (Calls, Meetings, E-Mails, Notizen) als Quelle
+- **Gong** — Call-Transkripte für den Sentiment-Branch
+- **Claude (Sonnet 4.6)** — Sentiment-Klassifikation und der Why-Changed-Satz
+- **Postgres** — `accounts_in_scope`-Gewichtungen, `account_health_history`-Audit-Trail, Idempotenz-Key
+- **Slack** — Alert-Kanal für Red-Band- und Large-Delta-Drops

@@ -1,0 +1,92 @@
+---
+slug: inbound-lead-triage-n8n
+canonical_slug: inbound-lead-triage-n8n
+locale: de
+verticals: [revops]
+title: Eingehende Lead-Triage und Routing mit n8n + Claude
+artifact_type: n8n-flow
+tools_used: [n8n, hubspot, claude]
+roles: [revops, sdr-leader]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/inbound-lead-triage-n8n.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: 73cc5f8581c5b86e4cf47b4d3e5d7a4f82831c18c126a96e42ccedf97b5453e6
+---
+
+Ein n8n-Flow, der jede eingehende Demo-Anfrage im Moment des Eintreffens erfasst, sie mit Claude gegen Ihr ICP-Rubric bewertet, mit firmografischen Daten anreichert und an einen Self-Serve-Flow, eine SDR-Queue nach Territory oder eine Slack-Page an den diensthabenden AE routet. Das Bundle unter `apps/web/public/artifacts/inbound-lead-triage-n8n/` liefert den vollständigen Export plus ein `_README.md`, das Import, Credential-Setup und Per-Branch-Verifikation abdeckt.
+
+## Wann einsetzen
+
+Verwenden Sie das, wenn Sie ein bedeutungsvolles Volumen eingehender Demo-Anfragen haben — ungefähr 50+ pro Woche — und SDRs echte Zeit mit Leads verbringen, die niemals einen Menschen hätten treffen sollen, oder genuinen High-Intent-Leads sitzen lassen in einer Queue, während sie ältere nach First-In-First-Out bearbeiten. Das Symptom, das den Build rechtfertigt, ist ungleiche Reaktionszeit: Ihre besten Leads warten stundenlang hinter Ihren schlechtesten.
+
+Es ist auch das richtige Muster, wenn Ihr ICP-Rubric eigenständig genug ist, dass zwei SDRs denselben Lead unterschiedlich bewerten würden. Sobald das Rubric in einem einzigen Markdown-Dokument lebt, das Claude bei jedem Call liest, wird das Scoring konsistent über Einreichungen hinweg und als einzelnes Artefakt überprüfbar.
+
+## Wann NICHT einsetzen
+
+Überspringen Sie das, wenn Sie weniger als ~10 eingehende Demo-Anfragen pro Woche erhalten. Bei diesem Volumen trifft der SDR die Routing-Entscheidung schneller von Hand, und Sie werden mehr Zeit mit der Pflege des Flows verbringen als er einspart. Die Fixkosten der Credential-Rotation, Rubric-Drift-Audits und der unvermeidliche 3-Uhr-Slack-Page über einen Claude-Timeout überwiegen den Per-Lead-Gewinn.
+
+Überspringen Sie es auch, wenn Ihr ICP wirklich undefiniert ist. Der Flow ist ein Multiplikator auf Ihrem Rubric — wenn „guter Lead" alles ist, was sich der SDR-Manager an jenem Morgen gut angefühlt hat, friert das Automatisieren das nur dieses Tages Bias in 10.000 Routings ein. Schreiben Sie zuerst das Rubric auf; automatisieren Sie es danach.
+
+Verwenden Sie das schließlich nicht, wenn Ihre Sales-Motion strikt product-led ist und Ihr „Demo-Anfrage"-Formular wirklich ein Account-Erstellungs-Prompt in Verkleidung ist. In diesem Fall ist das richtige Muster In-Product-Aktivierungs-Trigger, keine Triage-Schicht, die so tut, als ob das Formular der Einstiegspunkt wäre.
+
+## Einrichtung
+
+1. **Bundle importieren.** Legen Sie `apps/web/public/artifacts/inbound-lead-triage-n8n/inbound-lead-triage-n8n.json` über **Workflows → Aus Datei importieren** in n8n. Der Flow hat zwei Einstiegspunkte: einen Webhook für den Echtzeit-Pfad und einen täglichen Cron für den Backstop-Sweep.
+2. **HubSpot verdrahten.** Erstellen Sie die vier benutzerdefinierten Kontakteigenschaften aus `_README.md` (`icp_score__c`, `icp_score_reasoning__c`, `icp_pain_hypothesis__c`, `icp_scoring_method__c`). Richten Sie einen HubSpot-Workflow ein, der an `/webhook/inbound-lead-triage` POSTet, wann immer ein Kontakt ein Demo-Anfrage-Formular einreicht, mit `contactId` und dem Formular-Kontext.
+3. **Claude konfigurieren.** Setzen Sie die n8n-Workflow-Variable `ICP_RUBRIC` auf Ihr Rubric-Markdown (halten Sie es unter ~2k Token — es wird in jedem Call mitgeliefert). Das Standard-Modell ist `claude-haiku-4-5`; der Prompt erzwingt JSON-only-Output und explizite Fallback-Regeln für fehlende Daten und Free-Mail-Adressen.
+4. **Territory-Regeln setzen.** Befüllen Sie das Google Sheet, das von `PLACEHOLDER_TERRITORY_SHEET_ID` referenziert wird, mit einer Zeile pro Land plus einer `*`-Standardzeile. Erforderliche Spalten: `country`, `sdr_email`, `sdr_owner_id`, `sdr_slack_handle`, `ae_email`, `ae_owner_id`, `ae_slack_handle`.
+5. **Jeden Branch verifizieren.** Die fünfschrittige Verifikation in `_README.md` durchlaufen (niedriger Score, mittlerer Score, hoher Score, Claude-Fehler, Backstop). Aktivieren Sie den HubSpot-Trigger nur, wenn alle fünf bestehen.
+
+## Was der Flow macht
+
+Der Webhook akzeptiert das HubSpot-Formular-Submit-Payload und gibt sofort 202 zurück, sodass die Formulareinreichung niemals auf Anreicherung oder Scoring blockiert. `Normalize Payload` (ein Code-Node) flacht den HubSpot-Envelope auf eine einzige JSON-Form ab, wandelt die E-Mail in Kleinbuchstaben um, extrahiert die Domain und flaggt Free-Mail-Anbieter aus einer hart codierten Menge, sodass nachgelagerte Nodes dieses Signal nicht ableiten müssen.
+
+`Apollo — Enrich Domain` ruft Apollos Organization-Enrich-Endpoint mit einem 8-s-Timeout und `neverError: true` auf. Fehler stoppen den Flow nicht — sie produzieren einfach ein Payload mit `enrichmentOk: false`, das der Scoring-Schritt als 1-Punkt-Strafe behandeln soll. `Merge Lead + Firmographics` kombiniert den normalisierten Lead und die Anreicherung in das Bundle, das Claude sieht.
+
+`Claude — Score Lead` postet an `https://api.anthropic.com/v1/messages` mit `claude-haiku-4-5`, einem 6-s-Timeout und einem System-Prompt, der ein einziges JSON-Objekt mit `score`, `reasoning`, `primary_pain_hypothesis` und `disqualifiers` erzwingt. Der Prompt sagt Claude explizit, den Score um 1 zu senken, wenn Firmografik fehlt, und Free-Mail-Adressen auf 4 zu decken, es sei denn, die Formular-Antworten beweisen eine echte Rolle — beide Regeln gehören in den Prompt statt in den Code, damit sie an einer Stelle auditierbar sind.
+
+`Parse Score (with fallback)` ist der wichtigste Node. Er versucht, Claudes JSON zu parsen; wenn das Parsen fehlschlägt oder der Score fehlt, berechnet er einen deterministischen Score aus Mitarbeiterzahl + Berufsbezeichnung + Free-Mail-Status. Der Output trägt immer `scoringMethod: "claude"` oder `"rule-based"`, sodass das wöchentliche Audit erkennen kann, wann die Fallback-Nutzung steigt.
+
+`HubSpot — Upsert Score` schreibt Score, Reasoning, Pain-Hypothesis und Method zurück zum Kontakt, sodass SDRs sehen, warum ein Lead in ihrer Queue gelandet ist, nicht nur, dass er es getan hat. `Route by Score` ist ein Switch-Node mit drei expliziten Branches plus einem `unrouted`-Fallback: Score < 4 geht zu Self-Serve-Nurture, 4–7 geht zur SDR-Queue (nach einem `Sheets — Territory Lookup`), 8+ pagt den AE in `#inbound-hot`, und alles, was durchfällt, alarmiert Ops in `#inbound-ops-alerts`.
+
+Der zweite Einstiegspunkt — `Nightly Backstop Cron` um 02:15 — sucht in HubSpot nach Kontakten im Subscriber-Status mit einem `recent_conversion_date` in den letzten 26 Stunden und keinem `icp_score__c`, dann spielt jeden davon mit gebatchten Calls (`batchSize: 5`, `batchInterval: 2000ms`) durch den Webhook, damit das Aufholen die Rate-Limits nicht verbrennt.
+
+## Kostenrealität
+
+Pro Lead, mit `claude-haiku-4-5`, ist ein typischer Scoring-Call ungefähr 1,2k Input-Token (Rubric + Lead-Bundle) und 200 Output-Token. Zu Haiku 4.5-Preisen sind das etwa 0,0015 $ pro Lead. Apollos Organization-Enrich auf dem Basic-Tier ist ungefähr 0,01–0,05 $ pro Credit abhängig vom Plan; budgetieren Sie 0,02 $ pro Lead als Planungszahl. n8n self-hosted ist kostenlos; n8n Cloud Starter ist 20 $/Monat und handhabt 10k Ausführungen gut.
+
+Für ein Team, das 1.000 eingehende Demo-Anfragen pro Monat erhält, betragen die Gesamt-Grenzkosten unter 25 $/Monat für Claude + Apollo kombiniert. Die nicht-Grenz-Kosten sind die SDR-Leader-Stunde pro Woche, um eine Stichprobe bewerteter Leads zu auditieren und das Rubric abzustimmen — was das überhaupt erst zum Funktionieren bringt, nicht was es teuer macht.
+
+## Erfolgsmetrik
+
+Die zu beobachtende Metrik ist **Median-Zeit-bis-Erstkontakt bei Score-8+-Leads**. Vor diesem Flow wird diese Zahl von der SDR-Queue-Tiefe und der Tageszeit dominiert. Danach sollte sie auf unter 5 Minuten während der Geschäftszeiten sinken, weil der AE in Slack mit vollständigem Kontext gepagt wird, sobald das Formular eingereicht wird.
+
+Eine sekundäre Metrik ist **Prozentsatz des Inbounds, der einen Menschen erreicht**. Wenn der Flow ehrlich ist, sinkt diese Zahl um 30–50 % (Low-Score-Leads gehen jetzt in Nurture statt in eine SDR-Queue), und die SDR-Konversionsrate bei den Leads, die *tatsächlich* einen Menschen erreichen, sollte entsprechend steigen. Wenn Sie nur das Erste sehen ohne das Zweite, filtert Ihr Rubric falsch.
+
+## Vergleich mit Alternativen
+
+**vs. DIY-Python-Script auf einem Cron.** Ein Cron-gesteuertes Script, das HubSpot alle 5 Minuten pollt, fügt im schlimmsten Fall 5 Minuten Latenz und im Durchschnitt 2,5 Minuten hinzu, was den ganzen Punkt des Pagings bei High-Intent-Leads zunichte macht. Der Webhook-getriebene n8n-Flow ist sub-Sekunde auf dem Happy Path. Sie erhalten auch das n8n-Ausführungslog als kostenlose Observability-Schicht statt ein Script-stdout zu debuggen.
+
+**vs. HubSpot Workflows + Operations Hub.** HubSpot kann nach statischen Regeln routen (Land, Deal-Größe, Formularfelder), kann aber nicht Claude mit einem Rubric aufrufen und strukturiertes JSON parsen ohne eine Custom Code Action — und sobald Sie benutzerdefinierten Code in HubSpot schreiben, haben Sie die Sichtbarkeit und das Credential-Management verloren, die Sie von n8n bekämen. Operations Hub Professional ist auch 800 $/Monat, bevor Sie eine Zeile Logik geschrieben haben.
+
+**vs. einem Off-the-Shelf-Lead-Router (Chili Piper, Distribute, RevenueHero).** Das sind hervorragende Tools für den Routing-und-Meeting-Buchungs-Schritt und es lohnt sich, sie zu kaufen, wenn die Buchung beim ersten Kontakt Ihre Motion ist. Sie sind nicht gut darin, „den Lead mit meinem Rubric zu bewerten, bevor entschieden wird, was damit zu tun ist" — das ist die Aufgabe, die dieser Flow erledigt, und die beiden kombinieren sich sauber: Hier routen, dann High-Score-Leads an Chili Piper für das Buchungs-Erlebnis übergeben.
+
+## Watch-outs
+
+- **Webhook-Zuverlässigkeit.** HubSpots ausgehende Webhooks scheitern bei Retry-Erschöpfung stillschweigend. Guard: Der `Nightly Backstop Cron` sweept nach Kontakten im Subscriber-Status mit einer aktuellen Konversion in den letzten 26 Stunden und keinem `icp_score__c` und spielt jeden durch denselben Webhook. Wenn Sie Backstop-Fänge über ~2 % des Tagesvolumens sehen, eskalieren Sie zu HubSpot-Support — das ist ein echtes Zuverlässigkeitsproblem, kein Abstimmproblem.
+- **Claude-Latenz oder fehlgeformtes JSON.** Inbounds brauchen schnelles Routing; Claude kann gelegentlich 5+ Sekunden brauchen oder Prosa um das JSON zurückgeben. Guard: Der `Claude — Score Lead`-Node hat einen 6-s-Timeout und `neverError: true`, und `Parse Score (with fallback)` fällt auf einen deterministischen Regelbasierten Score zurück (Mitarbeiterzahl + Berufsbezeichnung + Free-Mail), der mit `scoringMethod: "rule-based"` in HubSpot getaggt wird. Die Rate wöchentlich auditieren — wenn die Regelbasierte Nutzung 5 % der Runs überschreitet, braucht das Modell oder der Prompt Behebung, nicht der Schwellenwert.
+- **Score-Gaming und Rubric-Drift.** Reps werden schnell lernen, was einen hohen Score auslöst, und sich beschweren, wenn ihre Lieblings-Leads niedrig bewerten. Guard: Ein wöchentliches 10-Lead-Audit durch den SDR-Leader, das Claudes Score und Reasoning gegen den Blind-Score des Leaders vergleicht. Wenn die Unstimmigkeit über 30 % ist, schreiben Sie das Rubric neu — passen Sie nicht den Schwellenwert an.
+- **Free-Mail-Leakage.** Selbstständige Senior-Käufer reichen tatsächlich von `gmail.com`-Adressen ein, und ein harter Deckel bei 4 vermisst sie. Guard: Der Deckel wird im Prompt statt im Code erzwungen, und der Prompt erlaubt Claude, den Deckel zu überschreiben, wenn die Formular-Antworten eine echte Rolle beweisen. Die Überschreibungsrate vierteljährlich prüfen — wenn sie nahe null ist, stellt Ihr Formular nicht die richtige Frage.
+- **Territory-Sheet-Drift.** Ein neues Land im eingehenden Traffic ohne Zeile im Sheet lässt den Lookup leer zurückgeben und den `unrouted`-Branch des Switch-Nodes feuern. Guard: Der unrouted Branch postet an `#inbound-ops-alerts` mit dem Score und der Methode, sodass Ops die Lücke sofort sieht, anstatt dass Leads stillschweigend nicht geroutet werden.
+
+## Stack
+
+- **n8n** — Webhook-Ingress, Anreicherungs-Orchestrierung, Routing und der nächtliche Backstop-Cron
+- **HubSpot** — Quelle des Inbounds, Ziel für den angereicherten und bewerteten Kontakt und das Lookup-Ziel für den Backstop-Sweep
+- **Claude (Haiku 4.5)** — ICP-Scoring mit Reasoning, strukturierter JSON-Output, deterministische Prompt-seitige Regeln für fehlende Daten und Free-Mail-Decken
+- **Apollo** — firmografische Anreicherung nach Domain (Branche, Mitarbeiterzahl, Technologien)
+- **Google Sheets** — Territory-Routing-Regeln, vom SDR-Leader ohne n8n-Berührung bearbeitbar
+- **Slack** — High-Intent-Paging in `#inbound-hot` und Ops-Alerts in `#inbound-ops-alerts`

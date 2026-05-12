@@ -1,0 +1,101 @@
+---
+slug: inbound-applicant-triage-n8n
+canonical_slug: inbound-applicant-triage-n8n
+locale: de
+verticals: [recruiting]
+title: Eingehende Bewerber-Triage mit n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, slack]
+roles: [recruiter, sourcer, talent-acquisition]
+difficulty: intermediate
+time_to_setup: 60min
+human_tested: false
+translated_from: en/inbound-applicant-triage-n8n.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: 8c8d5a8e567b8c63ba327409dc2c0dd6f35b44497392df61114f82f4c1f1ae8a
+---
+
+Ein n8n-Flow, der neue [Ashby](/de/tools/ashby/)-Bewerbungen abhört, den Kandidaten-Datensatz plus das Must-Have-Rubric der Stelle abruft, [Claude](/de/tools/claude/) bittet, die Bewerbung gegen das Rubric mit aus dem Lebenslauf zitierter Evidenz zu bewerten, und das Ergebnis in einen von drei Slack-Kanälen routet: `#review-needed` (die meisten), `#fast-track` (oberstes Dezil, nach Gesamtscore und Aktualität), oder `#surfaced-not-rejected` (unter dem Schwellenwert, aber sichtbar gehalten — der Flow lehnt niemals automatisch ab). Ersetzt die tägliche Posteingangs-Sortier-Stunde des Recruiters durch eine geordnete Slack-Queue, die 12–15 Minuten zum Durchgehen braucht.
+
+## Wann einsetzen
+
+- Sie erhalten ≥30 eingehende Bewerbungen pro Stelle pro Woche, und der Recruiter verbringt täglich mehr als eine Stunde damit, Lebensläufe zu lesen, die größtenteils nicht passen.
+- Die Stelle hat ein schriftliches Rubric mit Verhaltensankern pro Dimension (Skill-Match, Level, Standort/Arbeitsgenehmigung, Antwort-Wahrscheinlichkeit). Die Rubric-Vorlage liegt im `_README.md` des Bundles. Ohne sie bewertet der Flow gegen Bauchgefühl.
+- Sie verwenden [Ashby](/de/tools/ashby/) oder ein anderes ATS, das einen Per-Bewerbung-Webhook liefert. Greenhouse, Lever, Workable qualifizieren alle; der Intake-Node des Flows tauscht sauber aus. Nur-Polling-ATS-Plattformen funktionieren, aber mit einer 5-Minuten-Untergrenze bei der Latenz.
+- Ein Recruiter geht die `#review-needed`-Queue mindestens täglich durch und bearbeitet jeden Eintrag. Der Flow verschiebt Kandidaten nicht in eine Stage im ATS.
+
+## Wann NICHT einsetzen
+
+- **Auto-Ablehnung im Loop.** Der Flow rankt und routet; er lehnt niemals ab. Eine `reject`-Aktion an einen Score-Schwellenwert zu verdrahten, macht das zu automatisierter Entscheidungsfindung — das löst NYC Local Law 144 Bias-Audit-Pflichten innerhalb eines Jahres nach dem Go-Live aus, und EU-KI-Act-Annex-III-Hochrisikosystem-Pflichten für jeden EU-ansässigen Kandidaten. Der dritte Bucket des Flows (`#surfaced-not-rejected`) existiert genau deshalb, damit der Recruiter sieht, wer abgelehnt worden wäre, und überschreiben kann.
+- **Demografische Daten als Scoring-Input.** Der Flow verweigert, nach Name, Foto, Schulname als eigenständigem Signal, Adresse, aus dem Abschlussjahr inferiertem Alter, Geschlechtspronomen, Beschäftigungslücken-Strafen oder „Cultural Fit" ohne Verhaltensanker zu bewerten. Die Fairness-Checkliste im `_README.md` des Bundles läuft als Preflight auf dem Rubric.
+- **Das Urteilsvermögen des Recruiters bei Grenzfällen ersetzen.** Gesamtscore innerhalb von 15 % des Cutoffs wird nach `#review-needed` geroutet, nicht in einen der Enden. Das ist ein absichtliches Ermessens-Puffer-Band.
+- **Rollen, bei denen Sie weniger als 10 Bewerbungen pro Woche erhalten.** Manuelle Triage ist schneller als ein Rubric und eine Slack-Queue zu abstimmen. Die Setup-Kosten des Flows (60 Minuten plus Rubric-Erstellung) amortisieren sich bei der 30-App-pro-Woche-Marke, nicht bei der 5-pro-Woche-Marke.
+- **Vertrauliche / Executive-Rollen.** Andere Einwilligungs-Haltung. Andere Audit-Kette. Anderes Routing — diese gehen direkt zu einem namentlichen Recruiter, nicht in einen gemeinsamen Slack-Kanal.
+
+## Einrichtung
+
+1. **Flow importieren.** Legen Sie `apps/web/public/artifacts/inbound-applicant-triage-n8n/inbound-applicant-triage-n8n.json` in Ihre n8n-Instanz. Jeder Node trägt `notesInFlow: true`, sodass die In-Canvas-Notizen die Entscheidungen erklären.
+2. **Credentials verdrahten.** Der Flow braucht drei: `PLACEHOLDER_ASHBY_CRED_ID` (Ashby-API-Key, nur Lese-Scope), `PLACEHOLDER_ANTHROPIC_CRED_ID` (Claude-API-Key), `PLACEHOLDER_SLACK_CRED_ID` (Slack-Bot-Token mit `chat:write` für die drei Kanäle). Jeder Abschnitt in `_README.md` zeigt, wo der Wert zu finden ist.
+3. **Rubric verfassen.** Pro Stelle eine JSON-Datei unter `n8n/data/rubrics/<role-slug>.json` mit den vier Dimensionen (Skill, Level, Standort, Antwort-Wahrscheinlichkeit) und Verhaltensankern pro Dimension schreiben. Der Flow schlägt das Rubric nach `role_slug` aus dem Ashby-Bewerbungs-Payload nach. Kein Rubric für eine Stelle → der Flow stoppt mit einem `missing_rubric`-Log-Eintrag statt gegen Defaults zu bewerten.
+4. **Routing-Schwellenwerte konfigurieren.** Im `Route by Aggregate`-IF-Node: `aggregate >= 16` routet nach `#fast-track`, `12–15` nach `#review-needed`, alles unter 12 nach `#surfaced-not-rejected`. Nach einer Woche Dry-Run einstellen.
+5. **Dry-Run auf einer geschlossenen Rolle.** Die letzte Woche Bewerbungen für eine manuell gesourcte Stelle wiederholen. Den `#fast-track`-Bucket des Flows mit Ihrer tatsächlichen Screen-Pass-Liste vergleichen. Rubric-Anker einstellen, wenn sie abweichen — die Anker, nicht das Modell, sind normalerweise falsch.
+6. **Trigger aktivieren.** Den Ashby-Webhook von `disabled` auf `enabled` nur nach einem guten Dry-Run umschalten. Webhook-Traffic in der Produktion ist schwieriger zu debuggen als wiedergegebene Historie.
+
+## Was der Flow macht
+
+Acht Nodes, in Reihenfolge. Der Flow hält Fairness-Preflights und deterministische Filter vor dem LLM-Call, weil das Modell auf einem kontaminierten Payload frei loszulassen schnelles, zuversichtliches, unbrauchbares Scoring produziert.
+
+1. **Ashby-Webhook** — empfängt `application.created`-Events. Die Webhook-Signatur wird im nächsten Schritt verifiziert; ein nicht verifiziertes Payload wird verworfen.
+2. **Signatur verifizieren** — HMAC-SHA256 gegen das konfigurierte Webhook-Secret. Nicht übereinstimmende Signatur → log + halt. Die Signaturprüfung ist nicht optional, weil Ashby-Webhooks aus dem offenen Internet erreichbar sind.
+3. **Bewerbung + Rubric abrufen** — zieht den vollständigen Kandidaten + Bewerbungs-Datensatz aus `/candidate.info` (Ashby ist POST-only, sogar für Lesevorgänge — siehe `_README.md` des Bundles), und lädt die Rubric-Datei der Stelle. Stoppt bei `missing_rubric` statt auf einen Standard zurückzufallen.
+4. **Fairness-Preflight** — führt das Rubric durch eine Checkliste von Protected-Class-Proxies. Schulrangfolge-Scoring, namensbasierte Filterung, Beschäftigungslücken-Strafen, Foto-Präsenz, „Cultural Fit" ohne Anker → stoppen und dem Rubric-Autor aufzeigen. Die Entscheidung, vor dem LLM-Call zu scheitern, ist absichtlich: Ein biasiertes Rubric in eine Scoring-API geladen hinterlässt einen Log-Eintrag, der bereits als automatisierte Verarbeitung unter DSGVO Art. 22 zählt.
+5. **Deterministischer Vorfilter** — prüft die Arbeitsgenehmigung gegen die Standortanforderung der Stelle, entfernt Bewerbungen aus der kürzlich-abgelehnten Liste (6-Monatsstille-Periode), bestätigt, dass die Bewerbung die erforderlichen Dokumente hat (Lebenslauf, optionales Anschreiben). Diese Filter sind auditierbar und das LLM verhandelt sie nicht erneut.
+6. **Claude Score** — sendet Rubric + Lebenslauf + Bewerbungsformulardaten an Claude. Gibt ein JSON-Objekt mit Per-Dimensions-Scores 1–5, einem wörtlichen Evidenz-String pro Dimension über 1 und einem Aggregat zurück. Scores ohne Evidenz-String werden standardmäßig auf 1 gesetzt. Die Evidenz-Anforderung ist das, was das Modell im Lebenslaufstext verankert statt aus Namen oder Schule zu inferieren.
+7. **Route by Aggregate** — IF-Node. Drei Branches nach Score-Band wie in Setup-Schritt 4 gesetzt.
+8. **Slack Notify + Audit Append** — postet in den entsprechenden Slack-Kanal mit einem Link zurück zur Ashby-Kandidaten-Seite, den Per-Dimensions-Evidenz-Auszügen und einem `view-rubric`-Link. Fügt eine JSONL-Zeile an `audit/<YYYY-MM>.jsonl` an mit `application_id`, `role_slug`, `rubric_sha256`, Per-Dimensions-Scores, Aggregat, Route, Modell. Keine PII. Das Audit-Log ist das, was einen NYC LL 144- oder EU-KI-Act-Inquiry überstehbar macht.
+
+## Kostenrealität
+
+Pro 100 bewerteten Bewerbungen, auf Claude Sonnet 4.5:
+
+- **Anthropic-API-Token** — typischerweise 8–12k Input-Token pro Bewerbung (Rubric ~1k + Lebenslauf + Formulardaten) und 400–700 Output-Token (bewertetes JSON + Evidenz). Zu Sonnet-4.5-Listenpreisen landet das bei ungefähr 0,05–0,08 $ pro Bewerbung. Ein Team, das 1.000 eingehende Bewerbungen pro Woche bewertet, läuft 50–80 $ pro Woche in Modellkosten.
+- **n8n-Kosten** — Self-hosted n8n ist in einem Container kostenlos. n8n Clouds Starter-Plan deckt ~5k Workflow-Ausführungen pro Monat für 20 $; mittlere-Volumen-Teams (>5k/Woche) brauchen Pro oder Self-hosted.
+- **Ashby-API-Kontingent** — nur Leseanrufe. Der Flow macht 1 `/candidate.info` pro Bewerbung; weit innerhalb von Ashbys 100-Req/min-Standard.
+- **Recruiter-Zeit** — das ist der Gewinn. 100 Bewerbungen manuell lesen ist ~8 Stunden; die Slack-`#review-needed`-Queue mit vorab-stagierter Evidenz und Links durchgehen ist ~20–30 Minuten. Die Fast-Track-Queue braucht weitere 5–10 Minuten für höherwertigen Outreach.
+- **Setup-Zeit** — 60 Minuten für den Flow selbst, plus 30–60 Minuten pro Stelle für das Rubric. Das Rubric ist die bindenden Kosten; Wiederverwendung über Rollenfamilien amortisiert sie.
+
+## Erfolgsmetrik
+
+Drei Zahlen pro Stelle pro Monat im ATS verfolgen:
+
+- **Recruiter-Screen-Pass-Rate aus `#fast-track`** — sollte ≥75 % auf einem kalibrierten Rubric sein. Darunter ist das Rubric oder der Schwellenwert locker; straffen Sie die Anker, bevor Sie den Schwellenwert erhöhen.
+- **Recruiter-Screen-Pass-Rate aus `#review-needed`** — sollte 25–40 % sein. Wenn sie unter 20 % fällt, ist das Ermessens-Puffer-Band zu breit und Sie lesen zu viele. Wenn sie über 50 % steigt, ist der Fast-Track-Cutoff zu hoch und qualifizierte Kandidaten werden verpasst.
+- **Zeit von Bewerbung bis erstem Recruiter-Kontakt** — sollte von Tagen auf unter 4 Stunden sinken. Das ist die Kandidatenerfahrungs-Metrik und das, was den Flow gegenüber dem TA-Leiter verteidigbar macht.
+
+## Vergleich mit Alternativen
+
+- **vs. Ashbys natives Scoring (oder Greenhouse Predictive Hire)** — ATS-natives Scoring ist für die binäre „Match-Wahrscheinlichkeit"-Frage in Ordnung, aber der Score ist eine Black Box und das Rubric gehört nicht Ihnen. Wählen Sie den Flow, wenn Sie einen Per-Dimensions-Score mit wörtlicher Evidenz benötigen (verteidigbar unter NYC LL 144), ein Rubric, das Sie versionskontrollieren, oder ein Modell, das Sie austauschen können. Wählen Sie ATS-nativ, wenn Ihr Team das Rubric nicht pflegen wird.
+- **vs. [Eightfold](/de/tools/eightfold/) / [Findem](/de/tools/findem/) Inbound-Matching** — das sind tiefere Produkte: Sie re-scoren gegen Ihre historischen Einstellungen, sie handhaben Outbound, sie besitzen einen Kandidaten-Graphen. Wählen Sie sie, wenn das Budget das Plattform-Spiel trägt und Sie ein verwaltetes Produkt wollen. Wählen Sie den Flow, wenn Sie das Rubric und das Audit-Log in Ihrem Repo wollen und der Rest Ihres Stacks bereits verdrahtet ist.
+- **vs. DIY-Python-Script, das die Ashby-API pollt** — gleiche Scoring-Qualität, wenn Sie den Prompt sorgfältig aufbauen, aber Sie bauen auch die Webhook-Signatur-Verifizierung, den Fairness-Preflight, den Rubric-Loader, das Audit-Log, das Slack-Routing und die n8n-Debugger-UX selbst. Das Bundle liefert sie.
+- **vs. Status quo (Recruiter liest alles)** — manuell ist richtig bei weniger als 10 Apps/Woche pro Stelle, wo ein Rubric Overhead ist und der Kopf des Recruiters bereits kalibriert ist. Der Flow verdient seine Setup-Kosten bei Rollen, die skalieren.
+
+## Watch-outs
+
+- **Bias-Amplifikation.** *Guard:* Der Fairness-Preflight in Schritt 4 stoppt den Flow, wenn das Rubric Protected-Class-Proxies enthält. Das Audit-Log erfasst `rubric_sha256` pro bewerteter Bewerbung, sodass das bei einem bestimmten Datum verwendete Rubric unter [EU-KI-Act](/de/learn/eu-ai-act-for-legal-teams/)- oder NYC Local Law 144-Prüfung reproduzierbar ist.
+- **Webhook-Replay / Doppel-Scoring.** *Guard:* Die Ashby-Webhook-Signatur enthält `application.created.id`. Das Audit-Log des Flows ist auf `application_id` als Schlüssel; Zweitankunft wird erkannt und ohne Neubewertung übersprungen.
+- **Modell-Output-Drift bei Rubric-Bearbeitungen.** *Guard:* `rubric_sha256` im Audit-Log macht Rubric-Änderungen zwischen zwei Runs sichtbar. Wenn ein Gesamtscore für eine neu bewertete Bewerbung abweicht, liegt der Unterschied im Rubric-Hash, nicht in Modell-Nicht-Determinismus.
+- **Auto-Route-to-Rejection-Drift.** *Guard:* Der Flow hat keinen `reject`-Branch. Der dritte Bucket ist `#surfaced-not-rejected`, und die Slack-Nachricht enthält einen „promote to review"-Button, der die Bewerbung nach `#review-needed` re-routet. Der Recruiter ist die alleinige Ablehnungsautorität.
+- **Lebenslauf-PII in Slack-Nachricht.** *Guard:* Die Slack-Nachricht enthält nur den Vornamen des Kandidaten, den aktuellen Titel und die Per-Dimensions-Evidenz-Auszüge (max. 200 Zeichen jeweils). Vollständiger Lebenslaufsinhalt bleibt im ATS. Slack-Kanäle haben kürzere Aufbewahrung als Ashby; der Flow macht Slack nicht zu einer Kandidaten-Datenbank.
+- **Nicht-auf-EU-Kandidaten-getestetes Risiko.** *Guard:* Der `Verify Signature`-Node des Flows prüft auch den angegebenen Standort der Bewerbung. Bewerbungen mit EU-ansässigen Standortcodes werden unabhängig vom Score nach `#review-needed` geroutet, und die Slack-Nachricht flaggt `EU-Kandidat — bestätigen, dass KI-Screening-Hinweis zugestellt wurde`. KI-Screening von EU-Ansässigen ohne Hinweis ist eine EU-KI-Act-Hochrisikosystem-Verletzung.
+
+## Stack
+
+Das Artefakt-Bundle liegt unter `apps/web/public/artifacts/inbound-applicant-triage-n8n/` und enthält:
+
+- `inbound-applicant-triage-n8n.json` — der n8n-Flow-Export (jeder Node konfiguriert, keine Stub-Parameter)
+- `_README.md` — Credential-Setup, Rubric-Format, Fairness-Checkliste, Dry-Run-Prozedur
+
+Tools, die der Workflow voraussetzt: [Ashby](/de/tools/ashby/) (das ATS — wechseln Sie zu [Greenhouse](/de/tools/greenhouse/) oder [Lever](/de/tools/lever/), indem Sie den Intake-Node ersetzen), [Claude](/de/tools/claude/) (das Scoring-Modell), [n8n](/de/tools/n8n/) (die Orchestrierung), [Slack](/de/tools/slack/) (die Recruiter-Queue-Oberfläche). Für den parallelen Sourcing-Flow siehe den [Kandidaten-Sourcing-Claude-Skill](/de/workflows/candidate-sourcing-claude-skill/); für den Per-Loop-Interview-Aufbau siehe den [Interview-Loop-Builder](/de/workflows/interview-loop-builder-skill/).
+
+Verwandte Konzepte: [KI-Screening-Bias](/de/learn/ai-screening-bias/), [Kandidatenerfahrung](/de/learn/candidate-experience/), [Recruiting-Funnel-Metriken](/de/learn/recruiting-funnel-metrics/), [Strukturiertes Interviewen](/de/learn/structured-interviewing/).

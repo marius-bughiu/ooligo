@@ -1,0 +1,103 @@
+---
+slug: forecast-narrative-skill
+canonical_slug: forecast-narrative-skill
+locale: de
+verticals: [revops]
+title: Forecast-Call-Narrativ aus Salesforce + Gong
+artifact_type: claude-skill
+tools_used: [claude, salesforce, gong]
+roles: [revops]
+difficulty: intermediate
+time_to_setup: 45min
+human_tested: false
+translated_from: en/forecast-narrative-skill.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: e51e35262d3238a517f1ed7f76b8a296a30e3431169a7834f4f0be34de23d963
+---
+
+Ein Claude Skill, der die unordentliche Realität von Pipeline-Daten in ein einseitiges Forecast-Narrativ für den wöchentlichen Forecast-Call verwandelt. Der Output ist das Dokument, das der VP Sales / CRO in den 30 Minuten vor dem Live-Call liest: eine Headline-Zahl mit Konfidenzband, die drei Top-Deals, die die Zahl bewegen, das einzige größte Risiko und eine Bitte an die Führung.
+
+Der Skill liest Salesforce als Ground Truth für den Pipeline-Status und Gong als Wahrheitsprüfung für das, was Reps sagen vs. was Kunden tatsächlich gesagt haben. Er bekämpft zwei spezifische Fehlermodi, die RevOps-Teams jede Woche treffen: Deals, die auf Hoffnung statt auf Evidenz in Commit sitzen, und Exec-Briefings in einer so abgesicherten Sprache, dass der Exec aufhört zu lesen.
+
+## Wann einsetzen
+
+Verwenden Sie den Skill auf einer wiederkehrenden Kadenz — einmal pro Woche pro Forecast-Segment, ca. 30 Minuten vor dem Live-Call in den Forecast-Slack-Kanal gepostet. Der Punkt ist, Führungskräften Zeit zu geben, ihn kalt zu lesen, mit schärferen Fragen hineinzugehen und den Call zu verkürzen.
+
+Er zahlt sich aus, wenn:
+
+- Ihre Forecast-Segmente mindestens zehn aktive Commit-Deals pro Woche haben. Darunter schrumpft der Mehrwert gegenüber einem manuell geschriebenen Briefing.
+- Ihre Reps Gong-Calls zuverlässig loggen. Wenn die Gong-Aktivität lückenhaft ist, wird der Risiko-Abschnitt des Skills zum Rauschen.
+- Ihre Salesforce-Stage- und Close-Date-Disziplin vernünftig ist. Der Skill kann schlechte Daten nicht beheben; er zeigt sie sichtbarer auf, was nützlich ist, aber nicht das, was die meisten Teams von einem „Forecast-Tool" wollen.
+
+## Wann NICHT einsetzen
+
+Drei Situationen, in denen der Skill-Output das falsche Artefakt ist:
+
+- **Board-of-Directors-Materialien ohne CFO-Überprüfung.** Das Narrativ ist ein internes RevOps-Artefakt, das gegen Salesforce abgestimmt ist, nicht gegen das Buchungshauptbuch des Finanzwesens. An den Board gezeigte Zahlen sollten unter den Kontrollen des Finanzwesens durch das Finanzwesen kommen. Der Skill verweigert ausdrücklich, Board-formatierte Ausgabe zu produzieren.
+- **Finanzoffenlegungspflichtige Kommunikation** (10-Q, 10-K, Earnings-Vorbereitung, Investor-Updates, öffentliche Prognosen, alles, was die Rechtsabteilung sehen wird). Verwenden Sie den Prozess des Finanzwesens; fügen Sie dieses Narrativ nicht in extern Eingereichtes ein.
+- **Re-Baselining des offiziellen Commits.** Dieses Narrativ erklärt den Commit, den der Segment-Leader bereits gesetzt hat. Es ersetzt nicht das Commit-Setting-Meeting selbst. Wenn Sie den Skill verwenden, um herauszufinden, was der Commit sein sollte, haben Sie zwei Probleme und dieser Skill löst keines davon.
+
+## Einrichtung
+
+Das Bundle liegt unter `apps/web/public/artifacts/forecast-narrative-skill/`. Es enthält:
+
+1. `SKILL.md` — installieren Sie es unter `~/.claude/skills/forecast-narrative/SKILL.md`. Setzen Sie `SFDC_TOKEN`, `GONG_API_KEY` in Ihrer Umgebung.
+2. `references/1-narrative-structure.md` — die Abschnittsvorlage und Per-Abschnitt-Regeln. Bearbeiten Sie die Überschriften-Namen, wenn Ihr Exec nach anderen Labels sucht, aber behalten Sie die Abschnittsanzahl: Jeder Abschnitt existiert, weil sein Entfernen in vergangenen Calls zu Verwirrung geführt hat.
+3. `references/2-hedge-words-blocklist.md` — der Input für den Hedge-Removal-Pass. Bearbeiten Sie ihn nach dem Unternehmens-Ton; erweitern Sie ihn, wann immer ein Hedging-Wort einen echten Run übersteht. Die Blockliste ist das dauerhafte Artefakt — der Prompt ist es nicht.
+4. `references/3-sample-output.md` — ein ausgearbeitetes Beispiel mit der Reviewer-Checkliste. Führen Sie zuerst einen Skill-Aufruf auf einem bekannten Segment aus und vergleichen Sie ihn damit; wenn die Struktur nicht übereinstimmt, beheben Sie den Prompt, bevor Sie ihn an den Exec senden.
+
+Konfigurieren Sie Ihre Forecast-Segmente in `references/segment-config.md` — eine Zeile pro Segment mit der Salesforce-Report-ID, der Gong-Workspace-ID und dem Namen des Segment-Leaders (damit die „Bitte an VP/CRO"-Zeile automatisch aufgelöst wird). Snapshots landen unter `snapshots/<segment>/<week_ending>.json` und werden bei jedem Run versions-geprüft; wenn die Zeilen-Anzahl der Datei nicht mit der erwarteten Zeilen-Anzahl des Reports übereinstimmt, bricht der Skill ab, bevor er Deltas berechnet.
+
+Rufen Sie jeden Woche mit dem Segment-Slug und dem Wochenend-Datum auf: `build_forecast_narrative(segment="enterprise-amer", week_ending="2026-05-01")`.
+
+## Was der Skill tatsächlich macht
+
+Sechs Schritte, in Reihenfolge ausgeführt. Sie sind aus Design-Gründen sequenziell — jeder Schritt nach dem ersten hängt vom Snapshot ab, und der Hedge-Removal-Pass hängt davon ab, dass der vollständige Entwurf existiert.
+
+1. **Salesforce beim Cutoff snapshotten.** Den gespeicherten Report beim Wochenend-Zeitstempel ziehen. Auf Disk persistieren, damit der nächste Run einen echten Prior-Week-Snapshot zum Vergleichen hat. Gegen den Live-Salesforce-Status statt eines gespeicherten Snapshots zu diffen verliert den Audit-Trail.
+2. **Deltas berechnen.** Jede Opportunity aufzeigen, die die Forecast-Kategorie geändert hat, das Close-Date um mehr als 14 Tage verschoben hat, den Betrag um mehr als 10 % geändert hat oder aus dem Segment erstellt oder entfernt wurde.
+3. **Gong-Evidenz pro Commit-Deal ziehen.** Für jeden Deal in Commit Gong nach kundenseitiger Aktivität in den letzten 14 Tagen abfragen. Das ist der Teil, der den Skill von „Salesforce in hübschem Markdown zusammenfassen" unterscheidet — die Kombination der zwei Systeme fängt Deals ab, die auf Hoffnung in Commit gehalten werden, was Salesforce allein nicht sehen kann.
+4. **Beweger ranken.** Nach `abs(amount_change) × close_date_proximity` bewerten. Die Top drei nehmen. Harte Obergrenze bei drei, weil das Narrativ für den Exec ist, nicht zur Inspektion.
+5. **Das einzige größte Risiko identifizieren.** Aus dem Commit-Set einen Deal auswählen, bei dem Gong seit vierzehn oder mehr Tagen still ist, das Close-Date zweimal in 60 Tagen gerutscht ist oder der Deal in den letzten 7 Tagen ohne entsprechenden Kunden-Call zu Commit hinzugefügt wurde. Einen auswählen. Eine Liste von fünf Risiken wird als keine Risiken gelesen.
+6. **Hedge-Removal-Pass.** Den Entwurf entsprechend `references/1-narrative-structure.md` generieren. Dann einen zweiten Pass ausführen, der gegen `references/2-hedge-words-blocklist.md` scannt und jede geflaggten Formulierung in eine direkte Behauptung oder ein „weiß nicht"-Eingeständnis umschreibt. Der Grund für zwei Passes statt eines Upfront-Promptens: Sprachmodelle driften in Richtung Absicherung, je länger der Output wird, und ein dedizierter Entfernungs-Pass fängt zuverlässig ab, was ein Einzelpass-Prompt vermisst.
+
+Die Entscheidung, ein strukturiertes Narrativformat zu verwenden — feste Abschnittsreihenfolge, feste Überschriften, feste Argumentationsform — statt Freitext-Prosa ist bewusst. Freitext-Output driftet von Woche zu Woche in der Struktur, was den Exec zwingt, sich bei jedem Lesen neu zu orientieren. Feste Struktur bedeutet, dass der Exec jede Woche dieselben fünf Positionen scannt und dieselben Informationstypen an denselben Stellen findet. Vorhersehbarkeit ist das Feature.
+
+## Kostenrealität
+
+Ein einzelnes Segment-Narrativ verbraucht ungefähr 18.000–24.000 Input-Token (der Snapshot, der Prior-Snapshot, die Gong-Aktivitätszeilen, die drei Referenzdateien) und produziert etwa 1.200–1.800 Output-Token, einschließlich des Hedge-Removal-Passes. Zu Sonnet 4.6-Listenpreisen sind das in der Größenordnung von 0,07–0,11 $ pro Narrativ. Mit Opus 4.7 erwarten Sie 0,35–0,55 $. Betreiben Sie es auf Sonnet für die wöchentliche Kadenz und reservieren Sie Opus für Quartalsende, wenn der Einsatz die Ausgabe rechtfertigt.
+
+Eingesparte Zeit gegenüber einem manuell geschriebenen Briefing: Ein erfahrener RevOps-Analyst benötigt 60–90 Minuten pro Segment pro Woche, um dasselbe Artefakt aus rohen Salesforce-Reports und Gong-Notizen zusammenzustellen. Über vier Segmente sind das ungefähr einen halben Tag pro Woche zurückgewonnen. Der Skill benötigt 90–120 Sekunden pro Segment zum Ausführen, plus 5–10 Minuten menschliche Überprüfung vor dem Posten in Slack.
+
+Die ehrliche Einschränkung: Die eingesparte Zeit verschwindet vollständig, wenn der menschliche Überprüfungsschritt übersprungen wird. Reviewer fangen die halluzinierten Spezifika ab, die dieser Skill nicht eliminieren kann; ohne diesen Schritt dreht sich die Kostenrealität um und der Skill wird zu einer Verbindlichkeit. Budget die Überprüfungszeit explizit ein.
+
+## Erfolgsmetrik
+
+Beobachten Sie eine Zahl: **Forecast-Call-Dauer** über ein sechswöchiges Trailing-Window. Wenn das Briefing seinen Job macht, kommen Führungskräfte vorgelesen herein und der Call verkürzt sich um 15–25 %. Das Narrativ ersetzt den „was hat sich diese Woche geändert"-Teil des Calls, der am schlechtesten mit dem Deal-Volumen skaliert.
+
+Sekundäre Metriken, die nach dem ersten Monat verfolgt werden sollten:
+
+- Beat-or-Miss-Genauigkeit der Headline gegen die tatsächlichen Werte beim Periodenabschluss (Ziel: innerhalb von 500.000 $ auf Segmenten über 10 Mio. $ Commit).
+- Anzahl der „das ist falsch"-Korrekturen von Segment-Leadern pro Woche (Ziel: bis Woche sechs gegen null tendierend).
+- Ob der „einzige größte Risiko"-Deal tatsächlich gerutscht ist — False Positives sind tolerierbar, aber ein Muster von False Negatives (gerutschte Deals, die nicht geflaggt wurden) bedeutet, dass die Risiko-Heuristiken in Schritt 5 des Skills abgestimmt werden müssen.
+
+## Vergleich mit Alternativen
+
+- **Clari Narrative.** Clari produziert ein ähnliches Artefakt nativ, wenn Sie bereits auf Clari sind. Der Skill gewinnt, wenn (a) Sie nicht auf Clari sind und Ihr Forecast-Tool der Wahl Salesforce + Gong + Tabellen ist, oder (b) Sie auf Clari sind, aber das Narrativ mit unternehmensspezifischen Überlegungen erweitern möchten, die die Clari-Vorlage nicht ausdrücken kann. Clari gewinnt bei Out-of-the-Box-Deployment und engeren Salesforce-Hooks.
+- **Gong Forecast Notes.** Gongs Forecast-Funktionen lehnen sich stark auf call-seitige Signale und sind schwächer bei Pipeline-Zustands-Überlegungen. Der Skill verknüpft explizit Salesforce-seitigen Status mit Gong-seitiger Evidenz; Gong Forecast Notes macht das Gegenteil und behandelt die Pipeline als Nachfolge. Wählen Sie diesen Skill, wenn Salesforce die Source of Truth ist und Gong die Verifizierungsschicht. 
+- **Manuell geschriebenes Exec-Briefing.** Ein erfahrener RevOps-Analyst produziert immer noch das beste Narrativ — der Skill ist bestenfalls 80 % davon, und diese 80 % liegen bei faktischer Struktur, nicht bei Ermessensentscheidungen darüber, welche Deals aufzuzeigen sind. Der Skill gewinnt bei Konsistenz, Kadenz und dem halben Tag pro Woche, den er dem Analysten zurückgibt. Der Analyst sollte jeden Run überprüfen und bearbeiten; das ist ein Co-Autor-Tool, kein Ersatz.
+
+## Watch-outs
+
+- **Zuversichtlich klingende Halluzinationen bei Deal-Spezifika.** Das Modell kann einen Beschaffungsschritt, einen Stakeholder-Namen oder einen Vertragswert erfinden, der plausibel liest. Guard: Jede Behauptung über einen spezifischen Deal muss auf ein Salesforce-Feld oder eine Gong-Call-Zusammenfassung in den Quelldaten zurückführen. Der Skill bezeichnet jede inferierte-nicht-beobachtete Behauptung mit `(inferiert)` oder lässt sie weg. Wenn eine zuversichtliche spezifische Behauptung ohne Quellzitat erscheint, behandeln Sie den Run als fehlgeschlagen und führen Sie ihn mit einem kleineren Deal-Set erneut aus.
+- **Hedging-Sprache, die trotz des Removal-Passes zurückschleicht.** „Könnte", „dürfte", „möglicherweise", „scheint" schleichen sich zurück, besonders im Risiko-Abschnitt. Guard: Erweitern Sie `references/2-hedge-words-blocklist.md`, wann immer ein neues Hedging-Wort einen Pass übersteht. Die Blockliste ist das dauerhafte Artefakt; der Prompt ist es nicht. RevOps besitzt diese Datei.
+- **Zusammenfassung als tatsächliche Prognose zitiert.** Das Narrativ erklärt den Commit; es setzt ihn nicht. Guard: Die Headline zitiert die Commit-Zahl des Segment-Leaders, nie eine vom Skill allein berechnete Zahl. Wenn `current_commit` nicht übergeben wurde, bezeichnet der Skill seinen berechneten Bereich als „Skill-berechnete Pipeline-Abdeckungsbereich, kein genehmigter Commit", damit das Dokument nicht als offizielle Zahl falsch gelesen werden kann.
+- **Snapshot-Drift.** Wenn `snapshots/<segment>/<week_ending>.json` aus einem teilweise geladenen Report geschrieben wurde (Salesforce-Timeout mid-Pull, zum Beispiel), werden die Deltas im nächsten Run auf unsichtbare Weise falsch sein. Guard: Die erste Zeile der Snapshot-Datei zeichnet die erwartete vs. erhaltene Zeilen-Anzahl auf; wenn sie nicht übereinstimmen, bricht der Skill ab und teilt dem Operator mit, den Snapshot neu zu machen, bevor er fortfährt.
+- **Stage-Disziplin.** Wenn Reps Deals zu Commit verschieben, ohne dass die Arbeit getan ist, behebt kein Skill das. Das Narrativ wird treu berichten, was Salesforce sagt. Kombinieren Sie diesen Skill mit einem Stage-Progression-Validator-Workflow vorgelagert.
+
+## Stack
+
+- **Salesforce** — Pipeline-Status, Stage-Historie, Deal-Beträge, der gespeicherte Report, der jedes Segment definiert.
+- **Gong** — kundenseitiges Aktivitätssignal und Call-Zusammenfassungen als Wahrheitsprüfung auf Rep-Narrativ.
+- **Claude** — Narrativ-Synthese, Ranking und der Hedge-Removal-Pass. Sonnet für wöchentliche Kadenz; Opus für Quartalsende, wenn der Einsatz es rechtfertigt.

@@ -1,0 +1,105 @@
+---
+slug: headcount-plan-reconciliation-n8n
+canonical_slug: headcount-plan-reconciliation-n8n
+locale: de
+verticals: [recruiting]
+title: Headcount-Plan-Abstimmung mit n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, slack]
+roles: [recruiter, talent-acquisition, finance-business-partner]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/headcount-plan-reconciliation-n8n.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: d17279f5ceace94c8721ec7f68141c40283e6983820c40774b5f29d1c6111672
+---
+
+Ein n8n-Flow, der den Headcount-Plan des Unternehmens (die genehmigten Neueinstellungen pro Quartal, nach Team, nach Level, mit Startdaten) gegen die offenen Requisitions im ATS und die tatsächlichen Einstellungen im HRIS abgleicht — und wöchentlich einen Drift-Report mit zeilenweisen Varianzen an Slack postet. Ersetzt die Freitags-„Was ist die Lücke?"-Tabelle der Recruiter-Führung durch einen strukturierten Digest, den das Finanzwesen genehmigen kann. Fängt die Fehlermodi ab, die still ein Quartal kosten — gegen Teams geöffnete Requisitions, die bereits am Plan sind, Einstellungen unter dem falschen Team gebucht, Auftragnehmer-Konvertierungen als Neueinstellungen gezählt.
+
+## Wann einsetzen
+
+- Das Unternehmen hat einen schriftlichen Headcount-Plan mit Team- / Level- / Startdatum-Granularität (nicht „wir stellen 50 in Q3 ein" — „12 in Engineering, davon 4 Senior IC, 2 Mid IC, mit 6, die bis Woche 6 starten").
+- Sie haben mindestens zwei davon: den Headcount-Plan in einer strukturierten Quelle (Carta, BambooHR-Plan-Modul, Finance-Tabelle), offene Requisitions in [Ashby](/de/tools/ashby/) oder einem anderen ATS und im HRIS aufgezeichnete Einstellungen.
+- Sie schließen ein Quartal ab und müssen die Prognoseabweichung früh genug sehen, um etwas dagegen zu tun (nicht am Tag vor dem Board-Meeting).
+- Der Plan hat Team-Labels, die den ATS-Team-Labels entsprechen, ODER Sie haben eine Mapping-Tabelle, die Sie pflegen können.
+
+## Wann NICHT einsetzen
+
+- **Kein strukturierter Plan.** Ein Plan, der in einer Präsentation oder einem Meeting-Notizen-Dokument lebt, ist nicht abstimmbar. Bringen Sie den Plan zuerst in eine strukturierte Quelle; der Flow liest kein PowerPoint.
+- **Der Hiring Manager ist die Source of Truth.** Wenn Einstellungen in informellen Manager-für-Manager-Tabellen aufgezeichnet sind, ist die Abstimmung bedeutungslos, weil das „Aktual" alles ist, was jeder Manager sagt. Der Flow-Wert hängt davon ab, dass das HRIS das Aktual ist.
+- **Pre-Series-B-Unternehmen mit weniger als 30 Einstellungen pro Jahr.** Abstimmungsaufwand übersteigt den Wert bei kleinem Maßstab; ein Recruiter-Leader und der CEO können den Plan in ihren Köpfen halten.
+- **Der Plan ändert sich wöchentlich.** Wenn der Plan ständig mitten im Quartal revidiert wird, wird das Varianzsignal durch Planrevisionsrauschen dominiert. Stabilisieren Sie zuerst die Planänderungs-Kadenz.
+
+## Einrichtung
+
+1. **Flow importieren.** Legen Sie `apps/web/public/artifacts/headcount-plan-reconciliation-n8n/headcount-plan-reconciliation-n8n.json` in Ihre n8n-Instanz. Jeder Node trägt `notesInFlow: true`, sodass die In-Canvas-Notizen die Abstimmungslogik erklären.
+2. **Credentials verdrahten.** Drei erforderlich: `PLACEHOLDER_PLAN_DB_CRED_ID` (Lesezugriff auf den Plan-Speicherort — Postgres, Snowflake oder ein Sheets-Connector), `PLACEHOLDER_ASHBY_CRED_ID` (Ashby-Lese-Scope), `PLACEHOLDER_HRIS_CRED_ID` (HRIS-Lese-Scope; BambooHR / Workday / Rippling sind vorgeformt, andere brauchen einen Connector).
+3. **Team-Mapping verfassen.** Eine YAML-Datei unter `n8n/data/team_mapping.yml` mappt Plan-Team-Labels auf ATS-Team-Labels und HRIS-Team-Labels. Ohne das kann der Flow nicht system-übergreifend abstimmen. Die Mapping-Erstellung ist der einmalige Kostenaufwand; die laufende Wartung ist gering (nur wenn Teams erstellt oder zusammengeführt werden).
+4. **Slack-Ziel konfigurieren.** Per-Team-Varianzen-Reports an Per-Team-Kanäle, plus ein aggregierter Report an einen Recruiting-Leadership-Kanal. Der `Compose Variance Report`-Node des Flows templiert die Nachricht; passen Sie sie nach der Präferenz Ihres Teams für knapp vs. detailliert an.
+5. **Zeitplan setzen.** Der Standard ist wöchentlich Montag 8 Uhr Ortszeit. Der Cron-Node hat `timezone` explizit gesetzt — passen Sie es an die Zeitzone Ihres Büros an.
+6. **Dry-Run auf letztem Quartal.** Gegen letztes Quartal-Plan und Aktuals wiederholen. Bestätigen, dass die Varianz-Zahlen des Flows mit denen übereinstimmen, die Ihr Finance-Partner am Quartalsende hatte. Wenn nicht, ist das Team-Mapping oder die Auftragnehmer-vs.-VZE-Klassifikation falsch.
+
+## Was der Flow macht
+
+Acht Nodes. Die Abstimmungslogik ist deterministisch; das LLM tritt nur beim Varianz-Narrativ-Schritt (5) ein, und nur um eine menschenlesbare Zusammenfassung der deterministischen Befunde zu verfassen.
+
+1. **Cron-Trigger** — Montags 8 Uhr Büro-Zeitzone (Zeitzone explizit in Node-Einstellungen gesetzt).
+2. **Plan abrufen** — zieht den Headcount-Plan des aktuellen Quartals aus der Plan-Quelle. Schema: `team`, `level`, `count`, `target_start_date`, `req_status` (`approved` / `pending`).
+3. **Offene Requisitions abrufen (Ashby)** — zieht alle offenen Requisitions aus Ashby. Schema: `req_id`, `team`, `level`, `opened_at`, `target_start_date`.
+4. **Einstellungen abrufen (HRIS)** — zieht Einstellungen dieses Quartals aus dem HRIS. Schema: `hire_id`, `team`, `level`, `start_date`, `employment_type` (`fte` / `contractor` / `intern`).
+5. **Abstimmen** — Code-Node. Joined Plan + Requisitions + Einstellungen nach Team/Level. Für jede (Team, Level)-Zelle:
+   - **Offen gegen Plan** — Anzahl offener Requisitions vs. Plan-Ziel.
+   - **Eingestellt gegen Plan** — Anzahl VZE-Einstellungen vs. Plan-Ziel. Auftragnehmer und Praktikanten werden NICHT gezählt (der Auftragnehmer-Konvertierungs-Bucket des Flows ist separat).
+   - **Varianz** — `(Plan - Einstellungen - offene_Requisitions)`. Negativ = über Plan. Positiv = Lücke.
+   - **Drift-Signal** — Zellen flaggen, wo sich die Varianz seit dem letzten Run um >3 geändert hat, was eine ungeplante Genehmigung oder eine verpasste Einstellung suggeriert.
+   - **Anomalie-Zellen**: Requisitions offen ohne Plan-Eintrag (Rogue Req?), Einstellungen unter Teams gebucht, die nicht im Plan sind (falsch klassifiziert?), als Neueinstellungen gemeldete Auftragnehmer-Konvertierungen (doppelt gezählt?).
+6. **Claude Compose Narrative** — nimmt den strukturierten Abstimmungs-Output und schreibt eine 200-Wort-Varianz-Zusammenfassung pro Team-Kanal + eine 400-Wort-Aggregat-Zusammenfassung für die Führung. Das LLM berechnet KEINE Varianzen; es erzählt die deterministischen Befunde. Der Prompt verbietet dem Modell ausdrücklich, Ursachen zu inferieren („das Team liegt zurück, weil...") — das ist die Aufgabe des Lesers.
+7. **Per-Team posten** — Slack-Nachricht pro Team-Kanal mit nur den Varianzen dieses Teams. Datenschutz-Haltung: Jedes Team sieht nur seine eigenen Zahlen.
+8. **Aggregat posten** — Slack-Nachricht an den Recruiting-Leadership-Kanal mit der cross-team-Tabelle. Enthält Anomalie-Zellen mit einem Link zurück zu den Quell-Datensätzen.
+
+## Kostenrealität
+
+Pro wöchentlichem Run, auf Claude Sonnet 4.6:
+
+- **LLM-Token** — Narrativ-Komposition ist der einzige LLM-Schritt. Typischerweise 2–4k Input (strukturierte Abstimmungstabelle + Skill-Anweisungen) und 1–2k Output (Per-Team-Zusammenfassungen + Aggregat). Ungefähr 0,02–0,04 $ pro Run. Vernachlässigbar bei wöchentlicher Kadenz.
+- **Plan-Quelle / ATS / HRIS-API-Kosten** — nur Leseanrufe. Innerhalb kostenloser Kontingente für Ashby und die meisten HRIS-Anbieter.
+- **Recruiter-Leader-Zeit** — das ist der Gewinn. Freitagnachmittags-Tabellenneuerstellung ist 60–120 Minuten wöchentlich, wenn sie gründlich gemacht wird; den Montagsdigest lesen ist 5–10 Minuten. Die größere Zeitersparnis liegt bei den Anomalie-Zellen, die bei der manuellen Abstimmung oft unbemerkt bleiben bis zum Quartalsende.
+- **Setup-Zeit** — 90 Minuten einschließlich der Team-Mapping-Erstellung. Das Team-Mapping ist der bindende Setup-Aufwand.
+
+## Erfolgsmetrik
+
+Drei Dinge monatlich verfolgen:
+
+- **Quartalsend-Plan-Genauigkeit** — am Quartalsende, was war der Unterschied zwischen projizierten Einstellungen (Woche 8 des Quartals) und tatsächlichen Einstellungen (Woche 13)? Sollte vom historischen Drift des Unternehmens auf innerhalb von 5 % sinken. Die frühe Warnung ist es, was die Varianz handlungsfähig macht.
+- **Anomalie-Auflösungszeit** — Zeit von „Anomalie-Zelle geflaggt" bis „Anomalie aufgelöst" (korrekt klassifiziert, Plan aktualisiert oder Einstellung neu zugeordnet). Sollte von „am Quartalsende entdeckt" auf unter 5 Tage sinken.
+- **Planrevisions-Häufigkeit** — wie oft sich der Plan selbst mitten im Quartal ändert. Der Flow zeigt das auf; wenn Revisionen wöchentlich sind, ist die Planstabilität selbst das Problem und das Varianzsignal ist Rauschen.
+
+## Vergleich mit Alternativen
+
+- **vs. ATS-native Dashboards (Ashby Hiring Plan, Greenhouse Headcount Planning).** ATS-native Dashboards funktionieren, wenn das ATS die Plan-Quelle UND die Aktual-Quelle ist. Wählen Sie sie, wenn Sie konsolidieren können. Wählen Sie den Flow, wenn Ihr Plan im System des Finanzwesens liegt, Ihre Requisitions im ATS sind und Ihre Einstellungen im HRIS sind — drei Systeme, die verbunden werden müssen und die kein einzelnes ATS-Dashboard sieht.
+- **vs. Carta / Pave / Lattice Headcount-Planning-Module.** Wie oben; wenn die Plattform Ihre einzelne Quelle ist, verwenden Sie sie. Der Flow ist für den Multi-System-Fall.
+- **vs. ein vom Finanzwesen gebautes Dashboard.** Vom Finanzwesen gebaute BI-Dashboards (Looker, Mode, Hex) handhaben die Joins gut. Wählen Sie BI, wenn Sie Analysten-Kapazität haben. Wählen Sie den Flow, wenn nicht, oder wenn Sie die Varianz Slack-gepusht statt Dashboard-gezogen haben möchten.
+- **vs. die manuelle Freitags-Tabelle.** Der Standard. Vorhersehbarer Fehlermodus: Der Tabellen-Autor geht, die Methodik driftet, und Quartalsend-Varianzen überraschen den Board. Der Flow ist die leichtgewichtige Korrektur.
+
+## Watch-outs
+
+- **Team-Mapping-Drift.** *Guard:* Der erste Abstimmungsschritt des Flows prüft, dass jedes Plan-Team und jedes ATS-Team und jedes HRIS-Team in der Mapping-Datei erscheint. Nicht gemappte Entitäten erscheinen als Anomalie-Zellen; der Report flaggt sie explizit statt sie still fallen zu lassen.
+- **Auftragnehmer-Konvertierungs-Doppelzählung.** *Guard:* HRIS-Abfrage filtert nach `employment_type = 'fte'`. Konvertierungen bestehender Auftragnehmer zu VZEs erscheinen in einem separaten „Konvertierungen dieses Quartals"-Abschnitt, nicht in der Neueinstellungs-Zählung.
+- **Mitten-Quartal-Planrevision, die Varianz auslöscht.** *Guard:* Der Report zeigt aktuelle Planzahlen UND die ursprünglichen Quartalsstartplan-Zahlen mit aufgezeigtem Delta. Der Leser sieht beide Signale.
+- **Off-Cycle-Einstellungen (akquirierte Teams, Intern-zu-VZE).** *Guard:* Der Flow flaggt jede Einstellung mit `start_date` vor dem Quartalsstart als „off-cycle" und zeigt sie separat auf. Diese sind häufig (Acqui-Hire, später Abschluss) und erfordern eine andere Lektüre als reguläre Plan-Einstellungen.
+- **Datenschutz: Per-Team-Kanäle sehen Zahlen anderer Teams.** *Guard:* Die Per-Team-Slack-Post-Vorlage referenziert nur die Varianz-Zeile dieses Teams. Der Aggregat-Post (cross-team) geht nur an den Recruiting-Leadership-Kanal, nicht an Per-Team-Kanäle.
+- **Veraltete Plan-Quelle.** *Guard:* Der Flow prüft das `last_updated_at` der Plan-Quelle. Wenn älter als 14 Tage, wird ein Warn-Header auf dem Report ausgegeben („Plan zuletzt vor >14 Tagen aktualisiert — Varianz kann Plan-Veraltung widerspiegeln, nicht tatsächliche Lücke").
+
+## Stack
+
+Das Artefakt-Bundle liegt unter `apps/web/public/artifacts/headcount-plan-reconciliation-n8n/` und enthält:
+
+- `headcount-plan-reconciliation-n8n.json` — der n8n-Flow-Export mit allen konfigurierten Nodes
+- `_README.md` — Credential-Setup, Team-Mapping-Format, Dry-Run-Prozedur
+- `team-mapping-template.yml` — das Team-Mapping-YAML zum Kopieren und Ausfüllen
+
+Tools, die der Workflow voraussetzt: [n8n](/de/tools/n8n/) (die Orchestrierung), [Ashby](/de/tools/ashby/) (das ATS — wechseln Sie zu [Greenhouse](/de/tools/greenhouse/), indem Sie den Fetch-Reqs-Node ersetzen), [Claude](/de/tools/claude/) (Narrativ-Komposition), [Slack](/de/tools/slack/) (das Report-Ziel). HRIS-Connector ist unternehmensspezifisch.
+
+Verwandte Konzepte: [Workforce Planning](/de/learn/workforce-planning/), [Recruiting Funnel Metrics](/de/learn/recruiting-funnel-metrics/), [Cost per Hire](/de/learn/cost-per-hire/).

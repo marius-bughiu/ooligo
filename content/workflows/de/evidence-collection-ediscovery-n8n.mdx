@@ -1,0 +1,95 @@
+---
+slug: evidence-collection-ediscovery-n8n
+canonical_slug: evidence-collection-ediscovery-n8n
+locale: de
+verticals: [legal-ops]
+title: Beweismittelsammlungs-Orchestrierung für eDiscovery mit n8n
+artifact_type: n8n-flow
+tools_used: [n8n, relativity, slack]
+roles: [legal-ops, ediscovery-lead, in-house-counsel]
+difficulty: advanced
+time_to_setup: 180min
+human_tested: false
+translated_from: en/evidence-collection-ediscovery-n8n.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: d7c698322bd644f099fdad13e759f4d734c2f574e00390d4c745a0dee3b99a46
+---
+
+Ein n8n-Flow, der die Sammlungsphase von [eDiscovery](/de/learn/ediscovery/) (die EDRM-„Collection"-Stufe) orchestriert — zieht Custodian-Listen-Daten aus dem HRIS des Unternehmens, generiert Per-Custodian-Sammlungsanfragen gegen die Datenquellen des Unternehmens (Google Workspace, Microsoft 365, Slack, Dateifreigaben, benutzerdefinierte SaaS), verfolgt Sammlungsabschluss und Chain-of-Custody, leitet gesammelte Daten an den [Relativity](/de/tools/relativity/)-Workspace weiter (oder [Everlaw](/de/tools/everlaw/) / [Logikcull](/de/tools/logikcull/)) zur Verarbeitung. Jeder Schritt schreibt in ein unveränderliches Audit-Log, das der Counsel zur Verteidigung der Sammlungsadäquanz verwendet. Ersetzt die manuelle Sammlung des Legal-Ops-Admins per Tabelle und Screenshot durch einen deterministischen Flow.
+
+## Wann einsetzen
+
+- Unternehmen mit regulärer eDiscovery — typischerweise solche mit aktiven Rechtsstreit-Portfolios, wo Sammlung mehrmals pro Jahr stattfindet.
+- Custodian-Anzahl pro Verfahren ist groß genug, dass manuelle Sammlung operativ nicht durchführbar ist (typischerweise >5 Custodians pro Verfahren).
+- Das Unternehmen hat IT-Engineering-Kapazität, um die Connector-Schicht zu verdrahten (Google Workspace Vault, M365 eDiscovery, Slack Discovery API usw.). Der Flow ist die Orchestrierung; die Connectors sind per System.
+- Counsel zeichnet den Sammlungsumfang pro Custodian ab; der Flow führt gegen den genehmigten Umfang aus.
+
+## Wann NICHT einsetzen
+
+- **Single-Custodian-Sammlungen** — manuell ist in Ordnung; die Setup-Kosten des Flows (180 Minuten plus Connector-Verdrahtung) rechnen sich nicht.
+- **Chain-of-Custody-Dokumentations-Expertise ersetzen.** Der Flow generiert Audit-Datensätze; der eDiscovery-Lead validiert, dass die Datensätze dem Chain-of-Custody-Standard der Jurisdiktion entsprechen. Verschiedene Jurisdiktionen haben unterschiedliche Anforderungen.
+- **Sammlungsumfang automatisch definieren.** Counsel definiert den Umfang pro Verfahren; der Flow führt gegen den Umfang aus, verfasst ihn nicht.
+- **Erste Verfahren des Unternehmens** ohne etablierte Sammlungsverfahrens-Baseline. Der Flow codiert ein Verfahren; wenn es kein Verfahren zu codieren gibt, definieren Sie es zuerst.
+
+## Einrichtung
+
+1. **Flow importieren.** Importieren Sie `apps/web/public/artifacts/evidence-collection-ediscovery-n8n/evidence-collection-ediscovery-n8n.json` in Ihre n8n-Instanz.
+2. **Credentials verdrahten.** Pro Quelle: Google Workspace (Vault API; Service-Account mit delegierter Autorität), Microsoft 365 (Compliance Center API; Per-Tenant-App-Registrierung), Slack (Discovery API — nur im Enterprise Grid verfügbar), HRIS (Custodian-Quelle). Plus Relativity / Everlaw / Logikcull (die eDiscovery-Plattform) und Postgres (Audit-Log).
+3. **Per-Quellen-Sammlungsumfang-Vorlage verfassen.** Pro Datenquelle dokumentieren: welche Umfänge sammelbar sind (Datumsbereich, Suchbegriffe, Custodian-spezifische Filter), welche Per-Quellen-Rate-Limits gelten, welches erwartete Output-Format ist.
+4. **Chain-of-Custody-Vorlage konfigurieren.** Pro Verfahren und pro Custodian: wer gesammelt hat (Service-Account-Name + menschlicher Reviewer), wann, was gesammelt wurde, Hash der Sammlung bei Abschluss. Vorlage in `_README.md`.
+5. **eDiscovery-Plattform-Integration einrichten.** Relativity Processing API oder äquivalent für Everlaw / Logikcull. Der Flow lädt in einen Per-Verfahrens-Workspace hoch; die Verarbeitungs-Pipeline (Deduplizierung, OCR usw.) läuft in der Plattform.
+6. **Dry-Run auf einem abgeschlossenen Verfahren.** Sammlung für ein letztes Quartal abgeschlossenes Verfahren wiederholen. Bestätigen, dass das gesammelte Volumen mit dem ursprünglich produzierten übereinstimmt und die Chain-of-Custody-Datensätze mit dem übereinstimmen, was der Counsel zertifiziert hat.
+
+## Was der Flow macht
+
+Acht Nodes. Per-Custodian-per-Quellen-Orchestrierung mit Chain-of-Custody bei jedem Schritt.
+
+1. **Collection Request Trigger** — Webhook von der Legal-Ops-Plattform, wenn Counsel den Sammlungsumfang als genehmigt markiert.
+2. **Custodian + Umfang laden** — zieht Custodian-Liste + Per-Custodian-Per-Quellen-Umfang aus dem Sammlungsplan des Verfahrens.
+3. **Per-Quellen-Dispatch** — fächert einen Branch pro Datenquelle pro Custodian auf. Der komplexeste Teil des Flows — jede Quelle hat ihre eigene API und ihre eigenen Rate-Limit-Einschränkungen.
+4. **Quelle: Google Workspace Vault** — Vault-Verfahren erstellt (oder wiederverwendet), Hold ausgestellt, Suche gegen das Gmail / Drive / Calendar des Custodians innerhalb des Umfangs ausgeführt, Ergebnisse exportiert.
+5. **Quelle: M365 Compliance** — Content-Suche gegen das Postfach / OneDrive / Teams des Custodians innerhalb des Umfangs ausgeführt, Ergebnisse über das Compliance Center exportiert.
+6. **Quelle: Slack Discovery** — Slack Enterprise Grid Discovery API; Per-Custodian-Per-Channel-Export innerhalb des Umfangs.
+7. **Hash + Chain-of-Custody-Append** — jeder Per-Quellen-Export wird gehasht (SHA-256), und ein Chain-of-Custody-Datensatz wird an die Audit-Tabelle angehängt: `{matter_id, custodian_id, source, scope_summary, collected_at, collected_by_service_account, hash, file_count, byte_count}`.
+8. **Auf eDiscovery-Plattform hochladen** — Exporte in den Per-Verfahrens-Relativity-Workspace pushen; Verarbeitungsjob auslösen; Plattformseitige Load-ID im Audit-Log für Rückverfolgbarkeit aufzeichnen.
+
+## Kostenrealität
+
+- **Connector- / Quell-Plattform-Kosten** — Google Vault, M365 E5 mit Advanced eDiscovery, Slack Enterprise Grid tragen alle Per-Seat-Kosten. Der Flow reduziert diese nicht; er sorgt dafür, dass sie effektiv genutzt werden.
+- **n8n-Ausführungen** — lang laufend (große Exporte dauern Stunden); verwenden Sie den Queue-Modus von n8n für die Produktion.
+- **eDiscovery-Plattform-Verarbeitungskosten** — Relativity / Everlaw / Logikcull berechnen alle per GB verarbeitet; der Flow ändert diese Mathematik nicht.
+- **Legal-Ops-Admin-Zeit** — das ist der Gewinn. Manuelle Orchestrierung einer 10-Custodian-Sammlung über 4 Quellen sind Tage Arbeit; der Flow läuft in Stunden unbeaufsichtigt.
+- **Setup-Zeit** — 180 Minuten für den Flow selbst + erhebliche Per-Quellen-Connector-Verdrahtung (die Connectors sind der Großteil des tatsächlichen Setups).
+
+## Erfolgsmetrik
+
+- **Zeit von Counsel-Genehmigung bis Sammlungsabschluss** — sollte von Tagen/Wochen (manuell) auf Stunden (Flow) sinken, vorbehaltlich der Export-Job-Dauer der Quell-Plattform.
+- **Chain-of-Custody-Vollständigkeit** — sollte 100 % pro Verfahren sein. Jede Lücke ist ein Verteidigbarkeitsrisiko.
+- **Volumen-Drift** — vom Flow gesammeltes Volumen vs. vom Counsel erwarteter Umfang. Innerhalb von 10 % ist normal (Filter-Kalibrierung); >25 % löst eine Re-Scope-Überprüfung aus.
+
+## Vergleich mit Alternativen
+
+- **vs. native Sammlungsmodule der eDiscovery-Plattform** ([Relativity](/de/tools/relativity/) Collect, [Everlaw](/de/tools/everlaw/) Collections). Wählen Sie diese, wenn Ihr Team in der Plattform lebt und die Connectors der Plattform Ihre Quellen abdecken. Der Flow ist für Custom-Source-Verfahren oder Verfahren, die mehr Quellen umspannen, als eine einzelne Plattform nativ abdeckt.
+- **vs. kommerzielle Sammlungs-Orchestrierungs-Tools** (Reveal Brainspace, OpenText EnCase, Cellebrite, Onna). Wählen Sie diese für die hochwertigsten Verfahren mit forensischen Anforderungen. Der Flow ist das leichtgewichtige Mittelfeld für routinemäßige Corporate-eDiscovery.
+- **vs. manuelle Sammlung.** Bei kleinem Maßstab handhabbar; skaliert nicht auf Multi-Custodian-Verfahren.
+
+## Watch-outs
+
+- **Chain-of-Custody-Integrität.** *Guard:* Jeder Per-Quellen-Export wird zum Sammlungszeitpunkt und erneut vor dem Hochladen auf die eDiscovery-Plattform gehasht. Hash-Mismatches stoppen den Upload und alarmieren den eDiscovery-Lead.
+- **Umfangs-Creep bei automatisierter Sammlung.** *Guard:* Der Umfang des Flows wird aus dem Counsel-genehmigten Sammlungsplan gelesen; das Erweitern des Umfangs mid-Run erfordert eine Plan-Änderung, keine Flow-Anpassung. Das Audit-Log erfasst den Plan-SHA pro Run.
+- **Quell-Plattform-Rate-Limit-Erschöpfung.** *Guard:* Per-Quellen-Rate-Limiter in den Per-Quellen-Nodes des Flows. Die Slack Discovery API hat besonders aggressive Rate-Limits — der Flow passt das Tempo entsprechend an.
+- **Privilege-Exposition bei der Sammlung.** *Guard:* Die Sammlung erfasst alles im Umfang; die Privilege-Prüfung erfolgt nachgelagert in der eDiscovery-Plattform (der [Privilege-Review-Batch-Skill](/de/workflows/privilege-review-batch-skill/) ist die nächste Stufe). Der Flow filtert KEINE privilegierten Inhalte vorab — das ist eine nachgelagerte Entscheidung.
+- **Custodian-Datenschutzbedenken.** *Guard:* Der Flow operiert gegen die Systeme, die der Custodian für die Arbeit verwendet; persönliche Accounts (persönliches Gmail, persönliches Slack) sind außerhalb des Umfangs, es sei denn, Counsel hat sie explizit benannt. Der Sammlungsplan dokumentiert die Grenze.
+- **Cross-Jurisdiktion-Datenlokalisierung.** *Guard:* EU-ansässige Custodian-Daten können DSGVO-Datenlokalisierungsüberlegungen unterliegen; der Flow flaggt EU-ansässige Custodians per Umfang für Datenhandhabungs-Überprüfung, bevor der Export in einen nicht-EU-eDiscovery-Workspace erfolgt.
+
+## Stack
+
+Das Bundle liegt unter `apps/web/public/artifacts/evidence-collection-ediscovery-n8n/`:
+
+- `evidence-collection-ediscovery-n8n.json` — der Flow-Export (Skeleton — tatsächliche Per-Quellen-Connectors sind unternehmensspezifisch)
+- `_README.md` — Credentials, Audit-Tabellen-Schema, Per-Quellen-Connector-Notizen, Chain-of-Custody-Vorlage
+
+Tools: [n8n](/de/tools/n8n/), [Relativity](/de/tools/relativity/) (oder [Everlaw](/de/tools/everlaw/) / [Logikcull](/de/tools/logikcull/)), [Slack](/de/tools/slack/) (nur Benachrichtigung). Quell-Plattform-Connectors: Google Workspace Vault, Microsoft 365 Compliance, Slack Discovery, Custom SaaS nach dem Stack des Unternehmens.
+
+Verwandt: [eDiscovery](/de/learn/ediscovery/), [EDRM-Modell](/de/learn/edrm-model/), [Matter Management](/de/learn/matter-management/), [Privilege Review](/de/learn/privilege-review/).

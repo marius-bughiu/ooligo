@@ -1,0 +1,93 @@
+---
+slug: hiring-funnel-anomaly-n8n
+canonical_slug: hiring-funnel-anomaly-n8n
+locale: de
+verticals: [recruiting]
+title: Einstellungstrichter-Anomalieerkennung mit n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, slack]
+roles: [recruiting-leader, talent-acquisition, recruiting-ops]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/hiring-funnel-anomaly-n8n.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: 4e174fe537288513d7b5b6ce199683e752091ae4e7369348a2b9984a5336c024
+---
+
+Die meisten Recruiting-Teams entdecken Funnel-Probleme in der vierteljährlichen Business-Review. Zu diesem Zeitpunkt ist die Stelle seit 60 Tagen offen, zwei der drei besten Kandidaten haben anderswo unterschrieben und der Hiring Manager hat das Vertrauen in die [Pipeline](/de/learn/recruiting-funnel-metrics/) verloren. Dieser Workflow schließt diese Lücke. Ein n8n-Flow läuft nächtlich gegen Ihr [ATS](/de/learn/ats-vs-recruiting-crm/), berechnet Per-Rollen-by-Stage-Konversionsraten und Verweilzeiten gegen eine rollende 90-Tage-Baseline, flaggt statistisch bedeutende Abweichungen, bittet Claude, jede in ein bis zwei Sätzen zu erklären, und postet das Ergebnis in einen routing-bewussten Slack-Kanal vor dem nächsten Morgen-Stand-up.
+
+Das Bundle unter `apps/web/public/artifacts/hiring-funnel-anomaly-n8n/hiring-funnel-anomaly-n8n.json` enthält 15 vollständig konfigurierte Nodes — zwei geplante Trigger, ein Ashby-Pull, ein Aggregations-Code-Node mit der echten Anomalie-Logik, ein Postgres-Baseline-Lookup, den Detektor, ein deduplizierendes Insert, den Claude-Narrativ-Call, den Slack-Formatter und einen parallelen Time-to-Hire-Trend-Pfad. Das begleitende `_README.md` dokumentiert die vier Credentials, die drei Postgres-Tabellen, die Sie erstellen müssen, und eine fünfschrittige Erstlauf-Verifikation, die jeden Branch testet.
+
+## Wann einsetzen
+
+Sie sollten das deployen, wenn Ihr Recruiting-Team mindestens acht bis zehn aktive Rollen parallel betreibt, das Team seit mindestens 90 Tagen auf demselben [ATS](/de/learn/ats-vs-recruiting-crm/) ([Ashby](/de/tools/ashby/), [Greenhouse](/de/tools/greenhouse/) oder [Lever](/de/tools/lever/)) ist, sodass eine Baseline existiert, und mindestens eine Person im Team Funnel-Gesundheit als Teil ihrer Arbeit besitzt. Unterhalb dieser Schwellenwerte ist das Signal-Rausch-Verhältnis falsch: Die Baselines sind zu verrauscht, um einen nützlichen Z-Score-Schwellenwert zu setzen, und niemand wird auf den Alert tatsächlich reagieren, wenn er feuert.
+
+Die andere Vorbedingung ist taxonomische Disziplin. Wenn Ihre Stages für jede Rolle anders benannt sind oder Hiring Manager frei neue Stages mitten in der Suche erstellen, wird die Per-Rollen-by-Stage-Aggregation einen langen Schwanz von (Rolle, Stage)-Paaren mit Stichprobengröße eins produzieren. Der `MIN_SAMPLE = 20`-Guard des Detektors unterdrückt diese, was korrekt ist, aber Sie erhalten gar kein Signal statt falsches Signal. Beheben Sie zuerst die Stage-Taxonomie.
+
+## Wann NICHT einsetzen
+
+Deployen Sie das nicht, wenn Sie weniger als fünf aktive Rollen haben. Die Mathematik funktioniert nicht — es gibt nicht genug Events pro (Rolle, Stage)-Paar, um eine bedeutungsvolle Baseline-Standardabweichung zu berechnen, und Sie werden mehr Zeit mit der Abstimmung von Schwellenwerten verbringen als mit dem Handeln bei Alerts. Eine wöchentliche manuelle Überprüfung in einer Tabelle ist bei diesem Maßstab wirklich besser.
+
+Deployen Sie das nicht, wenn Ihr ATS der einzige Ort ist, wo Kandidaten-Daten existieren, und Sie noch kein separates Analytics-Warehouse haben. Der Flow setzt voraus, dass Sie eine Postgres-Datenbank aufstellen können, die Kandidaten-Daten spiegeln darf. Wenn Ihr Datenschutz- oder KI-Policy-Team noch nicht zugestimmt hat, dass Kandidaten-Daten das ATS verlassen, führen Sie diese Übung nur auf aggregierten Stage-Level-Zählungen durch — lassen Sie die Kandidaten-Level-Verweilzeit-Berechnung weg — und kommen Sie zurück, wenn die Policy aufgeholt hat.
+
+Deployen Sie das nicht auf einer Stage-Taxonomie, die sich wöchentlich ändert. Anomalieerkennung auf einer sich bewegenden Definition von „Stage" produziert Alerts, die niemand interpretieren kann. Stabilisieren Sie die Taxonomie für mindestens ein Quartal, bevor Sie den Flow einschalten.
+
+Schließlich deployen Sie das nicht, wenn die Reaktion Ihres Teams auf einen Funnel-Alert wäre „wir wussten das bereits." Der Wert des Workflows liegt in der 24-Stunden-Latenz bei einer Metrik, die sonst in 60 Tagen aufgetaucht wäre. Wenn Sie bereits ein tägliches Stand-up haben, bei dem das live überprüft wird, ist der Alert redundant.
+
+## Einrichtung
+
+Zuerst die Baseline aufbauen. Einen einmaligen Backfill über die letzten 90 Tage mit demselben Ashby-Application-Feed-Endpoint ausführen, den der Workflow verwendet, nach `(role_id, from_stage, to_stage)` gruppieren und `conversion_rate_mean`, `conversion_rate_stddev`, `dwell_seconds_p50`, `stage_sla_seconds` und `sample_size` in die `funnel_baselines`-Tabelle schreiben. Das DDL für diese Tabelle — und für `role_tth_baselines` und `anomaly_alerts` — ist im `_README.md` des Bundles.
+
+`hiring-funnel-anomaly-n8n.json` aus dem Bundle in n8n importieren. Der Workflow wird absichtlich inaktiv geliefert. Öffnen Sie `Settings` und bestätigen Sie, dass die Zeitzone der Arbeitszeit Ihres Teams entspricht; beide Cron-Nodes werten ihre Ausdrücke in der Workflow-Zeitzone aus, nicht in UTC. Erstellen Sie die vier Credentials, die namentlich in der JSON referenziert werden: `PLACEHOLDER_ASHBY_CRED_ID`, `PLACEHOLDER_POSTGRES_CRED_ID`, `PLACEHOLDER_ANTHROPIC_CRED_ID`, `PLACEHOLDER_SLACK_CRED_ID`. Das README geht durch jeden einschließlich der Slack-Scopes (`chat:write`, `chat:write.public`) und der Anthropic-Header-Auth-Form.
+
+Die fünfschrittige Erstlauf-Verifikation durchlaufen, bevor Sie aktivieren. Schritt zwei — eine synthetische Baseline-Zeile einzufügen, die garantiert flaggt — ist derjenige, den die meisten Menschen überspringen und sich dann wundern, warum kein Alert feuert; tun Sie es. Schritt drei bestätigt, dass der Dedupe-Key seinen Job macht, was der Kostenguard für den Claude-Call ist.
+
+Die Baselines monatlich auffrischen. Konversionsraten driften mit Saisonalität, Marktbedingungen und Teamzusammensetzung, und eine veraltete Baseline produziert entweder Alert-Spam oder verpasste Regressionen. Die Auffrischung ist dieselbe Abfrage, die die Baseline aufgebaut hat; machen Sie sie als separaten n8n-Workflow oder als SQL-Job auf der Postgres-Seite zu einem Cron.
+
+## Was der Flow macht
+
+Der 2-Uhr-Cron löst einen Ashby-Application-Feed-Pull für die letzten 24 Stunden aus. Der Aggregator-Code-Node gruppiert Events nach `(role_id, from_stage, to_stage)`, berechnet die heutige Konversionsrate und Median-Verweilzeit für jedes Paar und gibt ein Item pro Paar aus. Der Postgres-`Lookup Baseline`-Node joined jedes Paar mit seiner Baseline-Zeile. Der `Detect Anomalies`-Code-Node wendet drei Regeln an: Ein Stage-Konversions-Z-Score unter `-2.0` gegen den Baseline-Mittelwert wird als `stage_conversion_drop` geflaggt, eine Median-Verweilzeit, die `stage_sla_seconds * 1.5` überschreitet, wird als `candidate_stalled` geflaggt, und ein (Rolle, Stage)-Paar mit null Events heute und weniger als 20 historischen Events wird als `new_role_no_movement` mit einer Low-Severity-Notiz geflaggt, dass Schwellenwerte unterdrückt wurden.
+
+Jedes Flag wird in `anomaly_alerts` mit einem `dedupe_key` von `role::from_stage::to_stage::anomaly_type::yyyy-mm-dd` unter einer `ON CONFLICT DO NOTHING`-Klausel geschrieben. Nur Inserts, die eine Zeile zurückgegeben haben — also Alerts, die heute noch nicht existierten — gehen weiter zum Claude-Narrativ-Call und dem Slack-Post. Das ist der Kostenguard: Ein gleich-Tags-Re-Run des Workflows rechnet Anthropic nicht doppelt ab und postet nicht doppelt an Slack. Der Slack-Formatter routet nach Anomalie-Typ: Stage-Level-Drops und gestoppte Kandidaten gehen an `#recruiting-alerts`, Time-to-Hire-Trends und New-Role-No-Movement gehen an `#recruiting-leadership`, und Source-Channel-Drops gehen an `#sourcing`.
+
+Der 3-Uhr-Cron führt den parallelen Time-to-Hire-Trend-Pfad gegen eine `hires`-Tabelle aus. Er formt alle Zeilen, bei denen der rollende 7-Tage-Durchschnitt den Schwellenwert überschreitet, in denselben Alert-Envelope um und führt sie durch denselben Dedupe-und-Post-Pfad.
+
+## Kostenrealität
+
+Für ein 30-Rollen-Team, das das nächtlich ausführt, erwarten Sie etwa 600 (Rolle, Stage)-Aggregationen pro Tag. Der Ashby-Pull und Postgres-Lookups kosten praktisch nichts. Der Claude-Narrativ-Call verwendet `claude-sonnet-4-6` mit einem 256-Token-Limit und feuert nur bei neu eingefügten Alerts — für ein gesundes Team sind das typischerweise 0 bis 3 Alerts pro Nacht, oder ungefähr 0,05 bis 0,15 $ pro Nacht an Token-Ausgaben. Ein Spike von 20 simultanen Regressionen kostet etwa 1,00 $. Der Dedupe-Key hält Re-Runs kostenlos.
+
+n8n self-hosted auf einem 20 $/Monat-VPS handhabt diese Last mit Spielraum; n8n Clouds Starter-Plan (24 $/Monat) ist ebenfalls in Ordnung. Postgres kann dieselbe Instanz sein, die alles andere unterstützt, was Sie betreiben — die drei Tabellen sind klein, niedrig-Traffic und auf einem einzigen zusammengesetzten Schlüssel indiziert. Die gesamten Grenzkosten werden von der Personenzeit dominiert, um die Baseline frisch zu halten und die Stage-Taxonomie stabil zu halten, nicht von der Laufzeit.
+
+Wenn Sie Opus für den Narrativ-Call einsetzen, erwarten Sie ungefähr einen 5-fachen Token-Kostenmultiplikator; das lohnt sich selten für eine 1–2-Satz-Erklärung.
+
+## Erfolgsmetrik
+
+Verfolgen Sie die Median-Zeit zwischen dem tatsächlichen Beginn einer (Rolle, Stage)-Regression und dem Handeln des Recruiting-Teams. Vor diesem Flow beträgt diese Latenz typischerweise zwei bis sechs Wochen (das nächste Pipeline-Review). Mit dem Flow deployed und beobachtet, sollte sie auf 24 bis 48 Stunden sinken. Wenn nicht — wenn Alerts feuern und niemand handelt — ist das Problem nicht der Detektor, es ist das Routing oder der Schwellenwert, und die Korrektur ist entweder, die Kanäle zu straffen, bis der Alert eine Person erreicht, die die Autorität hat zu handeln, oder den Z-Score-Schwellenwert zu lockern, bis das Alert-Volumen dem entspricht, was das Team absorbieren kann.
+
+Eine sekundäre Metrik, die es wert ist zu beobachten: Alerts, ohne Aktion verworfen, als Prozentsatz der Gesamtmenge. Über 30 % alertieren Sie auf Rauschen; unter 5 % alertieren Sie wahrscheinlich zu wenig und verpassen Signal.
+
+## Vergleich mit Alternativen
+
+Die DIY-Alternative ist ein Python- oder SQL-Job, der dieselbe Aggregation ausführt und über Webhook an Slack postet. Das funktioniert und die Per-Event-Kosten sind niedriger, aber der n8n-Graph ist die Dokumentation — ein Recruiting-Ops-Engineer, der nächstes Quartal einsteigt, kann den Workflow öffnen, die acht Nodes in Reihenfolge sehen und das System verstehen, ohne Code zu lesen. Der DIY-Pfad überspringt typischerweise das Dedupe-Insert und den Kostenguard um den LLM-Call, was die Quelle der Rechnungen ist.
+
+Die Off-the-Shelf-Alternative ist das Kaufen von [Gem](/de/tools/gem/), [Ashby Analytics](/de/tools/ashby/) oder [Datapeople](/de/tools/datapeople/) für Funnel-Reporting. Das sind gute Produkte und sind die richtige Antwort für Teams, die verwaltete Dashboards wollen und keine Postgres-Baseline-Tabelle besitzen möchten. Sie sind die falsche Antwort, wenn Sie Anomalie-*Alerts* in Slack mit einem angehängten Narrativ wollen, weil keines davon das heute liefert; sie liefern Dashboards, die jemand daran denken muss zu prüfen. Der Austausch ist: bezahlen Sie den Anbieter und verlieren Sie die Alert-Latenz, oder besitzen Sie den n8n-Flow und gewinnen Sie das 24-Stunden-Signal zu den Kosten des Betriebs von Postgres.
+
+Die Status-quo-Alternative — das vierteljährliche Pipeline-Review — ist das, was die meisten Teams bereits tun. Es kostet nichts und zeigt dieselben Regressionen auf, nur 60 Tage zu spät. Wenn Ihre Rollen sechs Monate zum Besetzen brauchen und ein 60-Tage-Signal Ihnen immer noch Zeit lässt, den Kurs zu korrigieren, ist der Status quo wirklich in Ordnung.
+
+## Watch-outs
+
+**Alert-Fatigue ist der dominante Fehlermodus.** Ein Team, das morgens zehn Alerts bekommt, wird alle zehn innerhalb einer Woche ignorieren, einschließlich des einen, der wichtig war. Der Guard sind die `MIN_SAMPLE = 20`- und `Z_THRESHOLD = 2.0`-Konstanten im `Detect Anomalies`-Code-Node, plus der `DWELL_MULTIPLIER = 1.5` für gestoppte Kandidaten. Beginnen Sie mit diesen Werten, beobachten Sie den Kanal für die ersten drei Nächte und straffen Sie — nicht lockern — bis der Median-Morgen 0 bis 2 Alerts bringt. Lockern Sie später, wenn Sie echte Regressionen verpassen.
+
+**Baseline-Drift produziert stille False Negatives.** Konversionsraten ändern sich mit dem Arbeitsmarkt, dem Sourcing-Mix des Teams und der Rolle selbst. Eine Baseline, die im November gegen einen heißen Markt berechnet wurde, wird in einem weichen Markt unter-flaggen und in einem engen über-flaggen. Der Guard ist die monatliche Auffrischung von `funnel_baselines` und `role_tth_baselines` aus derselben Abfrage, die sie aufgebaut hat — planen Sie sie als wiederkehrenden n8n-Workflow oder einen Postgres-Job und behandeln Sie das Versagen dieser Auffrischung als P1-Vorfall.
+
+**Auto-Action bei einem Recruiting-Alert ist fast immer falsch.** Das Narrativ, das Claude zurückgibt, ist Korrelation, keine Kausalität; es als Direktive zu behandeln („Konversion sank um 30 %, automatisch alle Telefon-Screen-No-Shows ablehnen") wird das Problem verschlimmern. Der Guard ist strukturell: Der Flow hat keinen Write-Back-Pfad zum ATS. Wenn ein zukünftiger Beitragsleister vorschlägt, einen hinzuzufügen, lehnen Sie ab. KI zeigt die Anomalie auf; Menschen diagnostizieren und handeln.
+
+**Privilegierte Kandidaten-Daten verlassen das ATS.** Die Postgres-Tabellen halten `role_id`, Stage-Namen, Konversionsraten und Verweilzeiten, was designbedingt nur aggregiert ist — aber eine unachtsame Erweiterung, die Kandidatennamen oder Kontaktinformationen hinzufügt, um reichhaltigere Narrative zu ermöglichen, wird eine neue Datenschutz-Oberfläche schaffen. Der Guard ist das Schema in `_README.md`: Die Tabellen haben absichtlich keine kandidatenidentifizierenden Spalten. Wenn ein Beitragsleister sie hinzufügen möchte, leiten Sie die Änderung durch Ihr Datenschutz- und KI-Policy-Review.
+
+**Source-Channel-Attribution ist nur so gut wie die ATS-Daten.** Der optionale `source_channel_drop`-Alert (in der Slack-Routing-Map referenziert, aber standardmäßig nicht im Bundle aktiviert) hängt davon ab, dass jeder Bewerber eine saubere Source-Attribution in Ashby hat. Wenn Ihr Team bei der Source-Tagging nachlässig ist, wird der Alert bei Datenqualitätsproblemen feuern, nicht bei echten Kanal-Problemen. Der Guard ist eine Vorbedingungsprüfung: Aktivieren Sie diesen Alert-Typ nicht, bis die Source-Attribution in Ihrem ATS-Export mindestens 90 % vollständig ist. Verifizieren Sie mit einer einzeiligen SQL-Abfrage gegen den Application-Feed, bevor Sie ihn einschalten.
+
+## Stack
+
+Dieser Flow setzt [n8n](/de/tools/n8n/) für Orchestrierung, [Ashby](/de/tools/ashby/) (oder [Greenhouse](/de/tools/greenhouse/) / [Lever](/de/tools/lever/)) als ATS, Postgres für die Baseline und den Alert-Status, [Claude](/de/tools/claude/) für Narrativ-Erklärung und [Slack](/de/tools/slack/) für die Lieferung voraus. Es ist das operative Komplement zu den in [Recruiting Funnel Metrics](/de/learn/recruiting-funnel-metrics/) definierten Metriken und verwendet die [Time-to-Hire vs. Time-to-Fill](/de/learn/time-to-fill-vs-time-to-hire/)-Unterscheidung im Trend-Check-Pfad.
