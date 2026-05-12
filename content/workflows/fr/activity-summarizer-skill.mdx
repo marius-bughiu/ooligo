@@ -1,0 +1,99 @@
+---
+slug: activity-summarizer-skill
+canonical_slug: activity-summarizer-skill
+locale: fr
+verticals: [revops]
+title: Résumé hebdomadaire de l'activité d'un commercial en signaux clés
+artifact_type: claude-skill
+tools_used: [claude, salesforce, gong]
+roles: [revops, ae]
+difficulty: intermediate
+time_to_setup: 30min
+human_tested: false
+translated_from: en/activity-summarizer-skill.mdx
+translated_at: "2026-05-13T01:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "96d0014138fe29e79bf5dbc3beff591e199fc4783caba8e1382f7ca01de50847"
+---
+
+Un Claude Skill qui ingère les appels, emails et activités Salesforce d'un commercial sur les sept derniers jours et produit un rapport de signal en six bullets : ce qui chauffe, ce qui refroidit, où le commercial est bloqué, et une suggestion spécifique pour la semaine suivante. Conçu pour l'auto-révision du vendredi, pas pour la surveillance, et construit pour que le commercial — pas le manager — reçoive le brief en premier. Le bundle est livré avec un `SKILL.md` fonctionnel plus trois modèles de référence que l'équipe édite pour correspondre à son propre cadre de qualification, ses seuils de signal et son ton.
+
+## Quand utiliser
+
+Le cas précis pour lequel ce skill a été conçu : un AE veut un scan de cinq minutes de sa propre semaine avant de se déconnecter le vendredi. Il a dix à trente opportunités ouvertes, un CRM qui lui dit surtout ce qu'il sait déjà, et des appels Gong qu'il n'a pas eu le temps de réécouter. Il n'a pas besoin d'un tableau de bord ; il a besoin de trois choses sur lesquelles agir lundi. Le skill produit exactement ça — trois En-chauffe, deux Bloqués (ou En-refroidissement), une suggestion spécifique — et le format est intentionnellement court pour que les commerciaux le lisent vraiment. Les exports d'activité de plusieurs milliers de lignes sont parcourus en diagonale et oubliés ; six bullets sont actionnés.
+
+Il fonctionne aussi comme une cadence hebdomadaire gérée par RevOps au nom de l'équipe, mais seulement si la sortie atterrit toujours d'abord dans le DM du commercial et que le commercial contrôle s'il la transmet à un manager. La posture de confidentialité est la pièce porteuse — si elle bascule vers « manager en copie automatique », les commerciaux commencent à manipuler les données d'input en moins d'une semaine et le signal s'effondre.
+
+## Quand NE PAS utiliser
+
+N'utilisez pas ce skill pour les revues de pipeline inter-équipes. Vingt commerciaux signifient vingt invocations et le coût s'accumule rapidement ; un tableau de bord Salesforce fait ce travail moins cher et le rôle du manager est de regarder en travers, pas à l'intérieur, des semaines individuelles. Ne l'utilisez pas pour la préparation des appels de forecast — les rapports Salesforce font mieux les consolidations numériques et le skill n'est pas conçu pour additionner des dollars. Ne l'utilisez pas comme outil de surveillance (« montrez-moi ce que Bob a fait cette semaine ») ; dès que le rapport va au manager sans que le commercial ne l'ait lancé, vous perdez le contrat social qui maintient l'honnêteté des commerciaux sur leur propre activité. Et ne l'utilisez pas pour des analyses approfondies au niveau du compte — c'est un problème différent résolu par le skill `account-research`, qui va en profondeur sur un compte plutôt qu'en largeur sur le portefeuille d'un commercial.
+
+Ne le lancez pas sur des fenêtres inférieures à trois jours ; il y a trop peu de points de données pour que la rubrique de bucketing se déclenche proprement et la sortie ressemble à du bruit. Ne le lancez pas sur un commercial avec moins de cinq opportunités ouvertes — il n'y a pas assez de signal pour bucketer.
+
+## Configuration
+
+Le bundle d'artefact se trouve dans `apps/web/public/artifacts/activity-summarizer-skill/`. Il contient `SKILL.md` (le point d'entrée que Claude charge) et trois références remplissables sous `references/`. Parcourez-les dans l'ordre :
+
+1. Lisez `apps/web/public/artifacts/activity-summarizer-skill/SKILL.md` de bout en bout. La section « Method » nomme les choix d'ingénierie (pourquoi des pulls parallèles, pourquoi la règle de précédence, pourquoi un filtre d'appel de 300 secondes) ; ne survolez pas ces sections car c'est là que les faux positifs sont interceptés.
+2. Éditez `apps/web/public/artifacts/activity-summarizer-skill/references/qualification-framework.md`. Remplacez les valeurs par défaut MEDDPICC par le cadre réel de votre équipe — BANT, SPICED, votre variante maison — et surtout, remplacez les noms de champs Salesforce (`Opportunity.Economic_Buyer__c` et similaires) par ceux que votre CRM utilise réellement. Extrayez le temps médian en étape de votre équipe depuis un rapport Salesforce et insérez ces chiffres dans le tableau ; ils alimentent la détection Bloqué.
+3. Éditez `apps/web/public/artifacts/activity-summarizer-skill/references/signal-rubric.md`. Les valeurs par défaut (≥ 2 contacts multi-thread pour En-chauffe, ≥ 10 jours sans contact pour En-refroidissement, 1,5x le temps médian en étape pour Bloqué) sont des points de départ sains ; affinez-les après quelques semaines d'exécution sur vos données historiques. Le paramètre `min_call_duration_seconds` est par défaut à 300 pour filtrer les messageries vocales Gong — laissez-le sauf si votre équipe tient de nombreuses sessions de travail réelles de moins de cinq minutes.
+4. Éditez `apps/web/public/artifacts/activity-summarizer-skill/references/sample-output.md`. Insérez un ou deux de vos meilleurs rapports historiques (anonymisés) pour que le skill se conditionne sur le ton de votre équipe. La référence contient aussi un « mauvais exemple » sur lequel le skill se conditionne en négatif — conservez les deux.
+5. Configurez l'authentification. Salesforce : OAuth en lecture seule scopé sur Activité, Opportunité et HistoriqueOpportunité pour l'utilisateur commercial. Gong : clé API scopée pour lire les appels et transcriptions sur lesquels le commercial était présent. Les deux comme serveurs MCP ou appels API directs — le skill lui-même est agnostique au transport.
+6. Planifiez l'exécution. Le vendredi à 16h00 heure locale est la valeur par défaut ; la sortie va dans le DM du commercial via l'intégration Slack ou email de votre équipe. La copie automatique au manager n'est intentionnellement pas une option configurable dans le skill ; si un manager veut de la visibilité, le commercial transfère.
+
+## Ce que le skill fait réellement
+
+Deux appels API s'exécutent en parallèle : Salesforce SOQL pour les lignes `Task`, `Event` et `OpportunityHistory` dans la fenêtre, et Gong `/v2/calls` filtré par l'email du commercial (Gong indexe par email, pas par l'ID utilisateur Salesforce — traduisez d'abord ou la liste d'appels reviendra vide). Le filtre Salesforce supprime explicitement les Tâches `Logged Email` avec une `Description` vide car ce sont du bruit de hygiène CRM, pas de l'engagement ; dix de ces entrées sans une seule réponse ne signifie pas que le deal est chaud.
+
+Chaque opportunité ouverte obtient ensuite un enregistrement avec l'étape, le montant, le temps en étape, le nombre de contacts significatifs, et les champs requis du cadre de qualification. Chaque opportunité est bucketée En-chauffe, En-refroidissement ou Bloquée par rapport aux seuils dans `signal-rubric.md`. Une règle de précédence résout les chevauchements — En-refroidissement bat Bloqué bat En-chauffe — ce qui tue le faux positif le plus courant (un deal dont l'étape a avancé pour des raisons procédurales mais où chaque autre signal est mort). Les transitions Closed Lost sont explicitement exclues d'En-chauffe ; sans cette règle, un commercial qui clôture des deals morts le vendredi après-midi générerait un rapport excellent.
+
+L'étape de rendu choisit les trois meilleurs En-chauffe, les deux meilleurs Bloqués (ou En-refroidissement s'il n'y a pas de Bloqué), et produit une suggestion. La suggestion a trois garde-fous — elle doit nommer un compte, nommer une étape, et nommer un bloqueur spécifique. Si la rubrique ne peut pas produire une suggestion satisfaisant les trois, le skill écrit « Pas de suggestion cette semaine — le pipeline est propre » plutôt que de fabriquer une ligne générique « faire un suivi avec les leads périmés ».
+
+## Réalité des coûts
+
+Une seule exécution hebdomadaire sur un commercial avec vingt opportunités ouvertes représente environ 6 000 tokens d'entrée et 800 tokens de sortie sur Sonnet — environ 0,05 USD par exécution. Mathématiques de mise à l'échelle :
+
+- 1 commercial, hebdomadaire : 0,20 USD/mois
+- 20 commerciaux, hebdomadaire : 4 USD/mois
+- 100 commerciaux, hebdomadaire : 20 USD/mois
+- 100 commerciaux, quotidien : 140 USD/mois
+- 200 commerciaux, quotidien : 280 USD/mois — à ce stade, passez à Haiku (0,04 USD/exécution, 112 USD/mois) ou groupez les exécutions en un seul prompt avec plusieurs contextes commerciaux
+
+Le coût caché est le quota d'API sur Salesforce et Gong, pas Claude. L'API REST de Salesforce a une limite quotidienne par org (typiquement 15 000 appels pour une org Enterprise) ; chaque exécution commerciale consomme 4 à 8 appels selon le volume d'activité. À 200 commerciaux quotidiens, c'est 1 600 appels/jour sur Salesforce — bien dans le budget, mais vérifiez l'utilisation de votre org si vous gérez déjà d'autres automatisations intensément.
+
+Coût en temps : 30 minutes de configuration initiale si les noms de champs CRM sont propres, une heure si vous devez rechercher les bons noms d'API de champs personnalisés. Ongoing par semaine : zéro — c'est planifié.
+
+## À quoi ressemble le succès
+
+Une installation fonctionnelle produit une sortie qu'un commercial lit en 90 secondes et qui change au moins une action du lundi matin. Concrètement, après quatre semaines d'exécution :
+
+- Les deals « bloqués » du commercial apparaissent dans le rapport ≥ 1 semaine avant d'apparaître dans la revue de pipeline périmé du manager. Sinon, les seuils de temps médian en étape dans `qualification-framework.md` sont trop généreux — resserrez-les.
+- La ligne « une suggestion » produit une action que le commercial prend réellement ≥ 60 % des semaines. Si c'est moins, la rubrique produit des suggestions génériques et le garde de rendu n'est pas assez serré — vérifiez que le skill rejette bien les suggestions sans compte, étape et bloqueur nommés.
+- Le bucket En-refroidissement signale un deal qui devient ensuite Closed Lost ≥ 70 % du temps. Si la précision est bien inférieure, les seuils de refroidissement sont trop sensibles (les faux positifs noient le signal).
+
+Ce ne sont pas des métriques de vanité — ce sont les signaux que le skill fait le travail pour lequel il a été conçu. S'ils ne bougent pas, le skill génère de la lecture du vendredi, pas des décisions du vendredi.
+
+## Par rapport aux alternatives
+
+**vs. les digests natifs CRM (Salesforce Einstein Activity Capture, le propre résumé hebdomadaire de Gong).** Ceux-ci donnent des comptages d'activité bruts et des résumés d'appels mais ne synthétisent pas à travers les deux flux ni n'appliquent votre cadre de qualification. Einstein vous dira « 47 emails cette semaine » ; ce skill vous dit « Acme est passé en Proposition parce que le CTO a rejoint et a posé des questions de tarification ». Un niveau d'abstraction différent.
+
+**vs. résumés écrits manuellement par les commerciaux.** Un commercial qui rédige son propre bilan du vendredi produira une meilleure stratégie que ce skill — il connaît le contexte des deals. Mais 80 % des commerciaux n'écrivent pas le bilan, et ceux qui le font le sautent en fin de trimestre. Ce skill produit un résumé à 90 % aussi bon 100 % des semaines, ce qui bat un résumé à 100 % 30 % des semaines.
+
+**vs. le propre email de résumé hebdomadaire de Gong.** Le résumé de Gong est centré sur les appels uniquement ; il manque l'activité email et CRM qui porte souvent le signal de refroidissement. Il n'applique pas non plus votre cadre de qualification, donc il ne peut pas faire remonter « bloqué parce qu'aucun Economic Buyer nommé ». Complément utile, pas un remplacement.
+
+**vs. le statu quo (un 1:1 manager tous les deux vendredis).** Les 1:1 managers détectent les problèmes deux semaines trop tard et à la bande passante du manager. Ce skill les détecte dans les mains du commercial la même semaine, ce qui maintient l'action là où elle appartient.
+
+## Points de vigilance
+
+- **Posture de confidentialité : destiné uniquement aux commerciaux.** Le `recipient` par défaut est `dm` et le skill refuse d'envoyer à un canal manager. La copie automatique changerait le contrat social de « auto-révision hebdomadaire » à « rapport-délation hebdomadaire » — et les commerciaux manipuleront les données d'input en moins d'une semaine. Garde : le skill rejette les ID de canaux manager dans le paramètre destinataire, et le `SKILL.md` du bundle documente ceci comme non-configurable.
+- **La qualité des transcriptions Gong détermine la qualité du signal.** Les appels internationaux, le mauvais audio et les messageries courtes produisent des résumés bruités qui alimentent de mauvais bullets. Garde : `min_call_duration_seconds = 300` filtre les messageries et les appels de test ; le skill lit aussi le champ `transcriptionConfidence` de Gong par appel et abandonne tout ce qui est en dessous de 0,6.
+- **Dérive de la définition d'activité.** Un « Logged Email » sans corps et sans réponse n'est pas de l'engagement ; c'est de la théâtralité d'hygiène CRM. Dix de ces entrées ne signifie pas que le deal est chaud. Garde : le filtre SOQL exige une `Description` non vide sur les Tâches et ignore explicitement les Tâches où le `Subject` correspond aux patterns auto-enregistrés de l'équipe (`/^(Email\: |Logged via )/`).
+- **Fatigue des suggestions.** La ligne « une suggestion pour la semaine prochaine » dérive vers le générique (« faire un suivi avec les leads périmés ») quand la rubrique est lâche. Garde : l'étape de rendu rejette toute suggestion qui ne nomme pas un Compte, une Étape et un Bloqueur spécifique. Si la rubrique ne peut pas en produire une, le skill écrit « Pas de suggestion cette semaine — le pipeline est propre » plutôt que de rembourrer.
+- **Les changements d'étape comme signal peuvent mentir.** Un commercial qui déplace un deal en Closed Lost apparaît comme un changement d'étape mais ne devrait pas alimenter En-chauffe. Garde : les règles de bucketing traitent les reculs d'étape et les transitions Closed Lost explicitement sous En-refroidissement, jamais sous En-chauffe.
+- **Le skill ne remplace pas une revue de deal.** Il fait remonter des signaux, pas de la stratégie. Un flag Bloqué dit au commercial « Initech dépasse le temps médian en étape sans Economic Buyer » ; il ne dit pas au commercial quoi faire au-delà de la suggestion unique. Traitez-le comme du triage, pas du coaching.
+
+## Stack
+
+- **Salesforce** — activité, opportunité et historique d'étape comme source de vérité
+- **Gong** — transcriptions d'appels, ratios parole-écoute, questions d'achat signalées
+- **Claude** — extraction de signal, classement tenant compte du cadre, rendu par rapport à la référence de ton du bundle
