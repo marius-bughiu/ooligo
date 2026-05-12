@@ -1,0 +1,100 @@
+---
+slug: matter-status-digest-claude
+canonical_slug: matter-status-digest-claude
+locale: es
+verticals: [legal-ops]
+title: Digest semanal de estado de matters para el GC con Claude
+artifact_type: claude-skill
+tools_used: [claude]
+roles: [legal-ops, gc, in-house-counsel]
+difficulty: beginner
+time_to_setup: 30min
+human_tested: false
+translated_from: en/matter-status-digest-claude.mdx
+translated_at: "2026-05-11T00:00:00Z"
+translation_model: claude-opus-4-7
+source_sha256: "7f19b9b07e4a3744410803e87d2cade2acd9f40402797262491c64ba0b4c0d68"
+---
+
+Un Claude Skill que convierte un export semanal de tu sistema de [matter management](/es/learn/matter-management/) en un digest de una página para el General Counsel: forma de la cartera por fase, qué cambió desde la semana pasada, clústeres de fechas límite, candidatos de escalación y desviaciones de gasto en outside counsel. El skill reemplaza el hilo de "cada abogado manda un status update" del viernes por la tarde que nadie disfruta escribir ni leer. El bundle del artefacto en `apps/web/public/artifacts/matter-status-digest-claude/` trae el SKILL.md más tres plantillas de referencia rellenables que el equipo de legal-ops adapta a la taxonomía de fases del despacho, al layout que prefiere el GC y a las reglas de escalación de la firma.
+
+## Cuándo usarlo
+
+Usa este skill cuando el GC actualmente pasa el lunes por la mañana o leyendo correos de status de los abogados uno por uno, o pidiéndole al Legal Ops Manager un resumen verbal de la cartera, o tomando decisiones sobre información desactualizada porque el hilo del viernes no destacó lo que importaba. Específicamente, encaja cuando el despacho tiene entre 15 y 200 matters activos (chico para que un solo digest siga siendo escaneable, grande para que la forma de la cartera no sea memorizable), cuando el sistema de matter management es el sistema de registro (no una hoja de cálculo que se desincroniza de los datos del matter) y cuando el GC está dispuesto a invertir 30 minutos a la semana ajustando el layout en `references/2-sample-digest-format.md` durante el primer mes hasta que el digest se estabilice.
+
+También encaja como cadencia mensual para despachos boutique donde 8-12 matters no justifican un reporte semanal pero el GC aún quiere una vista mensual estructurada junto a las conversaciones en curso.
+
+## Cuándo NO usarlo
+
+No uses este skill en un despliegue de Claude que no haya pasado tu revisión de privilegio y de proveedores. Los exports de matters contienen attorney work product, estrategia de settlement y resúmenes de investigación — pasarlos por Claude.ai de consumo viola las expectativas de privilegio de la mayoría de los equipos in-house. Usa Claude en Bedrock, Vertex o un endpoint enterprise contratado con Anthropic con BAA y DPA firmados, y confirma que el despliegue aparezca en la lista de proveedores Tier-A del despacho antes de programar el cron.
+
+No uses este skill para redactar comunicaciones a clientes, correspondencia con la opposing counsel o memos al consejo. Esas audiencias requieren otro tono, otro umbral de evidencia y firma de un abogado. El digest es solo para la oficina del GC.
+
+No uses este skill como capa de alerta en tiempo real. Un snapshot semanal es la herramienta equivocada para presentaciones de TRO, subpoenas regulatorias, gatillos de breach notification o cualquier matter donde las horas importan. Usa el alerting nativo del sistema de matter management para esos casos — el digest es para conciencia de cartera en estado estable.
+
+No lo despliegues sobre carteras que no tengan disciplina de mantener actualizados los campos `phase`, `last_activity_date` y `next_deadline_date`. Un digest derivado de campos desactualizados es peor que no tener digest, porque el GC va a actuar sobre él. Arregla la higiene del status del matter primero; envía el digest después.
+
+## Setup
+
+1. Coloca el bundle de `apps/web/public/artifacts/matter-status-digest-claude/` en tu directorio de skills de Claude Code (o la ubicación equivalente del proyecto para tu despliegue enterprise de Claude). El bundle contiene `SKILL.md` y una carpeta `references/`.
+2. Adapta `references/1-matter-phase-taxonomy.md` a los nombres de fase que tu sistema de matter management realmente usa. La plantilla incluida usa buckets genéricos de litigation y transactional; la taxonomía de tu despacho será distinta. Mapea cada valor crudo de fase que tipean los abogados a un bucket canónico — los valores sin mapear aparecen en un footer de "Mapping gaps" en el digest hasta que los agregues.
+3. Edita `references/2-sample-digest-format.md` con el GC. Este es el Markdown literal que renderiza el skill. Negocia el layout en este archivo, no en el cuerpo del skill — mantén separables las decisiones de ingeniería y las decisiones editoriales.
+4. Edita `references/3-escalation-criteria.md` al perfil de riesgo de tu despacho. Los defaults incluidos (90 por ciento de utilización del presupuesto, pico de gasto de 25 por ciento vs el mes anterior, status sin actualizar por 14 días) funcionan para equipos in-house mid-size; las carteras transactional-heavy y reguladas usualmente quieren umbrales distintos.
+5. Configura el export. O bien apunta el skill a una ruta de dump CSV / JSON que un job nocturno refresque, o conecta directo a la API del sistema de matters. Las columnas requeridas están listadas en `SKILL.md` bajo "Inputs" — `matter_id`, `matter_name`, `phase`, `owner`, `last_activity_date`, `next_deadline`, `next_deadline_date`, `outside_counsel_firm`, `mtd_spend`, `budget`, `risk_tier`.
+6. Programa. Corre el skill en un cron de lunes por la mañana (07:00 hora local) y escribe el digest a `outbox/digest-YYYY-MM-DD.md`. Que el Legal Ops Manager revise los primeros ocho digests antes de que vayan al GC; la ventana de revisión manual atrapa drift de taxonomía, falsos positivos de escalación y mala calibración de tono durante el período de calibración.
+
+## Qué hace realmente el skill
+
+El skill corre cinco subtareas en orden, con decisiones de ingeniería deliberadas, no incidentales.
+
+Carga y valida el export, abortando si faltan columnas o si las fechas están mal formadas. La razón: un digest derivado de un export medio roto es peor que no tener digest, porque el GC lo va a tratar como ground truth.
+
+Agrega por fase antes de resumir — usando la taxonomía canónica de `references/1-matter-phase-taxonomy.md`. La razón por la cual la agregación precede al resumen: la primera pregunta del GC el lunes es "¿cuál es la forma de la cartera?". Una lista plana de matters no responde eso; una vista por buckets (ej. "12 en discovery, 4 en mediación, 3 en preparación de juicio") sí. La agregación también permite reportar deltas, cosa que una lista plana no puede.
+
+Calcula clústeres de fechas límite, destacando semanas en las que tres o más deadlines caen dentro de la misma ventana de siete días. Las semanas con un solo deadline son FYI. La señal de clúster es lo que importa para decisiones de recursos — el GC necesita saber cuándo el equipo está sobrecomprometido antes del viernes anterior, no después.
+
+Aplica las reglas de escalación de `references/3-escalation-criteria.md` y muestra un máximo de cinco ítems en "Needs GC attention", rankeados por risk tier, luego spend impact, luego proximidad de deadline. El cap es deliberado: una sección de escalación sin tope deja de ser una herramienta de triage. Los ítems del sexto en adelante caen a la sección FYI.
+
+Renderiza el digest usando el layout literal de `references/2-sample-digest-format.md`, y luego escribe una línea de log solo de metadata: timestamp, conteo de matters, conteo de escalaciones, segundos de generación, modelo y el SHA-256 del digest. La razón por la cual solo metadata: el cuerpo del digest contiene contenido privilegiado; el log va a telemetría operacional que puede tener acceso de auditoría más amplio que el digest mismo. Loggear el SHA prueba la procedencia del digest sin guardar el texto privilegiado en el log store.
+
+## Realidad de costos
+
+Un digest semanal típico de 30 matters corre aproximadamente 6k-12k tokens de input (export de matters más tres archivos de referencia más el digest de la semana pasada) y 1.5k-3k tokens de output (el digest renderizado). A precios de Claude Sonnet en un endpoint enterprise eso aterriza en alrededor de 5 a 10 centavos por corrida — digamos menos de 5 dólares al año por cartera para el gasto de modelo. El costo dominante es el tiempo de calibración del Legal Ops Manager en las semanas uno a cuatro (aproximadamente dos horas a la semana revisando el digest con el GC y editando los archivos de referencia), y el tiempo de integración para conectar el export al entorno del cron (típicamente medio día para una ruta CSV, uno o dos días para una integración de API).
+
+El tiempo ahorrado es lo que importa. Un hilo de status del viernes le cuesta a cada abogado 15-30 minutos a la semana en escribir y al GC unos 45-60 minutos el lunes en leer y sintetizar. Para un departamento legal de 12 abogados eso es de 6 a 12 horas-abogado por semana de escritura más una hora de lectura del GC, reemplazadas por una sola lectura del GC de 10 minutos el lunes y un costo de escritura casi nulo para los abogados (el sistema de matters sigue siendo la fuente de verdad). El ROI es la mañana de lunes del GC de vuelta, no la factura del modelo.
+
+## Métrica de éxito
+
+Trackea tres números desde la semana ocho en adelante — una vez cerrada la ventana de calibración.
+
+Tiempo del GC el lunes por la mañana en revisión de cartera, antes y después del despliegue. El target es menos de 15 minutos leyendo el digest más follow-ups dirigidos, reemplazando el patrón sin tope de "andar preguntando".
+
+Precisión de escalación: de los ítems que el digest muestra bajo "Needs GC attention this week", qué porcentaje efectivamente disparó una acción del GC. Target arriba del 70 por ciento. Por debajo del 50 por ciento significa que las reglas de escalación son demasiado sensibles; ajusta umbrales en `references/3-escalation-criteria.md`. Por encima del 90 por ciento significa que las reglas pueden estar demasiado ajustadas y que ítems importantes pueden estar cayendo silenciosamente a FYI; ensancha umbrales.
+
+Incidentes de status desactualizado por trimestre: con qué frecuencia un matter que el digest reportó como "activo y en marcha" resultó estar estancado o en problemas. El target es cero, con la salvedad de que el footer de staleness (matters cuyo `last_activity_date` tiene más de 14 días) es la red de seguridad que atrapa los casos donde la disciplina se afloja.
+
+## vs alternativas
+
+Comparado con los dashboards de matter management de Ironclad (o el dashboard nativo equivalente en Brightflag, SimpleLegal, Onit o tu sistema de matters de registro): los dashboards nativos muestran los datos pero no los sintetizan. El GC todavía tiene que mirar seis tiles e inferir la historia. El digest cuenta la historia en lenguaje claro y muestra las tres a cinco cosas que necesitan una decisión esta semana. Usa el dashboard para drill-down ad hoc; usa el digest para la capa de síntesis semanal que el dashboard no provee.
+
+Comparado con reportes de status escritos a mano por el GC o por el Legal Ops Manager: un autor humano produce una mejor narrativa sobre los matters que recuerda y una peor narrativa sobre los matters que olvidó. El skill es exhaustivo a lo largo del export — no puede olvidar un matter que no se tocó en dos semanas, porque la regla de staleness lo muestra. El trade-off es la voz: un reporte humano tiene el framing del GC ya horneado. Mítigalo editando `references/2-sample-digest-format.md` para que coincida con el fraseo preferido del GC, y manteniendo al Legal Ops Manager en el loop como editor durante la primera ventana de calibración.
+
+Comparado con un reporte de herramienta BI (Tableau, Looker, Power BI sobre el sistema de matters): las herramientas BI responden preguntas predefinidas en una agenda y producen gráficos. No producen un brief en Markdown, no manejan la capa no estructurada de "qué cambió y por qué importa", y no se adaptan a las reglas de escalación del despacho sin trabajo de autoría significativo. Usa BI para análisis de tendencias por trimestre; usa el skill para el digest operacional semanal.
+
+## A vigilar
+
+Manejo de contenido privilegiado. Corre el skill solo en un despliegue de Claude validado por tu revisión de privilegio. Resguardo: el skill se rehúsa a correr si la variable de entorno `OOLIGO_DIGEST_DEPLOYMENT_TIER` no está seteada en `tier-a`. Setéala explícitamente en el entorno del cron después de que la revisión de privilegio dé luz verde; nunca la pongas por default.
+
+Status de matter desactualizado generando falsa confianza. Resguardo: cualquier matter cuyo `last_activity_date` tenga más de 14 días aparece en una sección de footer dedicada "Stale status — verify", sin importar si otras reglas de escalación dispararon. El GC ve la staleness explícitamente en lugar de actuar sobre señal vieja.
+
+Riesgo de incumplimiento de deadlines escondido por la agregación de fases. Resguardo: cualquier deadline dentro de cinco días hábiles aparece en la sección de clústeres de deadlines sin importar la fase o el risk tier — la sección de clústeres es la red de seguridad que atrapa lo que las reglas de escalación dejan pasar.
+
+Falsos positivos de escalación ahogando al GC en ruido. Resguardo: la sección "Needs GC attention" tiene un cap duro en cinco ítems. Si más de cinco matters cumplen, el skill rankea por risk tier, luego spend impact, luego proximidad de deadline; el resto cae a FYI. Si te encuentras queriendo quitar el cap, ajusta las reglas en `references/3-escalation-criteria.md` en su lugar.
+
+Calibración de tono. Distintos GCs leen distintos digests. Resguardo: itera sobre los archivos de referencia semanalmente durante las primeras cuatro semanas, con el GC en la sala. Trata el formato como un artefacto vivo — el cuerpo del skill no debería necesitar cambiar una vez que las referencias se estabilicen.
+
+Auto-envío antes de revisar. Resguardo: el skill escribe a `outbox/digest-YYYY-MM-DD.md`; mandar el digest al GC es un paso aparte, disparado manualmente, hasta que cierre la ventana de calibración (mínimo ocho digests). Después de eso, automatiza el envío solo si la métrica de precisión arriba del 70 por ciento se sostuvo durante tres semanas consecutivas.
+
+## Stack
+
+Este workflow se empareja naturalmente con sistemas de [matter management](/es/learn/matter-management/) como fuente de verdad, con stacks de [legal-ops automation](/es/stacks/legal-ops/) para la capa de cron y entrega, y con workflows downstream que operan sobre el mismo export — por ejemplo revisión de facturas de outside counsel, automatizaciones de tracking de deadlines o análisis trimestral de cartera. Construye el digest después de que el sistema de matters esté limpio, no antes.

@@ -11,46 +11,63 @@ difficulty: beginner
 time_to_setup: 45min
 human_tested: false
 translated_from: en/demo-no-show-recovery-n8n.mdx
-translated_at: "2026-05-02T00:00:00Z"
+translated_at: "2026-05-08T01:35:00Z"
 translation_model: claude-opus-4-7
-source_sha256: "2084c51784a6d20bab5b187c8d9d4d28e189e566145673a66fe59b5e0b208001"
+source_sha256: "3ed2082e3291c985d037af8a1c044304ebe53a5586cf74f2e68f98a2b71bb4c1"
 ---
 
-Un flow de n8n que detecta no-shows de demo y corre una sequence de recuperación personalizada: un email de reagendamiento el mismo día con dos slots pre-elegidos, un follow-up dos días después referenciando un recurso relevante, y un soft-close después de una semana. Recupera aproximadamente 25-35% de los no-shows en la mayoría de las orgs de ventas. Cero esfuerzo del SDR humano.
+Un no-show de demo es el evento más caro en una motion de ventas B2B que nadie controla. El AE bloqueó treinta minutos, el SDR agendó la reunión, el comprador expresó intención real en algún momento, y luego no pasó nada. La mayoría de los equipos manejan esto con un recordatorio por Slack al AE y la vaga intención de "hacer follow-up". El follow-up llega días después, cuando el momento de compra ya se enfrió, o nunca llega porque el AE ya está en su próxima llamada. Este flow de n8n hace que la recuperación ocurra el mismo día, siempre, sin que un SDR haga el trabajo — y sale de la secuencia en cuanto una respuesta humana hace que la automatización sea redundante.
 
-## Qué necesitas
+## Cuándo usarlo
 
-- n8n con integraciones de HubSpot, Gmail y Calendar habilitadas
-- HubSpot Meetings o Chili Piper para el booking original
-- Un link de scheduling por AE o SDR
-- API key de Claude para personalización
-- Tres templates de email aprobados por etapa de la sequence de recuperación
+Tienes al menos 30 no-shows de demo por mes en todo el equipo. Por debajo de ese volumen, el AE puede recuperarlos a mano y no necesitas automatización; el modo de fallo de la automatización (un email un poco fuera de tono en el momento equivocado) se vuelve peor que el modo de fallo de la recuperación manual (olvidarse). Ya estás en HubSpot para reuniones (o Chili Piper escribiendo de vuelta a HubSpot) y los buzones de los AE están en Google Workspace. Tienes una señal honesta de no-show — es decir, HubSpot realmente está marcando las reuniones como `no_show` en lugar de dejarlas en blanco — y tus AE tienen links de scheduling que funcionan.
+
+## Cuándo NO usarlo
+
+No actives esto si se cumple cualquiera de estas condiciones. Tu "detección" de no-show es simplemente outcomes de reunión en blanco — vas a enviar emails de recuperación a personas que llegaron dos minutos tarde y el AE olvidó registrar la reunión, lo cual es peor que no hacer nada. El dominio de tu AE no tiene SPF, DKIM y DMARC configurados correctamente — el envío delegado desde un dominio sin autenticar va a caer en spam, va a entrenar a Gmail para que siga cayendo en spam, y va a dañar el outbound real del AE. Estás enviando outbound en frío de alto volumen desde los mismos buzones de AE (más de ~50 acciones de envío por día por buzón sumadas a esto) — los emails de recuperación van a competir con el outbound en frío y ambos van a sufrir. No tienes un camino limpio de opt-out que respetar — enviar un "soft close" a alguien que ya respondió STOP es ilegal en la mayoría de las jurisdicciones y ruinoso en todas.
 
 ## Setup
 
-1. **Detecta no-shows.** Configura HubSpot para marcar una meeting como `no-show` si el contacto no se conectó dentro de los 5 minutos (un workflow de HubSpot o un nodo calendar-watcher en n8n pueden hacerlo).
-2. **Importa el flow.** Pulla `demo-no-show-recovery.n8n.json`. El flow escucha el evento de no-show y luego camina al contacto por una sequence de tres pasos con salidas condicionales.
-3. **Personaliza con Claude.** El primer email lo genera Claude usando el snapshot de la empresa del contacto, el form fill que llevó al demo, y la voz del AE. Cap a 80 palabras.
-4. **Define salidas.** Si el contacto reagenda, agenda en el calendar link, o responde a cualquier email, sale del flow. Si presiona reply-stop o se desuscribe, sale y taggea.
-5. **Prueba con tres no-shows reales.** Envía a AEs internos primero, luego a no-shows en vivo en un segmento chico.
+El bundle completo se entrega en `apps/web/public/artifacts/demo-no-show-recovery-n8n/`. Dos archivos: `demo-no-show-recovery-n8n.json` (el export de n8n) y `_README.md` (procedimiento de import, los cuatro placeholders de credenciales, el esquema de Postgres para las dos tablas que el flow lee y escribe, y una verificación de primer arranque de nueve pasos que ejercita cada rama, incluyendo el guard de elegibilidad, el split de tono, el fallback de Claude, el barrido por cron y el path de salida por respuesta). Sigue el README de punta a punta antes de cambiar el workflow a Active. El SQL de creación del esquema debe ejecutarse antes de que dispare el primer webhook o el nodo `Postgres — Init Recovery State` va a fallar y el contacto va a quedar en un estado a medio secuenciar sin una fila de la cual recuperarse.
 
-## Cómo funciona
+## Lo que hace el flow en realidad
 
-El flow es event-driven. Cuando HubSpot dispara un evento `meeting_no_show`, n8n jala el contacto, el AE owner, el contexto de la meeting y el form submission original. Hace branch: si el contacto tuvo una meeting exitosa previa con la empresa en los últimos 90 días, el tono cambia a "te extrañamos" en lugar de "vamos a agendarte." En caso contrario, corre la sequence estándar.
+El webhook es la fuente de verdad. Un Workflow de HubSpot vigila `meetingOutcome = no_show` y hace POST de `{ meetingId, contactId, ownerId }` al endpoint `hubspot-no-show`. n8n responde 202 inmediatamente (para que el retry de HubSpot no dispare si un paso downstream va lento) y en paralelo trae la reunión, el contacto y el record del owner AE. El guard de elegibilidad son tres condiciones explícitas combinadas con AND: que no esté opted-out, que tenga una dirección de email real, y que el horario de inicio de la reunión esté al menos cinco minutos en el pasado. Esa última condición es la salvaguarda contra el modo de fallo "se conectaron tarde y el AE no se dio cuenta" — ver Watch-outs más abajo.
 
-Cada email se envía desde el Gmail del AE (delegated send), no desde un dominio de marketing automation. Esto importa para deliverability y reply rates. Claude personaliza la línea de opener referenciando el form fill o noticias recientes de la empresa, pero el cuerpo es el template aprobado.
+La rama de tono se decide con un único lookup en Postgres contra `hubspot_meetings_raw`: si el contacto tiene cualquier reunión con `outcome = 'completed'` en los últimos 90 días, el tono es `we_missed_you`; en caso contrario es `lets_reschedule`. Esto se le pasa a Claude junto con el resumen del form-fill del contacto y el nombre del AE. Claude devuelve una sola oración — limitada a 22 palabras, voz peer-to-peer — y el prompt tiene un contrato de fallback explícito: si el resumen del formulario está vacío o es genérico, el modelo devuelve el string literal `FALLBACK` y el paso JS en `Compose Step 1 Email` sustituye una apertura segura de plantilla en vez de mandar una línea sobre-personalizada construida sobre nada. Solo se genera la apertura. El cuerpo, los dos slots de horario preseleccionados y el call-to-action con el link de scheduling son determinísticos. Esta es la decisión de ingeniería que separa este flow del patrón típico de "que el LLM escriba el email entero": la mayor parte del email es plantilla, la personalización es una sola oración, y hay un fallback duro para cuando la personalización no es segura.
 
-Las respuestas se rutean de vuelta al AE con el reply tracking de HubSpot. El flow se detiene en el momento que un humano toma el control.
+Después de que se envía el step 1, una fila entra a `recovery_state` con `next_due_at = now() + 2 days`. Un nodo de cron separado barre cada 15 minutos durante horario laboral, levanta las filas vencidas, y rutea las filas en step-1 a un email value-forward que referencia un recurso relevante (mapeado por tono) y las filas en step-2 a un soft-close. Un tercer trigger independiente vigila el inbox del AE para cualquier email entrante nuevo, lo clasifica como `opt_out`, `rescheduled_or_replied` o `human_reply` con base en patrones de subject y snippet, sale de la secuencia, y escribe la razón de salida de vuelta al contacto de HubSpot vía PATCH para que el reporting pueda consolidar las salidas junto con las reuniones.
 
-## A tener en cuenta
+## Realidad de costos
 
-- **Reputación del sender.** Enviar desde el dominio del AE es la jugada correcta para respuestas pero la incorrecta si tus AEs olvidan autenticar. SPF, DKIM, DMARC tienen que estar seteados.
-- **Dial de personalización.** Los emails sobre-personalizados se sienten raros. El opener debe referenciar una cosa específica, no tres.
-- **Definición de no-show.** Si no tienes una señal limpia de no-show, el flow envía a gente que llegó tarde. Aprieta la lógica de detección antes de prender el flow.
+Por cada no-show recuperado: aproximadamente 1 llamada a la API de Claude con ~600 tokens de input y ~80 tokens de output, que en Sonnet son cerca de $0.003. Más 2–3 envíos de Gmail (gratis dentro de la cuota del buzón del AE). Más 4 llamadas a la API de HubSpot (muy por debajo del límite diario de HubSpot de cualquier organización razonable; las HubSpot Private Apps permiten 100 requests cada 10 segundos). Más el costo de self-host de n8n, que es ~$5/mes en una Hetzner CX22 si todavía no estás corriendo n8n. A 200 no-shows por mes el costo marginal es de unos $0.60 en cargos de Claude y cero en todo lo demás. Si incluso el 10% de esos se recuperan y convierten a oportunidad, la unit economics es absurda — el costo está dominado por los 30-45 minutos de setup, no por el costo de operación.
+
+## Cómo se ve el éxito
+
+Tres números a vigilar en HubSpot una vez que el flow lleva al menos 30 días corriendo. Primero, recovered-meeting rate: de los contactos que entraron al flow, qué porcentaje agendó una nueva reunión (vía salida `rescheduled_or_replied`) o respondió al AE dentro de la ventana de siete días. Saludable es 25-35%; por debajo de 15% significa que la apertura es genérica, que el resumen del form-fill no se está capturando, o que el dominio del AE tiene problemas de entregabilidad. Segundo, opt-out rate: porcentaje de contactos que salen vía `opt_out`. Saludable es por debajo de 3%; por encima de 5% significa que el tono está mal o que estás incluyendo segmentos que no deberían estar en el flow de recuperación en primer lugar. Tercero, false-positive rate: porcentaje de envíos del step-1 donde el AE confirma después que el contacto sí asistió (toma una muestra de 20 por mes manualmente). Esto debe estar por debajo de 2%; si es más alto, la detección de no-show está rota upstream y deberías pausar el flow.
+
+## Versus las alternativas
+
+Versus una secuencia solo con HubSpot Workflows: HubSpot puede manejar el timing y el envío del email, pero HubSpot no puede llamar a Claude para personalizar la apertura, no puede aplicar un contrato de fallback sobre la salida de personalización, y no puede rutear respuestas a través de clasificación basada en código. La versión solo-HubSpot manda la misma apertura a todos los del segmento. Eso te da quizás 15% de recuperación en vez de 25-35% — vale la pena si no tienes n8n, no vale la pena si lo tienes.
+
+Versus una plataforma de outbound como Smartlead u Outreach: esas herramientas asumen que estás enviando en frío a una lista y quieren optimizar la entregabilidad a través de cientos de buzones. Son overkill para este volumen (unos cientos de no-shows por mes por equipo) y no leen los outcomes de reuniones de HubSpot de forma nativa, así que igual necesitarías una capa de integración. El pricing tampoco tiene sentido — $100+/AE/mes para lo que como mucho son 2-3 envíos por AE por día desde este flow.
+
+Versus no hacer nada: el statu quo. La tasa de recuperación de no-shows de la mayoría de los equipos está en el rango 5-10% — el AE se acuerda de hacer follow-up con los de mejor fit y se olvida del resto. El delta de 5-10% a 25-35% es el ROI real de este flow.
+
+## Watch-outs
+
+**Llegadas tarde contadas como no-shows.** El falso positivo más común: el comprador se conecta seis minutos después del inicio, el AE ya se fue o marcó la reunión como hecha. La tercera condición del guard de elegibilidad (`meeting_start_time` al menos 5 minutos en el pasado) es la salvaguarda específica, pero no ayuda si HubSpot está marcando reuniones como `no_show` inmediatamente cuando el AE hace clic en "no-show" sin chequear. Arregla esto upstream exigiendo que el AE espere una ventana configurable antes de poder marcar `no_show` en HubSpot, o cambiando a un detector automático de no-show que vigile la asistencia en Zoom o Google Meet.
+
+**Apertura sobre-personalizada.** Claude, dado cualquier contexto, va a intentar personalizar. Si el resumen del formulario es "Quiere demo", la personalización va a ser un específico alucinado. La salvaguarda es el contrato `FALLBACK` explícito en el system prompt — Claude devuelve el string literal cuando el contexto es insuficiente y `Compose Step 1 Email` sustituye una apertura segura de plantilla. Vigila la métrica `used_fallback` en `recovery_state` durante el primer mes; si nunca es true, el contrato no está disparando y Claude está alucinando contenido en la apertura.
+
+**Colapso de la reputación de remitente.** El envío delegado desde el buzón del AE es la jugada correcta para los reply rates pero la jugada equivocada si el dominio del AE no autentica. La salvaguarda es operacional, no está en el flow: antes de activar, corre `mail-tester.com` contra un envío de prueba y confirma un 10/10 con SPF, DKIM y DMARC todos en verde. Si alguno está fallando, arregla el DNS primero o envía desde un subdominio (`replies.<dominio>.com`) con su propia autenticación.
+
+**Contactos que respondieron y siguen en la secuencia.** El trigger de respuesta hace polling de Gmail cada minuto, pero el polling de Gmail tiene un lag distinto de cero y el barrido de cron también corre cada 15 minutos. Hay una ventana donde un envío de step-2 podría dispararse después de que el comprador ya respondió. La salvaguarda es el filtro `status = 'active'` en `Postgres — Pull Due Recoveries` más el UPDATE de `Postgres — Exit Sequence` cambiando el status en cuanto llega una respuesta. Las race conditions son posibles en el límite del minuto; si esto importa para tu equipo, cambia el trigger de respuesta a una notificación push de Gmail (Pub/Sub) en vez de polling.
 
 ## Stack
 
-- **n8n** — orquestación y secuenciamiento condicional
-- **HubSpot** — estado de contacto, meeting y respuesta
-- **Gmail** — delegated send desde la dirección del AE
-- **Claude** — personalización de la línea de opener
+- **n8n** — orquestación, los tres triggers independientes (webhook, cron, Gmail) y los nodos de código JS para el contexto de personalización y la clasificación de respuestas.
+- **HubSpot** — fuente de verdad de reuniones y contactos, records de owner, write-back de la razón de salida vía token de Private App.
+- **Gmail** — envío delegado desde el buzón del AE; trigger de respuesta vigilando el mismo inbox.
+- **Claude (Sonnet)** — personalización de la línea de apertura con un contrato `FALLBACK` duro para cuando el contexto es insuficiente.
+- **Postgres** — tabla `recovery_state` para el estado de la secuencia y `hubspot_meetings_raw` para el lookup de reuniones previas a 90 días que decide la rama de tono.
