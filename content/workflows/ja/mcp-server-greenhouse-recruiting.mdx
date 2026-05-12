@@ -1,0 +1,123 @@
+---
+slug: mcp-server-greenhouse-recruiting
+canonical_slug: mcp-server-greenhouse-recruiting
+locale: ja
+verticals: [recruiting]
+title: 採用ワークフロー向けGreenhouse MCPサーバー
+artifact_type: mcp-server
+tools_used: [greenhouse, claude]
+roles: [recruiter, recruiting-engineer, talent-acquisition]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+translated_from: en/mcp-server-greenhouse-recruiting.mdx
+translated_at: "2026-05-13T02:15:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "d8fed108defafabc2d7f4be91256a6944324bf3b82b230176d0071e33a15a612"
+---
+
+[Greenhouse](/ja/tools/greenhouse/) Harvest APIを読み取り中心のツールとしてClaude Desktop / Claude Code / MCP対応クライアントに公開するModel Context Protocol（MCP）サーバーです。6つの読み取りツールがレクルーターの日常的な質問（「ステージXに30日以上以上停滞している候補者は誰か」「このロールのファネルはどうなっているか」「この候補者の履歴を見せて」）をカバーし、1つの慎重な書き込みツールがステージ停滞候補者をレクルーターが対応できる形で表面化します。Claude内での作業中にATSステートなしでコンテキストスイッチしたいレクルーター、およびATSの読み取りアクセスが必要なエージェントワークフローを構築するリクルーティングエンジニアのために設計されています。
+
+スキャフォールドはディスクからインポートできるPythonパッケージとして収録されています。ライブのGreenhouseテナントに対してランタイムテストされて**いません**——この免責事項はREADMEと `server.py` の冒頭で繰り返されています。本番利用には、まずリクルーティングエンジニアが非本番のGreenhouse環境に対して認証情報、レート制限、ディスパッチされるコールを検証する必要があります。
+
+## 使用すべきタイミング
+
+- レクルーターまたはリクルーティングエンジニアがClaude会話でATSステートを利用したく、MCPサーバーをインストールする意思がある場合（Claude DesktopとClaude Codeでは低摩擦。カスタムMCPクライアントではよりセットアップが必要）。
+- チームが[Greenhouse Harvest API](/ja/tools/greenhouse/)へのアクセスを持つ場合（HarvestはRead/Write API。Job Boardは公開Read Onlyです——このサーバーはHarvestを使用します）。
+- ユースケースに読み取り中心のアクセスが適している場合。サーバーの書き込みは1つの慎重なツール（`note_stage_stuck`）に限定されており、デフォルトでは候補者ステータスの変更は公開されていません。
+- リクルーティングエンジニアリングまたはITがHarvestスコープのAPIキーを扱えるセキュリティ姿勢を持つ場合。サーバーの監査ログが監査ログです。
+
+## 使用すべきでないタイミング
+
+- **今すぐ本番対応でランタイムテスト済みのセットアップが必要な場合。** これはスキャフォールドです。READMEがそう言っており、ドキュメントコメントもそう言っています。完成した展開ではなく出発点として使用してください。
+- **マルチテナントSaaSの用途。** サーバーの認証モデルはシングルテナント（1つのAPIキー、1つのGreenhouseインスタンス）です。マルチテナントには非自明な変更が必要です。
+- **書き込み重視のワークフロー。** サーバーは意図的に読み取り中心です。候補者をステージ間で移動させる、求人ボードに投稿する、候補者への通信を送信するユースケースには、リクルーティングカーソルルールのガイダンスに従って、ツールごとの独立したセキュリティレビューと明示的な正当化が必要です。
+- **Greenhouse外への候補者データの保存。** サーバーは呼び出し元のClaude セッションに候補者データを返します。セッションのデータ取り扱い姿勢はレクルーターの責任です。独自の監査テーブルに生の候補者名またはPIIをログしないでください——監査ログは `candidate_id` のみを記録します。
+- **候補者の同意姿勢のバイパス。** Greenhouseのデータは採用目的で候補者が同意したものです。エージェントワークフローへの取り込みはその同意を拡張しません。開示された処理目的の範囲内に留まってください。
+
+## セットアップ
+
+1. **パッケージをインストールします。** `apps/web/public/artifacts/mcp-server-greenhouse-recruiting/` から：
+   ```bash
+   pip install -e .
+   ```
+   パッケージは `pyproject.toml` を使用したuv/pip インストール可能なPythonプロジェクトとして構成されています。
+2. **認証情報を設定します。** 2つの環境変数：`GREENHOUSE_API_KEY`（Greenhouse → Configure → Dev Center → API Credential Managementから生成したHarvest APIキー。書き込みが不要なすべてのHarvestの動詞に対して*読み取り*権限を選択）と `GREENHOUSE_USER_ID_FOR_ON_BEHALF_OF`（Greenhouseが書き込みを帰属させるユーザーID、`note_stage_stuck` に必要）。
+3. **MCPクライアントに登録します。** Claude Desktopの場合、`claude_desktop_config.json` に追加します：
+   ```json
+   {
+     "mcpServers": {
+       "greenhouse-recruiting": {
+         "command": "uv",
+         "args": ["run", "greenhouse-recruiting-mcp"],
+         "env": {
+           "GREENHOUSE_API_KEY": "...",
+           "GREENHOUSE_USER_ID_FOR_ON_BEHALF_OF": "..."
+         }
+       }
+     }
+   }
+   ```
+   Claude Codeの場合、同等のものをプロジェクトの `.claude/settings.json` のMCPブロックに記述します。
+4. **ステージングに対してサニティチェックします。** Greenhouseは有料顧客に別のステージング環境を提供しています。まずサーバーをステージングに接続します。付属の `python -m greenhouse_recruiting_mcp.smoke` コマンド（認証情報が認証され、レート制限ヘッダーが解析できることを確認するバンドルされた非ランタイムテストのチェック）を実行します。
+5. **本番に移行します。** ステージングの検証後のみ、本番のAPIキーに環境変数を切り替えます。サーバーはMCPクライアントにローカルで実行されます。単一レクルーターの使用には個別の展開は不要です。チームでの使用の場合は、レクルーターごとのMCPゲートウェイを持つ共有コンテナで実行します。
+
+## サーバーが公開する内容
+
+7つのツール。6つは読み取り。1つは慎重な書き込みです。[リクルーティングカーソルルール](/ja/workflows/cursor-rules-recruiting-engineer/)のガイダンスに従い、書き込みにはツールごとの明示的な正当化が必要です——`note_stage_stuck` は `server.py` のドキュメントコメントにそれが記載されています。
+
+### 読み取りツール
+
+1. **`list_candidates_in_stage`** — 求人IDとステージ名を与えると、最終タッチ日時とともにそのステージの候補者を返します。「オンサイトデブリーフに誰が停滞しているか」のクエリに有用です。
+2. **`get_candidate_history`** — 候補者IDを与えると、ステージ履歴（入力、退出、タイムスタンプ、移動した人）を返します。レクルーターのスクリーン前のコンテキスト読み込みに有用です。
+3. **`list_jobs_open`** — チーム、ハイヤリングマネージャー、opened_at、target_close_dateとともにすべての求人中の求人をリストします。採用リーダーの「何に取り組んでいるか」の概要に有用です。
+4. **`get_funnel_for_job`** — 求人IDを与えると、ステージごとの候補者数を返します。ファネルの健全性チェックに有用です。
+5. **`list_jobs_stalled`** — N日間（デフォルト7日）候補者が進捗していない求人をリストします。ハイヤリングマネージャーが気づく前に停滞したreqをキャッチするのに有用です。
+6. **`search_candidates_by_attribute`** — カスタムフィールド名と値を与えると、一致する候補者を返します。GreenhouseのUIが表示しないアドホックフィルタリングに有用です。
+
+### 書き込みツール
+
+7. **`note_stage_stuck`** — 候補者IDと自由形式のメモを与えると、候補者のレコードに内部メモを追加します。「ClaudeはこのこのカンディデートをX日以上ステージ停滞としてフラグした」を記録するために使用され、アクションが監査証跡に表示されてサイレントにならないようにします。リクルーティングエンジニアの規範に従い：すべての書き込みは `On-Behalf-Of` ヘッダーを通じて帰属する監査証跡エントリを生成します。
+
+## コストの現実
+
+- **Greenhouse APIクォータ** — Harvest APIはAPIキーとIPごとに50リクエスト/10秒でレート制限されています。サーバーはトークンバケットレートリミッター（設定可能、デフォルト40リクエスト/10秒）を含み、制限に達する前にスロットリングします。これを超えるバーストは `Retry-After` ヘッダーなしの429になります（Greenhouseの文書化された動作）。サーバーのバックオフロジックがこれを処理します。
+- **LLMトークン** — 呼び出し元のClaude セッションがデータで何をするかにより完全に依存します。サーバー自体は構造化されたJSONを返します。Claude セッションのプロンプト予算がコストです。
+- **サーバーホスティングコスト** — MCPクライアントにローカルで実行されます。単一レクルーターの使用ではオンゴイングコストはゼロ。共有コンテナでのチーム全体の展開は最大でも小さなVMです（$5〜15/月）。
+- **セットアップ時間** — ステージングのサニティチェックとMCPクライアント登録を含めて60分。リクルーティングエンジニアの時間が拘束コストです。
+
+## 成功指標
+
+直接測定するのは困難です。正直な指標：
+
+- **MCPを使用したClaudeセッションの週次数** — 1週間あたりにレクルーターまたはリクルーティングエンジニアがMCPを呼び出したClaude セッションを使用した回数。1か月後に週5回未満であれば、ユースケースが存在しません。
+- **Claude セッションごとに節約した平均コンテキストスイッチ時間** — 定性的。「このMCPなしで、Greenhouse UIでこの質問にどれくらいかかったか」というレクルーター自身の評価。MCPはその答えが定期的に2分以上の場合にセットアップコストを回収します。
+
+## 代替手段との比較
+
+- **vs Greenhouse UIを直接使用する場合。** レクルーターが他の理由でGreenhouseにいる場合はUIが正しい選択です。MCPがセットアップコストを回収するのは、レクルーターが他の理由（アウトリーチの起草、メモの要約、Booleanクエリの構築）でClaudeにいる場合です。
+- **vs GreenhouseのネイティブチャットボットIntegration。** GreenhouseはSlackやその他のサーフェスとのIntegrationを提供してATSステートを表示します。チームがSlackで生活している場合はそれらを選択してください。チームがClaude内で生活している場合はMCPを選択してください。
+- **vs Harvestに対するDIY Pythonスクリプト。** 同じデータですが、MCPはデータをあらゆるMCPクライアント（Claude Desktop、Claude Code、Cursor、MCP採用が広がるにつれて他のもの）で利用可能にします。スクリプトだけではなく。
+- **vs GreenhouseのビルトインAPI直接クエリ。** 技術ユーザーには可能ですが、すべてのクエリがcurl-and-parseサイクルです。MCPはそれをClaude向けのツールコール形式にラップします。
+
+## 注意点
+
+- **ライブテナントに対してランタイムテストされていない。** *対策：* READMEと `server.py` のモジュールdocstringに明示的に免責されています。本番展開にはリクルーティングエンジニアがまずステージングテナントに対して各ツールを検証する必要があります。バンドルされたスモークテストは認証情報/レート制限のチェックであり、ツールごとの検証ではありません。
+- **レート制限の枯渇。** *対策：* サーバーのトークンバケットレートリミッターはデフォルト40リクエスト/10秒（Greenhouseの50リクエスト/10秒の上限以下）。設定可能。他のシステムがAPIキーを共有する場合は低く設定してください。
+- **チャットモデルコンテキストへの候補者PII漏洩。** *対策：* サーバーはAPIが返すデータ（名前とメールアドレスを含む）をClaude セッションに返します。セッションのデータ取り扱い姿勢はレクルーターの責任です。READMEには明示的に記載されています：セッションの書き起こしを共有のSlackチャンネルに貼り付けないでください。
+- **書き込みツールのずれ。** *対策：* 書き込みとして公開されているのは `note_stage_stuck` のみです。他の6つのツールには書き込みパスがありません。リクルーティングエンジニアが新しい書き込みツールを追加する場合は、READMEのツールごとのレビューテンプレートを記入し、ツールの目的を `server.py` の `tools/` レジストリセクションに記録する必要があります。
+- **APIキースコープのクリープ。** *対策：* READMEには必要な最小限のHarvestの動詞が文書化されています（`candidates`、`applications`、`jobs`、`users` の読み取り専用、`candidates.notes` の書き込みのみ）。より広いスコープのキーはサーバーをより影響範囲の大きいサーフェスにサイレントに変えます。
+- **マルチテナント設定のずれ。** *対策：* サーバーは設計によりシングルテナントです。マルチテナント展開には非自明な変更が必要です。READMEはこれを誤魔化すのではなく免責しています。
+
+## スタック
+
+アーティファクトバンドルは `apps/web/public/artifacts/mcp-server-greenhouse-recruiting/` にあり、以下を含みます：
+
+- `pyproject.toml` — パッケージメタデータ、依存関係、`greenhouse-recruiting-mcp` エントリポイント
+- `README.md` — インストール、環境変数、MCPクライアント登録、サニティチェック手順、セキュリティモデル、既知の制限
+- `src/greenhouse_recruiting_mcp/__init__.py` — パッケージ初期化
+- `src/greenhouse_recruiting_mcp/server.py` — 7つのツール定義とディスパッチ実装を含むMCPサーバー
+
+ワークフローが前提とするツール：[Greenhouse](/ja/tools/greenhouse/)（ATS）、[Claude](/ja/tools/claude/)（MCPクライアント）。並行するAshby MCPサーバーについては、[Ashby MCP](/ja/workflows/mcp-server-ashby-recruiting/)を参照してください。より広いリクルーティングエンジニアのガードレールについては、[リクルーティングエンジニアのカーソルルール](/ja/workflows/cursor-rules-recruiting-engineer/)を参照してください。
+
+関連概念：[ATSとリクルーティングCRM](/ja/learn/ats-vs-recruiting-crm/)、[採用テクノロジースタック](/ja/learn/recruiting-tech-stack/)。
