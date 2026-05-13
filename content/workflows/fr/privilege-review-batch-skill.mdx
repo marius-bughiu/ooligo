@@ -1,0 +1,107 @@
+---
+slug: privilege-review-batch-skill
+canonical_slug: privilege-review-batch-skill
+locale: fr
+verticals: [legal-ops]
+title: Revue de privilège en batch avec Claude
+artifact_type: claude-skill
+tools_used: [claude, relativity]
+roles: [legal-ops, in-house-counsel, paralegal]
+difficulty: advanced
+time_to_setup: 90min
+human_tested: false
+translated_from: en/privilege-review-batch-skill.mdx
+translated_at: "2026-05-13T10:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "25551f8efe1ae929299cdbae44488a013ebc082ee8a528b4da156b4e818af3f1"
+---
+
+Un Claude Skill qui prend un lot de documents — typiquement un dossier d'emails et pièces jointes exportés depuis une plateforme de revue [eDiscovery](/fr/learn/ediscovery/), ou un répertoire de contrats tirés d'un CLM — et effectue une première passe de [revue de privilège](/fr/learn/privilege-review/). Pour chaque document, il émet l'un des états `privileged`, `not-privileged` ou `borderline-needs-attorney`, étayé par des extraits de preuves ancrés par citation, plus une ébauche d'entrée de [journal de privilège](/fr/learn/privilege-log-format/) pour chaque document classifié `privileged`.
+
+C'est une couche de triage, pas une couche de détermination. Le skill compresse la première passe d'un avocat sur un univers de documents à cinq chiffres en une décision de routage : 70-80 % évidemment non privilégiés, 10-15 % évidemment privilégiés avec des ébauches d'entrées de journal pré-rédigées, 10-20 % dans une queue borderline avec la préoccupation spécifique (rôle d'avocat flou, tiers présent, privilège partiel, indicateur de renonciation) nommée afin que l'avocat réviseur consacre son temps aux enregistrements qui nécessitent réellement un jugement. Les décisions finales restent le travail de l'avocat.
+
+Le bundle dans `apps/web/public/artifacts/privilege-review-batch-skill/` contient `SKILL.md`, plus trois templates de référence que l'équipe du dossier remplit avant d'exécuter sur des documents en production : `references/1-privilege-rubric.md`, `references/2-privilege-log-format.md` et `references/3-jurisdictional-tests.md`.
+
+## Quand l'utiliser
+
+- **Première passe eDiscovery.** Un univers de revue de 5 000 à 50 000 documents atterrit sur la table de l'équipe après collection et déduplication. La revue par des avocats seuls coûte 10-30 minutes par document à 400-700 $/heure pour des avocats sous contrat et bien plus pour le temps d'associé. Exécuter ce skill en premier signifie que les avocats touchent la queue borderline et un échantillon de l'ensemble à haute confiance, pas chaque document.
+- **Audit de privilège CLM.** Une demande de régulateur, une due diligence M&A ou un audit interne nécessite que le référentiel de contrats soit parcouru pour identifier les documents mal étiquetés « privilégiés » (survendication) ou auxquels l'étiquette fait défaut là où elle devrait s'appliquer (sous-vendication). Le skill traite le corpus en batch et fait remonter les divergences pour revue par l'avocat.
+- **Triage d'enquête.** Avant qu'une boîte mail d'un dépositaire soit transmise au conseil externe pour production, le skill classifie en interne afin que le contenu privilégié soit routé via le conseil plutôt qu'inclus dans une remise en masse.
+- **Calibrage d'un nouveau rubrique.** Quand le dossier est nouveau et que l'équipe n'a pas encore verrouillé le rubrique de privilège, exécutez le skill sur un échantillon de 200-500 documents, comparez ses décisions à celles des avocats, ajustez le rubrique dans `references/1-privilege-rubric.md`, répétez. Le mode de calibrage (étape 4 dans `SKILL.md`) est conçu pour cette boucle.
+
+## Quand NE PAS l'utiliser
+
+- **Décisions finales de privilège.** La sortie est une recommandation. Un document marqué `privileged` ici nécessite encore la validation d'un avocat avant d'être retenu en production ; un document marqué `not-privileged` nécessite encore une vérification ponctuelle par l'avocat avant sa divulgation. Produire du matériel privilégié parce que le skill l'a dit propre est une exposition à la faute professionnelle qu'aucun score de confiance n'immunise.
+- **Vendeurs IA non-Tier-A.** Le contenu privilégié ne peut pas être routé via Claude grand public, un chatbot généraliste, un plugin de navigateur ou un wrapper SaaS non validé. Le skill vérifie l'endpoint configuré contre la liste autorisée dans `references/3-jurisdictional-tests.md` au démarrage et refuse d'exécuter si l'endpoint n'est pas sur la liste. Voir la [politique IA pour les équipes juridiques](/fr/learn/ai-policy-for-legal-teams/) pour le cadre sous-jacent.
+- **Décisions de production automatisées.** Aucun document ne doit être divulgué à une partie requérante sur la seule base de la sortie du skill. La production est une décision d'avocat contre le dossier complet.
+- **Brouillons de négociation en cours avec le conseil externe.** La plupart des politiques IA des cabinets excluent les brouillons actifs des outils IA. Exécutez sur des documents exécutés et entrants, pas sur ce qui est actuellement en cours de redline.
+- **PDFs image numérisés sans couche OCR.** Le skill s'arrête avec `error: "ocr_required"` plutôt que de produire du texte vide et de classer silencieusement le document comme non privilégié. L'OCR est une préoccupation amont séparée.
+
+## Setup
+
+1. **Déposez le Skill.** Placez `privilege-review-batch.skill` dans votre répertoire de skills Claude Code ou votre tenant Claude d'entreprise. Le skill expose un point d'entrée unique qui exécute le batch complet : `process_batch(batch_path, metadata_csv, rubric_path, jurisdiction, prior_decisions_csv?, borderline_threshold?)`.
+2. **Remplissez le rubrique.** Éditez `references/1-privilege-rubric.md` avec : l'ID du dossier, le standard de privilège en vigueur (`attorney-client`, `work-product` ou `both`), la liste des dépositaires avocats internes et externes avec adresses email (en minuscules, correspondant aux métadonnées de production), le périmètre thématique, le cercle de privilège (quel personnel interne peut figurer sur la ligne de destinataire sans briser le privilège), les indicateurs de renonciation spécifiques au dossier, et la date d'anticipation du litige pour le travail de préparation si applicable.
+3. **Choisissez le format du journal.** Éditez `references/2-privilege-log-format.md` pour correspondre au schéma requis par la juridiction (Federal Rule 26(b)(5)(A) est la valeur par défaut ; le Delaware Court of Chancery et le SDNY/EDNY ont des variantes documentées dans le fichier). Le skill rédige des entrées en Markdown ; l'outil de production du dossier exporte vers le format requis par la juridiction.
+4. **Épinglez la juridiction.** Éditez `references/3-jurisdictional-tests.md` pour confirmer que la juridiction du dossier est sur la liste approuvée (`us-federal`, `us-state-CA`, `uk`, `eu` sont prédéfinis ; ajoutez-en d'autres avec validation d'avocat). Remplissez la liste `ALLOWED_ENDPOINTS` avec les endpoints Tier-A que le cabinet a approuvés.
+5. **Calibrez sur un échantillon étiqueté par un avocat.** Tirez 50-100 documents précédemment revus par un avocat sur ce dossier ou un similaire. Passez les décisions antérieures comme `prior_decisions_csv`. Exécutez le skill. Inspectez le rapport de calibrage (étape 4 de la méthode) : l'accord devrait être d'au moins 90 % avant de vous fier à la sortie plus large. Si c'est moins, ajustez le rubrique — typiquement la liste des dépositaires avocats, le périmètre thématique ou le cercle de privilège est le gap — et répétez.
+6. **Exécutez le batch complet.** Traitez le répertoire d'export ; examinez d'abord la queue borderline, puis les décisions à haute confiance échantillonnées, puis finalisez les ébauches d'entrées de journal.
+
+## Ce que le skill fait réellement
+
+Pour chaque document du batch, quatre étapes ordonnées :
+
+1. **Extraction en deux passes.** La passe A extrait le texte en préservant les indices de paragraphes ; pour `.eml` et `.msg`, elle parse l'arbre MIME et émet un enregistrement par partie afin que le privilège des pièces jointes puisse être évalué indépendamment de l'email de couverture. La passe B joint le document à sa ligne dans le CSV de métadonnées et résout chaque partie contre la liste de dépositaires avocats du rubrique (`is_attorney: true | false | unknown`). Exposer les flags d'avocat pilotés par les métadonnées comme contexte de pré-classification explicite empêche le modèle de les re-dériver bruyamment depuis le corps et signifie qu'un chemin de repli métadonnées uniquement existe si l'extraction de texte échoue.
+2. **Classification ancrée par citation, une passe par document.** Le prompt par document encode le standard de privilège du rubrique, le test de la juridiction depuis `references/3-jurisdictional-tests.md`, la liste résolue des parties et le texte du document. Claude renvoie : classification, base (quel élément du test a déclenché), preuves (un à trois extraits verbatim avec coordonnées de citation), confiance, et un champ `concern` optionnel pour les appels borderline nommant le doute. Les prompts par document (plutôt qu'un méga-prompt) permettent de réessayer uniquement les échecs, de plafonner les tokens de chaque appel et d'isoler les hallucinations à un seul enregistrement.
+3. **Routage borderline.** Règles premier-match-gagne : confiance sous le seuil ; toute partie flaggée `is_attorney: unknown` ; destinataire tiers en dehors du cercle de privilège ; ou type de document correspondant à un pattern de routage-toujours configuré. Un rubrique bien ajusté produit un taux borderline de 10-20 %.
+4. **Ébauches d'entrées de journal pour l'ensemble privilégié.** Pour chaque document `privileged`, ébauche d'une entrée de journal depuis le schéma dans `references/2-privilege-log-format.md`, avec le champ `attorney_review_status` codé en dur à `draft — pending attorney review`.
+
+Le garde contre les hallucinations se situe à l'étape 2 : tout extrait de preuve renvoyé par le modèle qui n'est pas byte-identique à une sous-chaîne des parties du document est rejeté, et le document est forcé dans la queue borderline avec `concern: "evidence_not_grounded"` plutôt que d'émettre un enregistrement confident mais fictif.
+
+## Coûts réels
+
+Au tarif public API Anthropic pour Claude Sonnet 4.5, la dépense en tokens par document est approximativement :
+
+- Input : 3 000-15 000 tokens par document (texte + parties + rubrique + test juridictionnel). Les longs contrats et les emails multi-pièces jointes se situent au haut de la fourchette. À environ 3 $ par million de tokens d'input, c'est 0,009-0,045 $ par document.
+- Output : 200-600 tokens par document (enregistrement de classification + preuves + ébauche d'entrée de journal le cas échéant). À environ 15 $ par million de tokens d'output, c'est 0,003-0,009 $ par document.
+
+Total : environ 0,012-0,054 $ par document, avant mise en cache des prompts. La mise en cache du rubrique et du test juridictionnel (constants sur l'ensemble du batch) réduit typiquement le coût d'input de 60-80 % — le rubrique seul représente 1 500-3 000 tokens qui seraient autrement refacturés sur chaque document.
+
+À l'échelle eDiscovery, avec mise en cache :
+
+- 5 000 documents : 30-120 $
+- 20 000 documents : 120-480 $
+- 100 000 documents : 600-2 400 $
+
+Comparez cela à la première passe uniquement avocat à 400-700 $/heure pour des avocats sous contrat examinant 30-60 documents par heure : 20 000 documents représentent environ 333-667 heures d'avocat, soit 133 000-467 000 $ en pure main-d'œuvre de revue. Le skill n'élimine pas les heures d'avocat — la revue borderline et la finalisation restent — mais il les concentre sur les enregistrements nécessitant un jugement, avec des améliorations de débit de revue typiquement de 4-8x sur les batches éligibles à la première passe.
+
+## Métrique de succès
+
+Un seul chiffre à suivre dans le temps : **taux d'accord dans la queue borderline** — la fraction de documents que le skill a routés vers borderline que l'avocat a finalement décidé était privilégié ou non privilégié avec haute confiance. La cible est d'environ 60-80 %. Une queue où les avocats basculent 95 % des documents vers `privileged` (ou 95 % vers `not-privileged`) avec peu d'hésitation est une queue que le skill aurait dû classifier lui-même ; ajustez le rubrique ou les seuils. Une queue où chaque document nécessite une longue délibération est correctement calibrée.
+
+Métriques secondaires, suivies par batch :
+
+- **Taux faux-non-privilégié** (le skill a dit `not-privileged`, l'avocat a dit `privileged` — l'erreur de risque de production). Cible en dessous de 1 %. Au-dessus de 2 % c'est un signal d'arrêt et d'ajustement.
+- **Taux faux-privilégié** (risque de survendication, exposition aux sanctions si un tribunal oblige). Cible en dessous de 5 %. Au-dessus de 10 % c'est un signal d'arrêt et d'ajustement.
+- **Débit** — documents par heure d'avocat après l'exécution du skill, incluant la revue borderline et la finalisation du journal. La référence pré-skill est typiquement 30-60 docs/heure ; post-skill devrait atterrir à 150-300 docs/heure pour la queue borderline plus le travail de finalisation.
+
+## Comparaison avec les alternatives
+
+- **Versus Relativity Active Learning.** L'apprentissage actif continu de Relativity classe les documents par probabilité de réponse ou privilège en utilisant un modèle entraîné sur les décisions de codage des avocats du dossier. Il est excellent pour le classement et la priorisation ; il est moins efficace pour produire des explications défendables par document et pour rédiger l'entrée de journal. Ce skill produit un enregistrement ancré par citation par document et une ébauche d'entrée de journal — utile quand l'équipe a besoin d'une piste d'audit ou quand le journal est le goulot d'étranglement plutôt que la queue de revue. Les deux sont complémentaires, pas substituts : Active Learning classe la queue, le skill rédige les enregistrements et le journal.
+- **Versus la détection de privilège ML d'Everlaw.** Everlaw et plateformes similaires proposent des détecteurs de privilège intégrés au produit, entraînés sur de larges corpus de contentieux. Ils fonctionnent sans le rubrique spécifique au dossier que ce skill requiert, ce qui est plus rapide à démarrer mais moins précis sur les faits spécifiques au dossier (l'adresse email du Directeur Juridique, le cercle de privilège de ce dossier, les sujets spécifiques en périmètre). Pour un petit dossier ponctuel sans appétit pour le travail sur le rubrique, le détecteur intégré au produit est le bon choix. Pour les dossiers où le rubrique existe et que l'équipe a besoin des ébauches d'entrées de journal, ce skill produit une sortie plus adaptée au dossier.
+- **Versus la première passe manuelle d'avocats sous contrat.** La référence historique. Fiable, défendable et environ 100-1000x plus coûteuse aux échelles ci-dessus. Le skill ne remplace pas l'avocat sous contrat ; il déplace ses heures de « examiner chaque document » vers « décider de la queue borderline et finaliser le journal », ce qui est le travail nécessitant réellement un jugement juridique.
+
+## Points de vigilance
+
+- **Survendication de privilège.** Les journaux gonflés attirent des demandes de compel et des risques de sanctions. Garde-fou : quand `prior_decisions_csv` est fourni, le skill calcule `false_privileged_rate` contre les décisions des avocats et avertit quand il dépasse 5 % ; sans décisions antérieures, il échantillonne 10 % des appels `privileged` dans la queue borderline pour vérification ponctuelle par l'avocat avant la fermeture du batch.
+- **Documents partiellement privilégiés.** Un seul email peut être privilégié en partie (paragraphe de conseil juridique) et non privilégié en partie (mise à jour commerciale transférée). Traiter le document comme un seul appel est le mode d'échec. Garde-fou : l'extraction émet un enregistrement par partie MIME ; la classification s'exécute par partie ; les documents avec des parties de classification mixte routed vers borderline avec `concern: "partial_privilege"` et `redaction_required: true`. La rédaction elle-même est le travail de l'avocat.
+- **Confusion travail de préparation versus privilège avocat-client.** La doctrine du travail de préparation protège des choses différentes (anticipation du litige, impressions mentales de l'avocat) que le privilège avocat-client (conseil juridique confidentiel avocat-client), et le test du travail de préparation ne nécessite pas d'avocat sur la communication. Garde-fou : le rubrique nomme quel standard est en vigueur ; le champ `basis` sur la sortie nomme l'élément qui a déclenché ; si le skill ne peut pas résoudre quel standard s'applique, il route vers borderline avec `concern: "standard_resolution_required"`.
+- **Renonciation via destinataire tiers.** Une communication privilégiée en copie à un tiers non-client renonce généralement au privilège. Garde-fou : le routeur borderline vérifie chaque destinataire contre le cercle de privilège du rubrique et route tout document avec un destinataire extérieur vers borderline avec le tiers nommé dans le champ `concern`, afin que l'avocat puisse appliquer l'exception d'intérêt commun ou une doctrine similaire en revue.
+- **Application du vendeur Tier-A.** Router des documents privilégiés via un endpoint IA non approuvé peut renoncer au privilège. Garde-fou : le hook de démarrage du skill lit la liste `ALLOWED_ENDPOINTS` depuis `references/3-jurisdictional-tests.md` et refuse d'exécuter si l'endpoint configuré n'est pas sur la liste. Le propriétaire de la liste est nommé dans la politique IA ; les modifications nécessitent une validation.
+- **Les normes de divulgation des tribunaux varient.** La revue de privilège assistée par IA est de plus en plus acceptée, mais des obligations de divulgation spécifiques à la juridiction existent (certains juges attendent une description de la méthodologie IA dans le protocole de production). Vérifiez auprès du conseil local avant de vous appuyer sur le skill dans un dossier contentieux.
+
+## Stack
+
+- [Claude](/fr/tools/claude/) — endpoint Tier-A uniquement (niveau entreprise API Anthropic ou votre tenant Claude d'entreprise)
+- [Relativity](/fr/tools/relativity/), [Everlaw](/fr/tools/everlaw/) ou [DISCO](/fr/tools/disco/) — source de l'export de documents et du CSV de métadonnées
+- Le bundle du skill dans `apps/web/public/artifacts/privilege-review-batch-skill/`
+- Lecture associée : [eDiscovery](/fr/learn/ediscovery/), [revue de privilège](/fr/learn/privilege-review/), [format de journal de privilège](/fr/learn/privilege-log-format/), [modèle EDRM](/fr/learn/edrm-model/), [politique IA pour les équipes juridiques](/fr/learn/ai-policy-for-legal-teams/)

@@ -1,0 +1,91 @@
+---
+slug: regulatory-change-monitor-n8n
+canonical_slug: regulatory-change-monitor-n8n
+locale: fr
+verticals: [legal-ops]
+title: Moniteur de changements réglementaires avec n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack]
+roles: [legal-ops, in-house-counsel, compliance, dpo]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/regulatory-change-monitor-n8n.mdx
+translated_at: "2026-05-13T10:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "aa78e16fd4585ec1bcc8e580247d3de5bd8e4abe11ee2b2c742e744d4326919c"
+---
+
+Un flow n8n qui surveille un ensemble organisé de flux réglementaires (mises à jour de l'AI Act européen, décisions d'application du RGPD, lois américaines sur la vie privée par état, propositions de règles de la SEC, LL 144 de New York et autres lois IA-emploi, règles sectorielles), classe chaque élément par pertinence par rapport au profil d'exposition spécifique du cabinet, score l'urgence, et publie un digest structuré dans le canal Slack de l'équipe juridique — agrégat quotidien, plus alertes immédiates pour les éléments `high_urgency`. Remplace le « cimetière de flux RSS et newsletters » de l'avocat interne par une queue filtrée qui ne fait remonter que ce sur quoi le cabinet doit réellement agir.
+
+## Quand l'utiliser
+
+- Le cabinet opère dans plusieurs régimes réglementaires (vie privée, emploi, règles sectorielles) et l'équipe interne ne peut pas lire manuellement les mises à jour de chaque régulateur.
+- Le travail de conformité est suffisamment événementiel pour que « nous avons manqué ce changement de règle parce que personne ne l'a vu » soit un mode d'échec réel.
+- Le cabinet a documenté son profil d'exposition réglementaire (quelles juridictions, quels secteurs, quels types de données) — le filtre de pertinence requiert ce profil.
+
+## Quand NE PAS l'utiliser
+
+- **Remplacer la lecture du directeur juridique du cabinet.** Le flow est une aide à la décision ; le conseil lit encore les éléments de haute urgence et définit la réponse du cabinet. Le flow filtre ; le conseil agit.
+- **Produire des conseils juridiques sur les changements de règles.** Le flow résume. Le conseil interprète et décide de la réponse.
+- **Domaines de pratique très spécialisés** nécessitant une surveillance de niveau praticien dédiée (travail de compensation réglementaire M&A, fiscalité complexe). La pratique spécialisée a des sources spécialisées au-delà de ce qu'un moniteur de flux détecte.
+- **Géographies que le profil d'exposition ne couvre pas.** L'ajout d'une géographie nécessite la mise à jour du profil ; le flow ne découvre pas automatiquement ce dont le cabinet se soucie.
+
+## Setup
+
+1. **Importez le flow** depuis `apps/web/public/artifacts/regulatory-change-monitor-n8n/regulatory-change-monitor-n8n.json`.
+2. **Câblez les credentials.** Anthropic (classification Claude), Slack (destination du digest), fetcher HTTP (aucune auth nécessaire pour les flux RSS / API publics).
+3. **Rédigez le profil d'exposition du cabinet.** Par domaine réglementaire, documentez : juridictions applicables, secteurs, types de données, exposition aux pénalités, propriétaire de conseil nommé. Template dans `_README.md`.
+4. **Configurez les sources de flux.** Le flow fourni interroge 8 flux par défaut (page AI Act de la Commission européenne, page LL 144 des affaires de consommateurs de NYC, directives EDPB, propositions de règles SEC, application ICO, directives EDPS, communiqués de presse FTC, agrégateur d'application de la vie privée des AG d'état). Ajoutez ou supprimez selon l'exposition du cabinet.
+5. **Ajustez les seuils d'urgence.** Valeurs par défaut : décision d'application contre un cabinet pair → `high` ; proposition de règle dans la juridiction en périmètre → `medium` ; document de consultation → `low`. Ajustez selon la préférence du conseil pour le bruit versus les manques.
+6. **Testez pendant deux semaines.** Comparez les classifications du flow à la lecture manuelle du conseil pour la même période. Ajustez le filtre de pertinence et les règles d'urgence.
+
+## Ce que fait le flow
+
+Six nœuds. Polling par flux, puis classification par élément, puis assemblage du digest.
+
+1. **Cron Hourly** — se déclenche toutes les heures pour interroger les flux (le digest quotidien s'assemble à 8h du matin TZ bureau).
+2. **Fetch Feeds** — requêtes HTTP vers chaque URL de flux configurée. Parse RSS / Atom / JSON par format de flux. Déduplique par GUID d'élément contre les 30 derniers jours d'éléments vus.
+3. **Classify** — appel Claude par nouvel élément. Renvoie `{relevant_to_profile, jurisdictions_implicated, regulatory_areas, urgency, summary, recommended_owner}`. Les éléments avec `relevant_to_profile: false` sont exclus du digest mais consignés dans la table d'audit.
+4. **Store** — écrit chaque élément classifié dans la table `regulatory_items`.
+5. **Immediate Alert** — pour les éléments `urgency: high`, poste immédiatement dans `#legal-alerts` avec la classification + lien.
+6. **Daily Digest** — à 8h du matin TZ bureau, assemble les éléments des dernières 24 heures en un digest groupé par domaine réglementaire, posté dans `#legal-team`.
+
+## Coûts réels
+
+- **Tokens LLM** — typiquement 1-2 000 tokens d'input + 0,5 000 tokens d'output par élément classifié. Avec ~20-50 nouveaux éléments par jour sur les flux, ~0,20-0,60 $/jour en coût modèle.
+- **Exécutions n8n** — cron horaire + traitement par élément. Dans le plan Starter pour la plupart des cabinets.
+- **Temps du conseil** — le gain. La surveillance manuelle est de 30-60 minutes/jour par conseil pour une couverture approfondie ; la revue du digest quotidien est de 5-10 minutes plus le temps de réponse aux alertes immédiates.
+- **Temps de setup** — 90 minutes incluant la rédaction du profil d'exposition (45 minutes pour le profil).
+
+## Métrique de succès
+
+- **Incidents « nous l'avons manqué » par conseil par trimestre** — incidents où une enquête menée par un régulateur fait remonter un changement de règle que le cabinet aurait dû connaître. Devrait tomber à zéro sur les domaines surveillés.
+- **Ratio signal-sur-bruit du digest** — part des éléments du digest que le conseil marque comme « pertinent » versus « ignorer ». Devrait être de 70-85 % pertinent ; en dessous de 50 % signifie que le filtre de pertinence ou le profil d'exposition a besoin d'ajustement.
+- **Délai entre publication de la règle et posture de réponse du conseil** — pour les domaines surveillés, devrait passer de « semaines » (surveillance passive de newsletters) à moins de 24 heures (le digest le détecte au premier polling).
+
+## Comparaison avec les alternatives
+
+- **Versus les services commerciaux de surveillance réglementaire** (LexisNexis State Net, Bloomberg Government, FiscalNote, Thomson Reuters Regulatory Intelligence). Choisissez ceux-là si le budget soutient la stratégie plateforme et que vous voulez une couverture gérée avec des résumés de qualité praticien. Le flow est le juste milieu léger à moindre coût et avec le filtre de pertinence calibré sur votre profil.
+- **Versus la lecture de newsletters par l'avocat interne.** La valeur par défaut et la source des manques.
+- **Versus aucune surveillance.** Mode d'échec prévisible dans les petits cabinets ; fonctionne jusqu'à ce que ça ne fonctionne plus.
+
+## Points de vigilance
+
+- **Dérive des sources de flux.** *Garde-fou :* vérification de l'état des flux à chaque polling horaire. Les éléments de fetch échoués remontent comme avertissements « la source de flux X est hors ligne depuis N heures » sur le digest quotidien, pas silencieusement abandonnés.
+- **Faux négatifs du filtre de pertinence.** *Garde-fou :* la table d'audit consigne TOUS les éléments classifiés, y compris `relevant_to_profile: false`. Le conseil examine le bucket de faux négatifs hebdomadairement ; les manques sont un signal pour mettre à jour le profil ou le prompt du classificateur.
+- **Surflagging d'urgence.** *Garde-fou :* les posts d'alerte immédiate vont dans `#legal-alerts` uniquement ; le digest quotidien absorbe l'urgence moyenne et faible. L'ajustement des seuils d'urgence est le levier si les alertes submergent.
+- **Manque de mapping de juridiction.** *Garde-fou :* chaque élément est annoté avec `jurisdictions_implicated` basé sur l'autorité du régulateur + le périmètre déclaré de la règle. Les éléments où la juridiction est ambiguë sont étiquetés « ambiguë — conseil à confirmer » plutôt que devinés.
+- **Profil d'exposition périmé.** *Garde-fou :* le profil porte un `last_updated` et déclenche un « rappel de revue du profil » sur le digest s'il a plus de 6 mois.
+- **Obsolescence du contenu des flux versus date de publication.** *Garde-fou :* le digest trie par date de publication, pas par date de fetch. Les anciens éléments dans le flux réapparaissent si le flux lui-même était hors ligne pendant une période.
+
+## Stack
+
+Le bundle se trouve dans `apps/web/public/artifacts/regulatory-change-monitor-n8n/` :
+
+- `regulatory-change-monitor-n8n.json` — l'export du flow
+- `_README.md` — credentials, schéma du profil d'exposition, liste de flux par défaut, procédure de test
+
+Outils : [n8n](/fr/tools/n8n/), [Claude](/fr/tools/claude/), [Slack](/fr/tools/slack/).
+
+Associés : [gestion des connaissances juridiques](/fr/learn/legal-knowledge-management/), [AI Act européen pour les équipes juridiques](/fr/learn/eu-ai-act-for-legal-teams/), [RGPD pour les équipes juridiques](/fr/learn/gdpr-for-legal-teams/), [politique IA pour les équipes juridiques](/fr/learn/ai-policy-for-legal-teams/).

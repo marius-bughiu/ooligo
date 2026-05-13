@@ -1,0 +1,97 @@
+---
+slug: salesforce-data-cleanup-skill
+canonical_slug: salesforce-data-cleanup-skill
+locale: fr
+verticals: [revops]
+title: Nettoyage de données Salesforce avec un Claude Skill
+artifact_type: claude-skill
+tools_used: [claude, salesforce]
+roles: [revops]
+difficulty: advanced
+time_to_setup: 90min
+human_tested: false
+translated_from: en/salesforce-data-cleanup-skill.mdx
+translated_at: "2026-05-13T10:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "dfe7d7bcdd0cb8293f1064849a3538082e6bbb416e41bba6f06c56318f492e62"
+---
+
+Un Claude Skill qui scanne Salesforce pour les déchets de données qui distordent silencieusement votre reporting — comptes dupliqués, contacts orphelins, leads indésirables, téléphones malformés, inadéquations compte-contact et valeurs d'étape qui violent la définition du funnel — puis propose des corrections sous forme de CSV que l'opérateur approuve avant qu'un quelconque write n'atterrisse. Le Skill n'écrit jamais sans un dry-run explicite plus l'approbation humaine, et chaque changement appliqué est consigné dans un objet d'audit personnalisé afin de pouvoir être annulé.
+
+Le bundle complet se trouve dans `apps/web/public/artifacts/salesforce-data-cleanup-skill/`. Le `SKILL.md` porte les inputs, la méthode et le format de sortie que le Skill suit. Trois fichiers de référence servent d'échafaudage remplissable par l'opérateur : `dedup-rules.md` pour les clés de correspondance et les seuils de similarité, `stage-definitions.md` pour l'ensemble des champs requis par étape, et `survivor-ranking.md` pour les poids utilisés pour choisir quel enregistrement survit à une fusion.
+
+## Quand l'utiliser
+
+Optez pour ce Skill quand le reporting a cessé d'être fiable parce que les données d'objet sous-jacentes ont décayé plus vite que l'équipe ne peut les nettoyer. Déclencheurs spécifiques : un chiffre ARR pour le board est en désaccord avec la vue pipeline du DRV de plus d'un ou deux points de pourcentage ; l'équipe SDR se plaint de toucher le même prospect sous trois enregistrements Account différents ; un tableau de bord d'attribution marketing double-compte parce que des contacts existent sur les mauvais comptes ; une re-segmentation ICP annuelle est bloquée parce que les champs firmographiques sont absents sur un quart des comptes. Dans tous ces cas, le goulot d'étranglement est l'hygiène des données, pas la stratégie.
+
+Le Skill est aussi le bon choix quand un outil de déduplication existant a produit un effet de shelfware — RevOps a une licence mais personne ne fait suffisamment confiance aux propositions pour agir. Le différenciateur du Skill est que chaque fusion proposée est livrée avec une ligne de justification par paire citant la clé déterministe qui a déclenché et les signaux de sélection du survivant qui ont guidé le choix. C'est cette auditabilité qui débloque l'approbation humaine dont le nettoyage a besoin.
+
+## Quand NE PAS l'utiliser
+
+N'utilisez pas ce Skill si l'une des situations suivantes s'applique.
+
+Vous avez besoin d'une porte de déduplication en temps réel au point de capture du lead. Le Skill est un outil par lots qui scanne en chunks, pas une règle de validation synchrone. Pour la déduplication au point de création, configurez les Duplicate Rules natives de Salesforce.
+
+Vous avez besoin que le Skill applique automatiquement les writes. Il n'y a pas de mode automatique par conception. Chaque correction passe par un CSV de dry-run que l'opérateur doit marquer `Approve=Y` sur avant qu'`apply_fix` ne touche une ligne. Si le modèle opérationnel requiert des writes non supervisés, le Skill n'est pas la bonne forme et la bonne réponse est un job ETL déterministe avec la validation explicite du propriétaire dans le processus de gestion du changement.
+
+Vous répondez à une demande d'effacement RGPD ou CCPA. Utilisez le flux de purge PII documenté de la plateforme, qui passe par le juridique et produit la bonne piste papier. N'improvisez pas autour de cela avec un outil de nettoyage.
+
+Vous voulez des suppressions définitives contournant la corbeille. Le Skill n'a pas de chemin de code de suppression définitive. La discipline de la corbeille est non négociable ; les purges permanentes sont une action manuelle délibérée sur la plateforme.
+
+Le premier run est contre la production avec un token à portée d'écriture. Deux cycles de scan en lecture seule sont requis avant que le Skill accepte des credentials d'écriture, et même alors le premier run d'écriture devrait être une répétition sandbox d'une fusion de compte.
+
+## Setup
+
+1. Déposez le bundle dans `apps/web/public/artifacts/salesforce-data-cleanup-skill/` dans `~/.claude/skills/salesforce-data-cleanup/`. Le chargeur de Skill récupère `SKILL.md` et le répertoire `references/` automatiquement.
+2. Définissez `SFDC_TOKEN` sur un token Connected App en lecture seule. Définissez `SFDC_INSTANCE_URL` sur l'endpoint sandbox, pas la production. Le Skill défaut `sandbox=true` et refuse de changer sans un flag de surcharge explicite.
+3. Remplacez le contenu de `references/dedup-rules.md`, `references/stage-definitions.md` et `references/survivor-ranking.md` par les vraies règles de l'équipe. Les templates sont des échafaudages ; les exécuter sur une org en production produira un taux élevé de faux positifs par conception.
+4. Provisionnez le SObject personnalisé `Cleanup_Audit__c` dans les orgs sandbox et production en utilisant la forme de champ documentée dans `SKILL.md` sous « Method, step 5 ». Le journal d'audit est ce qui rend les runs réversibles — sans lui, n'exécutez pas `apply_fix`.
+5. Exécutez le premier scan de découverte. `scan_data_health(scope="Account,Contact,Lead,Opportunity")`. Attendez-vous à ce que le scan fasse remonter des défauts dans le jeu de règles de déduplication lors de la première passe — c'est le but des cycles en lecture seule.
+
+## Ce que le Skill fait réellement
+
+Le Skill exécute cinq étapes dans l'ordre, documentées complètement dans `SKILL.md`. Le scan de découverte tire chaque SObject en périmètre via l'API Bulk en chunks, parce qu'une requête REST unique contre une org de 100 000 comptes frappera les limites governor et que le Bulk en chunks évite le plafond de timeout sur les grandes extractions.
+
+La déduplication utilise un hybride en deux passes. La passe un est déterministe — domaine en minuscules, téléphone normalisé en E.164, nom normalisé en NFKD avec les suffixes d'entreprise supprimés. Les correspondances exactes sur une seule clé forte vont dans le CSV de proposition à `high` confiance. La passe deux est une comparaison de similarité sémantique Claude, mais uniquement sur les paires candidates qui partagent déjà un signal déterministe faible (mêmes six premiers chiffres de téléphone, même premier token de prénom, même TLD de domaine parent). L'approche affiner-puis-classer est ce qui maintient le coût en tokens par scan en dessous de cinq dollars sur une org de 100 000 comptes ; la sémantique pairwise pure sur N^2 enregistrements est à la fois coûteuse et bruyante sur les noms communs.
+
+La sélection du survivant pour les fusions utilise un score composite : poids de 0,4 sur la récence d'activité dans les 90 derniers jours de Tasks et Events, poids de 0,3 sur le nombre de contacts attachés, poids de 0,2 sur l'historique d'Opportunity (nombre plus logarithme du montant), poids de 0,1 sur le fait que `LastModifiedById` soit l'utilisateur d'intégration. Aucun signal unique n'est fiable seul — la modification la plus récente pointe souvent vers un backfill, le nombre de contacts favorise les vieux enregistrements croustillants, et le montant d'Opportunity seul ignore la relation active. Le composite suit là où l'équipe travaille réellement aujourd'hui.
+
+Le dry-run émet un CSV avec `Operation`, `Field`, `Old_Value`, `New_Value`, `Confidence`, `Survivor_Id`, `Rationale` et une colonne `Approve` que l'opérateur doit définir. Apply lit le CSV approuvé et écrit via l'API Bulk, consignant chaque changement dans `Cleanup_Audit__c` avec les valeurs JSON précédentes et nouvelles afin qu'un companion `revert(run_id)` puisse ré-appliquer les originaux.
+
+## Coûts réels
+
+Un scan de découverte contre une org de 100 000 comptes et 500 000 contacts s'exécute en environ vingt minutes d'horloge murale et consomme environ 3-5 dollars de tokens API Claude pour la passe de similarité sémantique. L'utilisation du quota d'appels API Bulk est dans les centaines d'appels bas par scan ; bien en dessous du plafond quotidien de toute org standard. Le run d'écriture appliqué est lui-même le coût plus petit — les writes Bulk API ne consomment pas de tokens Claude, ils ne brûlent que quelques appels API supplémentaires par chunk de lignes approuvées.
+
+Les mathématiques des effectifs sont la vraie histoire. Un sprint de nettoyage RevOps typique aux tailles ci-dessus consomme deux ou trois semaines du temps d'un analyste par trimestre, plus quelques jours d'un administrateur Salesforce. Le Skill réduit cela à environ deux jours par trimestre — un scan de découverte, une demi-journée à examiner les CSVs de dry-run, une répétition sandbox de toute fusion de compte, et un run d'application. Sur un salaire RevOps entièrement chargé, c'est une économie significative sur une année.
+
+Le coût que le Skill n'élimine pas est la surcharge de communication avec les reps. Un run de fusion sans communication brûle la confiance plus vite que les mauvaises données ne l'avaient fait, et le `change_brief.md` que le Skill émet aux côtés de chaque run appliqué est un template que l'opérateur doit encore envoyer.
+
+## Métrique de succès
+
+Regardez un chiffre par scan : la part des propositions à `high` confiance que l'opérateur approuve lors de la première revue. Lors du premier run, ce chiffre est typiquement inférieur à cinquante pour cent — c'est le jeu de règles de déduplication qui se règle, pas le Skill qui sous-performe. Dans trois ou quatre cycles de scan, avec les règles ajustées, ce chiffre devrait atterrir au-dessus de quatre-vingt pour cent. En dessous de ce plancher au cycle quatre, les règles de déduplication dans `references/dedup-rules.md` sont encore inadaptées aux données et ont besoin d'une autre passe avant tout run d'écriture supplémentaire.
+
+Une métrique secondaire : le nombre de violations d'étapes dans le temps. Une org saine avec une vraie définition de funnel devrait voir ce nombre baisser mois après mois à mesure que RevOps corrige les causes amont — règles de validation de champs requis, automations de transition d'étapes, logique de routage des leads. Si le nombre de violations d'étapes est stable entre les cycles de nettoyage, le problème de données sales est processus pas données.
+
+## Comparaison avec les alternatives
+
+DemandTools est l'outil de référence dans cet espace. C'est un outil mature, déterministe et piloté par GUI que les équipes RevOps utilisent depuis une décennie. Il est excellent pour la déduplication déterministe à volume élevé ; il est moins efficace sur la piste d'audit de rationale survivant que ce Skill émet, et il ne peut pas faire la passe de similarité sémantique pour les noms d'entreprises flous sans une couche de scripting séparée. Si l'équipe paie déjà pour DemandTools et que le jeu de règles de déduplication est mature, restez-y et envisagez ce Skill uniquement pour les cas limites de déduplication sémantique et la discipline du journal d'audit.
+
+Cloudingo est la comparaison la plus proche — il a la correspondance floue et un workflow review-puis-apply qui ressemble à ce que le Skill produit. Cloudingo est plus convivial pour un responsable RevOps non technique. L'avantage du Skill est la ligne de justification par paire et le modèle de fichier de référence qui permet à l'équipe de versionner ses règles de déduplication dans git aux côtés du reste de la configuration RevOps. Si RevOps est allergique à git, Cloudingo gagne.
+
+Un sprint de nettoyage RevOps manuel est l'alternative du statu quo pour les équipes sans outil de déduplication. Cela fonctionne, mais consomme le temps analyste documenté ci-dessus et ne produit aucun artefact réutilisable — le prochain sprint repart de zéro. Le scan de découverte du Skill est le même artefact à chaque fois, ce qui rend le travail cumulatif.
+
+## Points de vigilance
+
+Accorder un accès en écriture lors du premier run est l'échec le plus courant. Le premier scan fait remonter des défauts dans le jeu de règles de déduplication autant que dans les données ; si le Skill les applique, les faux positifs deviennent des writes réels et audités. Le garde-fou : le Skill refuse `apply_fix` quand le token configuré a une portée d'écriture et que le journal d'audit montre zéro ligne de dry-run préalable pour le périmètre du run. Deux cycles en lecture seule minimum, quelle que soit la confiance apparente des règles.
+
+Les fusions de comptes cascadant vers les mauvais enregistrements est l'échec le plus coûteux. Un mauvais survivant emmène avec lui les mauvaises Opportunities, Tasks, Events et Contact Roles. Le garde-fou : `apply_fix` pour toute ligne `dedup_account` refuse de s'exécuter sauf si une répétition sandbox avec le même préfixe `Run_Id` a eu lieu dans les quatorze derniers jours, et que l'opérateur a défini `--rehearsed=true`. La répétition sandbox n'est pas une cérémonie optionnelle — c'est là que les effets de cascade de toute fusion donnée sont réellement observés.
+
+Les reps qui découvrent des comptes fusionnés dont ils n'avaient pas entendu parler est l'échec culturel qui tue les futurs runs de nettoyage. Le garde-fou : le Skill émet un `change_brief.md` aux côtés de chaque run appliqué, listant la carte de fusion, les emails des propriétaires et le nombre d'Opportunities déplacées, prêt à coller dans un canal Slack avant que les reps ne se connectent. Envoyez-le. Sauter l'étape de communication brûle la confiance plus vite que les mauvaises données ne l'avaient jamais fait.
+
+Les suppressions définitives contournant la corbeille est une demande qui survient mais devrait être refusée. Le garde-fou : le Skill n'a pas de chemin de code de suppression définitive. `soft_delete` est la seule opération de suppression ; quiconque voulant une purge permanente le fait via le workflow manuel de la plateforme avec la validation appropriée.
+
+## Stack
+
+- **Salesforce** — source de vérité et cible des writes ; objet personnalisé `Cleanup_Audit__c` contient le journal d'audit réversible
+- **Claude** — exécute la passe de similarité sémantique et émet les lignes de justification par paire qui rendent les fusions auditables
+- **API Bulk** — utilisée à la fois pour les lectures (découverte en chunks) et les writes (application en chunks) ; jamais l'API REST synchrone pour les scans complets

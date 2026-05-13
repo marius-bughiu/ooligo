@@ -1,0 +1,123 @@
+---
+slug: mcp-server-greenhouse-recruiting
+canonical_slug: mcp-server-greenhouse-recruiting
+locale: fr
+verticals: [recruiting]
+title: Serveur MCP Greenhouse pour les workflows de recrutement
+artifact_type: mcp-server
+tools_used: [greenhouse, claude]
+roles: [recruiter, recruiting-engineer, talent-acquisition]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+translated_from: en/mcp-server-greenhouse-recruiting.mdx
+translated_at: "2026-05-13T10:30:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "d8fed108defafabc2d7f4be91256a6944324bf3b82b230176d0071e33a15a612"
+---
+
+Un serveur Model Context Protocol (MCP) qui expose l'API Harvest de [Greenhouse](/fr/tools/greenhouse/) comme ensemble d'outils principalement en lecture à Claude Desktop / Claude Code / tout client compatible MCP. Six outils en lecture couvrent les questions quotidiennes du recruteur (« quels candidats sont bloqués en étape X depuis plus de Y jours ? », « quel est le funnel pour ce poste ? », « montrez-moi l'historique de ce candidat »), et un outil d'écriture prudent signale les candidats bloqués dans une étape pour que le recruteur puisse agir. Conçu pour le recruteur qui vit dans Claude et souhaite accéder à son ATS sans changer de contexte, ainsi que pour l'ingénieur recrutement qui construit des workflows agentiques nécessitant un accès en lecture à l'ATS.
+
+Le scaffold est distribué sous forme de package Python importable depuis le disque. Il N'EST PAS testé en exécution contre un tenant Greenhouse en production — cette mise en garde est répétée dans le README et en tête de `server.py`. L'utilisation en production requiert que l'ingénieur recrutement câble les credentials, gère le rate-limiting et vérifie les appels effectués contre un environnement Greenhouse hors production.
+
+## Quand l'utiliser
+
+- Le recruteur ou l'ingénieur recrutement souhaite disposer de l'état de l'ATS dans les conversations Claude et est prêt à installer un serveur MCP (simple dans Claude Desktop et Claude Code, plus complexe dans les clients MCP personnalisés).
+- L'équipe dispose d'un accès à l'[API Harvest de Greenhouse](/fr/tools/greenhouse/) (Harvest est l'API en lecture-écriture ; Job Board est l'API publique en lecture seule — ce serveur utilise Harvest).
+- Un accès principalement en lecture correspond au cas d'usage. Les écritures du serveur sont limitées à un outil prudent (`note_stage_stuck`) qui ajoute une note interne ; aucune mutation d'état candidat n'est exposée par défaut.
+- L'ingénierie recrutement ou l'IT a la posture de sécurité nécessaire pour gérer une clé API avec portée Harvest. Le journal d'audit du serveur est le journal d'audit.
+
+## Quand NE PAS l'utiliser
+
+- **Vous avez besoin d'une configuration prête pour la production et testée en exécution dès aujourd'hui.** C'est un scaffold. Les README le précisent ; les docstrings le précisent. Utilisez-le comme point de départ, pas comme déploiement finalisé.
+- **Usage SaaS multi-tenant.** Le modèle d'authentification du serveur est mono-tenant (une clé API, une instance Greenhouse). Le multi-tenant nécessite une refonte non triviale.
+- **Workflows à forte écriture.** Le serveur est intentionnellement orienté lecture. Si le cas d'usage nécessite de déplacer des candidats entre étapes, publier sur des job boards ou envoyer des communications aux candidats, ces actions requièrent un audit de sécurité distinct par outil et une justification explicite par outil selon les directives de la cursor-rule recrutement.
+- **Stockage de données candidats hors Greenhouse.** Le serveur renvoie les données candidats à la session Claude appelante ; la posture de gestion des données de la session relève de la responsabilité du recruteur. Ne loggez pas les noms de candidats bruts ou des PII dans votre propre table d'audit — le journal d'audit ne capture que le `candidate_id`.
+- **Contournement de la posture de consentement candidat.** Les données Greenhouse sont consenties par les candidats à des fins de recrutement. Les extraire dans des workflows agentiques n'étend pas ce consentement. Restez dans les finalités de traitement déclarées.
+
+## Setup
+
+1. **Installez le package.** Depuis `apps/web/public/artifacts/mcp-server-greenhouse-recruiting/` :
+   ```bash
+   pip install -e .
+   ```
+   Le package est structuré comme un projet Python installable via uv / pip avec `pyproject.toml`.
+2. **Définissez les credentials.** Deux variables d'environnement : `GREENHOUSE_API_KEY` (clé API Harvest depuis Greenhouse → Configure → Dev Center → API Credential Management ; choisissez les permissions *read* sur chaque verbe Harvest que vous n'avez pas besoin d'écrire) et `GREENHOUSE_USER_ID_FOR_ON_BEHALF_OF` (l'identifiant utilisateur que Greenhouse attribuera aux écritures, requis pour `note_stage_stuck`).
+3. **Enregistrez-le auprès du client MCP.** Pour Claude Desktop, ajoutez dans `claude_desktop_config.json` :
+   ```json
+   {
+     "mcpServers": {
+       "greenhouse-recruiting": {
+         "command": "uv",
+         "args": ["run", "greenhouse-recruiting-mcp"],
+         "env": {
+           "GREENHOUSE_API_KEY": "...",
+           "GREENHOUSE_USER_ID_FOR_ON_BEHALF_OF": "..."
+         }
+       }
+     }
+   }
+   ```
+   Pour Claude Code, l'équivalent va dans le bloc MCP du `.claude/settings.json` du projet.
+4. **Vérification de cohérence contre staging.** Greenhouse propose un environnement de staging distinct pour les clients payants. Câblez le serveur contre staging en premier. Exécutez la commande `python -m greenhouse_recruiting_mcp.smoke` incluse (une vérification groupée non testée en exécution qui s'assure que les credentials s'authentifient et que les headers de rate-limit se parsent).
+5. **Passage en production.** Seulement après validation en staging, remplacez les variables d'environnement par la clé API de production. Le serveur tourne localement par rapport au client MCP ; aucun déploiement séparé n'est nécessaire pour un usage mono-recruteur. Pour un usage en équipe, déployez dans un conteneur partagé avec une gateway MCP par recruteur.
+
+## Ce que le serveur expose
+
+Sept outils. Six en lecture ; un en écriture prudente. Conformément aux directives de la [cursor-rule recrutement](/fr/workflows/cursor-rules-recruiting-engineer/), les écritures nécessitent une justification explicite par outil — `note_stage_stuck` est documentée dans la docstring de `server.py`.
+
+### Outils en lecture
+
+1. **`list_candidates_in_stage`** — pour un ID de poste et un nom d'étape donnés, renvoie les candidats actuellement dans cette étape avec leur timestamp de dernier contact. Utile pour les requêtes « qui est bloqué en onsite-debrief ? ».
+2. **`get_candidate_history`** — pour un ID candidat donné, renvoie son historique d'étapes (entrées, sorties, timestamps, qui les a déplacés). Utile pour le chargement de contexte avant un screen recruteur.
+3. **`list_jobs_open`** — liste tous les postes ouverts avec équipe, hiring manager, opened_at, target_close_date. Utile pour la vue d'ensemble « sur quoi travaillons-nous » du responsable recrutement.
+4. **`get_funnel_for_job`** — pour un ID de poste donné, renvoie le nombre de candidats par étape. Utile pour les vérifications de santé du funnel.
+5. **`list_jobs_stalled`** — liste les postes où aucun candidat n'a progressé depuis N jours (7 par défaut). Utile pour détecter les réquisitions bloquées avant que le hiring manager ne le remarque.
+6. **`search_candidates_by_attribute`** — pour un nom de champ personnalisé et une valeur donnés, renvoie les candidats correspondants. Utile pour le filtrage ad hoc que l'UI de Greenhouse n'expose pas.
+
+### Outil d'écriture
+
+7. **`note_stage_stuck`** — pour un ID candidat et une note en texte libre donnés, ajoute une note interne à la fiche du candidat. Utilisé pour consigner « Claude a signalé ce candidat comme bloqué dans une étape depuis plus de 14 jours » afin que l'action soit visible dans la piste d'audit et non silencieuse. Conformément aux normes de l'ingénieur recrutement : chaque écriture produit une entrée d'audit attribuée via l'header `On-Behalf-Of`.
+
+## Coûts réels
+
+- **Quota API Greenhouse** — l'API Harvest est limitée à 50 req/10s par clé API par IP. Le serveur inclut un rate limiter à jeton (configurable, 40 req/10s par défaut) qui bride avant la limite. Les rafales au-delà reçoivent des 429 sans header `Retry-After` (comportement documenté de Greenhouse) ; la logique de backoff du serveur gère cela.
+- **Tokens LLM** — dépendent entièrement de ce que la session Claude appelante fait des données. Le serveur lui-même renvoie du JSON structuré ; le budget de prompt de la session Claude est le coût.
+- **Coût d'hébergement du serveur** — s'exécute localement par rapport au client MCP. Zéro coût récurrent pour un usage mono-recruteur. Le déploiement en équipe dans un conteneur partagé représente au plus une petite VM (5-15 $/mois).
+- **Temps de setup** — 60 minutes incluant la vérification de cohérence en staging et l'enregistrement auprès du client MCP. Le temps de l'ingénieur recrutement est le coût contraignant.
+
+## Métrique de succès
+
+Difficile à mesurer directement. La métrique honnête :
+
+- **Nombre de sessions Claude par semaine utilisant le MCP** — combien de fois par semaine le recruteur ou l'ingénieur recrutement a utilisé une session Claude qui a appelé le MCP. Si c'est moins de 5 fois par semaine après un mois, le cas d'usage n'est pas là.
+- **Temps moyen de changement de contexte économisé par session Claude** — qualitatif ; l'évaluation du recruteur lui-même de « combien de temps cette question aurait-elle pris sans le MCP, dans l'UI Greenhouse ? » Le MCP rentabilise son coût de setup quand la réponse est régulièrement > 2 minutes par question.
+
+## Comparaison avec les alternatives
+
+- **Versus l'UI Greenhouse directement.** L'UI est le bon choix quand le recruteur est déjà dans Greenhouse pour d'autres raisons. Le MCP rentabilise son coût de setup quand le recruteur est dans Claude pour d'autres raisons (rédiger des messages outbound, résumer des notes, construire des requêtes Boolean) et que récupérer l'état de l'ATS serait un changement de contexte.
+- **Versus les intégrations chatbot natives de Greenhouse.** Greenhouse propose des intégrations Slack et d'autres surfaces qui exposent l'état de l'ATS. Choisissez celles-ci si l'équipe vit dans Slack. Choisissez le MCP si l'équipe vit dans Claude.
+- **Versus un script Python maison contre Harvest.** Mêmes données, mais le MCP rend les données disponibles à N'IMPORTE QUEL client MCP (Claude Desktop, Claude Code, Cursor, et d'autres à mesure que l'adoption du MCP progresse), pas seulement au script.
+- **Versus le requêtage direct de l'API de Greenhouse.** Possible pour les utilisateurs techniques, mais chaque requête est un cycle curl-et-parse. Le MCP encapsule cela sous forme d'appel d'outil pour Claude.
+
+## Points de vigilance
+
+- **Non testé en exécution contre un tenant en production.** *Garde-fou :* explicitement mentionné dans le README et dans la docstring du module `server.py`. Le déploiement en production requiert que l'ingénieur recrutement vérifie chaque outil contre un tenant de staging en premier. Le smoke test fourni est une vérification credentials/rate-limit, PAS une validation outil par outil.
+- **Épuisement du rate limit.** *Garde-fou :* rate limiter à jeton dans le serveur par défaut à 40 req/10s (sous le plafond de 50 req/10s de Greenhouse). Configurable ; abaissez si d'autres systèmes partagent la clé API.
+- **Fuite de PII candidat dans le contexte du modèle de chat.** *Garde-fou :* le serveur renvoie les données retournées par l'API (y compris noms et emails) à la session Claude. La posture de gestion des données de la session relève de la responsabilité du recruteur. Le README précise explicitement : ne pas coller les transcripts de session dans des canaux Slack partagés.
+- **Dérive de l'outil d'écriture.** *Garde-fou :* seul `note_stage_stuck` est exposé en écriture. Les six autres outils n'ont pas de chemins d'écriture. Si un ingénieur recrutement ajoute de nouveaux outils d'écriture, le modèle de revue par outil dans le README doit être rempli et la finalité de l'outil documentée dans la section `tools/` du registre de `server.py`.
+- **Dérive de portée de la clé API.** *Garde-fou :* le README documente les verbes Harvest minimaux nécessaires (lecture seule sur `candidates`, `applications`, `jobs`, `users` ; écriture sur `candidates.notes` uniquement). Les clés à portée plus large transforment silencieusement le serveur en une surface à rayon d'action plus élevé.
+- **Dérive de configuration multi-tenant.** *Garde-fou :* le serveur est mono-tenant par conception. Les déploiements multi-tenant nécessitent une refonte non triviale ; le README en fait mention plutôt que de le dissimuler.
+
+## Stack
+
+Le bundle d'artefacts se trouve dans `apps/web/public/artifacts/mcp-server-greenhouse-recruiting/` et contient :
+
+- `pyproject.toml` — métadonnées du package, dépendances, entrypoint `greenhouse-recruiting-mcp`
+- `README.md` — installation, variables d'environnement, enregistrement auprès du client MCP, procédure de vérification de cohérence, modèle de sécurité, limites connues
+- `src/greenhouse_recruiting_mcp/__init__.py` — init du package
+- `src/greenhouse_recruiting_mcp/server.py` — serveur MCP avec sept définitions d'outils et implémentations de dispatch
+
+Outils supposés par le workflow : [Greenhouse](/fr/tools/greenhouse/) (l'ATS), [Claude](/fr/tools/claude/) (le client MCP). Pour le serveur MCP Ashby parallèle, voir [Ashby MCP](/fr/workflows/mcp-server-ashby-recruiting/). Pour les guardrails plus larges de l'ingénieur recrutement, voir la [cursor rule ingénieur recrutement](/fr/workflows/cursor-rules-recruiting-engineer/).
+
+Concepts associés : [ATS versus recruiting CRM](/fr/learn/ats-vs-recruiting-crm/), [recruiting tech stack](/fr/learn/recruiting-tech-stack/).
