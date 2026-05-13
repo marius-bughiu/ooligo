@@ -24,7 +24,7 @@ const en: LegalPage = {
       heading: "What we collect",
       body: [
         "ooligo does not maintain its own user accounts, profiles, or login system, and does not set any first-party cookies for advertising or tracking. Data collection happens only through three third-party services:",
-        "Google Analytics 4 records aggregated pageviews, referrers, device/browser metadata, and approximate (country/region-level) location. Google AdSense serves the display ads on content pages and reads/sets advertising cookies subject to your consent. Beehiiv stores your email address and the vertical you selected if you subscribe to the newsletter via the footer or a vertical landing page.",
+        "Google Analytics 4 records aggregated pageviews, referrers, device/browser metadata, and approximate (country/region-level) location. Google AdSense serves the display ads on content pages and reads/sets advertising cookies subject to your consent. Beehiiv stores your email address and the vertical you selected if you subscribe to the newsletter via the footer or a vertical landing page. Cloudflare Web Analytics, when enabled, records aggregated pageview counts using no cookies and no personally identifiable information.",
       ],
     },
     {
@@ -67,7 +67,7 @@ const es: LegalPage = {
       heading: "Qué recopilamos",
       body: [
         "ooligo no mantiene cuentas de usuario, perfiles ni sistema de inicio de sesión propios, y no establece cookies propias con fines publicitarios o de seguimiento. La recopilación de datos ocurre únicamente a través de tres servicios de terceros:",
-        "Google Analytics 4 registra visitas agregadas, referencias, metadatos de dispositivo/navegador y ubicación aproximada (a nivel de país/región). Google AdSense sirve los anuncios gráficos en las páginas de contenido y lee/establece cookies publicitarias sujetas a tu consentimiento. Beehiiv almacena tu correo electrónico y la vertical que seleccionaste si te suscribes al boletín desde el pie de página o una landing de vertical.",
+        "Google Analytics 4 registra visitas agregadas, referencias, metadatos de dispositivo/navegador y ubicación aproximada (a nivel de país/región). Google AdSense sirve los anuncios gráficos en las páginas de contenido y lee/establece cookies publicitarias sujetas a tu consentimiento. Beehiiv almacena tu correo electrónico y la vertical que seleccionaste si te suscribes al boletín desde el pie de página o una landing de vertical. Cloudflare Web Analytics, cuando está habilitado, registra conteos agregados de visitas a páginas sin usar cookies ni información personal identificable.",
       ],
     },
     {
@@ -110,7 +110,7 @@ const ptBR: LegalPage = {
       heading: "O que coletamos",
       body: [
         "O ooligo não mantém contas de usuário, perfis ou sistema de login próprios, e não define nenhum cookie próprio com finalidade publicitária ou de rastreamento. A coleta de dados acontece somente por meio de três serviços de terceiros:",
-        "O Google Analytics 4 registra visualizações agregadas de página, referenciadores, metadados de dispositivo/navegador e localização aproximada (no nível de país/região). O Google AdSense exibe os anúncios gráficos nas páginas de conteúdo e lê/define cookies publicitários sujeitos ao seu consentimento. A Beehiiv armazena seu e-mail e a vertical selecionada caso você assine a newsletter pelo rodapé ou por uma landing de vertical.",
+        "O Google Analytics 4 registra visualizações agregadas de página, referenciadores, metadados de dispositivo/navegador e localização aproximada (no nível de país/região). O Google AdSense exibe os anúncios gráficos nas páginas de conteúdo e lê/define cookies publicitários sujeitos ao seu consentimento. A Beehiiv armazena seu e-mail e a vertical selecionada caso você assine a newsletter pelo rodapé ou por uma landing de vertical. O Cloudflare Web Analytics, quando ativado, registra contagens agregadas de visualizações de página sem usar cookies nem dados pessoais identificáveis.",
       ],
     },
     {
@@ -153,7 +153,7 @@ const ja: LegalPage = {
       heading: "収集するデータ",
       body: [
         "ooligoは独自のユーザーアカウント、プロフィール、ログインシステムを持たず、広告やトラッキング目的のファーストパーティCookieも設定しません。データの収集は次の3つの第三者サービスを通じてのみ行われます。",
-        "Google Analytics 4は、集計されたページビュー、リファラー、デバイス／ブラウザのメタデータ、おおよその所在地（国・地域レベル）を記録します。Google AdSenseはコンテンツページのディスプレイ広告を配信し、お客様の同意に基づいて広告Cookieを読み書きします。Beehiivは、フッターまたは業種別ランディングページからニュースレターに登録された場合に、メールアドレスと選択された業種を保存します。",
+        "Google Analytics 4は、集計されたページビュー、リファラー、デバイス／ブラウザのメタデータ、おおよその所在地（国・地域レベル）を記録します。Google AdSenseはコンテンツページのディスプレイ広告を配信し、お客様の同意に基づいて広告Cookieを読み書きします。Beehiivは、フッターまたは業種別ランディングページからニュースレターに登録された場合に、メールアドレスと選択された業種を保存します。Cloudflare Web Analyticsは、有効化されている場合に限り、Cookieや個人を特定できる情報を使用せずに集計されたページビュー数のみを記録します。",
       ],
     },
     {
@@ -196,7 +196,7 @@ const fr: LegalPage = {
       heading: "Ce que nous collectons",
       body: [
         "ooligo ne gère ni comptes utilisateurs, ni profils, ni système d'authentification, et ne dépose aucun cookie propriétaire à des fins publicitaires ou de traçage. La collecte de données se fait uniquement via trois services tiers :",
-        "Google Analytics 4 enregistre des pages vues agrégées, des référents, des métadonnées d'appareil/navigateur et une localisation approximative (au niveau du pays/de la région). Google AdSense diffuse les annonces display sur les pages de contenu et lit/dépose des cookies publicitaires soumis à votre consentement. Beehiiv stocke votre adresse e-mail et le secteur sélectionné si vous vous abonnez à la newsletter depuis le pied de page ou une landing sectorielle.",
+        "Google Analytics 4 enregistre des pages vues agrégées, des référents, des métadonnées d'appareil/navigateur et une localisation approximative (au niveau du pays/de la région). Google AdSense diffuse les annonces display sur les pages de contenu et lit/dépose des cookies publicitaires soumis à votre consentement. Beehiiv stocke votre adresse e-mail et le secteur sélectionné si vous vous abonnez à la newsletter depuis le pied de page ou une landing sectorielle. Cloudflare Web Analytics, lorsqu'il est activé, enregistre des compteurs de pages vues agrégés sans cookies ni informations personnelles identifiables.",
       ],
     },
     {
@@ -239,7 +239,7 @@ const de: LegalPage = {
       heading: "Welche Daten wir erheben",
       body: [
         "ooligo unterhält weder eigene Benutzerkonten oder Profile noch ein Anmeldesystem und setzt keine eigenen Cookies zu Werbe- oder Tracking-Zwecken. Daten werden ausschließlich über drei Drittanbieter erhoben:",
-        "Google Analytics 4 erfasst aggregierte Seitenaufrufe, Referrer, Geräte-/Browser-Metadaten und einen ungefähren Standort (Land/Region). Google AdSense liefert die Display-Anzeigen auf Inhaltsseiten und liest/setzt Werbe-Cookies vorbehaltlich Ihrer Einwilligung. Beehiiv speichert Ihre E-Mail-Adresse und die gewählte Branche, falls Sie den Newsletter über den Footer oder eine branchenspezifische Landingpage abonnieren.",
+        "Google Analytics 4 erfasst aggregierte Seitenaufrufe, Referrer, Geräte-/Browser-Metadaten und einen ungefähren Standort (Land/Region). Google AdSense liefert die Display-Anzeigen auf Inhaltsseiten und liest/setzt Werbe-Cookies vorbehaltlich Ihrer Einwilligung. Beehiiv speichert Ihre E-Mail-Adresse und die gewählte Branche, falls Sie den Newsletter über den Footer oder eine branchenspezifische Landingpage abonnieren. Cloudflare Web Analytics zählt — sofern aktiviert — ausschließlich aggregierte Seitenaufrufe, ohne Cookies und ohne personenbezogene Daten zu verwenden.",
       ],
     },
     {
