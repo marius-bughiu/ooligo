@@ -74,6 +74,20 @@ export function localeText<T>(
 export const REPO_URL = "https://github.com/marius-bughiu/ooligo" as const;
 export const REPO_BRANCH = "main" as const;
 
+// ----- Publisher -----
+//
+// Editorial identity for E-E-A-T / structured-data signals. Surfaced
+// site-wide as an `Organization` JSON-LD block in BaseLayout and on
+// every detail page as the `publisher` / `author` of the entry.
+//
+// `SITE_AUTHOR_NAME` is also the visible byline on detail pages. Do
+// NOT add a contact email here — the contact form is the only path
+// that should touch the owner's inbox.
+export const SITE_NAME = "ooligo" as const;
+export const SITE_AUTHOR_NAME = "Marius Bughiu" as const;
+export const SITE_URL = "https://ooligo.com" as const;
+export const SITE_LOGO_PATH = "/og.svg" as const;
+
 // ----- AdSense -----
 //
 // Hardcoded publisher + slot IDs (intentional — no env indirection).
