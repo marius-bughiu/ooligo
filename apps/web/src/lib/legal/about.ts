@@ -37,7 +37,6 @@ const en: LegalPage = {
       heading: "Build in public",
       body: [
         "The site's source code lives in a public GitHub repository under the MIT license. The full architecture, content schema, and roadmap are linked from the footer. Corrections are welcome as pull requests or as a note via the contact page; the goal is for the catalog to be more accurate after your visit than before it.",
-        "The site is funded by display advertising (Google AdSense) and a small newsletter sponsorship pool. Neither affects which tools get covered or how they're described — pricing, integrations, and limitations are reported as they are, not as vendors would like them to be.",
       ],
     },
   ],
@@ -69,7 +68,6 @@ const es: LegalPage = {
       heading: "Construir en público",
       body: [
         "El código fuente del sitio vive en un repositorio público de GitHub bajo licencia MIT. La arquitectura completa, el esquema de contenido y la hoja de ruta están enlazados desde el pie de página. Las correcciones son bienvenidas como pull requests o como nota a través de la página de contacto; el objetivo es que el catálogo sea más preciso después de tu visita que antes.",
-        "El sitio se financia con publicidad gráfica (Google AdSense) y un pequeño pool de patrocinios del boletín. Ninguno de los dos afecta a qué herramientas se cubren ni cómo se describen — los precios, integraciones y limitaciones se reportan tal como son, no como a los proveedores les gustaría.",
       ],
     },
   ],
@@ -101,7 +99,6 @@ const ptBR: LegalPage = {
       heading: "Construir em público",
       body: [
         "O código-fonte do site mora em um repositório público no GitHub sob licença MIT. A arquitetura completa, o schema do conteúdo e o roadmap estão linkados no rodapé. Correções são bem-vindas como pull requests ou como uma mensagem pela página de contato; a meta é que o catálogo fique mais preciso depois da sua visita do que antes.",
-        "O site é financiado por publicidade gráfica (Google AdSense) e um pequeno pool de patrocínios da newsletter. Nenhum dos dois afeta quais ferramentas são cobertas ou como são descritas — preços, integrações e limitações são reportados como são, não como os fornecedores gostariam.",
       ],
     },
   ],
@@ -133,7 +130,6 @@ const ja: LegalPage = {
       heading: "公開された場での開発",
       body: [
         "サイトのソースコードはMITライセンスのもとGitHubの公開リポジトリで管理されています。完全なアーキテクチャ、コンテンツスキーマ、ロードマップはフッターからリンクされています。修正の提案はプルリクエストやお問い合わせページからのメッセージで歓迎します。目標は、ご訪問の前よりも後のほうがカタログが正確になっていることです。",
-        "本サイトはディスプレイ広告（Google AdSense）と少額のニュースレタースポンサーシップで運営されています。これらは取り上げるツールや記述内容には影響しません——価格、連携、制限はベンダーが望むかたちではなく、ありのままに報告します。",
       ],
     },
   ],
@@ -165,7 +161,6 @@ const fr: LegalPage = {
       heading: "Construction en public",
       body: [
         "Le code source du site vit dans un dépôt GitHub public sous licence MIT. L'architecture complète, le schéma de contenu et la feuille de route sont liés depuis le pied de page. Les corrections sont bienvenues sous forme de pull requests ou via la page de contact ; l'objectif est que le catalogue soit plus précis après votre visite qu'avant.",
-        "Le site est financé par la publicité display (Google AdSense) et un petit pool de partenariats de newsletter. Ni l'un ni l'autre n'influence les outils couverts ou la manière dont ils sont décrits — tarifs, intégrations et limites sont rapportés tels qu'ils sont, et non tels que les éditeurs aimeraient qu'ils soient.",
       ],
     },
   ],
@@ -197,7 +192,6 @@ const de: LegalPage = {
       heading: "Build in public",
       body: [
         "Der Quellcode der Seite liegt in einem öffentlichen GitHub-Repository unter der MIT-Lizenz. Die vollständige Architektur, das Inhaltsschema und die Roadmap sind aus dem Footer verlinkt. Korrekturen sind als Pull Requests oder als Nachricht über die Kontaktseite willkommen; das Ziel ist, dass der Katalog nach Ihrem Besuch genauer ist als davor.",
-        "Die Seite finanziert sich über Displaywerbung (Google AdSense) und einen kleinen Sponsoringpool für den Newsletter. Beides hat keinen Einfluss darauf, welche Tools behandelt oder wie sie beschrieben werden — Preise, Integrationen und Einschränkungen werden so berichtet, wie sie sind, nicht wie die Anbieter sie gern hätten.",
       ],
     },
   ],
