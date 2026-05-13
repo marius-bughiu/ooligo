@@ -41,15 +41,9 @@ const en: LegalPage = {
       ],
     },
     {
-      heading: "Contact form",
-      body: [
-        "If you reach out via the contact form, the name, email, and message you submit are sent to a private inbox controlled by the site owner. The submission is not stored on this site, is not shared with third parties, and is used only to respond to your message. If you'd rather not submit your email, the GitHub issues channel linked from the contact page is a fully public alternative.",
-      ],
-    },
-    {
       heading: "Your rights and how to reach us",
       body: [
-        "If you are in the EU/EEA, UK, or another jurisdiction with comparable rights, you can request access to, correction of, or deletion of any personal data ooligo holds about you. The only data ooligo controls directly is the contact-form inbox and the Beehiiv subscription record; for those, send a request via the contact page. For advertising cookies set by Google AdSense and analytics handled by Google Analytics, requests are best directed to Google directly — those services operate under their own privacy policies, which we link from the relevant sections above.",
+        "If you are in the EU/EEA, UK, or another jurisdiction with comparable rights, you can request access to, correction of, or deletion of any personal data ooligo holds about you. The only data ooligo controls directly is the Beehiiv subscription record; for that, open an issue on the public GitHub repository linked from the contact page. For advertising cookies set by Google AdSense and analytics handled by Google Analytics, requests are best directed to Google directly — those services operate under their own privacy policies, which we link from the relevant sections above.",
       ],
     },
   ],
@@ -84,15 +78,9 @@ const es: LegalPage = {
       ],
     },
     {
-      heading: "Formulario de contacto",
-      body: [
-        "Si te pones en contacto a través del formulario, el nombre, correo electrónico y mensaje que envíes llegan a un buzón privado controlado por el propietario del sitio. El envío no se almacena en este sitio, no se comparte con terceros y se usa solo para responderte. Si prefieres no enviar tu correo, el canal de GitHub Issues enlazado desde la página de contacto es una alternativa totalmente pública.",
-      ],
-    },
-    {
       heading: "Tus derechos y cómo contactarnos",
       body: [
-        "Si estás en la UE/EEE, Reino Unido u otra jurisdicción con derechos equivalentes, puedes solicitar acceso, corrección o eliminación de los datos personales que ooligo tenga sobre ti. Los únicos datos que ooligo controla directamente son el buzón del formulario de contacto y el registro de suscripción en Beehiiv; para esos, envía una solicitud por la página de contacto. Para las cookies publicitarias de Google AdSense y la analítica gestionada por Google Analytics, las solicitudes se dirigen mejor directamente a Google — esos servicios operan bajo sus propias políticas de privacidad, enlazadas en las secciones anteriores.",
+        "Si estás en la UE/EEE, Reino Unido u otra jurisdicción con derechos equivalentes, puedes solicitar acceso, corrección o eliminación de los datos personales que ooligo tenga sobre ti. Los únicos datos que ooligo controla directamente son el registro de suscripción en Beehiiv; para eso, abre un issue en el repositorio público de GitHub enlazado desde la página de contacto. Para las cookies publicitarias de Google AdSense y la analítica gestionada por Google Analytics, las solicitudes se dirigen mejor directamente a Google — esos servicios operan bajo sus propias políticas de privacidad, enlazadas en las secciones anteriores.",
       ],
     },
   ],
@@ -127,15 +115,9 @@ const ptBR: LegalPage = {
       ],
     },
     {
-      heading: "Formulário de contato",
-      body: [
-        "Se você entrar em contato pelo formulário, o nome, e-mail e mensagem enviados vão para uma caixa de entrada privada controlada pelo proprietário do site. O envio não é armazenado neste site, não é compartilhado com terceiros e é usado apenas para responder à sua mensagem. Se preferir não enviar seu e-mail, o canal de Issues no GitHub linkado na página de contato é uma alternativa totalmente pública.",
-      ],
-    },
-    {
       heading: "Seus direitos e como falar com a gente",
       body: [
-        "Se você está na UE/EEE, no Reino Unido ou em outra jurisdição com direitos equivalentes, pode solicitar acesso, correção ou exclusão de quaisquer dados pessoais que o ooligo tenha sobre você. Os únicos dados que o ooligo controla diretamente são a caixa do formulário de contato e o registro de assinatura na Beehiiv; para esses, envie uma solicitação pela página de contato. Para os cookies publicitários do Google AdSense e a analytics do Google Analytics, os pedidos são melhor direcionados diretamente ao Google — esses serviços operam sob suas próprias políticas de privacidade, linkadas nas seções acima.",
+        "Se você está na UE/EEE, no Reino Unido ou em outra jurisdição com direitos equivalentes, pode solicitar acesso, correção ou exclusão de quaisquer dados pessoais que o ooligo tenha sobre você. Os únicos dados que o ooligo controla diretamente são o registro de assinatura na Beehiiv; para isso, abra um issue no repositório público no GitHub linkado na página de contato. Para os cookies publicitários do Google AdSense e a analytics do Google Analytics, os pedidos são melhor direcionados diretamente ao Google — esses serviços operam sob suas próprias políticas de privacidade, linkadas nas seções acima.",
       ],
     },
   ],
@@ -170,15 +152,9 @@ const ja: LegalPage = {
       ],
     },
     {
-      heading: "お問い合わせフォーム",
-      body: [
-        "お問い合わせフォームからご連絡いただいた場合、入力されたお名前、メールアドレス、メッセージは、サイト運営者が管理する非公開の受信箱に届きます。送信内容は本サイトに保存されず、第三者と共有されることもなく、ご返信の目的にのみ使用されます。メールアドレスを送信したくない場合は、お問い合わせページからリンクされているGitHubのIssuesチャネルが完全に公開された代替手段です。",
-      ],
-    },
-    {
       heading: "あなたの権利と連絡方法",
       body: [
-        "EU／EEA、英国、または同等の権利が認められる他の管轄内にお住まいの場合、ooligoが保持するご自身に関する個人データへのアクセス、訂正、削除を請求できます。ooligoが直接管理しているのは、お問い合わせフォームの受信箱とBeehiivの購読レコードのみです。これらについては、お問い合わせページからご請求ください。Google AdSenseが設定する広告CookieやGoogle Analyticsが扱うアクセス解析データについては、それぞれのサービスがそれぞれのプライバシーポリシーのもとで運営されているため、Googleへ直接ご請求いただくのが最も適切です。該当ポリシーへのリンクは上記の関連セクションに記載しています。",
+        "EU／EEA、英国、または同等の権利が認められる他の管轄内にお住まいの場合、ooligoが保持するご自身に関する個人データへのアクセス、訂正、削除を請求できます。ooligoが直接管理しているのはBeehiivの購読レコードのみです。これについては、お問い合わせページからリンクされている公開GitHubリポジトリでissueを開いてください。Google AdSenseが設定する広告CookieやGoogle Analyticsが扱うアクセス解析データについては、それぞれのサービスがそれぞれのプライバシーポリシーのもとで運営されているため、Googleへ直接ご請求いただくのが最も適切です。該当ポリシーへのリンクは上記の関連セクションに記載しています。",
       ],
     },
   ],
@@ -213,15 +189,9 @@ const fr: LegalPage = {
       ],
     },
     {
-      heading: "Formulaire de contact",
-      body: [
-        "Si vous nous écrivez via le formulaire de contact, le nom, l'e-mail et le message envoyés arrivent dans une boîte privée contrôlée par le propriétaire du site. Le message n'est pas stocké sur ce site, n'est pas partagé avec des tiers et n'est utilisé que pour vous répondre. Si vous préférez ne pas transmettre votre e-mail, le canal GitHub Issues lié depuis la page de contact est une alternative entièrement publique.",
-      ],
-    },
-    {
       heading: "Vos droits et comment nous joindre",
       body: [
-        "Si vous êtes dans l'UE/EEE, au Royaume-Uni ou dans une autre juridiction offrant des droits équivalents, vous pouvez demander l'accès, la rectification ou la suppression des données personnelles qu'ooligo détient à votre sujet. Les seules données qu'ooligo contrôle directement sont la boîte du formulaire de contact et l'enregistrement d'abonnement Beehiiv ; pour celles-ci, adressez une demande via la page de contact. Pour les cookies publicitaires déposés par Google AdSense et l'analytique gérée par Google Analytics, il est préférable de vous adresser directement à Google — ces services opèrent sous leurs propres politiques de confidentialité, liées dans les sections ci-dessus.",
+        "Si vous êtes dans l'UE/EEE, au Royaume-Uni ou dans une autre juridiction offrant des droits équivalents, vous pouvez demander l'accès, la rectification ou la suppression des données personnelles qu'ooligo détient à votre sujet. Les seules données qu'ooligo contrôle directement sont l'enregistrement d'abonnement Beehiiv ; pour cela, ouvrez une issue sur le dépôt GitHub public lié depuis la page de contact. Pour les cookies publicitaires déposés par Google AdSense et l'analytique gérée par Google Analytics, il est préférable de vous adresser directement à Google — ces services opèrent sous leurs propres politiques de confidentialité, liées dans les sections ci-dessus.",
       ],
     },
   ],
@@ -256,15 +226,9 @@ const de: LegalPage = {
       ],
     },
     {
-      heading: "Kontaktformular",
-      body: [
-        "Wenn Sie sich über das Kontaktformular melden, gelangen Name, E-Mail-Adresse und Nachricht in ein privates Postfach, das vom Seitenbetreiber kontrolliert wird. Die Einsendung wird nicht auf dieser Seite gespeichert, nicht an Dritte weitergegeben und ausschließlich verwendet, um auf Ihre Nachricht zu antworten. Wenn Sie Ihre E-Mail-Adresse nicht übermitteln möchten, ist der über die Kontaktseite verlinkte GitHub-Issues-Kanal eine vollständig öffentliche Alternative.",
-      ],
-    },
-    {
       heading: "Ihre Rechte und wie Sie uns erreichen",
       body: [
-        "Wenn Sie in der EU/im EWR, im Vereinigten Königreich oder einer anderen Jurisdiktion mit vergleichbaren Rechten ansässig sind, können Sie Auskunft, Berichtigung oder Löschung der personenbezogenen Daten verlangen, die ooligo über Sie hält. Die einzigen Daten, die ooligo selbst kontrolliert, sind das Postfach des Kontaktformulars und der Beehiiv-Abonnementeintrag; bitte richten Sie entsprechende Anfragen über die Kontaktseite an uns. Für Werbe-Cookies von Google AdSense und die Analyse durch Google Analytics ist es am sinnvollsten, sich direkt an Google zu wenden — diese Dienste arbeiten nach eigenen Datenschutzrichtlinien, die in den obigen Abschnitten verlinkt sind.",
+        "Wenn Sie in der EU/im EWR, im Vereinigten Königreich oder einer anderen Jurisdiktion mit vergleichbaren Rechten ansässig sind, können Sie Auskunft, Berichtigung oder Löschung der personenbezogenen Daten verlangen, die ooligo über Sie hält. Die einzigen Daten, die ooligo selbst kontrolliert, sind der Beehiiv-Abonnementeintrag; bitte öffnen Sie dafür eine Issue im öffentlichen GitHub-Repository, das von der Kontaktseite verlinkt ist. Für Werbe-Cookies von Google AdSense und die Analyse durch Google Analytics ist es am sinnvollsten, sich direkt an Google zu wenden — diese Dienste arbeiten nach eigenen Datenschutzrichtlinien, die in den obigen Abschnitten verlinkt sind.",
       ],
     },
   ],

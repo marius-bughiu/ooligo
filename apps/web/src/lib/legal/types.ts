@@ -28,33 +28,11 @@ export interface LegalPage {
   sections: LegalSection[];
 }
 
-export interface ContactFormStrings {
-  name_label: string;
-  email_label: string;
-  message_label: string;
-  submit: string;
-  submitting: string;
-  success: string;
-  error: string;
-  invalid_email: string;
-  /** Short intro to the alternate GitHub channel */
-  github_intro: string;
-  /** Label of the GitHub-issues link */
-  github_link_label: string;
-}
-
 export interface ContactPage extends LegalPage {
-  form: ContactFormStrings;
+  /** Label of the link pointing at GitHub Issues (the only contact channel). */
+  githubLinkLabel: string;
 }
 
-export type LegalStringsBlock = {
-  lastUpdatedLabel: string;
-  about: LegalPage;
-  privacy: LegalPage;
-  contact: ContactPage;
-  terms: LegalPage;
-};
-
-export type LegalStringsTable = Partial<Record<LocaleCode, LegalStringsBlock>> & {
-  en: LegalStringsBlock;
+export type LegalStringsTable = Partial<Record<LocaleCode, LegalPage>> & {
+  en: LegalPage;
 };

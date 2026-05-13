@@ -1,10 +1,10 @@
 /**
- * "Contact" page prose + form labels, per locale.
+ * "Contact" page prose, per locale.
  *
- * The page exposes a JSON POST form against /api/contact (a Cloudflare
- * Pages Function) and surfaces the public GitHub Issues channel as an
- * alternate. The owner's email address is NOT rendered in any locale —
- * keep it that way.
+ * The only contact channel is the public GitHub repository — issues
+ * for bug reports / feature requests / questions, pull requests for
+ * fact corrections, discussions for broader threads. No form, no
+ * private inbox: every conversation is public.
  */
 
 import type { ContactPage } from "./types";
@@ -15,211 +15,115 @@ const LAST_UPDATED = "2026-05-13";
 const en: ContactPage = {
   title: "Contact — ooligo",
   description:
-    "Get in touch with the ooligo team: corrections, feedback, partnership questions, or anything else.",
+    "Get in touch via the public GitHub repository — issues, pull requests, and discussions.",
   heading: "Contact",
   lastUpdated: LAST_UPDATED,
-  lead: "If you've spotted a factual error, want to suggest a tool or workflow we're missing, or have a partnership or press question, this form reaches the site owner directly.",
+  lead: "ooligo is run in the open and the only contact channel is the public GitHub repository.",
   sections: [
     {
-      heading: "Use the form for direct messages",
+      heading: "How to reach us",
       body: [
-        "Submissions are forwarded to a private inbox. You'll typically hear back within a few business days. The form is the best channel for anything that includes private context — pricing details under NDA, factual corrections you can source but don't want to make public, or partnership discussions.",
-      ],
-    },
-    {
-      heading: "Use GitHub for public corrections",
-      body: [
-        "If the issue is a public fact about a tool, a comparison, a workflow, or a learn entry — a price changed, an integration was added or removed, a category misclassification — opening a GitHub issue or pull request is faster and more transparent. Other readers can see the discussion and the fix, and the change ships as a normal site update.",
+        "Open an issue for bug reports, missing tools, or factual errors. Open a pull request to propose a correction or addition directly. Open a discussion for broader questions — pricing context, vendor relationships, editorial direction, or anything that doesn't fit the issue/PR mold.",
+        "Everything is public by design. If a topic genuinely needs to stay private, please don't send it here — there's no private channel to route it to.",
       ],
     },
   ],
-  form: {
-    name_label: "Name",
-    email_label: "Email",
-    message_label: "Message",
-    submit: "Send message",
-    submitting: "Sending…",
-    success: "Thanks — message received. We'll be in touch.",
-    error: "Something went wrong sending the message. Please try again.",
-    invalid_email: "Please enter a valid email address.",
-    github_intro: "Prefer a public channel? Open an issue or pull request:",
-    github_link_label: "GitHub issues",
-  },
+  githubLinkLabel: "Open an issue on GitHub →",
 };
 
 const es: ContactPage = {
   title: "Contacto — ooligo",
   description:
-    "Ponte en contacto con el equipo de ooligo: correcciones, comentarios, dudas de colaboración o cualquier otra cosa.",
+    "Ponte en contacto a través del repositorio público de GitHub: issues, pull requests y discusiones.",
   heading: "Contacto",
   lastUpdated: LAST_UPDATED,
-  lead: "Si detectaste un error factual, quieres sugerir una herramienta o workflow que falta, o tienes una pregunta de colaboración o prensa, este formulario llega directamente al propietario del sitio.",
+  lead: "ooligo se mantiene en abierto y el único canal de contacto es el repositorio público de GitHub.",
   sections: [
     {
-      heading: "Usa el formulario para mensajes directos",
+      heading: "Cómo contactarnos",
       body: [
-        "Los envíos se reenvían a un buzón privado. Normalmente recibirás respuesta en unos pocos días hábiles. El formulario es el mejor canal para cualquier cosa que incluya contexto privado: detalles de precios bajo NDA, correcciones con fuente que prefieras no hacer públicas o conversaciones de colaboración.",
-      ],
-    },
-    {
-      heading: "Usa GitHub para correcciones públicas",
-      body: [
-        "Si se trata de un hecho público sobre una herramienta, una comparación, un workflow o una entrada de aprendizaje — un precio que cambió, una integración añadida o eliminada, una clasificación errónea — abrir un issue o un pull request en GitHub es más rápido y transparente. Otros lectores ven la discusión y la corrección, y el cambio se publica como una actualización normal del sitio.",
+        "Abre un issue para reportar errores, herramientas que faltan o inexactitudes. Abre un pull request para proponer una corrección o adición directamente. Abre una discusión para preguntas más amplias: contexto de precios, relaciones con proveedores, dirección editorial o cualquier cosa que no encaje como issue o PR.",
+        "Todo es público por diseño. Si un tema realmente necesita permanecer privado, por favor no lo envíes aquí — no hay un canal privado al que enrutarlo.",
       ],
     },
   ],
-  form: {
-    name_label: "Nombre",
-    email_label: "Correo electrónico",
-    message_label: "Mensaje",
-    submit: "Enviar mensaje",
-    submitting: "Enviando…",
-    success: "Gracias, mensaje recibido. Te contactaremos.",
-    error: "Algo salió mal al enviar el mensaje. Inténtalo de nuevo.",
-    invalid_email: "Ingresa un correo electrónico válido.",
-    github_intro: "¿Prefieres un canal público? Abre un issue o un pull request:",
-    github_link_label: "GitHub issues",
-  },
+  githubLinkLabel: "Abrir un issue en GitHub →",
 };
 
 const ptBR: ContactPage = {
   title: "Contato — ooligo",
   description:
-    "Fale com a equipe do ooligo: correções, feedback, parcerias ou qualquer outra coisa.",
+    "Fale com a gente pelo repositório público no GitHub: issues, pull requests e discussions.",
   heading: "Contato",
   lastUpdated: LAST_UPDATED,
-  lead: "Se você encontrou um erro factual, quer sugerir uma ferramenta ou workflow que está faltando, ou tem uma dúvida sobre parceria ou imprensa, este formulário chega direto ao proprietário do site.",
+  lead: "O ooligo é mantido em aberto e o único canal de contato é o repositório público no GitHub.",
   sections: [
     {
-      heading: "Use o formulário para mensagens diretas",
+      heading: "Como falar com a gente",
       body: [
-        "As mensagens são encaminhadas para uma caixa de entrada privada. Em geral, você recebe retorno em alguns dias úteis. O formulário é o melhor canal para tudo que envolve contexto privado: detalhes de preço sob NDA, correções factuais com fonte que você prefere não tornar públicas ou conversas de parceria.",
-      ],
-    },
-    {
-      heading: "Use o GitHub para correções públicas",
-      body: [
-        "Se for um fato público sobre uma ferramenta, uma comparação, um workflow ou uma entrada de aprendizado — um preço que mudou, uma integração que entrou ou saiu, uma categoria classificada errado — abrir um issue ou pull request no GitHub é mais rápido e transparente. Outros leitores enxergam a discussão e a correção, e a mudança vai ao ar como uma atualização normal do site.",
+        "Abra um issue para relatar bugs, ferramentas faltando ou imprecisões. Abra um pull request para propor uma correção ou adição direto. Abra uma discussion para perguntas mais amplas: contexto de preço, relações com fornecedores, direção editorial ou qualquer coisa que não caiba como issue ou PR.",
+        "Tudo é público por design. Se um assunto realmente precisa ficar privado, por favor não envie por aqui — não há um canal privado para onde encaminhá-lo.",
       ],
     },
   ],
-  form: {
-    name_label: "Nome",
-    email_label: "E-mail",
-    message_label: "Mensagem",
-    submit: "Enviar mensagem",
-    submitting: "Enviando…",
-    success: "Obrigado — mensagem recebida. Entraremos em contato.",
-    error: "Algo deu errado ao enviar a mensagem. Tente novamente.",
-    invalid_email: "Insira um e-mail válido.",
-    github_intro: "Prefere um canal público? Abra um issue ou pull request:",
-    github_link_label: "GitHub issues",
-  },
+  githubLinkLabel: "Abrir um issue no GitHub →",
 };
 
 const ja: ContactPage = {
   title: "お問い合わせ — ooligo",
   description:
-    "ooligoチームへのご連絡：修正のご提案、ご意見、パートナーシップに関するご質問など。",
+    "公開されたGitHubリポジトリからお問い合わせいただけます——issue、pull request、discussionが利用できます。",
   heading: "お問い合わせ",
   lastUpdated: LAST_UPDATED,
-  lead: "事実関係の誤りを見つけた、不足しているツールやワークフローを提案したい、パートナーシップや取材のご質問がある——このフォームから直接サイト運営者へお問い合わせいただけます。",
+  lead: "ooligoはオープンに運営しており、お問い合わせ手段は公開GitHubリポジトリのみです。",
   sections: [
     {
-      heading: "直接のご連絡はフォームをご利用ください",
+      heading: "ご連絡方法",
       body: [
-        "送信内容は非公開の受信箱に転送されます。通常は数営業日以内にご返信します。NDA対象の価格情報、ソースはあるが公開はしたくない事実訂正、パートナーシップの相談など、非公開の文脈を含むご連絡はフォームが最も適した経路です。",
-      ],
-    },
-    {
-      heading: "公開できる修正はGitHubをご利用ください",
-      body: [
-        "ツール、比較、ワークフロー、学習エントリに関する公開可能な事実——価格の変更、連携の追加・削除、カテゴリ分類の誤りなど——であれば、GitHubのissueまたはpull requestを開く方が迅速で透明性があります。他の読者も議論や修正の内容を確認でき、変更は通常のサイト更新として反映されます。",
+        "バグ報告、不足しているツール、事実関係の誤りについてはissueをご利用ください。修正や追加の提案は直接pull requestをお送りいただけます。価格情報の背景、ベンダーとの関係、編集方針など、issueやPRに収まらない広範な質問はdiscussionをご利用ください。",
+        "すべては設計上、公開された場で行われます。本当に非公開で扱う必要のある話題は、こちらには送らないでください——個別の非公開チャネルはご用意していません。",
       ],
     },
   ],
-  form: {
-    name_label: "お名前",
-    email_label: "メールアドレス",
-    message_label: "メッセージ",
-    submit: "メッセージを送信",
-    submitting: "送信中…",
-    success: "ありがとうございます — メッセージを受け付けました。追ってご連絡します。",
-    error: "メッセージの送信中に問題が発生しました。もう一度お試しください。",
-    invalid_email: "有効なメールアドレスを入力してください。",
-    github_intro: "公開チャネルをお選びの場合は、issueまたはpull requestを開いてください：",
-    github_link_label: "GitHub issues",
-  },
+  githubLinkLabel: "GitHubでissueを開く →",
 };
 
 const fr: ContactPage = {
   title: "Contact — ooligo",
   description:
-    "Contactez l'équipe d'ooligo : corrections, retours, questions de partenariat ou autres.",
+    "Contactez-nous via le dépôt GitHub public : issues, pull requests et discussions.",
   heading: "Contact",
   lastUpdated: LAST_UPDATED,
-  lead: "Si vous avez repéré une erreur factuelle, souhaitez suggérer un outil ou un workflow manquant, ou avez une question de partenariat ou de presse, ce formulaire atteint directement le propriétaire du site.",
+  lead: "ooligo est tenu en open source et le seul canal de contact est le dépôt GitHub public.",
   sections: [
     {
-      heading: "Utilisez le formulaire pour les messages directs",
+      heading: "Comment nous joindre",
       body: [
-        "Les envois sont transférés vers une boîte privée. Vous obtenez généralement une réponse sous quelques jours ouvrés. Le formulaire est le bon canal pour tout ce qui comporte un contexte privé : détails tarifaires sous NDA, corrections factuelles sourcées que vous préférez ne pas rendre publiques, discussions de partenariat.",
-      ],
-    },
-    {
-      heading: "Utilisez GitHub pour les corrections publiques",
-      body: [
-        "S'il s'agit d'un fait public concernant un outil, une comparaison, un workflow ou une entrée d'apprentissage — un prix qui a changé, une intégration ajoutée ou retirée, une catégorisation erronée — ouvrir une issue ou une pull request GitHub est plus rapide et plus transparent. Les autres lecteurs voient la discussion et la correction, et le changement est livré comme une mise à jour normale du site.",
+        "Ouvrez une issue pour signaler un bug, un outil manquant ou une inexactitude. Ouvrez une pull request pour proposer directement une correction ou un ajout. Ouvrez une discussion pour les questions plus larges : contexte tarifaire, relations avec les éditeurs, ligne éditoriale, ou tout ce qui n'entre pas dans le moule issue / PR.",
+        "Tout est public par conception. Si un sujet doit vraiment rester privé, merci de ne pas l'envoyer ici — il n'y a pas de canal privé vers lequel le rediriger.",
       ],
     },
   ],
-  form: {
-    name_label: "Nom",
-    email_label: "E-mail",
-    message_label: "Message",
-    submit: "Envoyer le message",
-    submitting: "Envoi…",
-    success: "Merci — message reçu. Nous reviendrons vers vous.",
-    error: "Une erreur est survenue lors de l'envoi du message. Veuillez réessayer.",
-    invalid_email: "Veuillez saisir une adresse e-mail valide.",
-    github_intro: "Vous préférez un canal public ? Ouvrez une issue ou une pull request :",
-    github_link_label: "GitHub issues",
-  },
+  githubLinkLabel: "Ouvrir une issue sur GitHub →",
 };
 
 const de: ContactPage = {
   title: "Kontakt — ooligo",
   description:
-    "Nehmen Sie Kontakt mit dem ooligo-Team auf: Korrekturen, Feedback, Partnerschaftsanfragen oder anderes.",
+    "Nehmen Sie über das öffentliche GitHub-Repository Kontakt auf — Issues, Pull Requests und Discussions.",
   heading: "Kontakt",
   lastUpdated: LAST_UPDATED,
-  lead: "Wenn Sie einen sachlichen Fehler entdeckt haben, ein fehlendes Tool oder einen fehlenden Workflow vorschlagen möchten oder eine Partnerschafts- oder Presseanfrage haben, erreicht dieses Formular direkt den Seitenbetreiber.",
+  lead: "ooligo wird offen betrieben und der einzige Kontaktkanal ist das öffentliche GitHub-Repository.",
   sections: [
     {
-      heading: "Nutzen Sie das Formular für direkte Nachrichten",
+      heading: "So erreichen Sie uns",
       body: [
-        "Eingehende Nachrichten werden an ein privates Postfach weitergeleitet. In der Regel erhalten Sie innerhalb weniger Werktage eine Antwort. Das Formular ist der richtige Kanal für alles mit nicht-öffentlichem Kontext: Preisdetails unter NDA, sachliche Korrekturen mit Quelle, die Sie nicht öffentlich machen möchten, oder Partnerschaftsgespräche.",
-      ],
-    },
-    {
-      heading: "Nutzen Sie GitHub für öffentliche Korrekturen",
-      body: [
-        "Handelt es sich um eine öffentliche Tatsache zu einem Tool, einem Vergleich, einem Workflow oder einem Lerneintrag — ein geänderter Preis, eine hinzugekommene oder weggefallene Integration, eine falsche Kategorisierung —, ist das Öffnen einer Issue oder Pull Request auf GitHub schneller und transparenter. Andere Leser sehen die Diskussion und die Korrektur, und die Änderung erscheint als normales Site-Update.",
+        "Öffnen Sie eine Issue für Fehlermeldungen, fehlende Tools oder sachliche Ungenauigkeiten. Öffnen Sie eine Pull Request, um direkt eine Korrektur oder Ergänzung vorzuschlagen. Öffnen Sie eine Discussion für breitere Fragen — Preiskontext, Anbieterbeziehungen, redaktionelle Ausrichtung oder alles, was nicht in Issue oder PR passt.",
+        "Alles ist absichtlich öffentlich. Wenn ein Thema wirklich vertraulich bleiben muss, senden Sie es bitte nicht hierher — es gibt keinen privaten Kanal, an den es weitergeleitet werden könnte.",
       ],
     },
   ],
-  form: {
-    name_label: "Name",
-    email_label: "E-Mail",
-    message_label: "Nachricht",
-    submit: "Nachricht senden",
-    submitting: "Wird gesendet…",
-    success: "Danke — Nachricht erhalten. Wir melden uns.",
-    error: "Beim Senden der Nachricht ist etwas schiefgelaufen. Bitte erneut versuchen.",
-    invalid_email: "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
-    github_intro: "Lieber ein öffentlicher Kanal? Öffnen Sie eine Issue oder Pull Request:",
-    github_link_label: "GitHub-Issues",
-  },
+  githubLinkLabel: "Issue auf GitHub öffnen →",
 };
 
 export const contactByLocale: Partial<Record<LocaleCode, ContactPage>> & { en: ContactPage } = {
