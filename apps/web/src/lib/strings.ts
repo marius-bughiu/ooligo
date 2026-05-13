@@ -31,6 +31,11 @@ export type ChromeStrings = {
     catalog: string;
     verticals: string;
     build: string;
+    company: string;
+    about: string;
+    contact: string;
+    privacy: string;
+    terms: string;
     subscribe_heading: string;
     subscribe_blurb: string;
     subscribe_placeholder: string;
@@ -85,6 +90,11 @@ const en: ChromeStrings = {
     catalog: "Catalog",
     verticals: "Verticals",
     build: "Build",
+    company: "Company",
+    about: "About",
+    contact: "Contact",
+    privacy: "Privacy",
+    terms: "Terms",
     subscribe_heading: "Get the briefing",
     subscribe_blurb:
       "New tools, comparisons, and workflows for ops leaders. Free, weekly, vertical-tagged.",
@@ -140,6 +150,11 @@ const es: ChromeStrings = {
     catalog: "Catálogo",
     verticals: "Verticales",
     build: "Construcción",
+    company: "Empresa",
+    about: "Sobre",
+    contact: "Contacto",
+    privacy: "Privacidad",
+    terms: "Términos",
     subscribe_heading: "Recibe el briefing",
     subscribe_blurb:
       "Nuevas herramientas, comparaciones y workflows para líderes de operaciones. Gratis, semanal, etiquetado por vertical.",
@@ -195,6 +210,11 @@ const ptBR: ChromeStrings = {
     catalog: "Catálogo",
     verticals: "Verticais",
     build: "Construção",
+    company: "Empresa",
+    about: "Sobre",
+    contact: "Contato",
+    privacy: "Privacidade",
+    terms: "Termos",
     subscribe_heading: "Receba o briefing",
     subscribe_blurb:
       "Novas ferramentas, comparações e workflows para líderes de operações. Grátis, semanal, com tag por vertical.",
@@ -250,6 +270,11 @@ const ja: ChromeStrings = {
     catalog: "カタログ",
     verticals: "業種",
     build: "開発",
+    company: "運営者",
+    about: "サイトについて",
+    contact: "お問い合わせ",
+    privacy: "プライバシー",
+    terms: "利用規約",
     subscribe_heading: "ブリーフィングを受け取る",
     subscribe_blurb:
       "オペレーションリーダー向けの新しいツール、比較、ワークフロー。無料、毎週、業種別タグ付き。",
@@ -305,6 +330,11 @@ const fr: ChromeStrings = {
     catalog: "Catalogue",
     verticals: "Secteurs",
     build: "Construction",
+    company: "Éditeur",
+    about: "À propos",
+    contact: "Contact",
+    privacy: "Confidentialité",
+    terms: "Conditions",
     subscribe_heading: "Recevez le briefing",
     subscribe_blurb:
       "Nouveaux outils, comparaisons et workflows pour les responsables ops. Gratuit, hebdomadaire, balisé par secteur.",
@@ -360,6 +390,11 @@ const de: ChromeStrings = {
     catalog: "Katalog",
     verticals: "Branchen",
     build: "Aufbau",
+    company: "Anbieter",
+    about: "Über uns",
+    contact: "Kontakt",
+    privacy: "Datenschutz",
+    terms: "AGB",
     subscribe_heading: "Briefing abonnieren",
     subscribe_blurb:
       "Neue Tools, Vergleiche und Workflows für Ops-Verantwortliche. Kostenlos, wöchentlich, branchenspezifisch getaggt.",
