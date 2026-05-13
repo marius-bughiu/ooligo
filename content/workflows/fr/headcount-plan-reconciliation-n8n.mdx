@@ -1,0 +1,105 @@
+---
+slug: headcount-plan-reconciliation-n8n
+canonical_slug: headcount-plan-reconciliation-n8n
+locale: fr
+verticals: [recruiting]
+title: Réconciliation du plan d'effectifs avec n8n
+artifact_type: n8n-flow
+tools_used: [n8n, ashby, claude, slack]
+roles: [recruiter, talent-acquisition, finance-business-partner]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+translated_from: en/headcount-plan-reconciliation-n8n.mdx
+translated_at: "2026-05-13T03:00:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: d17279f5ceace94c8721ec7f68141c40283e6983820c40774b5f29d1c6111672
+---
+
+Un flow n8n qui réconcilie le plan d'effectifs de l'entreprise (les recrutements approuvés par trimestre, par équipe, par niveau, avec les dates de démarrage) par rapport aux postes ouverts dans l'ATS et aux recrutements réels enregistrés dans le SIRH — et publie un rapport de dérive hebdomadaire sur Slack avec les écarts ligne par ligne. Remplace le tableur du vendredi du responsable recrutement « quel est l'écart ? » par un digest structuré sur lequel la finance peut s'appuyer. Capture les modes d'échec qui coûtent silencieusement un trimestre — des postes ouverts pour des équipes déjà à l'effectif prévu, des recrutements enregistrés sous la mauvaise équipe, des conversions prestataires comptées comme nouveaux recrutements.
+
+## Quand l'utiliser
+
+- L'entreprise dispose d'un plan d'effectifs écrit avec une granularité équipe / niveau / date de démarrage (pas « nous recruterons 50 au T3 » — « 12 en ingénierie, dont 4 IC senior, 2 IC intermédiaire, avec 6 démarrant d'ici la semaine 6 »).
+- Vous avez au moins deux parmi : le plan d'effectifs dans une source structurée (module de plan Carta, BambooHR, tableur finance), les postes ouverts dans [Ashby](/fr/tools/ashby/) ou un autre ATS, et les recrutements enregistrés dans le SIRH.
+- Vous clôturez un trimestre et vous devez voir la variance de prévision assez tôt pour agir (pas la veille de la réunion du board).
+- Le plan dispose de libellés d'équipe qui correspondent aux libellés d'équipe de l'ATS, OU vous avez une table de correspondance que vous pouvez maintenir.
+
+## Quand NE PAS l'utiliser
+
+- **Pas de plan structuré.** Un plan qui vit dans un deck de slides ou un document de notes de réunion n'est pas réconciliable. Mettez d'abord le plan dans une source structurée ; le flow ne lit pas PowerPoint.
+- **Le hiring manager est la source de vérité.** Si les recrutements sont enregistrés dans des tableurs informels par hiring manager, la réconciliation est sans sens car l'« actuel » est ce que chaque manager dit qu'il est. La valeur du flow dépend du SIRH comme réel.
+- **Les entreprises pré-Série B avec moins de 30 recrutements par an.** Le surcoût de réconciliation dépasse la valeur à petite échelle ; un responsable recrutement et le PDG peuvent tenir le plan en tête.
+- **Le plan change hebdomadairement.** Si le plan est constamment révisé en milieu de trimestre, le signal de variance est dominé par le bruit des révisions de plan. Stabilisez d'abord la cadence des changements de plan.
+
+## Configuration
+
+1. **Importez le flow.** Déposez `apps/web/public/artifacts/headcount-plan-reconciliation-n8n/headcount-plan-reconciliation-n8n.json` dans votre instance n8n. Chaque nœud porte `notesInFlow: true` pour que les notes dans le canvas expliquent la logique de réconciliation.
+2. **Câblez les credentials.** Trois requis : `PLACEHOLDER_PLAN_DB_CRED_ID` (accès en lecture là où vit le plan — Postgres, Snowflake ou un connecteur Sheets), `PLACEHOLDER_ASHBY_CRED_ID` (scope de lecture Ashby), `PLACEHOLDER_HRIS_CRED_ID` (scope de lecture SIRH ; BambooHR / Workday / Rippling sont pré-configurés, les autres nécessitent un connecteur).
+3. **Rédigez la correspondance d'équipes.** Un fichier YAML sous `n8n/data/team_mapping.yml` fait correspondre les libellés d'équipe du plan aux libellés d'équipe de l'ATS et du SIRH. Sans cela, le flow ne peut pas réconcilier entre systèmes. La rédaction de la correspondance est le coût initial ; la maintenance continue est faible (uniquement lors de créations ou fusions d'équipes).
+4. **Configurez la destination Slack.** Rapports de variance par équipe vers des canaux par équipe, plus un rapport agrégé vers un canal de direction recrutement. Le nœud `Compose Variance Report` du flow modèle le message ; ajustez selon la préférence de votre équipe pour le concis vs le détaillé.
+5. **Planifiez.** La valeur par défaut est le lundi à 8h heure locale. Le nœud Cron a `timezone` défini explicitement — ajustez au fuseau horaire de votre bureau.
+6. **Test à blanc sur le dernier trimestre.** Rejouez par rapport au plan et aux actuals du dernier trimestre. Confirmez que les chiffres de variance du flow correspondent à ce que votre partenaire finance avait en fin de trimestre. Sinon, la correspondance d'équipes ou la classification prestataire-vs-CDI est incorrecte.
+
+## Ce que le flow fait
+
+Huit nœuds. La logique de réconciliation est déterministe ; le LLM n'intervient qu'à l'étape de narrative de variance (5), et uniquement pour rédiger un résumé lisible des constats déterministes.
+
+1. **Cron Trigger** — lundis 8h fuseau horaire du bureau (timezone défini explicitement dans les paramètres du nœud).
+2. **Fetch Plan** — extrait le plan d'effectifs du trimestre en cours depuis la source du plan. Schéma : `team`, `level`, `count`, `target_start_date`, `req_status` (`approved` / `pending`).
+3. **Fetch Open Reqs (Ashby)** — extrait tous les postes ouverts depuis Ashby. Schéma : `req_id`, `team`, `level`, `opened_at`, `target_start_date`.
+4. **Fetch Hires (HRIS)** — extrait les recrutements effectués ce trimestre depuis le SIRH. Schéma : `hire_id`, `team`, `level`, `start_date`, `employment_type` (`fte` / `contractor` / `intern`).
+5. **Reconcile** — nœud Code. Joint plan + postes + recrutements par équipe/niveau. Pour chaque cellule (équipe, niveau) :
+   - **Ouvert par rapport au plan** — nombre de postes ouverts vs objectif du plan.
+   - **Recruté par rapport au plan** — nombre de recrutements CDI vs objectif du plan. Les prestataires et stagiaires ne sont PAS comptés (le seau de conversion prestataires du flow est séparé).
+   - **Variance** — `(plan - hires - open_reqs)`. Négatif = au-dessus du plan. Positif = écart.
+   - **Signal de dérive** — signale les cellules où la variance a changé de >3 depuis la dernière exécution, suggérant une approbation non planifiée ou un recrutement manqué.
+   - **Cellules anomalies** : postes ouverts sans entrée dans le plan (poste parasite ?), recrutements enregistrés pour des équipes absentes du plan (mal classé ?), conversions prestataires rapportées comme nouveaux recrutements (double comptage ?).
+6. **Claude Compose Narrative** — prend l'output de réconciliation structuré et rédige un résumé de variance de 200 mots par canal d'équipe + un résumé agrégé de 400 mots pour la direction. Le LLM NE calcule PAS les variances ; il narre les constats déterministes. Le prompt interdit explicitement au modèle d'inférer des causes (« l'équipe est en retard parce que… ») car c'est le rôle du lecteur.
+7. **Post Per-Team** — message Slack par canal d'équipe avec uniquement la variance de cette équipe. Posture de confidentialité : chaque équipe ne voit que ses propres chiffres.
+8. **Post Aggregate** — message Slack vers le canal de direction recrutement avec le tableau inter-équipes. Inclut les cellules anomalies avec un lien vers les enregistrements sources.
+
+## Réalité des coûts
+
+Par exécution hebdomadaire, sur Claude Sonnet 4.6 :
+
+- **Tokens LLM** — la composition de la narrative est la seule étape LLM. Typiquement 2 à 4 000 tokens d'entrée (table de réconciliation structurée + instructions du skill) et 1 à 2 000 de sortie (résumés par équipe + agrégé). Environ 0,02 à 0,04 $ par exécution. Négligeable à cadence hebdomadaire.
+- **Coûts API plan-source / ATS / SIRH** — appels en lecture uniquement. Dans les quotas gratuits pour Ashby et la plupart des fournisseurs SIRH.
+- **Temps du responsable recrutement** — le gain. La reconstruction du tableur du vendredi après-midi prend 60 à 120 minutes hebdomadaires quand elle est faite rigoureusement ; lire le digest du lundi prend 5 à 10 minutes. Le gain de temps plus important se trouve sur les cellules anomalies, qui passent souvent inaperçues lors de la réconciliation manuelle jusqu'à la fin de trimestre.
+- **Temps de configuration** — 90 minutes incluant la rédaction de la correspondance d'équipes. La correspondance d'équipes est le coût de configuration structurant.
+
+## Métriques de succès
+
+Suivez trois éléments mensuellement :
+
+- **Précision du plan en fin de trimestre** — en fin de trimestre, quelle était la différence entre les recrutements projetés (semaine 8 du trimestre) et les recrutements réels (semaine 13) ? Devrait passer de la dérive historique de l'entreprise à moins de 5 %. L'alerte précoce est ce qui rend la variance actionnable.
+- **Délai de résolution des anomalies** — temps entre « cellule anomalie signalée » et « anomalie résolue » (correctement classifiée, plan mis à jour, ou recrutement réattribué). Devrait passer de « découvert en fin de trimestre » à moins de 5 jours.
+- **Fréquence des révisions de plan** — combien de fois le plan lui-même change en milieu de trimestre. Le flow le fait remonter ; si les révisions sont hebdomadaires, la stabilité du plan est elle-même le problème et le signal de variance est du bruit.
+
+## Alternatives
+
+- **vs tableaux de bord natifs ATS (Ashby Hiring Plan, Greenhouse Headcount Planning).** Les tableaux de bord natifs ATS fonctionnent si l'ATS est à la fois la source du plan ET la source des actuals. Choisissez-les si vous pouvez consolider. Choisissez le flow si votre plan vit dans le système finance, vos postes dans l'ATS et vos recrutements dans le SIRH — trois systèmes à joindre qu'aucun tableau de bord ATS unique ne voit.
+- **vs modules de planification Carta / Pave / Lattice.** Même raisonnement que ci-dessus ; si la plateforme est votre source unique, utilisez-la. Le flow est pour le cas multi-système.
+- **vs un tableau de bord construit par la finance.** Les tableaux de bord BI finance (Looker, Mode, Hex) gèrent les jointures correctement. Choisissez le BI si vous avez une capacité d'analyste. Choisissez le flow si vous n'en avez pas, ou si vous voulez la variance envoyée sur Slack plutôt que consultée sur un tableau de bord.
+- **vs le tableur manuel du vendredi.** Le défaut. Mode d'échec prévisible : l'auteur du tableur part, la méthodologie dérive et les variances de fin de trimestre surprennent le board. Le flow est la correction légère.
+
+## Points de vigilance
+
+- **Dérive de la correspondance d'équipes.** *Protection :* la première étape de réconciliation du flow vérifie que chaque équipe du plan, chaque équipe ATS et chaque équipe SIRH apparaissent dans le fichier de correspondance. Les entités sans correspondance remontent comme cellules anomalies ; le rapport les signale explicitement plutôt que de les supprimer silencieusement.
+- **Double comptage des conversions prestataires.** *Protection :* la requête SIRH filtre par `employment_type = 'fte'`. Les conversions de prestataires existants en CDI remontent dans une section séparée « conversions ce trimestre », pas dans le comptage de nouveaux recrutements.
+- **Révision du plan en milieu de trimestre masquant la variance.** *Protection :* le rapport affiche les chiffres du plan actuel ET les chiffres du plan de début de trimestre initial, avec le delta exposé. Le lecteur voit les deux signaux.
+- **Recrutements hors cycle (équipes acquises, stage-en-CDI).** *Protection :* le flow signale tout recrutement avec une `start_date` avant le début du trimestre comme « hors cycle » et l'affiche séparément. Ces cas sont courants (acqui-hire, clôture tardive) et nécessitent une lecture différente des recrutements normaux du plan.
+- **Confidentialité : canaux par équipe voyant les chiffres d'autres équipes.** *Protection :* le modèle de message Slack par équipe ne référence que la ligne de variance de cette équipe. Le message agrégé (inter-équipes) va uniquement vers le canal de direction recrutement, pas vers les canaux par équipe.
+- **Source du plan obsolète.** *Protection :* le flow vérifie le `last_updated_at` de la source du plan. Si plus ancienne que 14 jours, émet un en-tête d'avertissement sur le rapport (« Plan mis à jour il y a >14 jours — la variance peut refléter une obsolescence du plan, pas un écart réel »).
+
+## Stack
+
+Le bundle d'artifact se trouve dans `apps/web/public/artifacts/headcount-plan-reconciliation-n8n/` et contient :
+
+- `headcount-plan-reconciliation-n8n.json` — l'export du flow n8n avec tous les nœuds configurés
+- `_README.md` — configuration des credentials, format de la correspondance d'équipes, procédure de test à blanc
+- `team-mapping-template.yml` — le YAML de correspondance d'équipes à copier et remplir
+
+Outils que le workflow suppose que vous utilisez : [n8n](/fr/tools/n8n/) (l'orchestration), [Ashby](/fr/tools/ashby/) (l'ATS — remplacez par [Greenhouse](/fr/tools/greenhouse/) en remplaçant le nœud fetch-reqs), [Claude](/fr/tools/claude/) (composition de la narrative), [Slack](/fr/tools/slack/) (la destination du rapport). Le connecteur SIRH est par entreprise.
+
+Concepts connexes : [planification des effectifs](/fr/learn/workforce-planning/), [métriques du funnel de recrutement](/fr/learn/recruiting-funnel-metrics/), [coût par recrutement](/fr/learn/cost-per-hire/).
