@@ -1,0 +1,106 @@
+---
+slug: lead-enrichment-clay-claude
+canonical_slug: lead-enrichment-clay-claude
+locale: fr
+verticals: [revops]
+title: Enrichissement automatique des leads avec Clay + Claude
+artifact_type: claude-skill
+tools_used: [clay, claude, hubspot]
+roles: [revops, sdr-leader]
+difficulty: intermediate
+time_to_setup: 30min
+human_tested: false
+translated_from: en/lead-enrichment-clay-claude.mdx
+translated_at: "2026-05-13T03:00:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: cff984673e56d57db0ebda0a2255be586033ade4e294c0bb45c8497ced60724e
+---
+
+Un Claude Skill (`lead-enrichment`) qui prend une ligne de table Clay clé sur `domain` et retourne trois champs dérivés en un seul pass structuré : un résumé de l'entreprise en 2 phrases, un score d'adéquation ICP de 1-10 avec une raison en une ligne, et un opener d'email froid de moins de 50 mots qui cite un signal spécifique de l'empreinte publique de l'entreprise. L'opener est toujours un draft pour révision du commercial — le skill refuse d'être câblé dans une étape d'envoi automatique.
+
+Le bundle d'artifact est disponible dans `apps/web/public/artifacts/lead-enrichment-clay-claude/` et contient le corps du skill (`SKILL.md`) plus trois modèles de référence que l'opérateur remplit une fois et que le skill charge à chaque exécution.
+
+## Quand l'utiliser
+
+- Vous avez une table Clay (ou un CSV de leads exportable vers Clay) avec au moins une colonne `domain` remplie, et vous avez besoin de pousser des enregistrements enrichis dans HubSpot, Salesforce, Attio ou un séquenceur.
+- Le volume est dans les centaines à dizaines de milliers par batch. En dessous, écrire des openers manuellement est plus rapide. Au-dessus, la discipline de coût de ce skill (génération d'opener filtrée par ICP, extraction en un seul appel, plafonds de requêtes par hôte) est ce qui maintient un coût par ligne raisonnable.
+- Les commerciaux sont prêts à lire le draft de l'opener avant qu'il ne s'envoie. Toute la conception suppose un œil humain entre le draft et l'envoi, et se dégrade fortement sans cela.
+- Vous voulez un seul skill que l'équipe peut appeler depuis les colonnes IA Clay et depuis une session Claude Code exécutant l'API Batch Anthropic sur une liste exportée — le corps du skill est identique dans les deux surfaces.
+
+## Quand NE PAS l'utiliser
+
+- **Séquenceurs à envoi automatique.** Si le plan est « câblez `opener_draft` directement dans la première étape de séquence », arrêtez. L'opener porte un champ `opener_confidence` pour une raison : environ un draft sur cinq nécessite une réécriture. Les envoyer automatiquement est le mode d'échec contre lequel le skill est conçu.
+- **Listes sans base légale documentée pour le traitement.** Contacts UE ou UK scrapés sans consentement préalable, leads Québec sous la Loi 25, données consommateurs California sans voie CCPA — le skill enrichira tout ce que vous lui pointez, et c'est exactement pourquoi l'opérateur doit vérifier d'abord. La page MDX livre un bloc « Ne PAS invoquer » dans `SKILL.md` couvrant cela ; ne le commentez pas.
+- **Briefs de découverte au niveau compte.** Utilisez plutôt le skill `account-research`. Celui-là fait un mapping de persona approfondi et des hypothèses de douleur ; celui-ci optimise pour le volume de batch et le coût par ligne.
+- **Décisions qui nécessitent des données financières sous licence** (S&P, Pitchbook). Ce skill lit le web public uniquement et ne fabriquera pas de chiffres de revenus depuis le contenu de la page d'accueil.
+- **Listes où les données sources sont de mauvaise qualité.** Domaines pourris en entrée, drafts pourris en sortie. Lancez la colonne de validation de domaine de Clay en amont ; les domaines garés et les 404 sont sautés par le skill mais vous payez quand même des crédits pour le découvrir.
+
+## Configuration
+
+1. Déposez le skill dans votre environnement. Pour Claude.ai, importez le `SKILL.md` depuis `apps/web/public/artifacts/lead-enrichment-clay-claude/SKILL.md` et uploadez les trois fichiers dans `references/`. Pour Claude Code, copiez le répertoire dans `~/.claude/skills/lead-enrichment/`.
+2. Remplacez chaque placeholder `{...}` dans `references/1-icp-rubric.md` par le vrai ICP de votre équipe. Le skill détecte les placeholders non remplacés et refuse de scorer contre un modèle — `score: null, reason: "rubric not configured"` au lieu de deviner. C'est intentionnel ; un mauvais rubric est pire qu'aucun rubric.
+3. Modifiez `references/2-opener-style-guide.md` avec la voix de votre équipe et les phrases bannies. Les valeurs par défaut bannissent les tells LLM évidents (« j'ai remarqué », « j'adore ce que vous faites », tout superlatif) ; ajoutez des bans spécifiques à l'entreprise à mesure que vos commerciaux les signalent.
+4. Modifiez `references/3-source-quality-matrix.md` pour déclarer l'ordre de préférence entre les fournisseurs d'enrichissement câblés dans votre table Clay en amont de ce skill. Sans ordre déclaré, l'étape de snapshot bascule entre Apollo et Clearbit d'une exécution à l'autre, et les scores ICP dérivent.
+5. Dans Clay, créez trois colonnes IA référençant le skill : `summary`, `icp_fit_score`, `opener_draft`. Mappez les inputs selon la section « Inputs » de `SKILL.md`. Définissez la destination push vers HubSpot (ou votre CRM) et routez `opener_draft` dans une variable de séquence sur une étape qui nécessite une approbation manuelle, pas un envoi automatique.
+6. Exécutez sur un échantillon de 20 lignes. Vérification spot : les faits du snapshot tracent-ils vers du vrai contenu de page d'accueil, les scores ICP atterrissent-ils dans une distribution sensée, les openers passent-ils le guide de style. Affinez le rubric et le guide de style avant de monter en charge. Les 100 premières lignes sont des données de calibration ; traitez-les comme telles.
+
+## Ce que le skill fait réellement
+
+Par ligne, quatre sous-tâches dans l'ordre :
+
+1. **Résolution et récupération.** `https://{domain}` avec un timeout de 10 secondes et un saut de redirection, puis au mieux `/about`, `/company`, `/customers`. Les domaines garés / 404 / corps vide retournent `status: unreachable` et sautent le reste. Le plafond de concurrence par hôte est 2, avec un délai minimum de 250ms et une seule tentative de back-off sur 429.
+2. **Extraction de snapshot structuré** en un seul appel Claude : secteur, `size_signal`, `value_prop`, optionnel `recent_signal` avec URL. Un seul appel plutôt que trois car le nombre d'aller-retours est le driver de coût par ligne dominant à l'échelle et le prompt d'extraction reste fiable en un seul pass.
+3. **Score par rapport au rubric ICP.** Charge `references/1-icp-rubric.md`, retourne 1-10 avec une raison d'une ligne qui nomme la dimension du rubric qui a conduit le score.
+4. **Génération d'opener** — uniquement si le score dépasse le seuil (défaut 6/10). Règles strictes dans le prompt : plafond de 50 mots, référence exactement un fait du snapshot, pas de superlatifs, pas d'affirmations inventées sur l'entreprise, pas de question-close de fausse douleur. Retourne `opener_confidence` 0,0-1,0 ; en dessous de 0,5 est signalé pour réécriture.
+
+L'output d'une ligne est un bloc JSON intégré dans du Markdown — la colonne IA de Clay le parse, et un humain lisant le journal d'exécution peut le scanner. Le schéma complet et un exemple travaillé se trouvent dans la section « Output format » de `apps/web/public/artifacts/lead-enrichment-clay-claude/SKILL.md`.
+
+## Réalité des coûts
+
+Il y a deux lignes de coût : les tokens Anthropic et les crédits Clay.
+
+**Tokens Anthropic** au tarif Sonnet (entrée 3 $/MTok, sortie 15 $/MTok à la date de rédaction) :
+
+- Étapes 1+2 (récupération + extraction) : ~3,5k tokens d'entrée (page d'accueil + about tronqués à ~8k char) + ~250 tokens de sortie. Environ 0,014 $/ligne.
+- Étape 3 (score ICP) : ~1k entrée + ~80 sortie. Environ 0,004 $/ligne.
+- Étape 4 (opener, uniquement si score >= seuil) : ~1,2k entrée + ~120 sortie. Environ 0,005 $/ligne.
+
+Ainsi une ligne qui dépasse le seuil atterrit autour de 0,023 $ ; une ligne qui ne le dépasse pas autour de 0,018 $. Exécutez via l'**API Batch Anthropic** pour ~50 % de réduction quand la charge de travail n'est pas urgente (l'enrichissement nocturne des MQLs inbound est l'utilisation idéale) — ça fait descendre les lignes dans la plage 0,01-0,012 $.
+
+À l'échelle : un batch hebdomadaire de 100k lignes avec ~40 % de franchissement du seuil représente ~1 500-2 000 $/mois chez Anthropic avant remise batch, ~800-1 000 $ après.
+
+**Crédits Clay** dépendent des colonnes de fournisseurs câblées en amont. Apollo coûte environ 1 crédit par domaine résolu ; Clearbit Reveal 2-3 ; ZoomInfo (passthrough payant) davantage. Empilez trois fournisseurs et une seule ligne peut atteindre 8-12 crédits Clay avant que le skill lui-même ne s'exécute. Le plan Starter livre 5k crédits/mois ; le plan Pro 25k. Un batch de 100k lignes sous cette stack de fournisseurs nécessite le niveau Enterprise ou une matrice plus serrée dans `references/3-source-quality-matrix.md`. La matrice existe spécifiquement pour délester le fournisseur le moins bien classé quand le plafond de coût par ligne se déclenche.
+
+Si les maths semblent approximatifs, le levier est le seuil ICP. Le passer de 6 à 7 supprime typiquement la génération d'opener sur 25-35 % de lignes supplémentaires ; le passer à 8 en élimine encore 20 %. Le skill journalise la distribution des scores à la fin de chaque batch pour que l'opérateur puisse affiner empiriquement plutôt que par intuition.
+
+## Métriques de succès
+
+Taux de réponse sur les openers révisés par le commercial, segmentés par bucket `opener_confidence`. Le point du skill n'est pas « plus d'openers par heure » — c'est « des openers assez bons pour que les commerciaux arrêtent de les réécrire de zéro ». Deux sous-métriques à instrumenter :
+
+- **Taux de réécriture** — quelle fraction des valeurs `opener_draft` le commercial envoie inchangée vs réécrit substantiellement. Cible : sous 35 % sur les lignes confidence 0,7+ après les 500 premières lignes de calibration. Plus élevé signifie que le guide de style est faux, le rubric est faux, ou l'étape de snapshot hallucine.
+- **Taux de réponse par bucket de confiance.** Le taux de réponse sur `opener_confidence >= 0,7` devrait être au moins 1,5x le taux de réponse sur le bucket sous 0,5. S'ils sont similaires, le score de confiance n'est pas un signal — examinez avant de l'utiliser comme input de routage.
+
+## Alternatives
+
+- **vs la personnalisation native de séquence d'Apollo.** Apollo générera des openers depuis ses propres données d'enrichissement. C'est plus rapide à déployer mais les openers sont visiblement basés sur des modèles, scorés sur l'heuristique ICP d'Apollo (pas la vôtre), et n'ont aucune piste d'audit sur quel fait a conduit le draft. Ce skill prend plus longtemps à configurer et coûte plus par ligne, mais les openers référencent des URLs datées que vous pouvez vérifier en un clic et le rubric est un fichier que vous contrôlez.
+- **vs Clearbit + Outreach Smart Variables.** Les Smart Variables alimentées par Clearbit produisent des publipostages factuels (`"leur secteur est ${X}"`), pas des openers — ils nécessitent qu'un humain écrive la phrase réelle autour de la variable. Moins cher que ce skill si vos commerciaux écrivent déjà les phrases ; plus cher globalement s'ils ne le font pas, car le temps commercial domine le coût en tokens.
+- **vs rédaction manuelle d'opener.** Un SDR senior écrit un opener froid de haute qualité en 4-7 minutes par compte à ~60 $/heure entièrement chargé — appelons ça 5 $ de temps commercial par opener. Le skill coûte au maximum ~0,025 $ par opener. L'inconvénient : le commercial a aussi fait de la réflexion au niveau compte pendant qu'il écrivait. Le skill ne le fait pas. La bonne forme pour la plupart des équipes est le skill sur le volume top-of-funnel (tout ce qui est sous la liste de comptes tier-1) et des openers rédigés par les commerciaux sur la liste de comptes nommés.
+- **vs statu quo (pas d'enrichissement, openers génériques).** Les taux de réponse sur les openers génériques se situent quelque part dans la plage 1-2 % ; les openers légèrement personnalisés liés à un signal récent atteignent 4-8 % dans les benchmarks publiés. Le skill cible ces derniers. Vaut la peine seulement si l'équipe est prête à mettre en place le rubric et le guide de style ; sans ceux-là, les outputs du skill ne sont pas matériellement meilleurs que le statu quo.
+
+## Points de vigilance
+
+- **Dérive de qualité des sources entre fournisseurs.** Quand Apollo, Clearbit et ZoomInfo enrichissent tous la même ligne et sont en désaccord sur l'effectif ou le secteur, l'étape de snapshot bascule entre eux d'une exécution à l'autre. Protection : `references/3-source-quality-matrix.md` déclare l'ordre de préférence ; le snapshot cite quel fournisseur (ou valeur de page d'accueil) il a utilisé par champ, pour que la dérive soit auditale dans le journal `conflicts` par ligne.
+
+- **Opener inventant des affirmations qui ne sont pas dans les données.** Sans prompt strict, les openers fabriquent des faits à consonance confiante (« félicitations pour la Série C » sans Série C). Protection : le prompt d'opener reçoit le snapshot en ligne avec une règle explicite « les faits absents du snapshot sont interdits » ; `recent_signal` porte une URL pour une vérification en un clic ; les openers sous `opener_confidence` 0,5 sont signalés pour réécriture, jamais auto-envoyés.
+
+- **Escalade du coût par ligne quand le filtre ICP est lâche.** Un rubric qui score la plupart des lignes 7+ défait la porte du seuil ; la génération d'opener s'exécute sur chaque ligne et le coût par ligne monte de 3-4x. Protection : le skill émet un résumé `score_distribution` par batch ; si plus de 60 % d'un échantillon de 1k lignes atterrit à 7+, le skill affiche un avertissement et recommande de resserrer le rubric avant le prochain batch.
+
+- **`recent_signal` obsolète.** Un signal extrait il y a 90 jours devient un passif — des commerciaux écrivant « j'ai vu votre lancement de mars » en août paraissent endormis au volant. Protection : chaque enregistrement porte `enriched_at` ; la colonne Clay est configurée pour se ré-exécuter si plus ancienne de 30 jours ; l'étape opener refuse d'utiliser un `recent_signal` dont la date URL est plus de 60 jours en retard sur `enriched_at`.
+
+- **Consentement et base légale.** Le skill enrichit tout ce que vous lui pointez. Le bloc « Ne PAS invoquer » dans `SKILL.md` existe pour rappeler à l'opérateur de vérifier la base légale de la liste source avant l'exécution. Ne le supprimez pas.
+
+## Stack
+
+- **Clay** — substrat de table, stack de fournisseurs d'enrichissement en amont, push CRM de destination. Le plan Starter supporte la primitive de colonne IA dans laquelle le skill se branche ; le Pro est requis pour le volume de crédits de tout batch sérieux.
+- **Claude (Sonnet par défaut)** — la couche d'inférence pour l'extraction de snapshot, le scoring ICP et la génération d'opener. Exécutez via la colonne IA native de Clay ou via l'API Batch Anthropic depuis une session Claude Code pour les batchs non urgents à moitié prix.
+- **HubSpot, Salesforce ou Attio** — CRM de destination. Mappez `summary` → propriété personnalisée, `icp_fit_score` → propriété personnalisée + filtre de vue, `opener_draft` → variable de séquence premier contact sur une étape d'approbation manuelle.

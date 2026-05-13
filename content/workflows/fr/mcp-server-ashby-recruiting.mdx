@@ -1,0 +1,98 @@
+---
+slug: mcp-server-ashby-recruiting
+canonical_slug: mcp-server-ashby-recruiting
+locale: fr
+verticals: [recruiting]
+title: Serveur MCP Ashby pour Claude
+artifact_type: mcp-server
+tools_used: [claude, ashby]
+roles: [recruiter, recruiting-ops, talent-acquisition, recruiting-engineer]
+difficulty: advanced
+time_to_setup: 120min
+human_tested: false
+translated_from: en/mcp-server-ashby-recruiting.mdx
+translated_at: "2026-05-13T03:00:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: 2aaf60d3e212edad51738d08b4cc4b53589d2b84310a165bd0a8a6af5ef61e36
+---
+
+Un serveur Model Context Protocol (MCP) qui expose [Ashby](/fr/tools/ashby/) comme surface d'outils pour Claude — permettant aux recruteurs et aux équipes recruiting-ops d'interroger la base de données de candidats, de parcourir le pipeline d'un poste, de faire remonter les candidatures en attente, et de documenter du contexte sur un candidat sans quitter la conversation. Le bundle d'artefacts dans `apps/web/public/artifacts/mcp-server-ashby-recruiting/` livre un scaffold fonctionnel (`README.md`, `pyproject.toml`, `src/ashby_recruiting_mcp/__init__.py`, `src/ashby_recruiting_mcp/server.py`) qui enregistre onze outils couvrant les lectures, la recherche, les helpers de recrutement, et deux écritures à périmètre limité. Il est conçu pour être principalement en lecture : tout changement équivalent à un changement de statut continue de passer par l'interface Ashby où la piste d'audit et le workflow d'approbation existent déjà.
+
+## Quand l'utiliser
+
+Choisissez cette solution quand l'équipe de recrutement est déjà productive dans Claude pour des travaux adjacents — rédiger des messages d'approche, résumer des scorecards, préparer des mises à jour pour les hiring managers — et que la friction est le changement de contexte constant vers Ashby pour chercher "à quel stage est ce candidat", "quelles candidatures n'ont pas bougé cette semaine", "quel est le temps moyen à l'on-site pour ce rôle". Un serveur MCP effondre cette boucle. Le recruteur reste dans Claude, pose une question, obtient les données Ashby en temps réel intégrées à la conversation, et continue. La population idéale pour cela est les équipes recruiting-ops et recruiting-engineering d'au moins trois recruteurs ; en dessous de ce seuil, le coût d'installation et de maintenance dépasse les économies par question.
+
+Cela devient aussi rentable quand l'équipe a construit ou veut construire d'autres workflows Claude natifs pour le recrutement — le [skill de résumé de débrief d'entretien](/fr/workflows/interview-debrief-summary-skill/), le [digest hebdomadaire de recrutement](/fr/workflows/weekly-recruiting-digest-skill/), le [détecteur d'anomalies du funnel de recrutement](/fr/workflows/hiring-funnel-anomaly-n8n/) — parce que ces workflows bénéficient de pouvoir extraire l'état Ashby en temps réel à la demande plutôt que de tourner sur un export nocturne.
+
+## Quand NE PAS l'utiliser
+
+Évitez si l'équipe de recrutement est une seule personne, ou si le workspace contient des pipelines confidentiels au niveau du poste (executive search, staffing M&A, réorganisations non annoncées). Les clés API Ashby agissent avec une portée admin, donc une fois le serveur MCP câblé, chaque conversation a un accès potentiel en lecture à chaque candidat. Il n'y a pas d'ACL par recruteur sur l'API — le TODO `ASHBY_ALLOWED_JOB_IDS` du scaffold est la mitigation la plus proche, et c'est un TODO. Si le workspace ne peut pas tolérer cette exposition, soit gardez l'installation MCP sur une machine dédiée recruiting-ops, soit ne le déployez pas.
+
+Évitez aussi si l'équipe est sur un stack réglementé qui n'a pas encore autorisé le routage des données de candidats via l'API Anthropic. Les candidats EU sont des données RGPD ; les candidats californiens sont des données CCPA ; faire remonter des notes via Claude route des données réglementées via un tiers. Faites d'abord signer la [politique AI](/fr/learn/ai-policy-for-legal-teams/), puis déployez.
+
+Et évitez si le mouvement de recrutement est piloté par le volume (>500 candidatures/semaine par recruteur) — à cette échelle, la latence par question d'un appel MCP (une à deux secondes, parfois plus pour `pipeline_velocity`) s'accumule mal, et l'équipe est mieux servie par un tableau de bord qui batcherise les mêmes questions en avance.
+
+## Setup
+
+Les instructions complètes se trouvent dans `apps/web/public/artifacts/mcp-server-ashby-recruiting/README.md`. La version courte : clonez le bundle, `pip install -e .`, générez une clé API Ashby avec `candidatesRead`, `candidatesWrite`, `applicationsRead`, `jobsRead`, `openingsRead`, et `interviewsRead`, définissez `ASHBY_API_KEY` plus les trois variables d'environnement de réglage, et enregistrez le serveur dans `claude_desktop_config.json` de Claude Desktop. Prévoyez quatre-vingt-dix minutes pour l'installation initiale plus trente autres pour la vérification des outils sur le workspace en production ; la section `Limits and TODOs` de l'artefact liste les travaux à faire avant que ce soit production-ready.
+
+## Ce qu'il expose
+
+Onze outils répartis en quatre buckets, tous définis dans `src/ashby_recruiting_mcp/server.py` :
+
+- **Lectures d'objets** : `get_candidate`, `get_application`, `get_job`, `get_opening` — des fetchs directs d'enregistrements.
+- **Recherche** : `search_candidates(query, limit?)`, `list_applications(job_id, status?)`, `list_jobs(status?)` — paginés par curseur, plafonnés à 20 pages par le helper.
+- **Helpers de recrutement** : `stale_candidates(days_inactive=30, job_id?)` retourne les candidatures actives sans activité depuis N jours, groupées par stage actuel. `pipeline_velocity(job_id)` calcule le nombre moyen de jours par stage sur la fenêtre de lookback configurée (90 jours par défaut), mettant en évidence où le funnel est bloqué.
+- **Écritures légères** : `add_note(candidate_id, body)` ajoute une note au fil d'activité du candidat ; `add_tag(candidate_id, tag)` applique un tag descriptif. Pas d'avancement de stage, pas d'archivage de candidature, pas de création d'offre, pas de suppression de candidat.
+
+## Choix d'ingénierie
+
+**Principalement en lecture, jamais d'écriture de statut.** Les écritures légères sont délibérément limitées à des opérations additives à faible impact. Les notes et tags sont descriptifs — ils ne font pas avancer le candidat dans le pipeline, ne déclenchent pas d'automation en aval, et sont réversibles par le recruteur en deux clics. Les changements de stage, les archivages, et les routes de création d'offre ont été considérés et rejetés : ce sont des opérations à fort impact que l'interface Ashby protège par des flows de confirmation explicites, et un outil MCP n'a pas de garde équivalent. Mieux vaut les garder dans l'interface et garder l'histoire d'audit propre.
+
+**Un client HTTP par appel.** Le scaffold ouvre et ferme un `httpx.AsyncClient` par requête plutôt que de réutiliser une session. C'est sous-optimal pour le débit brut mais contourne tous les bugs d'état partagé que le runtime MCP a historiquement fait remonter quand des clients de longue durée survivent à leur event loop. Pour la production, passez à un client singleton derrière un verrou async et ajoutez le middleware de retry mentionné dans les TODOs du README.
+
+**Pagination plafonnée à 20 pages.** `ashby_post_paginated` vide jusqu'à 20 pages de curseur avant de s'arrêter. Avec la taille de page par défaut d'Ashby de 100, cela représente 2 000 enregistrements — suffisant pour toute requête raisonnable, assez petit pour qu'un appel d'outil incontrôlé ne puisse pas monopoliser le budget de rate-limit du workspace pendant plusieurs minutes. Ajustez le plafond si le workspace a genuinement besoin de remonter plus, mais la meilleure réponse est généralement un filtre plus strict.
+
+**Les noms de stages sont relus à chaque appel.** `pipeline_velocity` relit le pipeline depuis `application.interviewStageChanges` à chaque invocation plutôt que de le mettre en cache. Les noms de stages dérivent entre les pipelines (un renommage trimestriel de "Phone Screen" en "Initial Call" est normal), et un cache périmé retourne des labels déroutants. Le coût est un aller-retour supplémentaire ; le bénéfice est que le recruteur peut faire confiance aux labels.
+
+**La posture d'audit est "ajout explicite uniquement".** Chaque écriture passe par un outil avec `add_` dans son nom. Il n'y a pas d'`update_`, pas de `set_`, pas de `delete_`. Cela rend le filtrage du journal d'audit trivial : cherchez dans les logs du serveur MCP `add_note` et `add_tag`, et c'est l'inventaire complet des changements que l'IA a effectués sur le workspace.
+
+## Réalité des coûts
+
+Trois postes, aucun dramatique, mais valant la peine d'être budgétés :
+
+- **Abonnement Claude.** Claude Pro à 20 $/recruteur/mois pour les individuels ; Claude Team à 25 $/recruteur/mois pour les workspaces partagés. Pour une équipe de six recruteurs, cela représente 150 $/mois. MCP lui-même n'ajoute rien à cette facture.
+- **Hébergement du serveur.** Le scaffold tourne comme un processus stdio dans Claude Desktop — coût d'hébergement nul. Si l'équipe passe à un endpoint MCP hébergé (multi-recruteurs, installation partagée unique), le coût réaliste est un conteneur Fly.io ou Render à 5 $/mois plus ce que l'équipe ajoute en observabilité. Comptez 10-30 $/mois tout compris.
+- **Quota API Ashby.** L'API d'Ashby est limitée par workspace (la guidance publiée est "gardez-le raisonnable" ; le plafond pratique est dans les quelques centaines d'appels par minute). Un power user déclenchant une question MCP par minute sur une journée de 8 heures représente ~480 appels — bien en dessous du plafond. `pipeline_velocity` est le plus coûteux : il émet un appel `application.list` plus un appel `interviewStageChanges` par candidature, donc un poste avec 200 candidatures est une opération de 201 appels. Ne le bouclez pas sur tous les postes du workspace à la fois.
+
+Total, pour une équipe de six recruteurs utilisant cela sérieusement : moins de 200 $/mois.
+
+Le gain principal est le temps des recruteurs. Un back-of-envelope d'équipes ayant câblé cela : ~15 minutes/recruteur/jour récupérées à ne plus "switcher vers Ashby pour chercher X". Sur six recruteurs, c'est ~30 heures/mois — au coût plein du recruteur (disons 100 $/heure), cela représente 3 000 $/mois de capacité restituée. Les économies en dollars dominent le coût en dollars d'un ordre de grandeur. La raison pour laquelle les équipes sous-déploient encore est la friction d'installation, pas le ROI.
+
+## À quoi ressemble le succès
+
+Trois métriques, suivies chaque semaine pendant le premier mois :
+
+1. **Appels d'outils MCP par recruteur par jour.** Cible : 10-30. En dessous de 10 signifie que les recruteurs ne l'utilisent pas vraiment (ont probablement oublié qu'il était là, ou ont rencontré un bug tôt et abandonné). Au-dessus de 50 signifie qu'un workflow tourne qui devrait être un job planifié, pas un outil interactif.
+2. **Réduction de `stale_candidates`.** Suivez le nombre de candidatures actives inactives depuis plus de 30 jours, chaque semaine. Dans le mois suivant le déploiement, ce chiffre devrait baisser de 30-50 % — le helper rend le travail visible, et le travail visible est fait.
+3. **NPS des recruteurs sur "Claude est-il utile pour le travail Ashby".** Sondage à la semaine 1 et à la semaine 4. S'il n'est pas solidement positif à la semaine 4, l'installation est cassée ou les mauvais outils ont été livrés — revenez aux recruteurs et demandez quels deux outils ils utilisent et quels neuf ils ignorent.
+
+## Comparaison avec les alternatives
+
+**Prompts Claude.ai personnalisés collant des exports Ashby.** C'est le statu quo pour la plupart des équipes : exporter un CSV depuis Ashby, le coller dans une conversation Claude, poser la question. Ça marche et ne coûte rien de plus, mais les données sont périmées dès le moment du collage, le recruteur fait le travail d'export à chaque fois, et il n'y a pas de chemin pour documenter du contexte en retour dans Ashby. MCP gagne parce que les données sont en temps réel et la boucle est aller-retour — Claude peut lire et (de manière limitée) écrire en retour.
+
+**Les fonctionnalités AI natives d'Ashby.** Ashby livre une recherche de candidats alimentée par l'IA, des résumés et du matching. Elles sont utiles mais elles sont à l'intérieur d'Ashby — elles n'aident pas quand le recruteur est dans Claude à faire autre chose. Elles n'aident pas non plus avec la synthèse multi-outils (Ashby + Linear + Slack), qui est la frontière la plus intéressante. MCP est le bon choix quand le recruteur veut Claude comme substrat ; l'IA native Ashby est le bon choix quand le recruteur veut Ashby comme substrat. Beaucoup d'équipes veulent les deux.
+
+**Glue Zapier.** Un Zap peut se déclencher sur des événements Ashby et poster dans Slack ou notifier Claude.ai, mais les flows pilotés par Zap sont unidirectionnels et en forme d'événement. Ils ne peuvent pas répondre à des questions ad hoc comme "montrez-moi les candidats en attente pour le rôle backend senior". MCP est le bon choix quand la forme de la question est interactive ; Zap est le bon choix quand la forme de la question est "dites-moi quand X se produit".
+
+## Points de vigilance
+
+Trois modes d'échec nommés, chacun associé à un garde-fou :
+
+- **La clé API agit avec une portée admin.** Quiconque a accès à l'installation Claude avec ce MCP câblé peut lire chaque candidat, y compris les pipelines de direction. Garde-fou : limitez l'installation MCP aux machines de l'équipe de recrutement uniquement, documentez l'exposition avec la sécurité par écrit, faites tourner la clé trimestriellement, et traitez l'installation Claude comme un endpoint privilégié (pas de logins partagés, pas de `claude_desktop_config.json` commité).
+- **Les écritures légères contournent les workflows d'approbation Ashby.** `add_note` et `add_tag` écrivent directement via l'API — ils ne déclenchent aucune approbation qui se déclencherait normalement dans l'interface Ashby. Garde-fou : n'utilisez pas les outils d'écriture légère pour des tags équivalents à un statut (`hired`, `offer-extended`, `do-not-hire`) ; la description de l'outil `add_tag` du scaffold le signale explicitement, et le responsable recruiting-ops devrait le renforcer lors de l'onboarding.
+- **`pipeline_velocity` est le plus gourmand en rate-limit.** Il émet un appel par candidature dans le pipeline du poste. Un poste avec 500 candidatures est une opération de 501 appels qui peut saturer le budget de rate-limit du workspace pendant quelques minutes — visible par d'autres automatisations comme des 429. Garde-fou : limitez les utilisations concurrentes (un recruteur à la fois par poste), et le TODO du README d'ajouter un backoff exponentiel sur les 429 est non-optionnel avant tout déploiement à l'échelle de l'équipe.
+
+## Stack
+
+[Ashby](/fr/tools/ashby/) (ATS, la source de données). [Claude Desktop ou Claude Code](/fr/tools/claude/) (le host MCP). Runtime Python 3.11+ pour le serveur. Le SDK Python `mcp` (`mcp>=1.2.0`), `httpx` pour le client HTTP async, `pydantic` pour la validation. Pas de base de données, pas de queue, pas de broker — le serveur est sans état et relit tout à chaque appel.

@@ -1,0 +1,96 @@
+---
+slug: litigation-hold-orchestration-n8n
+canonical_slug: litigation-hold-orchestration-n8n
+locale: fr
+verticals: [legal-ops]
+title: Orchestration des mesures conservatoires de litige avec n8n
+artifact_type: n8n-flow
+tools_used: [n8n, slack, claude]
+roles: [legal-ops, in-house-counsel, ediscovery-lead]
+difficulty: advanced
+time_to_setup: 120min
+human_tested: false
+translated_from: en/litigation-hold-orchestration-n8n.mdx
+translated_at: "2026-05-13T03:00:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: 995fc46e9a102ae7bcc4ee64605d3e667802b7999cee0717b04a555d094609cd
+---
+
+Un flow n8n qui orchestre un cycle d'émission de mesures conservatoires de litige — envoi de la notice de conservation par email et Slack aux dépositaires désignés, suivi des accusés de réception avec des rappels à une cadence configurable, escalade des non-accusés vers le responsable legal-ops et le manager du dépositaire, journalisation de chaque action dans une table d'audit immuable que le cabinet utilise si l'adéquation des mesures conservatoires est ultérieurement contestée. Remplace le cycle manuel de l'assistant legal-ops basé sur tableur et règles Outlook (typiquement une charge continue de 2-4 heures par semaine une fois que quelques mesures conservatoires sont actives) par un flow déterministe qui ne peut pas oublier un dépositaire.
+
+## Quand l'utiliser
+
+- Le cabinet émet des mesures conservatoires à une fréquence où le suivi manuel commence à glisser — généralement plus de 3 mesures conservatoires actives simultanément.
+- Vous avez une source de dépositaires de référence : une table de gestion des dépositaires dans la plateforme ediscovery ([Relativity](/fr/tools/relativity/), [Everlaw](/fr/tools/everlaw/), [Logikcull](/fr/tools/logikcull/)) ou dans un CSV legal-ops maintenu.
+- Le cabinet a besoin d'une piste d'audit défendable pour l'adéquation des mesures conservatoires. La table d'audit du flow est la réponse à "montrez-nous que vous avez agi raisonnablement pour préserver".
+- Le responsable legal-ops et le conseil externe approuvent l'émission des mesures conservatoires ; le flow gère le suivi continu, pas la décision d'émettre.
+
+## Quand NE PAS l'utiliser
+
+- **Engagements avec une seule mesure conservatoire où le suivi manuel convient.** Le coût de setup (120 minutes, plus l'intégration avec la source des dépositaires) devient rentable à environ 3 mesures conservatoires actives, pas à une.
+- **Escalade automatique contournant le conseil.** Les chemins d'escalade du flow sont configurables, mais la valeur par défaut envoie au responsable legal-ops, PAS directement au DG ou au conseil externe. Le responsable applique son jugement sur les non-accusés qui méritent l'attention du conseil.
+- **Notices de conservation nécessitant un langage personnalisé par dépositaire.** Le flow crée des templates par affaire ; si chaque notice nécessite un langage sur mesure, le goulet d'étranglement n'est pas l'orchestration.
+- **Remplacement du jugement du conseil sur le périmètre des mesures conservatoires.** Le flow suit les mesures conservatoires aux dépositaires désignés par le conseil. Ajouter ou supprimer des dépositaires est une décision du conseil, pas une décision du flow.
+
+## Setup
+
+1. **Importez le flow.** Déposez `apps/web/public/artifacts/litigation-hold-orchestration-n8n/litigation-hold-orchestration-n8n.json` dans votre instance n8n.
+2. **Câblez les credentials.** Quatre requis : `PLACEHOLDER_CUSTODIAN_DB_CRED_ID` (accès en lecture à la source des dépositaires), `PLACEHOLDER_SMTP_CRED_ID` (SMTP pour l'email de notice de conservation), `PLACEHOLDER_SLACK_CRED_ID` (Slack pour la notification en canal), `PLACEHOLDER_AUDIT_DB_CRED_ID` (accès en écriture à la table d'audit immuable).
+3. **Rédigez le template de notice de conservation.** Par affaire, écrivez un template Markdown sous `n8n/data/hold-notices/<matter-id>.md`. Le template inclut le langage approuvé par le conseil sur le périmètre de conservation, les actions interdites (suppression, altération), et les instructions d'accusé de réception.
+4. **Configurez les chemins d'escalade.** La valeur par défaut du flow : rappel à +3, +7, +14 jours ; escalade vers le responsable legal-ops à +14 ; escalade vers le manager du dépositaire à +21. Ajustez selon le profil de risque du cabinet.
+5. **Configurez la table d'audit.** Une table Postgres / Snowflake indexée sur `(hold_id, custodian_id, action, timestamp)` avec une contrainte append-only appliquée au niveau DB (immuable ; le conseil doit démontrer que le journal d'audit ne peut pas être modifié rétroactivement).
+6. **Dry-run sur une mesure conservatoire clôturée.** Rejouez la liste des dépositaires d'une mesure conservatoire clôturée. Confirmez que les timings de notification, rappel et escalade correspondent à ce que l'assistant legal-ops faisait manuellement auparavant.
+
+## Ce que fait le flow
+
+Sept nœuds, en deux phases. La phase 1 (émission) se déclenche une seule fois par mesure conservatoire. La phase 2 (suivi) est un cron quotidien vérifiant les non-accusés et envoyant des rappels / escalades.
+
+1. **Issue Trigger** — déclencheur manuel ou webhook depuis la plateforme legal-ops quand le conseil marque une mesure conservatoire prête à être émise.
+2. **Load Custodian List** — extrait la liste des dépositaires depuis la source configurée pour l'affaire.
+3. **Send Hold Notice** — email + Slack à chaque dépositaire. L'email inclut le template de notice de conservation et un lien d'accusé de réception unique par dépositaire. Journal d'audit : une ligne par dépositaire par `notice_sent`.
+4. **Daily Cron Tracker** (déclencheur de workflow séparé) — du lundi au vendredi à 9h00 heure du bureau. Vérifie la table d'audit pour les dépositaires qui n'ont pas accusé réception dans la fenêtre configurée.
+5. **Determine Action** — nœud Code. Pour chaque non-accusé, détermine : envoyer un rappel (à +3, +7), escalader vers le responsable legal-ops (à +14), escalader vers le manager (à +21).
+6. **Dispatch Reminder / Escalation** — envoie un email de rappel ou d'escalade selon l'action déterminée. Entrée de journal d'audit par envoi.
+7. **Acknowledgement Webhook** — webhook séparé qui reçoit le clic d'accusé de réception du dépositaire. Enregistre dans la table d'audit ; arrête les rappels supplémentaires pour ce dépositaire.
+
+## Réalité des coûts
+
+- **Coût n8n** — auto-hébergé gratuit ; n8n Cloud au nombre d'exécutions de workflow généré (~3-5/jour par mesure conservatoire active) est confortablement dans le plan Starter.
+- **Tokens LLM** — aucun. Le flow est déterministe.
+- **SMTP / Slack** — dans les quotas standard.
+- **Temps de l'assistant legal-ops** — le bénéfice. Le suivi manuel de 5-10 mesures conservatoires actives représente 4-8 heures/semaine. L'exploitation du flow consiste à surveiller la table d'audit pour les vraies exceptions, ~30 min/semaine.
+- **Temps de setup** — 120 minutes incluant le provisionnement de la table d'audit, plus 30-60 minutes par affaire pour la rédaction du template de notice de conservation.
+
+## Métrique de succès
+
+- **Délai d'émission depuis la décision "émettre" du conseil** — devrait passer à moins d'1 heure (manuellement, c'est souvent une journée pour de grandes listes de dépositaires).
+- **Taux d'accusé de réception à +14 jours** — devrait dépasser 95 % sur les mesures conservatoires de routine. En dessous, le template de notice doit être retravaillé ou la liste des dépositaires contient des enregistrements périmés.
+- **Complétude de l'audit lors de la revue du conseil** — part des mesures conservatoires pour lesquelles le conseil peut produire une piste d'audit complète et défendable à la demande. Devrait être 100 % ; la table d'audit est la source.
+
+## Comparaison avec les alternatives
+
+- **vs module de conservation intégré de la plateforme ediscovery** ([Relativity](/fr/tools/relativity/) Legal Hold, [Logikcull](/fr/tools/logikcull/), [Everlaw](/fr/tools/everlaw/)). Choisissez le module de la plateforme si vous vivez dans l'outil ediscovery. Choisissez le flow si vos dépositaires s'étendent sur Slack, email et les systèmes RH et que vous avez besoin de surfaces de notification au-delà des valeurs par défaut de la plateforme.
+- **vs outils SaaS de gestion des mesures conservatoires** (Onna, Exterro Legal Hold). Choisissez ceux-là pour le self-service avancé des dépositaires et la conservation intégrée. Choisissez le flow si vous voulez l'orchestration dans votre propre infrastructure avec le journal d'audit dans votre propre base de données.
+- **vs tableur + règles Outlook.** La solution par défaut et la source de dépositaires oubliés à l'échelle. Le flow est le remplacement déterministe.
+
+## Points de vigilance
+
+- **Dérive de la liste des dépositaires.** *Garde-fou :* le flow ré-extrait la liste des dépositaires à chaque vérification, avec le `last_updated_at` de la source contrôlé. Si la liste a dérivé (dépositaire ajouté/supprimé) sans approbation du conseil, le flow présente le diff au responsable legal-ops plutôt que d'agir silencieusement sur la nouvelle liste.
+- **Mutabilité de la table d'audit.** *Garde-fou :* la table d'audit doit être append-only au niveau DB (Postgres : `REVOKE UPDATE, DELETE FROM ALL`). Le flow n'applique pas cela — la base de données le fait. Le README documente le schéma avec la contrainte en ligne.
+- **Dérive du texte de la notice.** *Garde-fou :* les templates de notice par affaire font l'objet d'un hash SHA au moment de l'émission ; le journal d'audit capture le SHA. Si le conseil veut modifier la notice, la modification est une action distincte dans le flow, pas une ré-émission silencieuse.
+- **Opt-out du dépositaire / ignore silencieux.** *Garde-fou :* l'escalade vers le manager à +21 jours convertit le problème d'un problème de dépositaire en un problème de management. Au-delà, le responsable legal-ops peut avoir besoin d'impliquer le conseil externe — le flow présente mais n'agit pas.
+- **Différences de conservation entre juridictions.** *Garde-fou :* le flow suppose la sémantique américaine des mesures conservatoires de litige. Le "devoir de conservation" de style européen au titre du futur AI Act et du RGPD a un périmètre différent ; le template de notice par affaire gère ceux-là.
+- **Posture de confidentialité sur l'email du dépositaire.** *Garde-fou :* les notices de conservation peuvent signaler l'existence d'une affaire de litige au dépositaire ; le chemin SMTP utilise le serveur mail du cabinet (pas un SaaS tiers) pour la confidentialité.
+
+## Stack
+
+Le bundle se trouve dans `apps/web/public/artifacts/litigation-hold-orchestration-n8n/` :
+
+- `litigation-hold-orchestration-n8n.json` — l'export du flow
+- `_README.md` — setup des credentials, schéma de la table d'audit, procédure de dry-run
+- `audit-table-schema.sql` — DDL pour la table d'audit immuable
+- `hold-notice-template.md` — template de notice de conservation à compléter par affaire
+
+Outils : [n8n](/fr/tools/n8n/) (orchestration), [Slack](/fr/tools/slack/) (notification en canal), [Claude](/fr/tools/claude/) (optionnel — pour le résumé quotidien de l'activité du journal d'audit vers le responsable legal-ops, pas pour les étapes de décision).
+
+Connexe : [ediscovery](/fr/learn/ediscovery/), [modèle EDRM](/fr/learn/edrm-model/), [gestion des affaires](/fr/learn/matter-management/).

@@ -1,0 +1,100 @@
+---
+slug: matter-status-digest-claude
+canonical_slug: matter-status-digest-claude
+locale: fr
+verticals: [legal-ops]
+title: Digest hebdomadaire de statut des affaires pour le Directeur Juridique avec Claude
+artifact_type: claude-skill
+tools_used: [claude]
+roles: [legal-ops, gc, in-house-counsel]
+difficulty: beginner
+time_to_setup: 30min
+human_tested: false
+translated_from: en/matter-status-digest-claude.mdx
+translated_at: "2026-05-13T03:00:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: 7f19b9b07e4a3744410803e87d2cade2acd9f40402797262491c64ba0b4c0d68
+---
+
+Un Claude Skill qui transforme un export hebdomadaire de votre système de [gestion des affaires](/fr/learn/matter-management/) en un digest d'une page pour le Directeur Juridique : forme du portefeuille par phase, ce qui a changé depuis la semaine dernière, clusters d'échéances, candidats à l'escalade, et écarts de dépenses de conseil externe. Le skill remplace le thread du vendredi après-midi "chaque avocat envoie un point de situation" que personne n'aime rédiger ni lire. Le bundle d'artefacts dans `apps/web/public/artifacts/matter-status-digest-claude/` livre le SKILL.md plus trois templates de référence à adapter pour la taxonomie de phases du cabinet, la mise en page préférée du DJ, et les règles d'escalade du cabinet.
+
+## Quand l'utiliser
+
+Utilisez ce skill quand le DJ passe le lundi matin soit à lire les emails de statut des avocats un par un, soit à demander au responsable legal-ops un résumé verbal du portefeuille, soit à prendre des décisions sur des informations périmées parce que le thread de statut du vendredi n'a pas mis en évidence ce qui comptait. Spécifiquement, cela convient quand le cabinet a entre 15 et 200 affaires actives (assez peu pour qu'un seul digest reste lisible d'un coup d'œil, assez nombreuses pour que la forme du portefeuille ne soit pas mémorisable), quand le système de gestion des affaires est le système de référence (pas un tableur qui dérive des données d'affaires), et quand le DJ est prêt à passer 30 minutes par semaine à affiner la mise en page dans `references/2-sample-digest-format.md` pendant le premier mois avant que le digest se stabilise.
+
+Cela convient également comme cadence mensuelle pour les cabinets boutique où 8-12 affaires ne justifient pas un reporting hebdomadaire mais où le DJ veut quand même une vue mensuelle structurée en parallèle des conversations en cours.
+
+## Quand NE PAS l'utiliser
+
+N'utilisez pas ce skill sur un déploiement Claude qui n'a pas été validé par votre revue de privilège et de fournisseur. Les exports d'affaires contiennent des produits du travail d'avocat, des stratégies de règlement et des résumés d'enquêtes — les faire passer par Claude.ai grand public viole les attentes de privilège de la plupart des équipes juridiques internes. Utilisez Claude sur Bedrock, Vertex, ou un endpoint entreprise Anthropic contractualisé avec un BAA et un DPA exécutés, et confirmez que le déploiement apparaît sur la liste des fournisseurs Tier-A de votre cabinet avant de planifier le cron.
+
+N'utilisez pas ce skill pour rédiger des communications à destination des clients, des correspondances avec le conseil adverse, ou des mémos au conseil d'administration. Ces audiences nécessitent un ton différent, un seuil de preuve différent, et une validation par un avocat. Le digest est réservé au bureau du DJ uniquement.
+
+N'utilisez pas ce skill comme couche d'alerte en temps réel. Un instantané hebdomadaire est le mauvais outil pour les dépôts de TRO, les citations à comparaître réglementaires, les déclencheurs de notification de violation, ou toute affaire où les heures comptent. Utilisez les alertes natives du système de gestion des affaires pour ceux-là — le digest est pour la conscience de portefeuille en régime stable.
+
+Ne déployez pas sur des portefeuilles qui manquent d'une discipline de maintien à jour des champs `phase`, `last_activity_date`, et `next_deadline_date`. Un digest dérivé de champs périmés est pire qu'aucun digest, car le DJ agira dessus. Corrigez d'abord l'hygiène du statut des affaires ; livrez le digest ensuite.
+
+## Setup
+
+1. Déposez le bundle depuis `apps/web/public/artifacts/matter-status-digest-claude/` dans votre répertoire de skills Claude Code (ou l'emplacement de projet équivalent pour votre déploiement Claude entreprise). Le bundle contient `SKILL.md` et un dossier `references/`.
+2. Adaptez `references/1-matter-phase-taxonomy.md` aux noms de phases que votre système de gestion des affaires utilise réellement. Le template livré utilise des buckets génériques de contentieux et de transactionnel ; la taxonomie de votre cabinet sera différente. Mappez chaque valeur de phase brute saisie par les avocats vers un bucket canonique — les valeurs non mappées apparaissent dans un footer "Lacunes de mapping" dans le digest jusqu'à ce que vous les ajoutiez.
+3. Modifiez `references/2-sample-digest-format.md` avec le DJ. C'est le Markdown littéral que le skill génère. Négociez la mise en page dans ce fichier, pas dans le corps du skill — gardez les choix d'ingénierie et les choix éditoriaux séparables.
+4. Modifiez `references/3-escalation-criteria.md` selon le profil de risque de votre cabinet. Les valeurs par défaut livrées (90 % d'utilisation du budget, pic de dépenses de 25 % vs le mois précédent, staleness du statut de 14 jours) fonctionnent pour les équipes juridiques internes de taille moyenne ; les portefeuilles à dominante transactionnelle et réglementée veulent généralement des seuils différents.
+5. Configurez l'export. Soit pointez le skill vers un chemin de dump CSV / JSON qu'un job nocturne rafraîchit, soit câblez directement l'API du système d'affaires. Les colonnes requises sont listées dans `SKILL.md` sous "Inputs" — `matter_id`, `matter_name`, `phase`, `owner`, `last_activity_date`, `next_deadline`, `next_deadline_date`, `outside_counsel_firm`, `mtd_spend`, `budget`, `risk_tier`.
+6. Planifiez. Lancez le skill sur un cron du lundi matin (07h00 heure locale) et écrivez le digest dans `outbox/digest-YYYY-MM-DD.md`. Faites réviser le digest par le responsable legal-ops les huit premières fois avant qu'il parvienne au DJ ; la fenêtre de revue manuelle capture la dérive taxonomique, les faux positifs d'escalade, et la mauvaise calibration du ton pendant la période de calibration.
+
+## Ce que fait réellement le skill
+
+Le skill exécute cinq sous-tâches dans l'ordre, avec des choix d'ingénierie délibérés plutôt qu'accessoires.
+
+Il charge et valide l'export, s'interrompant sur les colonnes manquantes ou les dates malformées. La raison : un digest dérivé d'un export à moitié cassé est pire qu'aucun digest, car le DJ le traitera comme une vérité absolue.
+
+Il agrège par phase avant de résumer — en utilisant la taxonomie canonique dans `references/1-matter-phase-taxonomy.md`. La raison pour laquelle l'agrégation précède le résumé : la première question du DJ le lundi est "quelle est la forme du portefeuille". Une liste plate d'affaires ne répond pas à ça ; une vue par bucket (par ex. "12 en discovery, 4 en médiation, 3 en préparation de procès") le fait. L'agrégation permet aussi au digest de rapporter des deltas, ce qu'une liste plate ne peut pas faire.
+
+Il calcule les clusters d'échéances, mettant en évidence les semaines où trois échéances ou plus tombent dans la même fenêtre de sept jours. Les semaines avec une seule échéance sont à titre informatif. Le signal de cluster est ce qui compte pour les décisions de ressources — le DJ doit savoir quand l'équipe est surchargée avant le vendredi précédent, pas après.
+
+Il applique les règles d'escalade de `references/3-escalation-criteria.md` et remonte un maximum de cinq éléments "Nécessite l'attention du DJ", classés par tier de risque puis impact en dépenses puis proximité d'échéance. Le plafond est délibéré : une section d'escalade sans limite cesse d'être un outil de triage. Les éléments classés sixièmes et au-delà tombent dans la section À titre informatif.
+
+Il génère le digest en utilisant la mise en page littérale de `references/2-sample-digest-format.md`, puis écrit une ligne de log uniquement métadonnées : horodatage, nombre d'affaires, nombre d'escalades, secondes de génération, modèle, et le SHA-256 du digest. La raison des métadonnées uniquement : le corps du digest contient du contenu privilégié ; le log va à la télémétrie opérationnelle qui peut avoir un accès d'audit plus large que le digest lui-même. Journaliser le SHA prouve la provenance du digest sans stocker le texte privilégié dans le log store.
+
+## Réalité des coûts
+
+Un digest hebdomadaire typique de 30 affaires nécessite environ 6k-12k tokens d'input (export d'affaires plus trois fichiers de référence plus le digest de la semaine précédente) et 1,5k-3k tokens d'output (le digest généré). Au pricing Claude Sonnet sur un endpoint entreprise, cela revient à environ 5 à 10 centimes par run de digest — appelez ça moins de 5 $ par an par portefeuille pour les dépenses de modèle. Le coût dominant est le temps de calibration du responsable legal-ops aux semaines un à quatre (environ deux heures par semaine à revoir le digest avec le DJ et à modifier les fichiers de référence), et le temps d'intégration pour câbler l'export d'affaires dans l'environnement cron (typiquement une demi-journée pour un chemin CSV, un à deux jours pour une intégration API).
+
+Le temps économisé est ce qui compte. Un thread de statut du vendredi coûte à chaque avocat 15-30 minutes par semaine à rédiger et au DJ environ 45-60 minutes le lundi à lire et synthétiser. Pour un département juridique de 12 avocats, c'est 6-12 heures-avocat par semaine de rédaction plus une heure de lecture par le DJ, remplacées par une lecture unique de 10 minutes par le DJ le lundi et un coût de rédaction quasi nul par les avocats (le système d'affaires reste la source de vérité). Le ROI est le lundi matin du DJ récupéré, pas la facture de modèle.
+
+## Métrique de succès
+
+Suivez trois chiffres à partir de la semaine huit — une fois que la fenêtre de calibration est fermée.
+
+Temps de revue de portefeuille du DJ le lundi matin, avant et après le déploiement. La cible est moins de 15 minutes de lecture du digest plus des suivis ciblés, remplaçant le pattern non borné "se renseigner auprès de tout le monde".
+
+Précision des escalades : parmi les éléments que le digest remonte sous "Nécessite l'attention du DJ cette semaine", quel pourcentage a réellement déclenché une action du DJ. Cible au-dessus de 70 %. En dessous de 50 % signifie que les règles d'escalade sont trop sensibles ; resserrez les seuils dans `references/3-escalation-criteria.md`. Au-dessus de 90 % signifie que les règles peuvent être trop strictes et que des éléments importants peuvent silencieusement passer en À titre informatif ; élargissez les seuils.
+
+Incidents de statut périmé par trimestre : combien de fois une affaire que le digest rapportait comme "active et dans les temps" s'est révélée bloquée ou en difficulté. La cible est zéro, sachant que le footer de staleness (affaires dont le `last_activity_date` a plus de 14 jours) est le filet de sécurité qui capture les cas où la discipline glisse.
+
+## Comparaison avec les alternatives
+
+Par rapport aux tableaux de bord de gestion des affaires d'Ironclad (ou le tableau de bord natif équivalent dans Brightflag, SimpleLegal, Onit, ou votre système de référence d'affaires) : les tableaux de bord natifs montrent les données mais ne les synthétisent pas. Le DJ doit quand même regarder six vignettes et inférer l'histoire. Le digest raconte l'histoire en français courant et met en évidence les trois à cinq éléments nécessitant une décision cette semaine. Utilisez le tableau de bord pour l'exploration ad-hoc ; utilisez le digest pour la couche de synthèse hebdomadaire que le tableau de bord ne fournit pas.
+
+Par rapport aux rapports de statut rédigés manuellement par le DJ ou le responsable legal-ops : un auteur humain produit une meilleure narrative sur les affaires dont il se souvient et une moins bonne narrative sur celles qu'il a oubliées. Le skill est exhaustif sur l'export — il ne peut pas oublier une affaire qui n'a pas été touchée depuis deux semaines, car la règle de staleness la remonte. La contrepartie est la voix : un rapport humain intègre le cadrage du DJ. Atténuez en modifiant `references/2-sample-digest-format.md` pour correspondre à la formulation préférée du DJ, et en gardant le responsable legal-ops dans la boucle comme éditeur pendant la première fenêtre de calibration.
+
+Par rapport à un rapport BI (Tableau, Looker, Power BI sur le système d'affaires) : les outils BI répondent à des questions prédéfinies sur un calendrier et produisent des graphiques. Ils ne produisent pas de briefing Markdown, ne gèrent pas la couche non structurée "ce qui a changé et pourquoi c'est important", et ne s'adaptent pas aux règles d'escalade du cabinet sans un travail de rédaction significatif. Utilisez la BI pour l'analyse de tendances sur des trimestres ; utilisez le skill pour le digest opérationnel hebdomadaire.
+
+## Points de vigilance
+
+Gestion du contenu privilégié. Lancez le skill uniquement sur un déploiement Claude validé par votre revue de privilège. Garde-fou : le skill refuse de s'exécuter si la variable d'environnement `OOLIGO_DIGEST_DEPLOYMENT_TIER` n'est pas définie à `tier-a`. Définissez-la explicitement dans l'environnement cron après que la revue de privilège a approuvé ; ne l'activez jamais par défaut.
+
+Statut d'affaire périmé produisant une fausse confiance. Garde-fou : toute affaire dont le `last_activity_date` a plus de 14 jours apparaît dans une section footer dédiée "Statut périmé — vérifiez", qu'importe si d'autres règles d'escalade se sont déclenchées. Le DJ voit la staleness explicitement plutôt que d'agir sur un signal périmé.
+
+Risque de manquement d'échéance masqué par l'agrégation de phase. Garde-fou : toute échéance dans les cinq jours ouvrables apparaît dans la section des clusters d'échéances quelle que soit la phase ou le tier de risque — la section des clusters est le filet de sécurité qui capture ce que les règles d'escalade ratent.
+
+Faux positifs d'escalade noyant le DJ dans le bruit. Garde-fou : la section "Nécessite l'attention du DJ" est plafonnée à cinq éléments. Si plus de cinq affaires correspondent, le skill classe par tier de risque puis impact en dépenses puis proximité d'échéance ; le reste passe en À titre informatif. Si vous vous trouvez à vouloir supprimer le plafond, resserrez plutôt les règles dans `references/3-escalation-criteria.md`.
+
+Calibration du ton. Différents DJ lisent différents digests. Garde-fou : itérez sur les fichiers de référence chaque semaine pendant les quatre premières semaines, avec le DJ dans la salle. Traitez le format comme un artefact vivant — le corps du skill ne devrait pas nécessiter de changement une fois que les références se sont stabilisées.
+
+Envoi automatique avant revue. Garde-fou : le skill écrit dans `outbox/digest-YYYY-MM-DD.md` ; l'envoi du digest au DJ est une étape séparée, déclenchée manuellement, jusqu'à ce que la fenêtre de calibration soit fermée (huit digests minimum). Ensuite, automatisez l'envoi uniquement si la métrique de précision au-dessus de 70 % s'est maintenue pendant trois semaines consécutives.
+
+## Stack
+
+Ce workflow s'associe naturellement aux systèmes de [gestion des affaires](/fr/learn/matter-management/) comme source de vérité, aux stacks [legal-ops automation](/fr/stacks/legal-ops/) pour la couche de cron et de livraison, et aux workflows en aval qui opèrent sur le même export — par exemple la revue des factures de conseil externe, les automatisations de suivi des échéances, ou l'analyse trimestrielle du portefeuille. Construisez le digest après que le système d'affaires est propre, pas avant.
