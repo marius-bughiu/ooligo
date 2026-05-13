@@ -20,13 +20,6 @@ const en: LegalPage = {
   lead: "ooligo is a small, independent reference site for the people who run operations inside modern companies — RevOps, Legal Ops, and TA/Recruiting Ops in particular.",
   sections: [
     {
-      heading: "Who runs the site",
-      body: [
-        "ooligo is built and maintained by Marius Bughiu, an independent operator with a background in B2B SaaS. The site started as a personal reference — a way to keep track of which tools were actually being adopted in ops teams and how they fit together — and grew into a public catalog as more of those notes accumulated.",
-        "There is no parent company, no investor backing, and no sales team. Editorial decisions are made by one person; if you disagree with one, the contact page is the right place to say so.",
-      ],
-    },
-    {
       heading: "What's on the site",
       body: [
         "ooligo organizes ops content into a few overlapping shapes: a tools catalog (vendor profiles with category, pricing model, and integrations), comparisons (side-by-side breakdowns of tools that solve the same problem), workflows (multi-step automations and the tools that run them), stacks (the bundles of tools that work well together in a given vertical), and a learn section (definitions, frameworks, and FAQs).",
@@ -58,13 +51,6 @@ const es: LegalPage = {
   lastUpdated: LAST_UPDATED,
   lead: "ooligo es un sitio de referencia pequeño e independiente para quienes dirigen operaciones dentro de empresas modernas — en particular RevOps, Legal Ops y TA/Recruiting Ops.",
   sections: [
-    {
-      heading: "Quién mantiene el sitio",
-      body: [
-        "ooligo lo construye y mantiene Marius Bughiu, un operador independiente con experiencia en B2B SaaS. El sitio empezó como una referencia personal — una manera de seguir qué herramientas se adoptaban realmente en los equipos de ops y cómo encajaban entre sí — y creció hasta convertirse en un catálogo público a medida que se acumulaban esas notas.",
-        "No hay empresa matriz, ni inversores, ni equipo comercial. Las decisiones editoriales las toma una sola persona; si no estás de acuerdo con alguna, la página de contacto es el lugar adecuado para decirlo.",
-      ],
-    },
     {
       heading: "Qué hay en el sitio",
       body: [
@@ -98,13 +84,6 @@ const ptBR: LegalPage = {
   lead: "ooligo é um site de referência pequeno e independente para quem comanda operações dentro de empresas modernas — em particular RevOps, Legal Ops e TA/Recruiting Ops.",
   sections: [
     {
-      heading: "Quem mantém o site",
-      body: [
-        "O ooligo é construído e mantido por Marius Bughiu, um operador independente com experiência em B2B SaaS. O site começou como uma referência pessoal — uma forma de acompanhar quais ferramentas estavam de fato sendo adotadas pelos times de ops e como elas se encaixavam — e cresceu como catálogo público à medida que essas anotações se acumularam.",
-        "Não há empresa-mãe, investidores ou equipe comercial. As decisões editoriais são tomadas por uma única pessoa; se você discordar de alguma, a página de contato é o lugar certo para dizer isso.",
-      ],
-    },
-    {
       heading: "O que tem no site",
       body: [
         "O ooligo organiza o conteúdo de ops em algumas formas sobrepostas: um catálogo de ferramentas (perfis de fornecedores com categoria, modelo de preço e integrações), comparações (análises lado a lado de ferramentas que resolvem o mesmo problema), workflows (automações de várias etapas e as ferramentas que as executam), stacks (os conjuntos de ferramentas que funcionam bem juntos numa vertical) e uma seção de aprendizado (definições, frameworks e FAQs).",
@@ -136,13 +115,6 @@ const ja: LegalPage = {
   lastUpdated: LAST_UPDATED,
   lead: "ooligoは、現代の企業内でオペレーションを担う人々——特にRevOps、Legal Ops、TA/Recruiting Ops——のための、小規模で独立したリファレンスサイトです。",
   sections: [
-    {
-      heading: "サイトの運営者",
-      body: [
-        "ooligoは、B2B SaaSのバックグラウンドを持つ独立したオペレーターであるMarius Bughiuが構築・運営しています。このサイトは個人的なリファレンスとして始まりました——どのツールが実際にオペレーションチームに採用されているか、それらがどう組み合わさるかを記録する手段として——そしてその記録が蓄積されるにつれて、公開カタログへと成長しました。",
-        "親会社、投資家の支援、営業チームはありません。編集上の判断は一人で行っています。もし同意できない判断があれば、お問い合わせページが最も適切な連絡先です。",
-      ],
-    },
     {
       heading: "サイトに掲載されているもの",
       body: [
@@ -176,13 +148,6 @@ const fr: LegalPage = {
   lead: "ooligo est un petit site de référence indépendant pour les personnes qui pilotent les opérations dans les entreprises modernes — en particulier RevOps, Legal Ops et TA/Recruiting Ops.",
   sections: [
     {
-      heading: "Qui gère le site",
-      body: [
-        "ooligo est construit et maintenu par Marius Bughiu, un opérateur indépendant avec une expérience en B2B SaaS. Le site a commencé comme une référence personnelle — une façon de garder trace des outils réellement adoptés par les équipes ops et de la manière dont ils s'imbriquent — puis s'est transformé en catalogue public au fil de l'accumulation de ces notes.",
-        "Il n'y a ni société mère, ni financement par des investisseurs, ni équipe commerciale. Les décisions éditoriales sont prises par une seule personne ; si vous en contestez une, la page de contact est le bon endroit pour le dire.",
-      ],
-    },
-    {
       heading: "Ce que contient le site",
       body: [
         "ooligo organise le contenu ops selon plusieurs formes qui se recoupent : un catalogue d'outils (profils d'éditeurs avec catégorie, modèle tarifaire et intégrations), des comparaisons (analyses côte à côte d'outils qui résolvent le même problème), des workflows (automatisations en plusieurs étapes et les outils qui les exécutent), des stacks (les combinaisons d'outils qui fonctionnent bien ensemble dans un secteur donné) et une section apprentissage (définitions, frameworks et FAQ).",
@@ -214,13 +179,6 @@ const de: LegalPage = {
   lastUpdated: LAST_UPDATED,
   lead: "ooligo ist eine kleine, unabhängige Referenzseite für diejenigen, die den operativen Betrieb in modernen Unternehmen verantworten — insbesondere RevOps, Legal Ops und TA/Recruiting Ops.",
   sections: [
-    {
-      heading: "Wer die Seite betreibt",
-      body: [
-        "ooligo wird von Marius Bughiu betrieben — einem unabhängigen Operator mit Hintergrund in B2B-SaaS. Die Seite ist ursprünglich als persönliche Referenz entstanden — als Möglichkeit, im Blick zu behalten, welche Tools in Ops-Teams tatsächlich eingesetzt werden und wie sie zusammenspielen — und ist mit der Zeit zu einem öffentlichen Katalog herangewachsen.",
-        "Es gibt kein Mutterunternehmen, keine Investoren und kein Vertriebsteam. Redaktionelle Entscheidungen trifft eine Person; wenn Sie eine davon für falsch halten, ist die Kontaktseite der richtige Ort, dies mitzuteilen.",
-      ],
-    },
     {
       heading: "Was Sie auf der Seite finden",
       body: [
