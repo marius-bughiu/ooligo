@@ -1,0 +1,86 @@
+---
+slug: webhook-handler-hubspot-n8n
+canonical_slug: webhook-handler-hubspot-n8n
+locale: ja
+verticals: [revops]
+title: n8nによる汎用HubSpot Webhookハンドラー
+artifact_type: n8n-flow
+tools_used: [n8n, hubspot]
+roles: [revops, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 45min
+human_tested: false
+translated_from: en/webhook-handler-hubspot-n8n.mdx
+translated_at: "2026-05-13T03:00:00Z"
+translation_model: claude-sonnet-4-6
+source_sha256: "65ddfff1804f408df00f8abc7bd4bcbd8690f717bd7e987c6a45ccb8e4caea9a"
+---
+
+ポータルが発火するすべてのHubSpot WorkflowsのWebhookを受け取り、HMAC v3シグネチャを検証し、Postgresの台帳で重複排除を行い、イベントタイプ別にルーティングし、HubSpotが再試行しないほど高速にackを返す単一のn8nワークフローです。1つのハンドラー、1つのURL、チームが気にするすべてのイベント（誰も信頼せず誰も管理していない1回きりのZapのフォルダを置き換えます）。
+
+アーキテクチャの中心はルーティングではありません。重複排除台帳です。HubSpotはすべての5xxレスポンスを最大24時間再試行し、ハンドラーはいつかダウンし、同じイベントが2〜3回届きます。HubSpotの`eventId`をキーとした台帳なしでは、Slack通知が二重発火し、ダウンストリームシステムでレコードが二重作成され、パイプラインメトリクスが破損します。台帳があれば、2回目の配信は挿入でゼロ行を返し、フローは`200 OK`のackに短絡します。`apps/web/public/artifacts/webhook-handler-hubspot-n8n/webhook-handler-hubspot-n8n.json`のバンドルはそのプロパティを中心に構築されており、それ以外はすべてファンアウトの配線です。
+
+## 使うべき状況
+
+HubSpotイベントに反応する必要があるダウンストリームシステムが3つ以上あり（Slack、データウェアハウス、内部サービス、ZendeskまたはSalesforceへの同期）、イベントが重複しており（ディールステージの変更はチケットも作成し、連絡先の作成はSlackもトリガーする）、現在は（イベント×宛先）のペアごとにZapまたはHubSpot Operations Hubのカスタムコードアクションがある場合です。そのマトリクスは乗法的に成長し、誰もリファクタリングしません。Switchノードと共有インフラ（シグネチャ検証、重複排除、エラーキャプチャ、再生）を持つ1つのハンドラーは、マトリクスをイベントタイプごとに1つのパスに削減します。ダウンストリームシステムにレート制限やクォータがあり、一元的にスロットリングする必要がある場合にもこれを使用してください。n8nのノードごとの再試行とキューモードがそのロジックを配置する正しい場所です（10個のZapに分散させるのではなく）。
+
+## 使うべきでない状況
+
+HubSpotイベントのダウンストリームコンシューマーが1つしかない場合は、n8nをスキップしてHubSpot Operations Hubのカスタムコードアクションを使用してください（HubSpot自身の再試行フレームワーク内で動作し、Webhookレシーバーを運用する必要がありません）。厳格なレイテンシ要件（100ms未満のackが必要）と高ボリュームのユースケース（毎秒100件を超えるイベントが持続）がある場合、n8nのWebhookノードを単一のPostgres接続プールでフロントエンドにするとボトルネックになります。代わりにAWS Lambda＋API Gateway＋DynamoDBを使用してください。チームにPostgresの小規模データベースを運用する意欲が全くない場合は、このワークフローは適していません（台帳は必須であり、「n8nの静的データを使用する」や、再起動を生き残れずイベントをサイレントに二重発火させるメモリキャッシュは代替になりません）。最後に、HubSpotのティアがMarketing Hub Free/Sales Hub Starterの場合、Workflows Webhooksはまったく利用できません。前提条件はOperations Hub ProfessionalまたはEnterpriseです。
+
+## セットアップ
+
+1. Postgresインスタンスをプロビジョニングします（または既存のものを使用します）。`apps/web/public/artifacts/webhook-handler-hubspot-n8n/_README.md`の2つの`CREATE TABLE`文を実行します（`hubspot_event_ledger`は重複排除テーブル、`hubspot_unhandled_events`はSwitchがまだ処理しないサブスクリプションタイプのイベントを保管します）。
+2. HubSpotデベロッパーアカウントで、アウトバウンドWebhookに署名するアプリのクライアントシークレットを見つけるか作成します。クライアントシークレットはHMACキーです（WorkflowsのWebhook署名は直接それを使用します）。値を一度メモしてください（HubSpotは再表示しません）。
+3. n8nインスタンスに2つの環境変数を設定します：`HUBSPOT_CLIENT_SECRET`（ステップ2の値）と`N8N_WEBHOOK_PUBLIC_BASE_URL`（n8nインストールの公開オリジン、例：`https://n8n.example.com`（末尾スラッシュなし））。Codeノードはこの正確なオリジンに対してサイニング文字列を再構築するため、不一致はすべてのシグネチャを壊します。
+4. `apps/web/public/artifacts/webhook-handler-hubspot-n8n/webhook-handler-hubspot-n8n.json`を**Workflows → Import from File**でインポートします。2つのプレースホルダーに認証情報をバインドします：`Postgres — hubspot-ledger`（ステップ1のデータベースを指すPostgres認証情報）と`Slack — bot token`（`Authorization: Bearer xoxb-...`を持つ`httpHeaderAuth`認証情報）。
+5. ワークフローをアクティブ化します。WebhookノードからプロダクションのWebhook URLをコピーし、HubSpotアプリのWebhookサブスクリプションページに登録します。ルーティングする特定のイベントタイプにサブスクライブします（`deal.propertyChange`、`contact.creation`、`ticket.propertyChange`がバンドルされているブランチです。ポータルに合わせて追加または削除します）。
+6. バンドルの`_README.md`の4つの検証ケース（有効なハッピーパス、無効なシグネチャの拒否、重複イベントIDのスキップ、不明なサブスクリプションタイプのフォールバック）を実行してから、プロダクションのHubSpot WorkflowをURLに向けてください。
+
+## フローの動作
+
+WebhookノードはPOST `/webhook/hubspot/events`を`rawBody: true`で受け付けます。生バイトは必須です。HubSpotのv3シグネチャは正確なリクエストボディで計算されます（n8nのデフォルトのJSON解析はペイロードを再シリアライズし、空白の違いでシグネチャを無効化します）。
+
+`Verify HMAC + Parse`は、順番に4つのことを行うCodeノードです：タイムスタンプヘッダーがウォールクロックから5分以上ずれているリクエストを拒否する（これが再生ウィンドウです）、サイニング文字列`POST + URI + RAW_BODY + TIMESTAMP`を再構築する、`HMAC-SHA256(client_secret, signing_string)`を計算してbase64エンコードする、そして`crypto.timingSafeEqual`を使用して結果を`x-hubspot-signature-v3`と定数時間で比較する。失敗した場合、理由文字列とともに`__valid: false`とフラグが立てられた単一のアイテムを出力します。成功した場合、ボディを解析してHubSpotのバッチ内のイベントごとに1つのアイテムを出力します（HubSpotは1配信あたり最大100イベントをバッチ処理します）。
+
+`Dedupe Ledger Insert`はべき等性のキーストーンです。すべてのイベントは`INSERT INTO hubspot_event_ledger (...) VALUES (...) ON CONFLICT (event_id) DO NOTHING RETURNING event_id`を実行します。初回のイベントは`event_id`を返して続行します。重複（HubSpotの再試行、シグネチャをパスした再生攻撃、またはワークフローの誤ったインポート）はゼロ行を返します。`If New Event`はその空の結果を確認して、ダウンストリームブランチを再発火させることなく`Respond 200 OK`に短絡します。
+
+`Switch — Event Type`は`subscriptionType`をキーとします。バンドルされているブランチは例示的なものです（`deal.propertyChange`はSlackメッセージを投稿し、`contact.creation`は内部APIにPOSTし、`ticket.propertyChange`はプレースホルダーのZendeskのURLに同期します）。実際の宛先に置き換えてください。フォールバック出力は`hubspot_unhandled_events`に書き込みます。HubSpot側のスキーマ変更（サブスクリプションに新しいイベントタイプが追加、イベントペイロードに新しいプロパティが追加）はフロー全体を失敗させずに人間のレビューのためにイベントを保管します。
+
+`Respond 200 OK`は明示的なRespond-to-Webhookノードです（Webhookノードの`responseMode: "responseNode"`は、ackがいつ返るかを正確に制御することを意味します）。ackは台帳の挿入が成功した後に返し、ダウンストリームブランチの完了後ではありません。このトレードオフは意図的なものです。HubSpotは台帳にイベントがある時点でそれを配信済みとみなします。ブランチの失敗はError Triggerサブフロー（`#alerts-revops`に投稿）と`hubspot_event_ledger`から読み込む自前の再生ツールによってアウトオブバンドで回収されます。代替案（ブランチ完了後にのみackする）は、遅いダウンストリームAPIがHubSpotのキューを詰まらせ、その後重複排除しなければならない再試行をトリガーします。
+
+## コスト実績
+
+シングルの小型VM上のn8n自己ホスト（2 vCPU/4GB、Hetzner/DigitalOceanで約$20〜30/月）は、1つのHubSpotポータルから1日数万件のイベントを問題なく処理します。n8n Cloudのスターターティアは2,500実行で$24/月であり、このボリュームでは急速にコスト高になります。月10,000件以上のWebhook配信を見込む場合は、自己ホストの方が大幅に安価です。台帳用に小型のマネージドPostgres（Supabase、RDS、Neonで$15〜25/月）を追加します。
+
+重複排除台帳の行サイズは生ペイロードサイズによって約2〜4KBです（HubSpotのペイロードは小さく、通常約500バイトでJSONBはよく圧縮されます）。30日保持で月3万件のイベントの場合、テーブルは100MB未満です。30日保持で月100万件のイベントの場合、約3〜4GBですが、それでもマネージドPostgresにとっては些細です。プルーニングジョブ（`received_at`でインデックスされた1日1回の`DELETE`）のコストは無視できます。
+
+隠れたコストはダウンストリームAPIのクォータです。Switchフォールバックを溢れさせるスキーマドリフトイベントは驚きになる可能性があります。誤設定されたHubSpot Workflowが1時間で1万件のイベントを発火させると、数分でSlackのレート制限とほとんどの内部APIクォータを使い果たします。両方に対してバジェットを確保してください（ブランチごとの再試行上限（バンドルには`tryCount: 5, waitBetweenTries: 1000-2000ms`が同梱）と、ダウンストリームAPIがキューに留まるのではなく失われることなくクリーンに429をn8nに返すサーキットブレーカーの考え方）。
+
+## 成功指標
+
+HubSpotの発火からダウンストリームの副作用まで95パーセンタイルで2秒未満のエンドツーエンドレイテンシ（`occurred_at`（イベントのHubSpotのタイムスタンプ）をダウンストリームシステムの作成/更新タイムスタンプと比較して測定）。2つ目の指標：四半期ごとのゼロ二重発火（ダウンストリームシステムの監査ログに対して`count(*) GROUP BY event_id HAVING count(*) > 1`で測定）。両方を達成できれば、ハンドラーは仕事をしており、注視を止めることができます。
+
+## 代替手段との比較
+
+**HubSpot Operations Hubのカスタムコード**との比較：HubSpotのカスタムコードアクションは、インフラを運用する必要なくHubSpot自身の再試行フレームワーク内で動作します。宛先が1〜2つの簡単なものには真の優位性があります。3つ以上の宛先では、各Workflowにサイニング/重複排除/ルーティングロジックの独自コピーがあり、インフラを共有できない（共有Postgresの台帳なし、共有Slack認証情報のローテーションなし、一元的なエラーハンドリングなし）ため苦痛になります。ブレークイーブンは約3つの宛先または任意のイベント間相関の必要性です。最初はHubSpotのカスタムコードを選び、それを超えたときにこのn8nハンドラーに移行してください。
+
+**AWS Lambda＋API Gateway＋DynamoDB**との比較：これはよりスケーラブルなアーキテクチャですが（DynamoDBの条件付き書き込みはミリ秒レイテンシのべき等性、Lambdaは水平自動スケール、API Gatewayはルートごとのスロットリングが無料）、デプロイメントパイプライン、IaC、オブザーバビリティスタック、およびLambdaのコールドスタートをデバッグできるチームが必要です。月10〜10万件のイベントを処理するRevOpsチームにとって、n8nはシンプルに運用でき、変更も容易（コード＋再デプロイではなくSwitch＋ブランチノード）、台帳は他のOps自動化が既に使用しているPostgresと同じです。毎秒100件を超えるイベントが持続する場合、またはレイテンシが一桁ミリ秒で重要な場合にLambdaを選んでください。
+
+**Zapごとのイベントというステータスクォ**との比較：これは実際に誰もが置き換えている代替手段です。Zapは再試行時に二重発火し（Zapierの重複排除はベストエフォートであり、ユーザーが制御できません）、共有のシグネチャ検証がなく（Zapの Webhook URLを持つ人なら誰でも偽のイベントを発火できます）、20個あるとリファクタリングが不可能になります。このn8nワークフローの論拠は、集中インフラの論拠と同じです：バグを修正する1か所、シークレットをローテーションする1か所、監査ログを読む1か所。
+
+## 注意事項
+
+- **ローカルではパスするがプロダクションで失敗するHMACシグネチャの不一致。** サイニング文字列にはURIが含まれており、URIはHubSpotがPOSTした内容と正確に一致する必要があります。`N8N_WEBHOOK_PUBLIC_BASE_URL`を正確に設定してください（末尾スラッシュなし、正しいスキーム、正しいポート）。最も一般的なプロダクションの失敗は、n8nの前にあるCloudflare/ロードバランサーが、HubSpotが見るURLとn8nが持つと考えているURLを変えることです。対策：デバッグレベルで再構築されたサイニング文字列をログに記録し、最初のシグネチャ失敗時にHubSpotのリクエストログと比較してください（プロダクションではデバッグを超えてそのログを有効にしないでください）。
+- **5分ウィンドウ内の再生攻撃。** シグネチャ検証は必要ですが十分ではありません（キャプチャされた署名済みリクエストはタイムスタンプウィンドウ内で再生できます）。対策：重複排除台帳の`event_id` PRIMARY KEYがこれをno-opにします（再生は挿入でゼロ行を返してackに短絡します）。ただし`event_id`がイベントごとに安定した一意の識別子である場合のみです。稼働前にREADMEの重複イベントテストケースで確認してください。
+- **バースト時のダウンストリームAPIクォータの枯渇。** 誤設定されたHubSpot Workflowは毎分数千件のイベントを発火できます。Slackの`chat.postMessage`はチャンネルあたり毎秒約1メッセージです。多くの内部APIはトークンあたり100リクエスト/分のクォータを持っています。対策：ワークフロー内のブランチごとの再試行上限（`tryCount: 5, waitBetweenTries`）プラスn8nキューモードにより、イベントが失敗速度でなくキューに積み上がります。本当に高ボリュームのブランチには、直接HTTPノードをSQS/Redisキュー書き込みに変えて、別のコンシューマーがクォータを尊重した速度で消化できるようにしてください。
+- **HubSpot側のスキーマドリフト。** HubSpotはイベントペイロードにフィールドを追加し、時折新しいサブスクリプションタイプを導入します。対策：Switchノードのフォールバック出力はエラーになる代わりに不明なタイプを`hubspot_unhandled_events`に保管します。ダウンストリームブランチは`propertyName`/`propertyValue`を形状をアサートするのではなく防御的に読み取ります。
+- **実行途中のn8nワーカーのクラッシュ。** 台帳への挿入後、`Respond 200 OK`の前にワーカーが死ぬと、HubSpotはackを受け取っていないため再試行し、2回目の配信は台帳制約に当たってゼロ行を返し、ダウンストリームブランチは再発火しません。対策：`saveExecutionProgress: true`を有効にし（バンドルに既に設定済み）、台帳を真実のソースとして扱います。再生ツールは`hubspot_event_ledger`を読み取り、HubSpotのAPIではなく保管されたイベントペイロードに対してブランチを再実行します。
+
+## スタック
+
+- **HubSpot Workflows** — イベントソース。Operations Hub ProfessionalまたはEnterpriseがWebhookアクションに必要。
+- **n8n**（自己ホストを推奨）— Webhookレシーバー、シグネチャ検証器、ルーター、ファンアウト。プロダクションではキューモードを強く推奨。
+- **Postgres** — 重複排除台帳と未処理イベントの保管。マネージドPostgresであれば何でも可（Supabase、Neon、RDS、Cloud SQL）。
+- **Slack** — 失敗アラートとサンプルのディールステージブランチ。`chat:write`を持つBotトークン。
+- **ダウンストリームシステム** — 内部API、Salesforce、Zendesk、データウェアハウスなど、イベントがファンアウトする宛先。
