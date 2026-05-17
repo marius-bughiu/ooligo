@@ -2,39 +2,49 @@
 
 Content on ooligo is authored directly by LLMs (Claude, primarily) operating on this repo. There is no separate content-generator service, no scheduled CI job that synthesizes pages, and no human-review gate. An LLM authors a page; validators check it; CI builds and deploys it.
 
-This document is the contract that any LLM working on this repo follows when adding or updating content. **Authoring is EN-only.** Translation is a separate, autonomous job — see "Translation queue and skills" below.
+This document is the contract that any LLM working on this repo follows when adding or updating content. **A page is six MDX files, authored together.** Translation is inline — the same session that drafts the EN body translates it into the five non-EN locales using the rules in [content-strategy/locale-register.md](content-strategy/locale-register.md), and the whole 6-file bundle ships in a single commit.
 
 ## The rule
 
-> **When an LLM adds or edits a page, it writes EN only.**
+> **When an LLM adds or edits a page, it writes all 6 locale variants in the same session and the same commit.**
 
-Concretely: a new tool entry means one file — `tools/en/<slug>.mdx`. A new comparison, workflow, or learn entry: same per-locale subdirectory layout, EN only. The ES and pt-BR variants are produced separately by `/translate-es` and `/translate-pt-br`, which read `<locale>_TRANSLATION_QUEUE.md` and drain it one page at a time.
+Concretely: a new tool entry means six files —
 
-The same rule applies to updates. Editing the EN entry changes its body's SHA-256, which the queue script picks up as `stale` for every non-canonical locale on the next run.
+```
+content/tools/en/<slug>.mdx
+content/tools/es/<slug>.mdx
+content/tools/pt-BR/<slug>.mdx
+content/tools/de/<slug>.mdx
+content/tools/fr/<slug>.mdx
+content/tools/ja/<slug>.mdx
+```
+
+— and the same shape for comparisons, workflows, learn, and stacks. The slug is identical across locales (the `canonical_slug` field, also identical across all six, is what hreflang clusters key on). The session drafts EN first, then translates inline per [content-strategy/locale-register.md](content-strategy/locale-register.md), validates, commits, pushes.
+
+The same rule applies to updates. Editing a page means re-authoring all 6 locales in the same commit. Translations never lag EN.
 
 ## Authoring model
 
 ```
-LLM session (Claude Code, claude.ai with repo MCP, etc.)
+LLM session (Claude Code, scheduled task, claude.ai with repo MCP, etc.)
   │
   ├─ Reads sources (official docs, pricing pages, public APIs, Reddit/HN signal)
-  ├─ Writes content/<entity>/en/<slug>.mdx
-  ├─ Commits the EN file
-  └─ Pushes
+  ├─ Drafts the EN body per the per-type bar
+  ├─ Translates inline into es, pt-BR, de, fr, ja per content-strategy/locale-register.md
+  ├─ Writes six MDX files: content/<entity>/{en,es,pt-BR,de,fr,ja}/<slug>.mdx
+  ├─ Runs `npm run validate:config` and `npm run check:vocab`
+  ├─ If anything fails on any locale, ABORTS the slot (no half-state)
+  ├─ Commits all six files together
+  └─ Pushes to main
        │
        ▼
   CI: validate config + typecheck + Astro build
        │
        ▼
   CI: deploy to Cloudflare Pages
-       │
-       ▼
-  Later (separate sessions):
-    /translate-es      drains es_TRANSLATION_QUEUE.md one page at a time
-    /translate-pt-br   drains pt-BR_TRANSLATION_QUEUE.md one page at a time
 ```
 
-The authoring LLM is responsible for getting the EN content right. The validators catch structural mistakes (schema violations, broken links, mismatched frontmatter) but they don't substitute for editorial judgment.
+There is no separate async translation step. There is no queue, no SHA-256 bookkeeping, no drain. The authoring LLM is responsible for getting all six locales right in one session. The validators catch structural mistakes (schema violations, broken links, mismatched frontmatter) but they don't substitute for editorial judgment.
 
 ## Frontmatter discipline
 
@@ -47,15 +57,15 @@ Required fields on every EN page:
 - `locale: en`
 - `verticals` (array of vertical IDs from `content/verticals.json`)
 
-Translation-specific frontmatter (`translated_from`, `translated_at`, `translation_model`, `source_sha256`) is the responsibility of the translation skills — see `.claude/skills/translate-<locale>/SKILL.md`.
+The `translated_from`, `translated_at`, `translation_model`, and `source_sha256` fields are optional under the all-locales-in-one-session model. Existing translated files keep their values; new authoring runs may omit them. They remain in the schema for backwards compatibility with the legacy translated content already in the repo.
 
-## Translation queue and skills
+## Locale parity
 
-Translation parity is enforced by tooling, not authoring discipline:
+Every page exists in all six locales at the moment it's committed. Parity is enforced by the authoring routine, not by a post-hoc queue drain.
 
-- **`npm run queue:translations`** — scans every collection × non-canonical locale and writes `es_TRANSLATION_QUEUE.md` and `pt-BR_TRANSLATION_QUEUE.md` at the repo root. An item appears as `missing` if no translated file exists, or `stale` if the SHA-256 of the EN body no longer matches the `source_sha256` stored on the translated file's frontmatter.
-- **`npm run hash:en -- <path>`** — prints the SHA-256 of an EN file's body. The translation skills use this to compute the value for `source_sha256` when writing a translated file.
-- **`/translate-es` and `/translate-pt-br`** — project-scoped skills under `.claude/skills/`. Each invocation translates the next item in the queue, validates the build, regenerates the queue, and commits + pushes to `main`. Translation glossary (never-translate proper nouns, fixed industry terms) and regional register live in those skill bodies, not here.
+A consistency-check utility — `npm run queue:translations` (in `packages/pipeline`) — remains available as a one-shot drift detector. Run it manually if you suspect a hand-edit outside the authoring routine left a locale behind; it reports any EN entry whose 5 translated siblings are missing or whose `source_sha256` (if set) no longer matches the EN body. Under the new architecture this should return zero items in normal operation; non-zero output is a signal that something edited EN outside an authoring run.
+
+The translation rules — glossary, regional register, never-translate list — live in [content-strategy/locale-register.md](content-strategy/locale-register.md). The authoring routine reads that file once per run.
 
 ## Quality bar (the LLM author's responsibility)
 
@@ -66,7 +76,7 @@ The authoring LLM is on the hook for:
 3. **Cross-linking** — every entity links to related entities per ARCHITECTURE.md's link-budget rules. Validators check structural existence; the LLM checks relevance.
 4. **Voice consistency** — confident, opinionated, structured. We rank, we recommend, we say what's bad. We don't G2-hedge.
 
-The translating LLM (per the per-locale skills) is on the hook for translation parity — the ES/pt-BR variants must say the same things as EN. That's enforced in the skill bodies.
+The authoring LLM is also on the hook for translation parity within the same session — the 5 non-EN variants must say the same things as EN. The rules for register, glossary, and never-translate terms live in [content-strategy/locale-register.md](content-strategy/locale-register.md).
 
 ### What "best-in-class" actually means
 
@@ -346,9 +356,9 @@ Pricing changes, vendors get acquired, tools sunset. `last_reviewed` is the cont
 | Learn — definition / framework / FAQ / glossary | — | 12 months |
 | Learn — how-to | — | 6 months (UI screenshots and command syntax drift fastest) |
 
-The freshness check is mechanical: for every entry, `today - last_reviewed > SLA` fails the bar. Refresh = re-author from current sources, bump `last_reviewed`. The translation queue will mark non-canonical locales stale automatically (via SHA-256 drift on the EN body), and subsequent `/translate-<locale>` runs will re-translate.
+The freshness check is mechanical: for every entry, `today - last_reviewed > SLA` fails the bar. Refresh = re-author the EN body and all five translated variants from current sources in the same session, bump `last_reviewed`.
 
-A future CI script (out of scope today) will surface entries past their SLA in a weekly digest. Until then, the responsibility sits with whoever opens the entry's MDX file: if the date is past SLA, refresh before any other edit.
+The weekly `ooligo-freshness-sweep` scheduled task surfaces SLA-stale entries by prepending `refresh:` items to `content-strategy/topic-queue.md`. The `ooligo-evergreen-refresh` slot consumes one per week, and authoring slots consume them ahead of new-content items. See `content-strategy/freshness-prompt.md` for the routine details.
 
 ### Higher-risk page classes
 
@@ -398,20 +408,20 @@ A refresh is the same operation as authoring (re-write the entry from current so
 - A vendor announces a material change (pricing, sunset, acquisition).
 - A class of recurring error in `CORRECTIONS.md` triggers a re-author against the new bar.
 
-After any refresh, `npm run queue:translations` will mark every non-canonical locale variant as `stale` (because the EN body's SHA-256 changed), and subsequent `/translate-<locale>` invocations re-translate.
+After any refresh, the routine re-authors all six locale variants in the same commit. There is no async catch-up step.
 
 ## Adding a vertical or locale
 
 - **Adding a vertical** — config update in `content/verticals.json` + tagging existing entries with the new vertical (multi-tag) + a few vertical-specific stack/workflow pages. See ARCHITECTURE.md.
 - **Adding a locale** — three steps:
-  1. Add the locale entry to `content/locales.json`.
-  2. Create `.claude/skills/translate-<locale>/SKILL.md` (clone an existing one and adjust the regional register section).
-  3. Run `npm run queue:translations` — every EN entry will appear as `missing` for the new locale. Then drain the queue with repeated `/translate-<locale>` invocations until empty.
+  1. Add the locale entry to `content/locales.json` and the `LOCALE` enum in `apps/web/src/content.config.ts`.
+  2. Add a section for the new locale to [content-strategy/locale-register.md](content-strategy/locale-register.md) — register, audience, banned forms, fixed translations.
+  3. The next authoring run (or a manual backfill pass) writes the new locale alongside the existing five. For backfilling the existing catalog into the new locale, run a sequence of authoring slots with the slugs you want backfilled queued as `refresh:` items.
 
 ## Why no automated generator
 
 Earlier drafts of this doc described a generator pipeline (TypeScript scripts using the Anthropic SDK, structured outputs, back-translation similarity gates, auto-PR bots). That model adds layers of indirection without improving quality, and decouples content authorship from review of source signal.
 
-A Claude session reading the source URLs, considering the audience, writing the entry, and (separately) translating it produces better content than a script with a single canned prompt. The repo is the unit of versioning; the LLM is the unit of authoring.
+A Claude session reading the source URLs, considering the audience, writing the entry, and translating it produces better content than a script with a single canned prompt. The repo is the unit of versioning; the LLM is the unit of authoring; the session is the unit of work — one session writes one page across all six locales.
 
-What we have instead: a script that finds gaps (`queue:translations`) and a skill that fills them (`/translate-<locale>`), both run inside Claude sessions on the repo. That gives us automation where it's mechanical (gap detection, hash bookkeeping) without taking the author out of the loop on content judgment.
+The autonomous side of this is in `content-strategy/` (versioned prompts read by scheduled tasks) and `~/.claude/scheduled-tasks/ooligo-*/` (the thin shells that fire on cron). The author stays in the loop on content judgment; only the cadence and the bookkeeping are automated.
