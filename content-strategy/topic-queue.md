@@ -18,7 +18,7 @@ Format per item:
 
 ## Tools
 
-- [type:tool] [vertical:cross] new entry: glean — enterprise AI work assistant / unified search; cross-vertical because RevOps, Legal, and Recruiting all touch it as a search-and-summarize layer over their SaaS data
+- [type:tool] [vertical:cross] new entry: glean — enterprise AI work assistant / unified search; cross-vertical because RevOps, Legal, and Recruiting all touch it as a search-and-summarize layer over their SaaS data → slug: glean
 - [type:tool] [vertical:legal-ops] new entry: hebbia — Matrix-style document analysis platform used by in-house and Big Law for structured extraction over deal-room corpora; routinely compared with Harvey
 - [type:tool] [vertical:legal-ops] new entry: brightflag — AI-assisted legal e-billing / matter management; the canonical alternative readers ask about when they reject Onit/SimpleLegal
 - [type:tool] [vertical:legal-ops] new entry: onit — enterprise legal ops platform (matter management, ELM, contract); needed to anchor brightflag-vs-onit and similar pairwise
