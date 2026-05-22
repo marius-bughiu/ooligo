@@ -24,7 +24,7 @@ Format per item:
 - [type:tool] [vertical:legal-ops] new entry: onit — enterprise legal ops platform (matter management, ELM, contract); needed to anchor brightflag-vs-onit and similar pairwise → slug: onit
 - [type:tool] [vertical:revops] new entry: smartlead — cold email infrastructure (deliverability, warmup, unified inbox); high reddit / r/sales mention volume → slug: smartlead
 - [type:tool] [vertical:revops] new entry: instantly — cold email sending platform with built-in lead database; commonly paired vs smartlead and lemlist → slug: instantly
-- [type:tool] [vertical:revops] new entry: nooks — AI parallel dialer with call coaching and AI assistant on the line; the category-leading parallel-dial entrant readers ask about vs Orum
+- [type:tool] [vertical:revops] new entry: nooks — AI parallel dialer with call coaching and AI assistant on the line; the category-leading parallel-dial entrant readers ask about vs Orum → slug: nooks
 - [type:tool] [vertical:revops] new entry: orum — live conversation platform / parallel dialer; established alternative to Nooks and the SDR-productivity story
 - [type:tool] [vertical:revops] new entry: 11x — autonomous AI SDR (Alice, Jordan, Mike); high-discussion AI-SDR vendor that needs a sober buyer-side page
 - [type:tool] [vertical:revops] new entry: artisan — Ava AI SDR / outbound AI agent; second pole of the AI-SDR comparison readers want
