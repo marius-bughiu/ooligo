@@ -21,7 +21,7 @@ Format per item:
 - [type:tool] [vertical:cross] new entry: glean — enterprise AI work assistant / unified search; cross-vertical because RevOps, Legal, and Recruiting all touch it as a search-and-summarize layer over their SaaS data → slug: glean
 - [type:tool] [vertical:legal-ops] new entry: hebbia — Matrix-style document analysis platform used by in-house and Big Law for structured extraction over deal-room corpora; routinely compared with Harvey → slug: hebbia
 - [type:tool] [vertical:legal-ops] new entry: brightflag — AI-assisted legal e-billing / matter management; the canonical alternative readers ask about when they reject Onit/SimpleLegal → slug: brightflag
-- [type:tool] [vertical:legal-ops] new entry: onit — enterprise legal ops platform (matter management, ELM, contract); needed to anchor brightflag-vs-onit and similar pairwise
+- [type:tool] [vertical:legal-ops] new entry: onit — enterprise legal ops platform (matter management, ELM, contract); needed to anchor brightflag-vs-onit and similar pairwise → slug: onit
 - [type:tool] [vertical:revops] new entry: smartlead — cold email infrastructure (deliverability, warmup, unified inbox); high reddit / r/sales mention volume
 - [type:tool] [vertical:revops] new entry: instantly — cold email sending platform with built-in lead database; commonly paired vs smartlead and lemlist
 - [type:tool] [vertical:revops] new entry: nooks — AI parallel dialer with call coaching and AI assistant on the line; the category-leading parallel-dial entrant readers ask about vs Orum
