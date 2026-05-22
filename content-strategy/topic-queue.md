@@ -26,7 +26,7 @@ Format per item:
 - [type:tool] [vertical:revops] new entry: instantly — cold email sending platform with built-in lead database; commonly paired vs smartlead and lemlist → slug: instantly
 - [type:tool] [vertical:revops] new entry: nooks — AI parallel dialer with call coaching and AI assistant on the line; the category-leading parallel-dial entrant readers ask about vs Orum → slug: nooks
 - [type:tool] [vertical:revops] new entry: orum — live conversation platform / parallel dialer; established alternative to Nooks and the SDR-productivity story → slug: orum
-- [type:tool] [vertical:revops] new entry: 11x — autonomous AI SDR (Alice, Jordan, Mike); high-discussion AI-SDR vendor that needs a sober buyer-side page
+- [type:tool] [vertical:revops] new entry: 11x — autonomous AI SDR (Alice, Jordan, Mike); high-discussion AI-SDR vendor that needs a sober buyer-side page → slug: 11x
 - [type:tool] [vertical:revops] new entry: artisan — Ava AI SDR / outbound AI agent; second pole of the AI-SDR comparison readers want
 - [type:tool] [vertical:revops] new entry: pocus — product-led sales platform (PLS) for SaaS with self-serve motions; needed to anchor PLS stack and PLS comparisons
 - [type:tool] [vertical:revops] new entry: koala — product signals → SDR alerting platform; the PLS counterpart readers most often compare to Pocus
