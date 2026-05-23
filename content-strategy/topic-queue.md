@@ -28,18 +28,18 @@ Format per item:
 - [type:tool] [vertical:revops] new entry: orum — live conversation platform / parallel dialer; established alternative to Nooks and the SDR-productivity story → slug: orum
 - [type:tool] [vertical:revops] new entry: 11x — autonomous AI SDR (Alice, Jordan, Mike); high-discussion AI-SDR vendor that needs a sober buyer-side page → slug: 11x
 - [type:tool] [vertical:revops] new entry: artisan — Ava AI SDR / outbound AI agent; second pole of the AI-SDR comparison readers want → slug: artisan
-- [type:tool] [vertical:revops] new entry: pocus — product-led sales platform (PLS) for SaaS with self-serve motions; needed to anchor PLS stack and PLS comparisons
-- [type:tool] [vertical:revops] new entry: koala — product signals → SDR alerting platform; the PLS counterpart readers most often compare to Pocus
-- [type:tool] [vertical:revops] new entry: crossbeam — partner ecosystem / account mapping; needed for partner-led-growth stack and comparisons with Reveal
-- [type:tool] [vertical:revops] new entry: pipedrive — SMB-friendly CRM; the missing third pole alongside HubSpot/Salesforce/Attio for SMB readers
-- [type:tool] [vertical:recruiting] new entry: karat — interview-as-a-service / technical interview outsourcing; routinely compared with CodeSignal and HackerRank
-- [type:tool] [vertical:recruiting] new entry: pillar — interview intelligence platform focused on hiring; the third pole alongside BrightHire and Metaview
-- [type:tool] [vertical:recruiting] new entry: hireflix — async video interviewing; the canonical async-video entry readers ask about
-- [type:tool] [vertical:recruiting] new entry: maki-people — AI candidate-experience and pre-hire assessments via conversational AI
-- [type:tool] [vertical:recruiting] new entry: bamboohr — HRIS + light ATS used by SMB recruiting teams; needed for SMB recruiting comparisons
-- [type:tool] [vertical:cross] new entry: recall-ai — meeting bot infrastructure (the API behind many AI-notetakers); developer-facing but discussed in RevOps/Recruiting tool stacks
-- [type:tool] [vertical:cross] new entry: calendly — meeting scheduling; the missing baseline alongside Chili Piper and GoodTime for routing/scheduling comparisons
-- [type:tool] [vertical:revops] new entry: vidyard — async video for sales; needed to anchor async-video sales comparisons and to support sequence-builder workflows
+- [type:tool] [vertical:revops] new entry: pocus — product-led sales platform (PLS) for SaaS with self-serve motions; needed to anchor PLS stack and PLS comparisons → slug: pocus
+- [type:tool] [vertical:revops] new entry: koala — product signals → SDR alerting platform; the PLS counterpart readers most often compare to Pocus → slug: koala
+- [type:tool] [vertical:revops] new entry: crossbeam — partner ecosystem / account mapping; needed for partner-led-growth stack and comparisons with Reveal → slug: crossbeam
+- [type:tool] [vertical:revops] new entry: pipedrive — SMB-friendly CRM; the missing third pole alongside HubSpot/Salesforce/Attio for SMB readers → slug: pipedrive
+- [type:tool] [vertical:recruiting] new entry: karat — interview-as-a-service / technical interview outsourcing; routinely compared with CodeSignal and HackerRank → slug: karat
+- [type:tool] [vertical:recruiting] new entry: pillar — interview intelligence platform focused on hiring; the third pole alongside BrightHire and Metaview → slug: pillar
+- [type:tool] [vertical:recruiting] new entry: hireflix — async video interviewing; the canonical async-video entry readers ask about → slug: hireflix
+- [type:tool] [vertical:recruiting] new entry: maki-people — AI candidate-experience and pre-hire assessments via conversational AI → slug: maki-people
+- [type:tool] [vertical:recruiting] new entry: bamboohr — HRIS + light ATS used by SMB recruiting teams; needed for SMB recruiting comparisons → slug: bamboohr
+- [type:tool] [vertical:cross] new entry: recall-ai — meeting bot infrastructure (the API behind many AI-notetakers); developer-facing but discussed in RevOps/Recruiting tool stacks → slug: recall-ai
+- [type:tool] [vertical:cross] new entry: calendly — meeting scheduling; the missing baseline alongside Chili Piper and GoodTime for routing/scheduling comparisons → slug: calendly
+- [type:tool] [vertical:revops] new entry: vidyard — async video for sales; needed to anchor async-video sales comparisons and to support sequence-builder workflows → slug: vidyard
 
 ## Comparisons
 
