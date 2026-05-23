@@ -1,0 +1,95 @@
+---
+slug: abm-list-quality-audit-skill
+canonical_slug: abm-list-quality-audit-skill
+locale: en
+verticals: [revops]
+title: Audit an ABM list against an ICP rubric with Claude
+artifact_type: claude-skill
+tools_used: [claude, clay, 6sense]
+roles: [revops]
+difficulty: intermediate
+time_to_setup: 30-60 min
+human_tested: false
+---
+
+A Claude Skill that takes an ABM target list and an ICP rubric and returns a per-account defect report — every account that fails gets a defect code from a defined taxonomy (wrong-size, wrong-industry, wrong-geo, stale-data, low-intent, missing-field), a quality tier (Q1 through Q4), a list-level quality score, and a ranked remediation queue. The bundle ships at `apps/web/public/artifacts/abm-list-quality-audit-skill/` and contains `SKILL.md` plus three reference templates the user adapts before first run.
+
+It answers the question that most ABM campaigns skip before launch: "Of the 300 accounts in this list, how many actually meet our ICP, and what exactly is wrong with the ones that don't?" Without that answer, ABM platform spend — 6sense, Demandbase, LinkedIn matched audiences — goes toward accounts you would never convert, and the campaign's disappointing results get attributed to message or channel rather than list quality.
+
+## When to use
+
+Use this skill before loading any ABM list into a paid-media platform, before assigning named accounts to AEs, and before any campaign launch where the list was assembled more than 90 days ago. ABM lists degrade faster than most RevOps teams realize: headcount data goes stale, funding stages change, companies get acquired, and the ICP rubric itself sometimes shifts without the list being re-evaluated.
+
+The skill is also the right tool for quarterly list hygiene. Run it over your entire ABM universe — not just campaign lists — to find accounts that were added when your ICP looked different and have not been re-evaluated since. The defect-frequency table tells you which enrichment gaps are most common across your universe, which is actionable for whoever owns the [Clay](/en/tools/clay/) enrichment workflow.
+
+Invoke from:
+
+- A **[Clay](/en/tools/clay/) table** where each row is an account, triggered manually before a campaign launch or on a quarterly cron. The skill writes `quality_tier` and `defect_codes` back to two Clay columns; downstream automation can filter on these to suppress Q3/Q4 accounts from campaign uploads.
+- A **CSV pre-flight check** before import into [6sense](/en/tools/6sense/) or any ABM advertising platform. Running the audit removes accounts you would otherwise pay to target — at typical ABM CPM rates ($20-40 per 1,000 impressions), removing 50 out-of-ICP accounts from a 500-account list cuts waste by 10%.
+- A **Salesforce report-based trigger** over named accounts in a segment, writing `ABM_Quality_Tier__c` and `ABM_Defect_Codes__c` back to the account record.
+
+## When NOT to use
+
+Skip this skill when:
+
+- **You want to score inbound MQLs.** The audit is designed for outbound named-account lists. For inbound lead triage, the lead-scoring-icp-rubric skill is the right tool — it handles the single-lead flow and the borderline escalation logic that matters for inbound.
+- **Your ICP rubric does not exist yet.** The skill audits against a rubric you provide. If you have not had the ICP argument — what industries, headcount bands, and geographies you actually win in — that conversation must happen first. Running an audit against a placeholder rubric produces a false sense of rigor.
+- **The list needs deduplification, not auditing.** If the goal is to remove current customers, competitors, churned accounts, or GDPR-suppressed contacts, that is a filter operation, not an ICP audit. Run those exclusions before the audit, or the skill will spend tokens scoring companies you already know you want to exclude.
+- **You need to generate the list, not audit it.** The skill takes an existing list as input. It does not run TAM discovery or generate net-new accounts. Use a dedicated list-building workflow — Clay plus ICP criteria — to produce the raw list first.
+- **The list has fewer than 20 accounts.** Below that size, an experienced RevOps or AE can manually review every account in under an hour. The setup cost of the skill (rubric configuration, defect taxonomy customization) is not worth it.
+
+## Setup
+
+Setup takes 30-60 minutes assuming the ICP rubric exists. The rubric argument — aligning RevOps, GTM leadership, and an AE or two on what an A-tier industry and headcount band actually means — takes longer and happens before setup.
+
+1. **Install the Skill.** Copy `apps/web/public/artifacts/abm-list-quality-audit-skill/SKILL.md` and the `references/` folder into your `.claude/skills/abm-audit/` directory, or upload as a Skill in claude.ai. The frontmatter `name` and `description` are the trigger on relevant prompts.
+2. **Configure the ICP rubric.** Open `references/1-icp-rubric-template.md`. If your team already uses the lead-scoring-icp-rubric skill, you can reference the same rubric file — the structure is identical. Replace placeholder rows with actual criteria, weights (1-5), and tier values (A / B / C). Fill the hard disqualifiers section. Update "Last edited" — the SHA-256 the skill records in every report footer ensures that stakeholders can tell when the rubric moved.
+3. **Configure the defect taxonomy.** Open `references/2-defect-taxonomy.md`. The defect codes themselves are fixed — do not rename them, as downstream parsers key on the code strings. Edit the "Remediation action" column to match your team's actual process: which Clay column provides headcount re-enrichment, who owns the ZoomInfo subscription, which segment owns the enterprise overflow accounts.
+4. **Prepare intent scores (optional but high-value).** If you use [6sense](/en/tools/6sense/) or Bombora, export a `domain → intent_score` map for your account universe and pass it as `intent_scores` input. This adds `low-intent` and `intent-spike` annotations on top of the rubric scores — the `intent-spike` flag is particularly valuable for Q2 accounts that are in-ICP but borderline, because it surfaces them for prioritization even before re-enrichment.
+5. **Set enrichment staleness threshold.** Update `enrichment_staleness_days` to match how aggressively your enrichment layer recycles. Clay + ZoomInfo typically refreshes on a 90-day schedule; if you run monthly enrichment, you may set 45 days. This drives the `stale-data` defect code.
+6. **Test on a known list.** Run the skill over 20-30 accounts you know well — a mix of current customers, churned accounts, and prospects of varying quality. Verify that the quality tiers match your team's intuition. If Q1 accounts are showing defect codes, the rubric is miscalibrated. If obvious out-of-ICP accounts are scoring Q2, the hard disqualifiers or weights need tightening.
+
+## What the skill actually does
+
+The skill runs four steps in a fixed order.
+
+**Step 1 — hard disqualifier sweep.** Before any LLM call, each account is checked against the rubric's hard disqualifiers: sanctioned country, disqualified industry, headcount below the absolute floor, accounts on the explicit exclusion list (competitors, current customers). Hits receive defect code `hd:{reason}` and a quality tier of `disqualified`. This step is deterministic and runs on every account in milliseconds. Why run this first: on a 500-account list, it is common for 5-15% of accounts to be immediate disqualifications — running LLM scoring on those accounts wastes tokens and adds latency without adding information.
+
+**Step 2 — per-account ICP rubric scoring.** Accounts that cleared the hard disqualifier sweep are scored against each criterion in the rubric. For each criterion, the model emits a tier (A / B / C), a weight (from the rubric), and a one-sentence rationale citing the rubric row. The weighted sum maps to a quality tier: Q1 (score ≥ 8.0), Q2 (6.0-7.99), Q3 (4.0-5.99), Q4 (< 4.0). Failing criteria generate the corresponding defect codes — a headcount score of C on an account below the B-tier floor generates `wrong-size:too-small`.
+
+Why per-criterion rather than a single blended score: the defect codes that drive the remediation queue require knowing which specific criterion failed, not just that the overall score was low. A Q3 account with `missing-field:tech_stack` is a different remediation task from a Q3 account with `wrong-industry` — the first needs enrichment, the second needs removal.
+
+**Step 3 — supplemental defect detection.** After rubric scoring, the skill checks for defects not covered by the rubric: `stale-data` (enrichment older than threshold), `missing-field:{field}` (criteria that could not be scored), `low-intent` and `intent-spike` from the provided intent scores. The `intent-spike` flag can appear even on Q2 accounts — it surfaces accounts where in-market behavior should override the borderline rubric score and trigger direct AE outreach anyway.
+
+**Step 4 — list-level aggregation.** After per-account scoring, the skill computes the list quality score (Q1% + Q2% - Q3% - 2×Q4%, scaled to 100), the defect frequency table, and the remediation queue. The remediation queue is sorted by estimated re-audit lift: accounts most likely to become Q1 after re-enrichment appear first. A list quality score below 30 is the skill's go/no-go signal — the recommendation section will say "Do not launch until Q3/Q4 accounts are remediated or removed."
+
+## Cost reality
+
+Per-account token cost depends on rubric size and how much account data is provided. For a typical 6-criterion rubric with structured per-criterion output and one account record at 300-500 tokens of data, expect roughly 1,200-2,000 input tokens and 300-500 output tokens per account. At Claude Sonnet 4.x pricing (approximately $3 per million input and $15 per million output as of early 2026), that is $0.008-0.015 per account.
+
+A 500-account pre-campaign audit costs $4-8 in Claude tokens. A quarterly hygiene pass over a 2,000-account ABM universe costs $16-30. These are smaller than the cost of one misrouted AE sequence. The non-token cost is larger: configuring the rubric and defect taxonomy correctly is a 60-90 minute session; plan for it.
+
+The token cost per account is lower than the lead-scoring skill because ABM accounts typically have richer structured data (fewer missing fields) and the defect codes are more compact than a full per-criterion rationale. If your accounts have many missing fields, more of the processing falls to the supplemental defect step, which is deterministic and free.
+
+Prompt caching of the rubric and defect taxonomy files pays off meaningfully at scale — on a 500-account audit the rubric is loaded once and cached across the full batch. On a 5-account spot-check it does not matter.
+
+## Success metric
+
+The primary metric for the audit is **list quality score trend**: run the audit on the same ABM universe every quarter and track whether the list quality score rises. A rising score means your enrichment cadence is working, your rubric is stable, and your list-building process has tightened. A falling score — or a score that stays flat despite remediation effort — means either the rubric has shifted or the enrichment source is unreliable.
+
+Secondary metric: **ABM campaign conversion rate by quality tier.** After 90 days of running campaigns against audited lists, compare the conversion-to-opportunity rate for Q1 accounts vs Q2 accounts vs accounts that were remediated from Q3 before being included. Q1 should convert at a higher rate than Q2, and Q2 after remediation should convert at a higher rate than unauditied Q3. If there is no conversion difference between tiers, the rubric is not predictive and needs to be re-argued.
+
+## Failure modes
+
+- **Defect codes that indict the rubric, not the list.** If 35% of your list receives `wrong-size:too-small`, the problem is often the headcount floor in the rubric, not the list. The rubric may have been set when your motion was pure enterprise and has not been updated since you opened an SMB segment. Acting on those defect codes by removing 35% of the list is the wrong move; re-examining the rubric is the right one. **Guard:** after every audit, check whether any single defect code applies to more than 25% of accounts. If so, review the rubric criterion that generates that code before remediating the list. The audit output's defect frequency table makes this check easy — the most-common code is always row one of the table.
+- **Stale enrichment producing false negatives on good accounts.** An account with a `last_enrichment_date` of 14 months ago may have tripled headcount, raised a Series B, and added Salesforce to their tech stack since that data was collected. The skill's Q4 verdict on that account is not a verdict on the company — it is a verdict on your enrichment cadence. Removing or de-prioritizing those accounts before re-enriching them loses real pipeline. **Guard:** the skill adds `stale-data` to any account where enrichment exceeds the staleness threshold and notes "scored on potentially stale data" in the rationale. The remediation queue places `stale-data` + high rubric-score-potential accounts at the top. The standing rule: never remove an account from the list solely because of `stale-data`; always re-enrich first.
+- **Intent score inflation from single-user behavior.** A company in a 6sense "high-intent" segment may be there because one junior analyst at the company read three blog posts. Surfacing that company as `intent-spike` and routing it to direct AE outreach based on that signal is a false positive that burns AE time. **Guard:** when `intent_scores` are provided, the skill displays the raw intent score and the source alongside the `intent-spike` flag. The standing guidance in the skill output: before acting on any `intent-spike` signal, verify with [6sense](/en/tools/6sense/) or your ABM platform that the intent activity originates from buying-committee personas — director level and above in relevant functional areas — rather than from a single low-authority user.
+- **Rubric drift invalidating historical audit comparisons.** If the rubric changes between the Q2 audit and the Q3 audit, the list quality scores are not comparable — a rising score might just reflect a looser rubric, not actual list improvement. **Guard:** the skill records the rubric's SHA-256 in every audit footer. When comparing quarter-over-quarter list quality scores, confirm the rubric SHA-256 is identical. If the rubric changed, re-run the prior quarter's list against the new rubric before making comparisons. The "Last edited" date in the rubric file and the quarterly calendar reminder to review the rubric work together to make drift visible before it distorts the trend.
+
+## vs alternatives
+
+**vs manual RevOps review.** For a list under 50 accounts, an experienced RevOps analyst with the ICP rubric open can manually review every account in 2-3 hours and produce a better-calibrated result than the skill — humans catch edge cases, like "this company has a weird SIC code but their actual product is clearly in our ICP," that the skill will miss. Above 150 accounts, manual review becomes inconsistent: the analyst's ICP intuition drifts between the first account and the 130th. The skill applies the rubric consistently at any list size.
+
+**vs 6sense's built-in account grading.** 6sense provides an account fit score based on its proprietary ICP model, trained on companies in your CRM with positive engagement history. It is useful once you have enough CRM history for 6sense to learn from (typically 50-100 closed-won accounts). For teams below that bar, 6sense's fit model is under-trained and noisy. This skill works from day one because the rubric is hand-authored. The trade-off: 6sense's model picks up patterns you did not explicitly write down; this skill only knows what you told it. For teams at 50+ closed-won, run both — use 6sense's score for "what surprises me" and this skill's defect codes for "what specifically is wrong with the Q3 accounts."
+
+**vs a spreadsheet ICP scoring matrix.** Many RevOps teams have a spreadsheet where they rate each account against ICP criteria manually. The spreadsheet approach breaks down at scale (consistency drops above 50 accounts), does not produce a defect taxonomy (it tells you the score, not why it is wrong), and becomes stale the moment the rubric changes because no one updates all the previously scored rows. This skill applies the rubric consistently, names the specific defect, and the SHA-256 mechanism ensures you know when the rubric moved. The spreadsheet is the right tool for the first 20 accounts; the skill is the right tool after that.
