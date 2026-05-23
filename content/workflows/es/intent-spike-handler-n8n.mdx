@@ -1,0 +1,89 @@
+---
+slug: intent-spike-handler-n8n
+canonical_slug: intent-spike-handler-n8n
+locale: es
+verticals: [revops]
+title: Route and action intent spikes automatically with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, 6sense, common-room, salesforce, slack]
+roles: [revops, sdr]
+difficulty: intermediate
+time_to_setup: 1-2 hours
+human_tested: false
+---
+
+Un flow de n8n que captura spikes de intención a nivel de cuenta desde [Common Room](/es/tools/common-room/), [6sense](/es/tools/6sense/) (vía sincronización con Salesforce CRM) y Bombora (vía sincronización con Salesforce CRM), deduplica dentro de una ventana diaria, asigna cada spike al propietario de la cuenta en Salesforce o a un pool de SDR por territorio, le pide a Claude que redacte un primer contacto anclado a los temas específicos que está investigando la cuenta, y entrega el contexto completo —incluyendo el borrador— como notificación en [Slack](/es/tools/slack/) y como tarea en [Salesforce](/es/tools/salesforce/). El bundle en `apps/web/public/artifacts/intent-spike-handler-n8n/` incluye el export completo de [n8n](/es/tools/n8n/) más un `_README.md` con instrucciones de importación, variables de entorno, configuración de credenciales, campos personalizados en Salesforce y verificación por rama.
+
+## Cuándo usarlo
+
+Úsalo cuando tus datos de intención ya están fluyendo hacia Salesforce (vía los paquetes gestionados de 6sense o Bombora) o Common Room, pero el seguimiento de los reps ante los spikes es inconsistente: algunos cuentas reciben acción en menos de una hora, otras se quedan sin contacto durante días porque la señal llegó a una vista de CRM que nadie revisa. El síntoma es que el reporte de tu plataforma de intención muestra cuentas con spike alto que nunca recibieron un primer contacto durante la misma semana.
+
+También es el patrón correcto cuando tienes más de un SDR cubriendo territorio y quieres que los spikes se ruteen al rep adecuado de forma automática, en lugar de caer en una bandeja compartida donde la responsabilidad es ambigua. La lógica de asignación del flow verifica primero al propietario de la cuenta en Salesforce; si no existe ninguna cuenta, rutea al pool de SDR de AMER, EMEA o ROW según el país de facturación de la cuenta. Esa regla está en un nodo Code, no en un archivo de configuración, así que el equipo de ops puede auditarla y cambiarla sin abrir un ticket.
+
+El diseño de borrador-no-envío es intencional. Los datos de intención indican que una cuenta está investigando un tema, no que una persona específica está lista para recibir un pitch. El borrador de Claude es un punto de partida que el SDR edita antes de enviar —referencia los temas específicos que la cuenta está investigando, lo que reduce el tiempo de investigación del SDR de 10–15 minutos a menos de 2 minutos, pero el criterio del rep sobre el momento y el tono sigue en el proceso.
+
+## Cuándo NO usarlo
+
+Omítelo si tus plataformas de intención no están sincronizando datos a Salesforce. El path de polling depende de campos de Account en Salesforce escritos por los paquetes gestionados de 6sense o Bombora. Sin esos campos, el path de polling retorna cero filas. El path en tiempo real (webhooks de Common Room) funciona de forma independiente, pero si no estás ejecutando ninguna de esas integraciones, no hay nada que ingestar.
+
+También omítelo si tu equipo de SDR tiene menos de 3 reps y ya revisa las señales de intención en la plataforma UI diariamente. A ese tamaño y con esa disciplina, la capa de notificación añade costo de infraestructura sin cambiar materialmente el tiempo de respuesta.
+
+No uses este flow como único mecanismo de priorización para cuentas de alto valor. El flow gestiona la notificación y la creación de tarea; no reemplaza la revisión semanal de cuentas donde el AE y el SDR deciden qué spikes priorizar. Una notificación de alta severidad en Slack no significa que la cuenta esté lista para comprar —significa que alguien en esa empresa está investigando temas relevantes. El rep decide qué hacer con esa información.
+
+Por último, ten en cuenta que este flow no maneja el caso en que la misma persona ya ha sido contactada previamente. Busca la Account en Salesforce pero no verifica si un contacto de esa cuenta ya está en una secuencia activa. Antes de que el SDR envíe el borrador de Claude, debe verificar en su herramienta de secuenciación que el contacto no esté ya inscrito.
+
+## Configuración
+
+1. **Importar el bundle.** Sube `apps/web/public/artifacts/intent-spike-handler-n8n/intent-spike-handler-n8n.json` a n8n mediante **Workflows → Import from File**. Dos puntos de entrada: un webhook para el path en tiempo real de Common Room y un Schedule Trigger que hace polling a Salesforce cada 4 horas para el path de CRM-sync de 6sense/Bombora.
+
+2. **Configurar las variables de entorno.** El flow usa 10 variables de entorno (URLs de instancia, emails de pool de SDR y handles de Slack). Configúralas en n8n Cloud en **Settings → Environment Variables** o en el archivo `.env` de tu instancia self-hosted. La lista completa con las instrucciones para encontrar cada valor está en `_README.md`.
+
+3. **Conectar credenciales.** Se requieren cuatro credenciales:
+   - `PLACEHOLDER_ANTHROPIC_CRED_ID` — HTTP Header Auth con `x-api-key` configurado con tu clave de Anthropic
+   - `PLACEHOLDER_SLACK_CRED_ID` — HTTP Header Auth con `Authorization: Bearer xoxb-…`
+   - `PLACEHOLDER_SALESFORCE_CRED_ID` — HTTP Header Auth con `Authorization: Bearer <sfdc_token>`
+   - No se necesita credencial directa de 6sense ni Bombora en n8n — los datos llegan a través de los campos de Account en Salesforce escritos por los paquetes de esos proveedores
+
+4. **Crear campos personalizados en Salesforce.** Tres campos en el objeto Task: `Intent_Spike_Source__c` (Texto 50), `Intent_Score__c` (Número 18,0), `Intent_Buying_Stage__c` (Texto 50). Los campos de Account de 6sense y Bombora son instalados por los paquetes de cada proveedor — verifica que los nombres de API coincidan con los de tu org.
+
+5. **Conectar Common Room (path en tiempo real).** En Common Room, agrega un webhook saliente apuntando a `https://<tu-host-n8n>/webhook/intent-spike-handler` con tipo de payload **Organization**. Configura un trigger de workflow en la señal que defina un spike para tu equipo.
+
+6. **Verificar cada path.** Sigue los cinco pasos de verificación en `_README.md` antes de activar el workflow.
+
+## Qué hace el flow
+
+`Webhook — Intent Spike Ingest` acepta solicitudes POST y retorna 202 inmediatamente al llamador. `Normalize Intent Payload` es un nodo Code que maneja tres formas de payload: el formato de webhook de organización de Common Room (detectado por `type: "organization"`), una forma de CRM-sync de 6sense enviada por el Polling Cron (detectada por `_source: "6sense"`), y una forma de CRM-sync de Bombora (detectada por `_source: "bombora"`). El paso de normalización mapea cada forma a un registro interno único con campos consistentes: `domain`, `accountName`, `intentScore`, `buyingStage`, `topTopics`, `spikeSeverity`. La severidad del spike (baja/media/alta) se deriva primero del buying stage (Decision y Purchase mapean a alta; Consideration a media; Awareness y Target a baja) y como fallback del score numérico de intención (≥70 = alta, 40–69 = media, <40 = baja).
+
+`Dedup Check — Fetch Static Data` lee el almacén de datos estáticos del workflow en n8n para una clave compuesta de dominio + fecha actual (`acme.com::2026-05-23`). Un 404 significa primer spike del día — continuar. Un 200 significa que el flow ya procesó esta cuenta hoy — el nodo `Dedup Gate` retorna un array vacío y la ejecución se detiene silenciosamente. La ventana diaria es el horizonte de dedup correcto porque las plataformas de intención frecuentemente revalúan las cuentas cada pocas horas; sin ventana, el mismo spike generaría 4–6 notificaciones por día por cuenta.
+
+`Salesforce — Account Lookup` consulta Salesforce por una Account donde el campo Website contiene el dominio del spike. `Assignment Logic` usa el resultado: si se encontró una Account, el propietario existente recibe el spike. Si no se encontró ninguna Account, el nodo selecciona un pool de territorio usando el país de facturación de la cuenta contra tres conjuntos (AMER, EMEA, ROW). Los emails de pool y handles de Slack provienen de variables de entorno.
+
+`Claude — Draft First Touch` envía una solicitud a la API de Anthropic con `claude-haiku-4-5`, un timeout de 8 segundos y `neverError: true`. El prompt del sistema prohíbe explícitamente frases de relleno y le indica a Claude que referencie los temas de investigación específicos —no el dolor genérico de la industria. `Parse Draft (with fallback)` maneja timeouts de Claude o JSON malformado produciendo un borrador basado en plantilla etiquetado como `draftSource: template-fallback`.
+
+`Slack — Notify Assignee` publica en `#intent-spikes` con un mensaje estructurado de Block Kit: una línea de encabezado con indicador de severidad y @mención del handle de Slack del asignado, un bloque de firmográficos, y el borrador de Claude con etiqueta explícita de "editar antes de enviar". `Salesforce — Create Task` crea una tarea vinculada a la Account con el contexto completo en el campo Descripción.
+
+El segundo punto de entrada — `Polling Cron — Every 4h` — consulta Salesforce cada 4 horas por Accounts modificadas donde el buying stage de 6sense sea Decision o Purchase, o el surge level de Bombora sea alto. `Build Forward Payloads` convierte cada registro de Account en la forma de payload apropiada, y `Forward to Ingest Webhook` envía cada uno al webhook principal con `batchSize: 3` y `batchInterval: 3000ms`.
+
+## Costo real
+
+Por spike, `claude-haiku-4-5` recibe aproximadamente 700 tokens de entrada y produce alrededor de 150 tokens de salida. A los precios de Haiku 4.5 (~$0.80/M entrada, ~$4/M salida), eso es aproximadamente $0.0009 por spike — menos de $0.001. Para un equipo que procesa 500 spikes de intención al mes, el costo de Claude es menor de $0.50/mes. La ventana de dedup significa que las cuentas de alto volumen que tienen spikes repetidos durante el día solo se facturan una vez por día por cuenta.
+
+Las llamadas a la API de Salesforce (una consulta + una creación de tarea por spike) consumen el límite diario de llamadas API de tu org. Salesforce Enterprise permite 150,000 llamadas API por 24 horas por defecto; con 500 spikes/mes (~17/día), este flow usa aproximadamente 34 llamadas/día. El path de polling agrega una consulta por lotes cada 4 horas (6 consultas/día) independientemente del volumen de spikes.
+
+## Modos de fallo
+
+- **Los nombres de campo de 6sense / Bombora no coinciden.** La consulta SOQL en `Salesforce — Poll Intent Fields` usa nombres de API específicos. Si tu proveedor instaló su paquete gestionado con nombres de campo diferentes, la consulta retorna cero filas silenciosamente. Guard: después de importar, ejecuta `Salesforce — Poll Intent Fields` manualmente e inspecciona la salida cruda. Si los registros vuelven pero los campos de intención son nulos, compara los nombres de API en el SOQL con los de tu objeto Account en Salesforce Setup.
+
+- **Los datos estáticos de dedup se acumulan indefinidamente.** El nodo `Dedup Mark — Write Static Data` estampa una clave por dominio por día, pero los datos estáticos del workflow en n8n no se podan automáticamente. Guard: programa una ejecución de mantenimiento mensual que llame a la API de n8n para limpiar los datos estáticos de este workflow, o agrega un cron secundario que elimine claves con más de 7 días de antigüedad.
+
+- **La rotación del Bearer token de Salesforce rompe el path de polling.** El token Bearer crudo en `SFDC_ACCESS_TOKEN` rota cada 2 horas por defecto. Cuando expira, los nodos de Salesforce retornan errores 401 silenciosamente (porque `neverError: true`). Guard: monitorea un patrón de nodos de Salesforce que retornan resultados vacíos incluso cuando sabes que hay spikes de intención ocurriendo. Para producción, reemplaza el enfoque de token Bearer crudo con una Connected App de Salesforce usando el flow de credenciales de cliente OAuth 2.0.
+
+- **El borrador de Claude cita temas desactualizados.** El campo `topTopics` de Common Room o Bombora es una cadena delimitada por punto y coma desde la última ventana de sincronización de la plataforma. Si la plataforma no ha sincronizado en más de 12 horas, los temas pueden reflejar investigación de hace dos días. Guard: la notificación de Slack incluye el timestamp `receivedAt` y la fuente de intención para que el SDR pueda verificar la antigüedad de la señal antes de actuar sobre el borrador.
+
+## vs alternativas
+
+**vs los Workflows nativos de 6sense (Orchestrations).** Las Orchestrations de 6sense pueden disparar acciones como inscribir contactos en secuencias de Outreach o Salesloft directamente desde señales de intención. Es la herramienta correcta si tu acción es la inscripción en una secuencia existente. No es la herramienta correcta si quieres: (a) un borrador de mensaje adaptado a los temas de investigación específicos, (b) una tarea de Salesforce como registro de primer contacto, o (c) normalización multi-fuente entre 6sense y Bombora en el mismo path de routing. El flow de n8n se compone con Orchestrations — usa Orchestrations para inscripción en secuencias y este flow para la capa de notificación + creación de tarea.
+
+**vs triage manual de SDR.** El status quo para la mayoría de equipos es un canal de Slack compartido o vista de CRM donde llegan resúmenes de señales de intención. Los SDR lo revisan cuando tienen tiempo. El costo principal es la latencia de respuesta — el tiempo medio desde el spike hasta el primer contacto se mide en días, no en horas, porque la cola del SDR es profunda y las alertas de intención no se priorizan sobre las actividades programadas. Este flow no garantiza una respuesta más rápida; garantiza que el rep correcto vea el spike de inmediato con el contexto que necesita para actuar.
+
+**vs una tabla de Clay que hace scraping de señales de intención.** Clay puede extraer datos de Bombora o 6sense a una tabla, enriquecerlos, y enviar filas enriquecidas a Salesforce o a una herramienta de secuenciación. Es un buen fit para corridas de prospección outbound por lotes (semanal, no en tiempo real). No es un buen fit para el patrón de notificación en tiempo real — las tablas de Clay no son event-driven, así que el workflow siempre tiene algo de lag de lote. Usa Clay para la capa de prospección; usa este flow para la capa de respuesta a spikes en tiempo real.

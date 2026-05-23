@@ -1,0 +1,89 @@
+---
+slug: intent-spike-handler-n8n
+canonical_slug: intent-spike-handler-n8n
+locale: ja
+verticals: [revops]
+title: Route and action intent spikes automatically with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, 6sense, common-room, salesforce, slack]
+roles: [revops, sdr]
+difficulty: intermediate
+time_to_setup: 1-2 hours
+human_tested: false
+---
+
+[Common Room](/ja/tools/common-room/)、[6sense](/ja/tools/6sense/)（Salesforce CRM 同期経由）、Bombora（Salesforce CRM 同期経由）からアカウントレベルのインテント・スパイクを捕捉し、日単位の時間窓で重複排除を行い、各スパイクを Salesforce の既存アカウントオーナーまたは地域別 SDR プールに割り当て、Claude にアカウントが調査している具体的なトピックに基づいたファーストタッチの下書きを生成させ、下書き込みの完全なコンテキストを [Slack](/ja/tools/slack/) 通知と [Salesforce](/ja/tools/salesforce/) タスクとして届ける n8n フローです。`apps/web/public/artifacts/intent-spike-handler-n8n/` にあるバンドルには、完全な [n8n](/ja/tools/n8n/) エクスポートと、インポート手順、環境変数、credential 設定、Salesforce カスタムフィールド、各ブランチの検証をカバーした `_README.md` が含まれています。
+
+## いつ使うか
+
+インテントデータがすでに Salesforce に流れている（6sense または Bombora のマネージドパッケージ経由）か Common Room に入っているにもかかわらず、スパイクへの担当者のフォローアップが一貫していない場合に使います。あるアカウントは 1 時間以内に対応されるのに、別のアカウントは誰も確認しない CRM ビューにシグナルが届いたため何日も放置される、というケースです。症状は、インテントプラットフォームのレポートが高スパイクのアカウントを表示しているのに、同じ週にファーストタッチが一度も行われていないことです。
+
+また、1 人以上の SDR が地域を担当しており、スパイクを正しい担当者に自動的にルーティングしたい場合にも適しています。フローのアサインロジックはまず Salesforce の既存アカウントオーナーを確認し、アカウントが存在しない場合はアカウントの請求先国に基づいて AMER、EMEA、ROW の SDR プールにルーティングします。このルールはコードノードに記述されており、設定ファイルではないため、ops チームはチケットを開かずに内容を確認・変更できます。
+
+「下書きのみ、送信しない」設計は意図的なものです。インテントデータはアカウントがあるトピックを調査していることを示すものであり、特定の人物が購買準備ができていることを示すものではありません。Claude の下書きは SDR が送信前に編集するための出発点です。アカウントが調査している具体的なトピックを参照するため、SDR のリサーチ時間を 10〜15 分から 2 分未満に短縮しますが、タイミングとトーンに関する担当者の判断はプロセスに残ります。
+
+## 使わないケース
+
+インテントプラットフォームが Salesforce にデータを同期していない場合はスキップしてください。ポーリングパスは 6sense または Bombora のマネージドパッケージが書き込む Salesforce Account フィールドに依存しています。これらのフィールドがなければ、ポーリングパスは 0 件を返します。リアルタイムパス（Common Room の送信 webhook）は独立して機能しますが、どちらのインテグレーションも動かしていない場合は取り込むものがありません。
+
+SDR チームが 3 人未満で、インテントシグナルをプラットフォームの UI で毎日確認している場合もスキップしてください。その規模と規律があれば、通知レイヤーは応答時間を大きく変えることなくインフラコストを追加するだけです。
+
+このフローを高価値アカウントの唯一の優先順位付けメカニズムとして使わないでください。フローは通知とタスク作成を担うものであり、AE と SDR がどのスパイクを優先するかを決める週次のアカウントレビューを代替するものではありません。高重要度の Slack 通知はアカウントが購買準備ができていることを意味するのではなく、そのアカウントの誰かが関連トピックを調査していることを意味します。何をするかは担当者が判断します。
+
+また、このフローは同じ人物が以前に連絡を受けたかどうかを処理しません。Salesforce の Account を検索しますが、そのアカウントの連絡先がすでにアクティブなシーケンスに登録されているかどうかは確認しません。SDR が Claude の下書きを送信する前に、シーケンスツールで連絡先がすでに登録されていないか確認する必要があります。
+
+## セットアップ
+
+1. **バンドルをインポートする。** `apps/web/public/artifacts/intent-spike-handler-n8n/intent-spike-handler-n8n.json` を n8n の **Workflows → Import from File** でアップロードします。2 つのエントリーポイントがあります：Common Room のリアルタイムパス用の webhook と、6sense/Bombora の CRM 同期パス用に Salesforce を 4 時間ごとにポーリングする Schedule Trigger です。
+
+2. **環境変数を設定する。** フローは 10 個の環境変数（インスタンス URL、SDR プールのメールアドレスと Slack ハンドル）を使用します。n8n Cloud では **Settings → Environment Variables** で、セルフホスト版では `.env` ファイルで設定してください。各値の入手先を含む完全なリストは `_README.md` に記載されています。
+
+3. **Credential を接続する。** 4 つの credential が必要です：
+   - `PLACEHOLDER_ANTHROPIC_CRED_ID` — HTTP Header Auth で `x-api-key` に Anthropic キーを設定
+   - `PLACEHOLDER_SLACK_CRED_ID` — HTTP Header Auth で `Authorization: Bearer xoxb-…` を設定
+   - `PLACEHOLDER_SALESFORCE_CRED_ID` — HTTP Header Auth で `Authorization: Bearer <sfdc_token>` を設定
+   - 6sense または Bombora の直接 credential は n8n では不要です。データはこれらベンダーのマネージドパッケージが書き込む Salesforce Account フィールド経由で届きます。
+
+4. **Salesforce カスタムフィールドを作成する。** Task オブジェクトに 3 つのフィールドを作成します：`Intent_Spike_Source__c`（テキスト 50）、`Intent_Score__c`（数値 18,0）、`Intent_Buying_Stage__c`（テキスト 50）。6sense と Bombora の Account フィールドは各ベンダーのパッケージによってインストールされます。API 名が自分の org のものと一致しているか確認してください。
+
+5. **Common Room を接続する（リアルタイムパス）。** Common Room でペイロードタイプ **Organization** の送信 webhook を `https://<n8n ホスト>/webhook/intent-spike-handler` に向けて追加します。チームにとってスパイクを定義するシグナルでワークフロートリガーを設定してください。
+
+6. **各パスを検証する。** ワークフローを有効化する前に `_README.md` の 5 ステップの検証を実施してください。
+
+## フローの動作
+
+`Webhook — Intent Spike Ingest` は POST リクエストを受け付け、呼び出し元に即座に 202 を返します。`Normalize Intent Payload` は 3 種類のペイロード形式を処理するコードノードです：Common Room の組織 webhook 形式（`type: "organization"` で検出）、Polling Cron が転送する 6sense CRM 同期形式（`_source: "6sense"` で検出）、Bombora CRM 同期形式（`_source: "bombora"` で検出）。正規化ステップは各形式を `domain`、`accountName`、`intentScore`、`buyingStage`、`topTopics`、`spikeSeverity` といった一貫したフィールドを持つ単一の内部レコードにマッピングします。スパイクの重要度（低/中/高）はまず buying stage から導出され（Decision と Purchase → 高、Consideration → 中、Awareness と Target → 低）、フォールバックとして数値インテントスコアから導出されます（70 以上 = 高、40〜69 = 中、40 未満 = 低）。
+
+`Dedup Check — Fetch Static Data` は n8n のワークフロー静的データストアをドメイン + 現在の日付で構成されるキー（例：`acme.com::2026-05-23`）で読み取ります。404 はその日の最初のスパイクを意味し、処理を継続します。200 はフローが今日このアカウントをすでに処理済みであることを意味し、`Dedup Gate` ノードが空の配列を返して実行が静かに停止します。インテントプラットフォームはアカウントを数時間ごとに再評価することが多いため、日単位の窓が適切な重複排除の水平線となります。窓がなければ、同じスパイクがアカウントごとに 1 日 4〜6 件の通知を生成します。
+
+`Salesforce — Account Lookup` は Website フィールドにスパイクのドメインを含む Account を Salesforce に問い合わせます。`Assignment Logic` は結果を使用します：Account が見つかった場合は既存のオーナーがスパイクを受け取ります。Account が見つからなかった場合、ノードはアカウントの請求先国を 3 つのセット（AMER、EMEA、ROW）に対して照合して地域プールを選択します。プールのメールアドレスと Slack ハンドルは環境変数から取得します。
+
+`Claude — Draft First Touch` は `claude-haiku-4-5`、8 秒のタイムアウト、`neverError: true` で Anthropic API にリクエストを送ります。システムプロンプトはフィラーフレーズを明示的に禁止し、業界全般の課題ではなく具体的なリサーチトピックを参照するよう Claude に指示します。`Parse Draft (with fallback)` は Claude のタイムアウトや不正な JSON を処理し、`draftSource: template-fallback` タグ付きのテンプレートベースの下書きを生成します。
+
+`Slack — Notify Assignee` は Block Kit 構造化メッセージを `#intent-spikes` に投稿します：重要度インジケーターと担当者の Slack ハンドルの @メンションを含むヘッダー行、企業情報ブロック、「送信前に編集してください」という明示的なラベル付きの Claude 下書き。`Salesforce — Create Task` は Account にリンクされたタスク（`WhatId` 経由）を説明フィールドに完全なコンテキストを含めて作成します。
+
+2 番目のエントリーポイントである `Polling Cron — Every 4h` は 4 時間ごとに Salesforce に問い合わせ、過去 4 時間に変更された Account のうち 6sense の buying stage が Decision か Purchase、または Bombora の surge level が高いものを取得します。`Build Forward Payloads` は各 Account レコードを適切なペイロード形式に変換し、`Forward to Ingest Webhook` は `batchSize: 3`、`batchInterval: 3000ms` でメイン webhook に各レコードを送信します。
+
+## コストの実態
+
+スパイクごとに `claude-haiku-4-5` は約 700 トークンの入力を受け取り、3 パートの下書きに約 150 トークンの出力を生成します。Haiku 4.5 の料金（入力 ~$0.80/M、出力 ~$4/M）では、1 スパイクあたり約 $0.0009 — $0.001 未満です。月に 500 件のインテントスパイクを処理するチームの場合、Claude のコストは月 $0.50 未満です。重複排除の窓により、同日に複数回スパイクする大量ボリュームのアカウントはアカウント 1 件・1 日 1 回のみ課金されます。
+
+Salesforce API 呼び出し（スパイクごとに 1 件のクエリ + 1 件のタスク作成）は org の日次 API 呼び出し制限を消費します。Salesforce Enterprise はデフォルトで 24 時間あたり 150,000 API 呼び出しを許可しています。月 500 件のスパイク（約 17 件/日）であれば、このフローは 1 日約 34 呼び出しを使用します。ポーリングパスはスパイクボリュームに関係なく 4 時間ごとにバッチクエリを追加します（6 クエリ/日）。
+
+## 障害モード
+
+- **6sense / Bombora のフィールド名が一致しない。** `Salesforce — Poll Intent Fields` の SOQL クエリは特定の API 名を使用しています。ベンダーが異なるフィールド名でマネージドパッケージをインストールしていた場合、クエリは静かに 0 件を返します。Guard：インポート後に `Salesforce — Poll Intent Fields` を手動で実行し、生の出力を確認してください。レコードは返ってくるがインテントフィールドが null の場合、SOQL の API 名と Salesforce Setup → Object Manager の Account オブジェクトに実際に存在するものを比較してください。
+
+- **重複排除の静的データが無制限に蓄積する。** `Dedup Mark — Write Static Data` ノードはドメインごとに日単位でキーをスタンプしますが、n8n のワークフロー静的データは自動的に削除されません。Guard：n8n API を呼び出してこのワークフローの静的データをクリアする月次メンテナンス実行をスケジュールするか、7 日以上経過したキーを削除するセカンダリ cron を追加してください。
+
+- **Salesforce Bearer トークンのローテーションがポーリングパスを壊す。** `SFDC_ACCESS_TOKEN` の生の Bearer トークンはデフォルトで 2 時間ごとにローテーションします。期限が切れると、Salesforce ノードは静かに 401 エラーを返します（`neverError: true` のため）。Guard：インテントスパイクが発生していることを知っているにもかかわらず、Salesforce ノードが空の結果を返すパターンを監視してください。本番環境では、生の Bearer トークンアプローチを OAuth 2.0 クライアント credentials フローを使用した Salesforce Connected App に置き換えてください。
+
+- **Claude の下書きが古いトピックを参照する。** Common Room または Bombora の `topTopics` フィールドは、プラットフォームの最後の同期ウィンドウからのセミコロン区切りの文字列です。プラットフォームが 12 時間以上同期していない場合、トピックは 2 日前のリサーチを反映している可能性があります。Guard：Slack 通知には `receivedAt` タイムスタンプとインテントソースが含まれているため、SDR は下書きに基づいて行動する前にシグナルの経過時間を確認できます。
+
+## 代替手段との比較
+
+**vs 6sense のネイティブ Workflows（Orchestrations）。** 6sense の Orchestrations はインテントシグナルから直接 Outreach や Salesloft のシーケンスに連絡先を登録するなどのアクションをトリガーできます。アクションが既存のシーケンスへの登録であれば、これが正しいツールです。以下を求めている場合は正しいツールではありません：(a) 具体的なリサーチトピックに合わせた下書きメッセージ、(b) ファーストタッチレコードとしての Salesforce タスク、(c) 同一ルーティングパスでの 6sense と Bombora をまたいだマルチソース正規化。n8n フローは Orchestrations と組み合わせて使えます。シーケンス登録には Orchestrations を、通知 + タスク作成レイヤーにはこのフローを使ってください。
+
+**vs 手動 SDR トリアージ。** ほとんどのチームの現状は、インテントシグナルのサマリーが届く共有 Slack チャンネルまたは CRM ビューです。SDR は時間があるときに確認します。主なコストは応答遅延です。スパイクからファーストタッチまでの中央値は、SDR キューが深く、インテントアラートがスケジュールされたアクティビティより優先されないため、時間ではなく日単位で測定されます。このフローは応答の速さを保証するものではありません。正しい担当者が行動に必要なコンテキストを持ってスパイクを即座に確認することを保証するものです。
+
+**vs インテントシグナルをスクレイピングする Clay テーブル。** Clay は Bombora や 6sense のデータをテーブルに取り込み、エンリッチして、エンリッチ済みの行を Salesforce やシーケンスツールに送信できます。バッチアウトバウンドプロスペクティングの実行（週次、リアルタイムではない）には適しています。Clay テーブルはイベント駆動ではないため、リアルタイム通知パターンには適していません。プロスペクティングレイヤーには Clay を、リアルタイムスパイク応答レイヤーにはこのフローを使ってください。

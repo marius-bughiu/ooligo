@@ -1,0 +1,489 @@
+{
+  "name": "Intent spike handler — route and action",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "intent-spike-handler",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000001",
+      "name": "Webhook — Intent Spike Ingest",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "intent-spike-handler-webhook",
+      "notesInFlow": true,
+      "notes": "Accepts POSTs from Common Room outgoing webhooks (organization payload) OR from the Polling Cron's self-POST for 6sense/Bombora CRM-synced data. Path: /webhook/intent-spike-handler."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"received\": true, \"domain\": \"{{ $json.body.domain || $json.domain }}\" }",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000002",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 480],
+      "notesInFlow": true,
+      "notes": "Return immediately so Common Room or the cron caller is not blocked on downstream enrichment and LLM calls."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize intent spike payloads from three possible sources:\n// 1. Common Room outgoing webhook (organization payload, v1)\n// 2. 6sense CRM-sync data forwarded by the Polling Cron (custom shape)\n// 3. Bombora CRM-sync data forwarded by the Polling Cron (custom shape)\n//\n// Output: a single normalized intent record regardless of source.\n\nconst raw = $json.body || $json;\n\n// Detect source by payload shape\nlet source = 'unknown';\nlet domain = '';\nlet accountName = '';\nlet employeeCount = null;\nlet industry = '';\nlet country = '';\nlet intentScore = null;\nlet buyingStage = '';\nlet topTopics = [];\nlet technologies = [];\nlet sfdcAccountId = '';\nlet crAccountId = '';\nlet spikeSeverity = 'medium'; // low | medium | high\n\nif (raw.type === 'organization' || raw.version) {\n  // Common Room organization webhook\n  source = 'common-room';\n  domain = raw.domain || '';\n  accountName = raw.name || '';\n  employeeCount = raw.employeeCount || null;\n  industry = raw.industry || '';\n  country = raw.location?.country || '';\n  technologies = Array.isArray(raw.technologies) ? raw.technologies.slice(0, 10) : [];\n  // Common Room passes custom fields for intent score if 6sense is connected via Salesforce\n  intentScore = raw.customFields?.sixsense_intent_score || raw.intentScore || null;\n  buyingStage = raw.customFields?.sixsense_buying_stage || raw.buyingStage || '';\n  topTopics = raw.customFields?.bombora_top_topics?.split(',').map(t => t.trim()) || [];\n  crAccountId = raw.commonRoomOrgLink || '';\n  sfdcAccountId = raw.customFields?.sfdc_account_id || '';\n\n} else if (raw._source === '6sense') {\n  // 6sense CRM-sync data forwarded by Polling Cron\n  source = '6sense';\n  domain = raw.domain || '';\n  accountName = raw.account_name || '';\n  employeeCount = raw.employee_count || null;\n  industry = raw.industry || '';\n  country = raw.country || '';\n  intentScore = raw.intent_score || null;\n  buyingStage = raw.buying_stage || '';\n  topTopics = Array.isArray(raw.top_topics) ? raw.top_topics.slice(0, 8) : [];\n  sfdcAccountId = raw.sfdc_account_id || '';\n  technologies = Array.isArray(raw.technologies) ? raw.technologies.slice(0, 10) : [];\n\n} else if (raw._source === 'bombora') {\n  // Bombora CRM-sync data forwarded by Polling Cron\n  source = 'bombora';\n  domain = raw.domain || '';\n  accountName = raw.company_name || '';\n  employeeCount = raw.company_size || null;\n  industry = raw.industry || '';\n  country = raw.country || '';\n  intentScore = raw.composite_score || null;\n  buyingStage = raw.surge_level || ''; // low / medium / high\n  topTopics = Array.isArray(raw.topics) ? raw.topics.map(t => t.topic || t).slice(0, 8) : [];\n  sfdcAccountId = raw.sfdc_account_id || '';\n  technologies = [];\n\n} else {\n  // Fallback: try to pull common fields from whatever shape was sent\n  source = 'generic';\n  domain = raw.domain || raw.website || '';\n  accountName = raw.name || raw.account_name || raw.company_name || '';\n  employeeCount = raw.employeeCount || raw.employee_count || null;\n  industry = raw.industry || '';\n  country = raw.country || '';\n  intentScore = raw.intentScore || raw.intent_score || null;\n  buyingStage = raw.buyingStage || raw.buying_stage || '';\n  topTopics = Array.isArray(raw.topTopics || raw.topics) ? (raw.topTopics || raw.topics).slice(0, 8) : [];\n  sfdcAccountId = raw.sfdcAccountId || raw.sfdc_account_id || '';\n}\n\n// Map buying stage / score to spike severity\n// 6sense stages: Target, Awareness, Consideration, Decision, Purchase\n// Bombora surge levels: low, medium, high\n// Numeric scores: 0-100\nconst stageMap = {\n  'purchase': 'high', 'decision': 'high',\n  'consideration': 'medium',\n  'awareness': 'low', 'target': 'low',\n  'high': 'high', 'medium': 'medium', 'low': 'low'\n};\nif (buyingStage) {\n  spikeSeverity = stageMap[buyingStage.toLowerCase()] || 'medium';\n} else if (intentScore !== null) {\n  if (intentScore >= 70) spikeSeverity = 'high';\n  else if (intentScore >= 40) spikeSeverity = 'medium';\n  else spikeSeverity = 'low';\n}\n\n// Derive a dedup key: domain + date (day-level window prevents re-firing for same account same day)\nconst today = new Date().toISOString().split('T')[0];\nconst dedupKey = `${domain}::${today}`;\n\nif (!domain) {\n  throw new Error('Normalized payload has no domain — cannot process spike without account identifier.');\n}\n\nreturn [{\n  json: {\n    source,\n    domain,\n    accountName,\n    employeeCount,\n    industry,\n    country,\n    intentScore,\n    buyingStage,\n    topTopics,\n    technologies,\n    sfdcAccountId,\n    crAccountId,\n    spikeSeverity,\n    dedupKey,\n    receivedAt: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000003",
+      "name": "Normalize Intent Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300],
+      "notesInFlow": true,
+      "notes": "Handles Common Room, 6sense CRM-sync, Bombora CRM-sync, and generic shapes. Throws if domain is missing."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.N8N_SELF_URL_HOST }}/api/v1/workflows/{{ $workflow.id }}/static-data/dedup/{{ $json.dedupKey }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-N8N-API-KEY", "value": "={{ $env.N8N_API_KEY }}" }
+          ]
+        },
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000004",
+      "name": "Dedup Check — Fetch Static Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300],
+      "notesInFlow": true,
+      "notes": "Reads n8n static workflow data to check if this domain was already actioned today (day-level dedup window). A 404 means first spike of the day — proceed. A 200 means duplicate — skip. Requires N8N_API_KEY env var."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dedup gate: if the static-data GET returned 200 with a stored timestamp, this spike\n// was already processed today. Skip it by returning an empty array (no output items).\n// If GET returned 404 or any error, this is the first spike for this domain today — proceed.\n\nconst statusCode = $json.statusCode || $json.status || 200;\nconst alreadyProcessed = statusCode === 200 && $json.body?.value;\n\nif (alreadyProcessed) {\n  // Duplicate spike — output nothing so downstream nodes don't fire\n  return [];\n}\n\n// First spike of the day — pass through the normalized payload from two nodes back\nconst normalized = $('Normalize Intent Payload').item.json;\nreturn [{ json: { ...normalized, dedupPassed: true } }];"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000005",
+      "name": "Dedup Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "notesInFlow": true,
+      "notes": "Returns empty array (halts execution) for duplicate spikes. Passes through on first spike of the day. Day-level window prevents SDR fatigue from the same account re-spiking within a single day."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.N8N_SELF_URL_HOST }}/api/v1/workflows/{{ $workflow.id }}/static-data/dedup/{{ $json.dedupKey }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-N8N-API-KEY", "value": "={{ $env.N8N_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"value\": \"{{ $json.receivedAt }}\" }",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000006",
+      "name": "Dedup Mark — Write Static Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300],
+      "notesInFlow": true,
+      "notes": "Stamps this domain+date key as processed so subsequent spikes today are dropped by the Dedup Gate."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SFDC_INSTANCE_URL }}/services/data/v59.0/query/?q=SELECT+Id,OwnerId,Owner.Name,Owner.Email,Owner.Slack_Handle__c,Name,Industry,AnnualRevenue,NumberOfEmployees,BillingCountry,sixsense_Buying_Stage__c,sixsense_Intent_Score__c+FROM+Account+WHERE+Website+LIKE+'%{{ $json.domain }}%'+LIMIT+1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SFDC_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000007",
+      "name": "Salesforce — Account Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SALESFORCE_CRED_ID",
+          "name": "Salesforce — Bearer token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Looks up the Salesforce Account by domain substring. Returns OwnerId, Owner.Name, Owner.Email, Owner.Slack_Handle__c so the assignment logic can use the existing owner. neverError so a miss flows through."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assignment logic: determine which rep owns this spike and at what urgency.\n//\n// Rules (in priority order):\n// 1. If a Salesforce Account exists and has an Owner, that owner gets the spike — they own the account.\n// 2. If no SFDC Account found, route to the SDR assignment pool based on territory:\n//    - US/CA/AU/NZ → SDR_POOL_AMER (env var: SDR_POOL_AMER_EMAIL, SDR_POOL_AMER_SLACK)\n//    - DE/AT/CH/FR/NL/SE/DK/NO/FI/BE → SDR_POOL_EMEA (env var: SDR_POOL_EMEA_EMAIL, SDR_POOL_EMEA_SLACK)\n//    - All others → SDR_POOL_ROW (env var: SDR_POOL_ROW_EMAIL, SDR_POOL_ROW_SLACK)\n// 3. Urgency: high-severity spikes get flagged urgent; mid/low get standard.\n\nconst spikeData = $('Dedup Gate').item.json;\nconst sfRecord = $json?.records?.[0] || null;\n\nlet assigneeEmail = '';\nlet assigneeName = '';\nlet assigneeSlack = '';\nlet sfdcAccountId = spikeData.sfdcAccountId || '';\nlet assignmentSource = '';\n\nif (sfRecord) {\n  // Account exists in Salesforce — keep existing owner\n  assigneeEmail = sfRecord.Owner?.Email || $env.SDR_POOL_AMER_EMAIL;\n  assigneeName = sfRecord.Owner?.Name || 'Account Owner';\n  assigneeSlack = sfRecord.Owner?.Slack_Handle__c || '';\n  sfdcAccountId = sfRecord.Id || sfdcAccountId;\n  assignmentSource = 'sfdc-existing-owner';\n} else {\n  // No SFDC Account — territory-based pool assignment\n  const country = (spikeData.country || '').toUpperCase();\n  const amer = new Set(['US', 'CA', 'AU', 'NZ', 'MX', 'BR', 'AR', 'CL', 'CO']);\n  const emea = new Set(['DE', 'AT', 'CH', 'FR', 'NL', 'SE', 'DK', 'NO', 'FI', 'BE', 'GB', 'IE', 'ES', 'PT', 'IT']);\n\n  if (amer.has(country) || country === '') {\n    assigneeEmail = $env.SDR_POOL_AMER_EMAIL || 'sdr-amer@example.com';\n    assigneeName = 'SDR Pool — AMER';\n    assigneeSlack = $env.SDR_POOL_AMER_SLACK || '';\n    assignmentSource = 'pool-amer';\n  } else if (emea.has(country)) {\n    assigneeEmail = $env.SDR_POOL_EMEA_EMAIL || 'sdr-emea@example.com';\n    assigneeName = 'SDR Pool — EMEA';\n    assigneeSlack = $env.SDR_POOL_EMEA_SLACK || '';\n    assignmentSource = 'pool-emea';\n  } else {\n    assigneeEmail = $env.SDR_POOL_ROW_EMAIL || 'sdr-row@example.com';\n    assigneeName = 'SDR Pool — ROW';\n    assigneeSlack = $env.SDR_POOL_ROW_SLACK || '';\n    assignmentSource = 'pool-row';\n  }\n}\n\nconst isUrgent = spikeData.spikeSeverity === 'high';\n\nreturn [{\n  json: {\n    ...spikeData,\n    sfdcAccountId,\n    assigneeEmail,\n    assigneeName,\n    assigneeSlack,\n    assignmentSource,\n    isUrgent,\n    sfdcAccountFound: !!sfRecord,\n    sfdcAccountName: sfRecord?.Name || spikeData.accountName,\n  }\n}];"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000008",
+      "name": "Assignment Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300],
+      "notesInFlow": true,
+      "notes": "Priority: SFDC existing owner → territory pool (AMER/EMEA/ROW). urgency flag set on high-severity spikes. All env vars have fallback strings so the flow never throws on missing config."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 600,\n  \"system\": \"You write short, specific first-touch outreach for B2B SDRs acting on real-time intent signals. Given account firmographics, intent data, and top research topics, produce a single JSON object with three fields: {\\\"subject\\\": string under 60 chars, \\\"body\\\": string under 220 chars, \\\"talking_point\\\": string under 120 chars}. The body must reference the specific topics the account is researching — not generic pain. Do not use: 'I noticed', 'reach out', 'touch base', 'circle back', 'synergy', 'value prop', 'leverage', 'empower'. The draft is a starting point — the SDR edits before sending. Tone: direct, peer-to-peer, no fluff. Reply with JSON only, no prose, no code fences.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Account: {{ $json.sfdcAccountName }}\\nDomain: {{ $json.domain }}\\nIndustry: {{ $json.industry }}\\nEmployee count: {{ $json.employeeCount }}\\nCountry: {{ $json.country }}\\nIntent source: {{ $json.source }}\\nIntent score: {{ $json.intentScore }}\\nBuying stage: {{ $json.buyingStage }}\\nSpike severity: {{ $json.spikeSeverity }}\\nTop research topics: {{ JSON.stringify($json.topTopics) }}\\nTechnologies: {{ JSON.stringify($json.technologies.slice(0, 6)) }}\\nAssignee: {{ $json.assigneeName }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000009",
+      "name": "Claude — Draft First Touch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "8s timeout. neverError so a Claude failure doesn't block the Slack notification and Salesforce task. Draft is a starting point — explicit in both the system prompt and the Slack message."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's draft. Fall back to a templated placeholder if parsing fails.\nconst assignmentData = $('Assignment Logic').item.json;\nconst raw = $json?.content?.[0]?.text || '';\n\nlet draft = null;\ntry {\n  draft = JSON.parse(raw);\n} catch (e) {\n  draft = null;\n}\n\nconst usedFallback = !draft || !draft.subject;\nconst subject = draft?.subject || `[Intent spike] ${assignmentData.sfdcAccountName} is researching — follow up`;\nconst body = draft?.body || `Hi [Name], saw ${assignmentData.sfdcAccountName} is actively researching ${assignmentData.topTopics.slice(0, 2).join(' and ')} — thought it was worth a quick note to see if there's a fit. Happy to share what we've seen work for similar teams.`;\nconst talkingPoint = draft?.talking_point || `${assignmentData.sfdcAccountName} hit ${assignmentData.spikeSeverity} intent on: ${assignmentData.topTopics.slice(0, 3).join(', ')}.`;\n\nreturn [{\n  json: {\n    ...assignmentData,\n    draftSubject: subject,\n    draftBody: body,\n    draftTalkingPoint: talkingPoint,\n    draftSource: usedFallback ? 'template-fallback' : 'claude',\n  }\n}];"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-00000000000a",
+      "name": "Parse Draft (with fallback)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 300],
+      "notesInFlow": true,
+      "notes": "Tags draftSource as 'claude' or 'template-fallback' so ops can audit how often Claude is actually running."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#intent-spikes\",\n  \"text\": \"{{ $json.isUrgent ? ':red_circle:' : ':large_yellow_circle:' }} Intent spike — {{ $json.sfdcAccountName }} ({{ $json.spikeSeverity }} severity)\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"{{ $json.isUrgent ? ':red_circle:' : ':large_yellow_circle:' }} *Intent spike — {{ $json.sfdcAccountName }}* | severity: *{{ $json.spikeSeverity }}* | source: {{ $json.source }}\\n*Assigned to:* {{ $json.assigneeName }}{{ $json.assigneeSlack ? ' (<@' + $json.assigneeSlack + '>)' : '' }} | assignment: {{ $json.assignmentSource }}\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Domain:* {{ $json.domain }} · *Industry:* {{ $json.industry || 'unknown' }} · *Headcount:* {{ $json.employeeCount || 'unknown' }} · *Country:* {{ $json.country || 'unknown' }}\\n*Buying stage:* {{ $json.buyingStage || 'n/a' }} · *Intent score:* {{ $json.intentScore !== null ? $json.intentScore : 'n/a' }}\\n*Top topics:* {{ $json.topTopics.slice(0, 5).join(', ') || 'none reported' }}\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Draft subject:* {{ $json.draftSubject }}\\n*Draft body (edit before sending):* {{ $json.draftBody }}\\n*Talking point:* {{ $json.draftTalkingPoint }}\\n_Draft source: {{ $json.draftSource }}_\"\n      }\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"SFDC account: {{ $json.sfdcAccountFound ? $json.sfdcAccountId : 'not found — new account' }} · Spike received: {{ $json.receivedAt }}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "3a3a3a3a-0003-0000-0000-00000000000b",
+      "name": "Slack — Notify Assignee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 180],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Posts to #intent-spikes (all spikes) and @-mentions the assignee's Slack handle if populated. Red circle for high severity, yellow for mid/low."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.SFDC_INSTANCE_URL }}/services/data/v59.0/sobjects/Task",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SFDC_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"Subject\": \"Intent spike: {{ $json.sfdcAccountName }} — {{ $json.spikeSeverity }} severity\",\n  \"Description\": \"Source: {{ $json.source }}\\nBuying stage: {{ $json.buyingStage || 'n/a' }}\\nIntent score: {{ $json.intentScore !== null ? $json.intentScore : 'n/a' }}\\nTop topics: {{ $json.topTopics.join(', ') }}\\nDraft subject: {{ $json.draftSubject }}\\nDraft body: {{ $json.draftBody }}\\nTalking point: {{ $json.draftTalkingPoint }}\\nDraft source: {{ $json.draftSource }}\\nAssignment: {{ $json.assignmentSource }}\",\n  \"OwnerId\": \"{{ $json.sfdcAccountId ? $json.assigneeEmail : '' }}\",\n  \"WhatId\": \"{{ $json.sfdcAccountId || '' }}\",\n  \"Priority\": \"{{ $json.isUrgent ? 'High' : 'Normal' }}\",\n  \"Status\": \"Not Started\",\n  \"ActivityDate\": \"{{ $now.plus({days: $json.isUrgent ? 1 : 3}).toFormat('yyyy-MM-dd') }}\",\n  \"Type\": \"Call\",\n  \"Intent_Spike_Source__c\": \"{{ $json.source }}\",\n  \"Intent_Score__c\": {{ $json.intentScore || 'null' }},\n  \"Intent_Buying_Stage__c\": \"{{ $json.buyingStage || '' }}\"\n}",
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-00000000000c",
+      "name": "Salesforce — Create Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 360],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SALESFORCE_CRED_ID",
+          "name": "Salesforce — Bearer token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Creates a Salesforce Task on the Account (WhatId). Due date: +1 day for urgent, +3 days for standard. Three custom fields (Intent_Spike_Source__c, Intent_Score__c, Intent_Buying_Stage__c) must be created before activating — see _README.md."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */4 * * *"
+            }
+          ]
+        },
+        "timezone": "America/New_York"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-00000000000d",
+      "name": "Polling Cron — Every 4h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 760],
+      "notesInFlow": true,
+      "notes": "Polls Salesforce every 4 hours for accounts whose 6sense or Bombora fields have changed since the last poll window. Forwards spikes to the main webhook. Timezone: America/New_York — adjust to match business hours."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SFDC_INSTANCE_URL }}/services/data/v59.0/query/?q=SELECT+Id,Name,Website,Industry,BillingCountry,NumberOfEmployees,sixsense_Intent_Score__c,sixsense_Buying_Stage__c,sixsense_Top_Topics__c,Bombora_Composite_Score__c,Bombora_Surge_Level__c,Bombora_Top_Topics__c,OwnerId,Owner.Email,Owner.Name,Owner.Slack_Handle__c+FROM+Account+WHERE+(sixsense_Buying_Stage__c+IN+('Decision','Purchase')+OR+Bombora_Surge_Level__c='high')+AND+SystemModstamp>=LAST_N_HOURS:4+LIMIT+200",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SFDC_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-00000000000e",
+      "name": "Salesforce — Poll Intent Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 760],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SALESFORCE_CRED_ID",
+          "name": "Salesforce — Bearer token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Queries Accounts modified in the last 4h with Decision/Purchase buying stage (6sense) OR high Bombora surge. Requires the 6sense and Bombora managed packages to have synced their fields to Account objects. LIMIT 200 per poll — extend query with pagination if volume is higher."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan out Salesforce Account records as individual webhook POSTs to the main ingest endpoint.\n// Each record is forwarded as a Bombora or 6sense CRM-sync shaped payload so\n// Normalize Intent Payload can handle it.\n\nconst records = $json?.records || [];\nif (!records.length) return [];\n\nreturn records.map(r => ({\n  json: {\n    _forwardTo: `${$env.N8N_SELF_URL_HOST}/webhook/intent-spike-handler`,\n    payload: {\n      // Use 6sense fields if populated, else fall back to Bombora fields\n      _source: r.sixsense_Intent_Score__c ? '6sense' : 'bombora',\n      domain: (r.Website || '').replace(/^https?:\\/\\/(www\\.)?/, '').split('/')[0],\n      account_name: r.Name,\n      company_name: r.Name,\n      employee_count: r.NumberOfEmployees,\n      industry: r.Industry,\n      country: r.BillingCountry,\n      intent_score: r.sixsense_Intent_Score__c || null,\n      buying_stage: r.sixsense_Buying_Stage__c || null,\n      composite_score: r.Bombora_Composite_Score__c || null,\n      surge_level: r.Bombora_Surge_Level__c || null,\n      top_topics: r.sixsense_Top_Topics__c\n        ? r.sixsense_Top_Topics__c.split(';').map(t => t.trim())\n        : (r.Bombora_Top_Topics__c ? r.Bombora_Top_Topics__c.split(';').map(t => t.trim()) : []),\n      sfdc_account_id: r.Id,\n    }\n  }\n}));"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-00000000000f",
+      "name": "Build Forward Payloads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 760],
+      "notesInFlow": true,
+      "notes": "Converts each Account record into a payload shaped for the Normalize Intent Payload node. Prefers 6sense fields; falls back to Bombora fields."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.N8N_SELF_URL_HOST }}/webhook/intent-spike-handler",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 3,
+              "batchInterval": 3000
+            }
+          },
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000010",
+      "name": "Forward to Ingest Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 760],
+      "notesInFlow": true,
+      "notes": "Sends each Account spike to the main webhook with batchSize 3, batchInterval 3000ms to avoid hammering Anthropic and Salesforce APIs. neverError so one bad forward doesn't stop the batch."
+    }
+  ],
+  "connections": {
+    "Webhook — Intent Spike Ingest": {
+      "main": [
+        [
+          { "node": "Respond 202 Accepted", "type": "main", "index": 0 },
+          { "node": "Normalize Intent Payload", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Normalize Intent Payload": {
+      "main": [
+        [{ "node": "Dedup Check — Fetch Static Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "Dedup Check — Fetch Static Data": {
+      "main": [
+        [{ "node": "Dedup Gate", "type": "main", "index": 0 }]
+      ]
+    },
+    "Dedup Gate": {
+      "main": [
+        [{ "node": "Dedup Mark — Write Static Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "Dedup Mark — Write Static Data": {
+      "main": [
+        [{ "node": "Salesforce — Account Lookup", "type": "main", "index": 0 }]
+      ]
+    },
+    "Salesforce — Account Lookup": {
+      "main": [
+        [{ "node": "Assignment Logic", "type": "main", "index": 0 }]
+      ]
+    },
+    "Assignment Logic": {
+      "main": [
+        [{ "node": "Claude — Draft First Touch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Draft First Touch": {
+      "main": [
+        [{ "node": "Parse Draft (with fallback)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Draft (with fallback)": {
+      "main": [
+        [
+          { "node": "Slack — Notify Assignee", "type": "main", "index": 0 },
+          { "node": "Salesforce — Create Task", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Polling Cron — Every 4h": {
+      "main": [
+        [{ "node": "Salesforce — Poll Intent Fields", "type": "main", "index": 0 }]
+      ]
+    },
+    "Salesforce — Poll Intent Fields": {
+      "main": [
+        [{ "node": "Build Forward Payloads", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Forward Payloads": {
+      "main": [
+        [{ "node": "Forward to Ingest Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionId": "3a3a3a3a-0003-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "intent-spike-handler-n8n",
+  "tags": [
+    { "name": "revops" },
+    { "name": "intent" },
+    { "name": "outbound" }
+  ]
+}
