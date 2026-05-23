@@ -106,10 +106,10 @@ Format per item:
 
 ## Stacks
 
-- [type:stack] [vertical:legal-ops] new entry: enterprise-clm-stack — Ironclad + DocuSign IAM + Spellbook + Litera; use case: enterprise contract lifecycle with AI-assisted drafting
-- [type:stack] [vertical:legal-ops] new entry: ediscovery-stack — Relativity + Reveal + Logikcull (smaller matters) + Everlaw alternatives; use case: AmLaw-grade discovery review
-- [type:stack] [vertical:legal-ops] new entry: legal-ops-team-of-one-stack — Ironclad-or-Juro + Spellbook + Brightflag + Notion; use case: solo in-house counsel running ops single-handed
-- [type:stack] [vertical:recruiting] new entry: high-volume-recruiting-stack — Fountain + Paradox + Workable; use case: hourly / frontline at-scale hiring
-- [type:stack] [vertical:revops] new entry: gtm-engineering-stack — Clay + n8n + HubSpot + Common Room; use case: small GTM-engineering team automating signal-to-action loops
-- [type:stack] [vertical:revops] new entry: pls-product-led-sales-stack — Pocus + Koala + Salesforce + Slack; use case: PLG SaaS layering sales motion onto self-serve usage
-- [type:stack] [vertical:revops] new entry: partner-ecosystem-stack — Crossbeam + Reveal + Salesforce + Common Room; use case: partner-led growth with ecosystem account-mapping
+- [type:stack] [vertical:legal-ops] new entry: enterprise-clm-stack — Ironclad + DocuSign IAM + Spellbook + Litera; use case: enterprise contract lifecycle with AI-assisted drafting → slug: enterprise-clm-stack
+- [type:stack] [vertical:legal-ops] new entry: ediscovery-stack — Relativity + Reveal + Logikcull (smaller matters) + Everlaw alternatives; use case: AmLaw-grade discovery review → slug: ediscovery-stack
+- [type:stack] [vertical:legal-ops] new entry: legal-ops-team-of-one-stack — Ironclad-or-Juro + Spellbook + Brightflag + Notion; use case: solo in-house counsel running ops single-handed → slug: legal-ops-team-of-one-stack
+- [type:stack] [vertical:recruiting] new entry: high-volume-recruiting-stack — Fountain + Paradox + Workable; use case: hourly / frontline at-scale hiring → slug: high-volume-recruiting-stack
+- [type:stack] [vertical:revops] new entry: gtm-engineering-stack — Clay + n8n + HubSpot + Common Room; use case: small GTM-engineering team automating signal-to-action loops → slug: gtm-engineering-stack
+- [type:stack] [vertical:revops] new entry: pls-product-led-sales-stack — Pocus + Koala + Salesforce + Slack; use case: PLG SaaS layering sales motion onto self-serve usage → slug: pls-product-led-sales-stack
+- [type:stack] [vertical:revops] new entry: partner-ecosystem-stack — Crossbeam + Reveal + Salesforce + Common Room; use case: partner-led growth with ecosystem account-mapping → slug: partner-ecosystem-stack
