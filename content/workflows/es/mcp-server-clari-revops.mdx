@@ -1,0 +1,103 @@
+---
+slug: mcp-server-clari-revops
+canonical_slug: mcp-server-clari-revops
+locale: es
+verticals: [revops]
+title: Query Clari forecast and pipeline data from Claude via MCP
+artifact_type: mcp-server
+tools_used: [clari, claude]
+roles: [revops]
+difficulty: advanced
+time_to_setup: 1-2 hours
+human_tested: false
+---
+
+Un servidor Model Context Protocol que da a [Claude](/es/tools/claude/) acceso de solo lectura a [Clari](/es/tools/clari/) — tus números de forecast, los movimientos recientes del pipeline y los scores de riesgo de deals generados por IA — sin salir del chat. Pregunta "¿Cómo está el Q2 por segmento?" o "¿Qué deals movieron su fecha de cierre esta semana?" y obtén una respuesta estructurada extraída directamente de la API de Clari. El scaffold completo está en el bundle del artifact en `apps/web/public/artifacts/mcp-server-clari-revops/`, que incluye un `README.md`, un `pyproject.toml` y `src/clari_revops_mcp/server.py` listo para instalar con `pip install -e .`.
+
+## Cuándo usar esto
+
+Úsalo cuando tu equipo de RevOps tenga un patrón semanal recurrente de abrir Clari, exportar un slice del forecast, pegarlo en algún lado y hacer una pregunta cuya forma ya conoces — "muéstrame los commits por rep", "qué deals en Clari están marcados como alto riesgo pero todavía en Commit en SFDC", "¿qué cambió en los últimos siete días?". El cambio de contexto y el paso manual de exportación son la fricción. Este servidor elimina ambos.
+
+El patrón funciona mejor en dos modos específicos. Primero, el modo de preparación previa a la llamada: en los 20 minutos antes de una forecast call, Claude extrae el forecast actual de Clari, identifica los deals que la IA de Clari marca como riesgosos, y cruza con los eventos del pipeline de la última semana — todo en un solo prompt, sin cambiar de pestaña. Segundo, el modo de revisión semanal del pipeline: un RevOps lead quiere saber qué se movió desde el lunes sin navegar por los logs de auditoría. `get_pipeline_changes` devuelve una lista filtrada de movimientos de etapa, ediciones de monto y pushes de fecha de cierre en formato de ventana temporal.
+
+También es el patrón correcto si ya desplegaste el MCP server de Salesforce RevOps (el workflow en `content/workflows/en/mcp-server-salesforce-revops.mdx`) y quieres que Claude correlacione la vista de forecast de Clari con el source of record de SFDC. Los dos servers corren en paralelo en Claude Desktop sin conflicto; Claude puede llamar a ambos en un mismo turno.
+
+## Cuándo NO usar esto
+
+Omítelo si alguno de los siguientes es cierto:
+
+- **Tu instancia de Clari no está conectada a datos de CRM en vivo.** La API de Clari devuelve lo que Clari sincronizó desde tu CRM. Si el lag de sincronización supera pocas horas, Claude describirá una imagen desactualizada. Verifica la frescura de los datos en la configuración de admin de Clari antes de asumir que los números son actuales.
+- **Necesitas tiempo de respuesta inferior a un segundo.** La Forecast API de Clari es asíncrona por diseño: envías un job, haces polling hasta `DONE`, luego descargas. En una org con carga normal esto toma 5–30 segundos por llamada a `get_forecast` (estimación basada en el ciclo de polling async con 12 intentos a 5 segundos de intervalo). Eso está bien para la preparación previa a la llamada; no está bien para una llamada en vivo donde la sala está esperando.
+- **Necesitas enviar datos a Clari.** Este servidor es de solo lectura por construcción. No hay tools de ajuste, override de commit ni ingesta. Si tu equipo necesita hacer ajustes de forecast desde Claude, tendrías que construir sobre la Data Ingestion API de Clari (`POST /ingest/entity/{entity}`) por separado.
+- **Tu org no revisó la política de datos de IA/LLM.** Clari contiene valores de deals, nombres de reps y, en muchas orgs, datos de oportunidades a nivel de contacto. Cada llamada a `get_forecast` y `get_deal_risk` pasa esos datos a través de la API de Claude como contexto. Si tu postura de cumplimiento restringe el PII de LLMs de terceros, resuelve esa pregunta de política antes de activar el servidor.
+- **Solo usas las funciones nativas de IA de Clari.** Clari ya tiene narrativas de forecast, inspección de deals y funciones conversacionales incorporadas en su propia UI. Si tu equipo está satisfecho haciendo preguntas dentro de Clari, este servidor agrega costo de infraestructura sin ningún cambio en el workflow.
+
+## Configuración
+
+El `README.md` del bundle es la fuente autoritativa para cada paso. La orientación aquí cubre qué significan las env vars y dónde encontrar los valores.
+
+**Instalar.** Clona el directorio del bundle, crea un entorno virtual Python 3.11+, y ejecuta `pip install -e .` desde `apps/web/public/artifacts/mcp-server-clari-revops/`. Las dependencias son `mcp>=1.2.0`, `httpx>=0.27.0` y `pydantic>=2.6.0`.
+
+**Generar un token de API de Clari.** En Clari: Account Settings → API Token → Generate New API Token. El token tiene scope de org y está vinculado a los permisos del usuario generador. Usa una cuenta de servicio dedicada con el rol mínimo de Clari (viewer o analista de RevOps), no una cuenta de administrador. El token se invalida si la cuenta de servicio se desactiva, así que documenta la cuenta en tu runbook.
+
+**Encontrar tu Forecast ID.** Abre la Forecast Tab en Clari. La URL contiene `forecastId=<uuid>`. Ese UUID es `CLARI_FORECAST_ID`. Si manejas múltiples configuraciones de forecast (ej. Enterprise vs. SMB), guarda el más usado como default y pasa otros por llamada con el argumento `forecast_id`.
+
+**Configurar env vars y registrar.** Cinco env vars: `CLARI_API_TOKEN`, `CLARI_BASE_URL` (default `https://api.clari.com/v5`), `CLARI_FORECAST_ID`, `CLARI_POLL_MAX_ATTEMPTS` (default 12), `CLARI_POLL_INTERVAL_SECONDS` (default 5). Agrega el bloque JSON del `README.md` de `apps/web/public/artifacts/mcp-server-clari-revops/` a `claude_desktop_config.json`. Reinicia Claude Desktop. Verás 3 tools registradas bajo `clari-revops`.
+
+**Verificación de sanidad.** Pregúntale a Claude "Usando clari-revops, obtén los cambios del pipeline desde [el lunes pasado] hasta hoy." Un array vacío es válido si no hubo cambios. Luego ejecuta `get_forecast` para un forecast ID conocido y compara los totales de commit devueltos con lo que ves en la UI de Clari. La alineación confirma que el token y el forecast ID son correctos.
+
+Tiempo total hasta un registro funcional de la tool: 1–2 horas, la mayor parte dedicada a la creación de cuenta de servicio, generación de token y la navegación del admin de Clari a la URL de la Forecast Tab para encontrar el forecast ID.
+
+## Qué expone
+
+Tres tools, todas de solo lectura.
+
+**`get_forecast(forecast_id?, time_period?, scope_id?, currency?)`** envía un job de exportación de Forecast de Clari vía `POST /export/forecast/{forecastId}` con `exportFormat=JSON`, luego hace polling en `GET /export/jobs/{jobId}` hasta que `status=DONE`, luego descarga `GET /export/jobs/{jobId}/results`. Devuelve hasta 200 filas de forecast incluyendo quota, commit, best-case, totales de CRM y cualquier ajuste manual. El diseño asíncrono de tres pasos es la propia arquitectura de Clari — no hay un endpoint de forecast síncrono.
+
+**`get_pipeline_changes(start_date, end_date, limit?)`** consulta la Audit API de Clari en `GET /audit/events` con parámetros `dateFrom` y `dateTo`. La tool obtiene eventos raw y filtra del lado del cliente a los seis tipos de eventos más relevantes para la revisión del pipeline: `OPPORTUNITY_STAGE_CHANGED`, `OPPORTUNITY_AMOUNT_CHANGED`, `OPPORTUNITY_CLOSE_DATE_CHANGED`, `OPPORTUNITY_OWNER_CHANGED`, `ADJUSTMENT_CREATED` y `ADJUSTMENT_UPDATED`. Devuelve hasta 200 eventos, los más recientes primero. El filtro del lado del cliente existe porque el parámetro `event` de Clari acepta solo un tipo de evento por solicitud, no un array.
+
+**`get_deal_risk(opp_ids)`** consulta la Opportunity API de Clari en `GET /opportunity` con hasta 100 IDs de oportunidades de CRM como parámetros `oppId` repetibles. Devuelve el `crmScore` de cada deal (el score de riesgo de IA de Clari), el array `trendHistory` y valores de campos clave. Esta es la tool que usar cuando tienes una lista de deals en una llamada de Commit o Best Case y quieres ver cuáles considera en riesgo el modelo de Clari antes de que empiece la conversación.
+
+## Decisiones de ingeniería
+
+**Solo lectura por construcción.** El servidor no tiene tools de escritura, ni de ingesta ni de cancelación de jobs. La API de Clari expone `PATCH /export/jobs/{jobId}` para cancelar jobs y `POST /ingest/entity/{entity}` para enviar datos — ninguno está expuesto aquí. La decisión es deliberada: los ajustes de forecast y la ingesta de datos son operaciones de consecuencias que pertenecen a la propia UI de Clari, donde el trail de auditoría es nativo. Agregarlos a una tool de Claude requiere una historia de auditoría separada y documentada, que es un TODO para los equipos que la necesiten.
+
+**Polling asíncrono en lugar de un wrapper pseudo-síncrono.** La tool `get_forecast` no pretende que la API de Clari es síncrona. Expone los parámetros de polling (`CLARI_POLL_MAX_ATTEMPTS`, `CLARI_POLL_INTERVAL_SECONDS`) para que los operadores puedan ajustar el techo de timeout según la profundidad de la cola de jobs de su org. Un techo default de 60 segundos es correcto para la mayoría de las orgs; una org Enterprise grande que ejecuta muchas exportaciones concurrentes puede necesitar 120 segundos (24 intentos a 5 s). Ocultarlo en un sleep loop fijo haría que el timeout fuera impredecible y difícil de depurar.
+
+**Filtro de eventos del lado del cliente en `get_pipeline_changes`.** La Audit API de Clari acepta un único filtro `event` por solicitud. Obtener seis tipos de eventos requeriría seis llamadas a la API y un merge/sort en el cliente. En cambio, la tool hace una sola solicitud con un `limit` generoso, filtra del lado del cliente a los tipos de eventos relevantes, y limita a 200. Esto es más rápido y más barato (una llamada a la API vs. seis) a costa de una precisión ligeramente menor en el conteo de eventos raw. El trade-off es aceptable porque los eventos relevantes para el pipeline son una fracción alta del tráfico total de auditoría, y el límite de 200 eventos devueltos mantiene predecible el costo de la ventana de contexto.
+
+**Límite de 100 IDs en `get_deal_risk`.** La Opportunity API de Clari acepta hasta 100 parámetros `oppId` por solicitud según la especificación publicada (developer.clari.com). La tool aplica este límite con un mensaje de error claro en lugar de truncar silenciosamente. El procesamiento en lotes de más de 100 IDs es un TODO numerado en `apps/web/public/artifacts/mcp-server-clari-revops/README.md`.
+
+## Realidad de costos
+
+Tres líneas de costo a planificar.
+
+**Suscripción a Claude.** Claude Pro a $20/usuario/mes, los tiers Max a $100–$200/usuario/mes, o precios por consumo de API. El servidor MCP no cambia esto.
+
+**Cuota de API de Clari.** Clari no publica un límite de tasa por minuto en su documentación pública (verificado en mayo de 2026). La API está diseñada como un endpoint analítico de bajo throughput. Trátala como de un solo dígito de llamadas por minuto para exportaciones de forecast; el modelo de job asíncrono es en sí mismo un mecanismo de limitación de tasa. Verifica `GET /admin/limits` para el techo de jobs concurrentes de tu org antes de ejecutar múltiples exportaciones de forecast en paralelo.
+
+**Costo de tokens del lado de Claude.** Una respuesta de forecast de 200 filas a aproximadamente 400 tokens por fila son ~80K tokens por llamada a `get_forecast`. Al precio de Claude Sonnet (~$3/millón de tokens de entrada a mayo de 2026, estimación), eso es aproximadamente $0.24/llamada en entrada. Dos o tres llamadas de forecast más una llamada de cambios de pipeline por sesión de revisión pone a un RevOps lead típico en menos de $1/sesión en costo de tokens de API. Con una suscripción de $20/usuario/mes eso es despreciable; en el tier Pro está incluido.
+
+**Infraestructura.** El scaffold corre como un proceso Python local por usuario de Claude Desktop — costo de infraestructura cero en una laptop de desarrollador. Si lo envuelves como un servicio FastAPI compartido para usuarios de RevOps no desarrolladores, presupuesta $20–50/mes en cualquier proveedor cloud.
+
+## Modos de falla
+
+**`get_forecast` agota el tiempo de espera.** El job de exportación asíncrona de Clari está en una cola. La cola de jobs de Clari puede sobrecargarse durante períodos de alto uso (fin de trimestre, exportaciones a nivel de org). Guard: sube `CLARI_POLL_MAX_ATTEMPTS` de 12 a 24 (120 segundos en total). Si sigue agotando el tiempo, verifica `GET /admin/limits` — el conteo de `running_jobs` te indica si el techo de slot concurrente de la org está lleno. Cancela jobs obsoletos a través de la UI de Clari antes de reintentar.
+
+**Token inválido o expirado.** Los tokens de Clari se invalidan cuando el usuario generador es desactivado o cuando se genera un nuevo token con el mismo nombre. El servidor lanza un `httpx.HTTPStatusError` con estado 401 o 403. Guard: usa una cuenta de servicio dedicada cuya activación no esté vinculada a ningún empleado individual. Rota los tokens en un calendario documentado (trimestral) y almacena el token actual en un secrets manager en lugar de un archivo env estático.
+
+**`forecast_id` no encontrado.** Clari devuelve `no_such_forecast_config` si el forecast ID no existe o no es accesible para el usuario del token. Guard: el paso de verificación de sanidad del README te pide explícitamente verificar el resultado de `get_forecast` contra la UI de Clari. La URL de la Forecast Tab es la fuente canónica del ID — no lo adivines ni lo construyas a partir del nombre de la org.
+
+**El esquema de eventos de auditoría cambia.** El esquema de eventos de auditoría de Clari no está versionado en la documentación pública de la API. Si Clari renombra o elimina los tipos de eventos en `PIPELINE_AUDIT_EVENTS`, el filtro del lado del cliente devuelve una lista vacía sin error. Guard: incluye una verificación de `get_pipeline_changes` en tu validación trimestral del servicio. Si devuelve cero eventos durante un período que sabes que tuvo actividad, inspecciona el array `activities` raw de una llamada directa a `GET /audit/events` para ver qué tipos de eventos está emitiendo Clari.
+
+**Lag de frescura de datos.** Clari sincroniza desde tu CRM en un horario programado (típicamente 15–60 minutos para integraciones estándar con SFDC, según la documentación de soporte de Clari). Un pull de forecast inmediatamente después de que un rep actualice un deal en SFDC puede reflejar el estado pre-actualización. Guard: anota el lag de sincronización en el acuerdo de trabajo de tu equipo. Para decisiones críticas de tiempo (fin del día, fin del trimestre), verifica la frescura de los datos en el panel de admin de Clari antes de confiar en la salida del MCP.
+
+## Versus las alternativas
+
+**La UI conversacional nativa de Clari.** Clari tiene funciones de IA incorporadas — narrativas de forecast, resúmenes de deals, consultas conversacionales de ask-Clari — que funcionan dentro del producto Clari. First-party, sin infraestructura adicional, sin costo de tokens fuera de la suscripción a Clari. El trade-off: la conversación vive en Clari. Si la superficie de razonamiento principal de tu equipo es Claude (para preguntas cross-system, para redacción de documentos, para sintetizar datos de Clari con contexto de SFDC o transcripciones de llamadas de Gong), forzar un cambio de contexto a Clari es en sí mismo el costo de fricción. El servidor MCP es la elección correcta cuando quieres datos de Clari dentro del contexto de Claude, no un reemplazo nativo de Clari para tu inversión en IA existente.
+
+**Script Python DIY contra la API de Clari.** Control total sobre la lógica de polling, la forma de la respuesta y el caché. El trade-off: tú lo mantienes. El modelo asíncrono de exportación de forecast requiere ~30 líneas de lógica de polling por sí solo; agregar autenticación, manejo de errores y las tres formas de tool lleva el total a ~200–300 líneas. El scaffold MCP en `src/clari_revops_mcp/server.py` te da eso sin el contrato de mantenimiento.
+
+**Exportar datos de Clari a un warehouse y consultar con SQL.** Si tu org ya empuja datos de Clari a Snowflake o BigQuery a través del Bulk Export Framework de Clari, consultarlos allí es más rápido (sin overhead de llamada a la API), más barato (costo de consulta del warehouse vs. costo de tokens de LLM) y más flexible (SQL arbitrario vs. tres tools fijas). Este servidor MCP es la elección correcta cuando quieres consultas ad-hoc en lenguaje natural durante una conversación en vivo, no cuando quieres construir dashboards duraderos o pipelines de alertas.
+
+**Status quo (exportaciones manuales de Clari + pegar en un doc).** Gratis, sin infraestructura. El costo son los 5–10 minutos por sesión de revisión que se gastan navegando Clari, activando una exportación, esperando y reformateando. Multiplícalo por el número de sesiones de revisión por semana por miembro del equipo de RevOps. El servidor MCP supera esto en tiempo de respuesta una vez que se paga el costo único de configuración.

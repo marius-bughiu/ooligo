@@ -1,0 +1,103 @@
+---
+slug: mcp-server-clari-revops
+canonical_slug: mcp-server-clari-revops
+locale: ja
+verticals: [revops]
+title: Query Clari forecast and pipeline data from Claude via MCP
+artifact_type: mcp-server
+tools_used: [clari, claude]
+roles: [revops]
+difficulty: advanced
+time_to_setup: 1-2 hours
+human_tested: false
+---
+
+[Claude](/ja/tools/claude/) に [Clari](/ja/tools/clari/) への読み取り専用アクセスを与える Model Context Protocol サーバーです。チャットを離れることなく、forecast の数値、最近のパイプライン変動、AI が生成したディールリスクスコアを取得できます。「Q2 のセグメント別の状況は？」「今週クローズ日を後ろ倒しにしたディールはどれ？」と聞くだけで、Clari の API から直接取得した構造化された回答が返ってきます。完全な scaffold は `apps/web/public/artifacts/mcp-server-clari-revops/` のアーティファクトバンドルにあり、`README.md`、`pyproject.toml`、そして `pip install -e .` でインストールできる `src/clari_revops_mcp/server.py` が含まれています。
+
+## 使用する場面
+
+RevOps チームに、Clari を開いて forecast のスライスをエクスポートし、どこかに貼り付けて既に形がわかっている質問をするという週次の繰り返しパターンがある場合に使います。「rep 別のコミット数を見せて」「Clari でハイリスクとマークされているが SFDC でまだ Commit のディールは？」「この 7 日間で何が変わった？」といったものです。コンテキストスイッチと手動エクスポートのステップが摩擦です。このサーバーはその両方をなくします。
+
+このパターンは 2 つの特定のモードで最もよく機能します。1 つ目は、コール前の準備モードです。forecast コールの 20 分前に、Claude が最新の Clari forecast を取得し、Clari の AI がリスクとフラグしたディールを特定し、先週のパイプラインイベントと照合します。すべて 1 つのプロンプトで、タブを切り替えることなく行えます。2 つ目は、週次パイプラインレビューモードです。RevOps リードが監査ログをナビゲートせずに月曜日から何が動いたかを知りたい場合、`get_pipeline_changes` はステージ変更、金額編集、クローズ日の後ろ倒しのフィルタリングされたリストを日付ウィンドウ形式で返します。
+
+また、Salesforce RevOps MCP サーバー（`content/workflows/en/mcp-server-salesforce-revops.mdx` のワークフロー）をすでにデプロイしており、Claude に Clari の forecast ビューと SFDC のソースオブレコードを相関させたい場合にも適したパターンです。2 つのサーバーは Claude Desktop で競合なく並行して動作します。Claude は 1 回のターンで両方を呼び出せます。
+
+## 使用しない場面
+
+以下のいずれかに当てはまる場合は省略してください：
+
+- **Clari インスタンスがライブ CRM データに接続されていない。** Clari API は、Clari が CRM から同期したものを返します。同期ラグが数時間を超える場合、Claude は古い状況を説明することになります。数値が最新であると仮定する前に、Clari の admin 設定でデータの鮮度を確認してください。
+- **サブ秒の応答時間が必要。** Clari の Forecast API は設計上非同期です。ジョブを送信し、`DONE` になるまでポーリングし、その後ダウンロードします。通常の負荷の org では `get_forecast` の呼び出しごとに 5〜30 秒かかります（5 秒間隔で 12 回試行する非同期ポーリングサイクルに基づく推定）。コール前の準備には問題ありませんが、室内が待っているライブコールには適していません。
+- **Clari にデータを送信する必要がある。** このサーバーは設計上読み取り専用です。調整、コミットオーバーライド、インジェストのツールはありません。Claude 経由で forecast の調整が必要なチームは、Clari の Data Ingestion API（`POST /ingest/entity/{entity}`）を別途使う必要があります。
+- **Org が AI/LLM データポリシーを見直していない。** Clari にはディール額、rep 名、多くの org ではコンタクトレベルの商談データが含まれます。`get_forecast` と `get_deal_risk` の各呼び出しは、これらのデータをコンテキストとして Claude の API を通じて送信します。コンプライアンス上の立場がサードパーティ LLM からの PII を制限している場合は、サーバーを有効にする前にそのポリシー問題を解決してください。
+- **Clari のネイティブ AI 機能しか使わない。** Clari にはすでにネイティブの forecast ナラティブ、ディールインスペクション、会話機能が UI に組み込まれています。チームが Clari 内で質問することに満足しているなら、このサーバーはワークフローを変えることなくインフラコストを追加するだけです。
+
+## セットアップ
+
+バンドルの `README.md` が各ステップの権威ある情報源です。ここでは env 変数の意味と値の見つけ方を説明します。
+
+**インストール。** バンドルディレクトリをクローンし、Python 3.11+ の仮想環境を作成し、`apps/web/public/artifacts/mcp-server-clari-revops/` から `pip install -e .` を実行します。依存関係は `mcp>=1.2.0`、`httpx>=0.27.0`、`pydantic>=2.6.0` です。
+
+**Clari API トークンを生成する。** Clari の Account Settings → API Token → Generate New API Token を使います。トークンは org スコープで、生成したユーザーの権限に紐付いています。admin アカウントではなく、最小限の Clari ロール（viewer または RevOps アナリスト）を持つ専用サービスアカウントを使ってください。サービスアカウントが無効化されるとトークンも無効になるため、runbook にアカウントを文書化してください。
+
+**Forecast ID を見つける。** Clari の Forecast Tab を開きます。URL に `forecastId=<uuid>` が含まれています。その UUID が `CLARI_FORECAST_ID` です。複数の forecast 設定（例：Enterprise vs. SMB）を管理している場合は、最もよく使うものをデフォルトとして保存し、他は `forecast_id` 引数で呼び出しごとに渡します。
+
+**env 変数を設定して登録する。** 5 つの env 変数：`CLARI_API_TOKEN`、`CLARI_BASE_URL`（デフォルト `https://api.clari.com/v5`）、`CLARI_FORECAST_ID`、`CLARI_POLL_MAX_ATTEMPTS`（デフォルト 12）、`CLARI_POLL_INTERVAL_SECONDS`（デフォルト 5）。`apps/web/public/artifacts/mcp-server-clari-revops/` の `README.md` の JSON ブロックを `claude_desktop_config.json` に追加します。Claude Desktop を再起動すると、`clari-revops` の下に 3 つのツールが登録されます。
+
+**動作確認。** Claude に「clari-revops を使って、[先週月曜日] から今日までのパイプライン変更を取得して」と依頼します。変更がなければ空配列が返るのは正常です。次に既知の forecast ID で `get_forecast` を実行し、返ってきたコミット合計を Clari UI で見た内容と比較します。一致すれば、トークンと forecast ID が正しいことを確認できます。
+
+ツール登録が機能するまでの合計時間：1〜2 時間。大部分はサービスアカウントの作成、トークン生成、Clari admin が Forecast Tab の URL から forecast ID を見つけるために費やされます。
+
+## 公開するもの
+
+3 つのツール、すべて読み取り専用です。
+
+**`get_forecast(forecast_id?, time_period?, scope_id?, currency?)`** は `exportFormat=JSON` を指定して `POST /export/forecast/{forecastId}` 経由で Clari Forecast エクスポートジョブを送信し、`status=DONE` になるまで `GET /export/jobs/{jobId}` をポーリングし、`GET /export/jobs/{jobId}/results` をダウンロードします。クォータ、コミット、ベストケース、CRM 合計、手動調整を含む最大 200 行の forecast データを返します。3 ステップの非同期設計は Clari 自身のアーキテクチャです。同期的な forecast エンドポイントはありません。
+
+**`get_pipeline_changes(start_date, end_date, limit?)`** は `dateFrom` と `dateTo` パラメータを使って `GET /audit/events` で Clari の Audit API を照会します。ツールは生のイベントを取得し、パイプラインレビューに最も関連性の高い 6 種類のイベントタイプにクライアント側でフィルタリングします：`OPPORTUNITY_STAGE_CHANGED`、`OPPORTUNITY_AMOUNT_CHANGED`、`OPPORTUNITY_CLOSE_DATE_CHANGED`、`OPPORTUNITY_OWNER_CHANGED`、`ADJUSTMENT_CREATED`、`ADJUSTMENT_UPDATED`。最新のものから最大 200 件のイベントを返します。Clari の `event` クエリパラメータが配列ではなく 1 リクエストにつき 1 種類のイベントタイプしか受け付けないため、クライアント側フィルタリングが存在します。
+
+**`get_deal_risk(opp_ids)`** は繰り返し可能な `oppId` クエリパラメータとして最大 100 件の CRM 商談 ID を指定して `GET /opportunity` で Clari の Opportunity API を照会します。各ディールの `crmScore`（Clari の AI リスクスコア）、`trendHistory` 配列、主要フィールド値を返します。Commit または Best Case コールでディールリストがあり、会話が始まる前に Clari のモデルがリスクありと考えるディールを特定したいときに使うツールです。
+
+## エンジニアリングの選択
+
+**設計上の読み取り専用。** サーバーには書き込みツール、インジェストツール、ジョブキャンセルツールがありません。Clari API はジョブのキャンセル用に `PATCH /export/jobs/{jobId}` を、データ送信用に `POST /ingest/entity/{entity}` を公開していますが、どちらもここでは公開していません。この決定は意図的なものです。forecast の調整とデータインジェストは、audit trail がネイティブな Clari 自身の UI に属する影響の大きい操作です。これらを Claude ツールに追加するには、別途文書化された audit ストーリーが必要であり、それが必要なチームへの TODO となっています。
+
+**疑似同期ラッパーではなく非同期ポーリング。** `get_forecast` ツールは Clari API が同期であるふりをしません。ポーリングパラメータ（`CLARI_POLL_MAX_ATTEMPTS`、`CLARI_POLL_INTERVAL_SECONDS`）を公開し、オペレーターが自分の org のジョブキューの深さに合わせてタイムアウトの上限を調整できるようにします。60 秒のデフォルト上限はほとんどの org に適しています。多くの同時エクスポートを実行している大規模 Enterprise org では 120 秒（5 秒で 24 回の試行）が必要になることがあります。固定の sleep ループに隠してしまうとタイムアウトが予測不能になり、デバッグが困難になります。
+
+**`get_pipeline_changes` のクライアント側イベントフィルタリング。** Clari の Audit API はリクエストごとに 1 つの `event` フィルターしか受け付けません。6 種類のイベントタイプを取得するには 6 回の API 呼び出しとクライアント側でのマージ/ソートが必要になります。代わりに、ツールは寛大な `limit` で 1 回のリクエストを行い、関連するイベントタイプにクライアント側でフィルタリングし、200 件に上限を設けます。これは生のイベント数の精度がわずかに低下する代わりに、より高速でコストが低い（1 回の API 呼び出し対 6 回）方法です。パイプライン関連のイベントが総 audit トラフィックの高い割合を占めており、返されるイベントの 200 件の上限がコンテキストウィンドウのコストを予測可能に保つため、このトレードオフは許容できます。
+
+**`get_deal_risk` の 100 ID 上限。** Clari の Opportunity API は公開された仕様（developer.clari.com）によるとリクエストごとに最大 100 件の `oppId` パラメータを受け付けます。ツールはこの上限を黙って切り捨てるのではなく、明確なエラーメッセージで強制します。100 件を超える ID のバッチ処理は `apps/web/public/artifacts/mcp-server-clari-revops/README.md` に番号付きの TODO として記載されています。
+
+## コストの実態
+
+計画すべき 3 つのコスト項目があります。
+
+**Claude サブスクリプション。** Claude Pro は $20/ユーザー/月、Max ティアは $100〜$200/ユーザー/月、または API 従量課金です。MCP サーバーはこれを変えません。
+
+**Clari API クォータ。** Clari は公開ドキュメントに分単位のレート制限を掲載していません（2026 年 5 月時点で確認済み）。API は低スループットの分析エンドポイントとして設計されています。forecast エクスポートには 1 分あたり 1 桁台の呼び出しとして扱います。非同期ジョブモデル自体がレート制限のメカニズムです。複数の forecast エクスポートを並行して実行する前に、`GET /admin/limits` で org の同時ジョブの上限を確認してください。
+
+**Claude 側のトークンコスト。** 1 行あたり約 400 トークンで 200 行の forecast レスポンスは `get_forecast` 1 回の呼び出しで ~80K トークンです。Claude Sonnet の料金（2026 年 5 月時点で入力トークン ~$3/百万トークン、推定）では、入力で約 $0.24/呼び出しになります。1 回のレビューセッションあたり 2〜3 回の forecast 呼び出しとパイプライン変更の呼び出し 1 回で、典型的な RevOps リードは API トークンコストが $1/セッション未満になります。$20/ユーザー/月のサブスクリプションでは無視できるレベルです。Pro ティアでは含まれています。
+
+**インフラ。** scaffold は Claude Desktop ユーザーごとにローカル Python プロセスとして動作します。開発者のノートパソコン上ではインフラコストはゼロです。非開発者の RevOps ユーザー向けに共有 FastAPI サービスとしてラップする場合は、任意のクラウドプロバイダーで月 $20〜$50 を見積もってください。
+
+## 障害モード
+
+**`get_forecast` がタイムアウトする。** Clari の非同期エクスポートジョブがキューに入っています。Clari のジョブキューは高負荷期間（四半期末、org 全体のエクスポート実行）に詰まることがあります。Guard：`CLARI_POLL_MAX_ATTEMPTS` を 12 から 24（合計 120 秒）に増やします。まだタイムアウトする場合は `GET /admin/limits` を確認します。`running_jobs` のカウントが org の同時スロット上限が満杯かどうかを示します。再試行前に Clari UI から古いジョブをキャンセルしてください。
+
+**トークンが無効または期限切れ。** Clari トークンは、生成したユーザーが無効化されたとき、または同じ名前で新しいトークンが生成されたときに無効化されます。サーバーはステータス 401 または 403 の `httpx.HTTPStatusError` をスローします。Guard：個々の従業員のアクティベーションに紐付いていない専用サービスアカウントを使用します。文書化されたスケジュール（四半期ごと）でトークンをローテーションし、静的な env ファイルではなくシークレットマネージャーに現在のトークンを保存します。
+
+**`forecast_id` が見つからない。** forecast ID が存在しないか、トークンのユーザーがアクセスできない場合、Clari は `no_such_forecast_config` を返します。Guard：README のサニティチェックステップでは `get_forecast` の結果を Clari UI と照合することを明示的に求めています。Forecast Tab の URL が ID の正規ソースです。org 名から推測したり構築したりしないでください。
+
+**audit イベントスキーマが変更される。** Clari の audit イベントスキーマは公開 API ドキュメントではバージョン管理されていません。Clari が `PIPELINE_AUDIT_EVENTS` のイベントタイプの名前を変更または削除した場合、クライアント側フィルタはエラーなしで空のリストを返します。Guard：四半期ごとのサービス検証に `get_pipeline_changes` のチェックを含めます。アクティビティがあったとわかっている期間にゼロイベントが返る場合は、`GET /audit/events` への直接呼び出しから生の `activities` 配列を確認し、Clari が出力しているイベントタイプを確認してください。
+
+**データ鮮度のラグ。** Clari はスケジュールに従って CRM から同期します（Clari サポートドキュメントによると、標準的な SFDC 統合では通常 15〜60 分）。rep が SFDC でディールを更新した直後の forecast プルは、更新前の状態を反映することがあります。Guard：チームの作業合意書に同期ラグを記載します。時間的に重要な判断（日末、四半期末）については、MCP の出力を信頼する前に Clari の admin パネルでデータの鮮度を確認してください。
+
+## 代替手段との比較
+
+**Clari のネイティブ会話 UI。** Clari には forecast ナラティブ、ディールサマリー、ask-Clari 会話クエリなどの組み込み AI 機能があり、Clari 製品内で動作します。ファーストパーティで、追加インフラなし、Clari サブスクリプション外のトークンコストなし。トレードオフ：会話が Clari の中にあります。チームの主要な推論サーフェスが Claude（クロスシステムの質問、ドキュメント作成、Clari データと SFDC コンテキストや Gong コールトランスクリプトの統合のため）である場合、Clari へのコンテキストスイッチを強制すること自体が摩擦コストです。MCP サーバーは、既存の AI 投資に対する Clari ネイティブの置き換えではなく、Claude のコンテキスト内に Clari データが必要な場合に適した選択肢です。
+
+**Clari API に対する DIY Python スクリプト。** ポーリングロジック、レスポンスの形式、キャッシングへの完全なコントロール。トレードオフ：自分でメンテナンスします。forecast エクスポートの非同期モデルだけで ~30 行のポーリングロジックが必要です。認証、エラー処理、3 つのツールの形式を追加すると合計 ~200〜300 行になります。`src/clari_revops_mcp/server.py` の MCP scaffold はメンテナンス契約なしにそれを提供します。
+
+**Clari データをウェアハウスにエクスポートして SQL でクエリする。** org が Clari の Bulk Export Framework 経由で Clari データを Snowflake や BigQuery に送信している場合、そこでのクエリはより高速（API 呼び出しのオーバーヘッドなし）、より安価（ウェアハウスクエリコスト対 LLM トークンコスト）、より柔軟（任意の SQL 対 3 つの固定ツール）です。このMCP サーバーは、耐久性のあるダッシュボードやアラートパイプラインではなく、ライブ会話中のアドホックな自然言語クエリが必要な場合に適した選択肢です。
+
+**現状維持（手動 Clari エクスポート + ドキュメントへの貼り付け）。** 無料、インフラなし。コストは、Clari をナビゲートし、エクスポートをトリガーし、待機し、再フォーマットするために 1 回のレビューセッションにつき費やす 5〜10 分です。RevOps チームメンバー 1 人あたりの週次レビューセッション数を掛けてください。MCP サーバーは、1 度限りのセットアップコストが支払われれば、応答時間でこれを上回ります。
