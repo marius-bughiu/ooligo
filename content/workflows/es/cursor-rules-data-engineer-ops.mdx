@@ -1,0 +1,99 @@
+---
+slug: cursor-rules-data-engineer-ops
+canonical_slug: cursor-rules-data-engineer-ops
+locale: es
+verticals: [revops, legal-ops, recruiting]
+title: Cursor rules para el data engineer orientado a ops
+artifact_type: cursor-rule
+tools_used: [cursor, n8n]
+roles: [data-engineer]
+difficulty: intermediate
+time_to_setup: 15-30 min
+human_tested: false
+---
+
+Un archivo `.cursorrules` para el data engineer cuyos clientes internos principales son equipos de ops: RevOps, Legal Ops y Recruiting. El bundle se encuentra en `apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules`. Colócalo en `.cursor/rules/` en tu repositorio de data platform y deja de discutir "¿debería este modelo ser incremental?" o "¿este sync necesita un `unique_key`?" con tu asistente de IA durante el próximo trimestre.
+
+La propiedad definitoria del trabajo de datos orientado a ops es que tus pipelines alimentan decisiones, no solo dashboards. Una fila duplicada en un modelo de revenue pipeline no activa ninguna alerta — infla silenciosamente el conteo de oportunidades que el VP de Ventas usa para establecer cuotas. Un sync de reverse-ETL defectuoso no falla de manera visible — sobreescribe registros de Salesforce con datos obsoletos que el modelo de forecast trata como actuales. Las reglas de este bundle codifican las decisiones de ingeniería que mantienen los datos de ops precisos bajo presión: idempotencia como valor por defecto, tests `unique` obligatorios, fuentes de sync materializadas en el warehouse, límites de tasa explícitos en cada llamada externa, y una ruta de escalación estructurada cuando el usuario busca un atajo.
+
+## Cuándo usar esto
+
+Construyes y mantienes pipelines de datos con dbt, un warehouse en la nube (Snowflake o BigQuery), una herramienta de reverse-ETL (Census o Hightouch), y un orquestador (n8n o Airflow). Tus modelos alimentan forecasts GTM, análisis de contratos para Legal Ops, o modelos de headcount para Recruiting — no solo dashboards de BI. Escribes SQL y Python en [Cursor](/es/tools/cursor/) y quieres que la IA tome por defecto los patrones de ingeniería de datos que previenen fallos silenciosos de correctitud, en lugar de los patrones más rápidos de escribir.
+
+## Cuándo NO usar esto
+
+- **Tu pipeline alimenta un dashboard de product analytics, no ops.** El product analytics tolera consistencia eventual y conteos aproximados. Las reglas aquí están calibradas para el radio de impacto de los errores en datos de ops (registros CRM incorrectos, modelos de headcount erróneos, conteos de contratos obsoletos). La sobrecarga — tests obligatorios, valores por defecto incrementales, logging de auditoría — es desproporcionada para un dashboard que se actualiza cada 30 minutos y donde nadie te va a exigir cuentas por una varianza del 0.5%.
+- **Eres un analista individual que no ejecuta dbt en producción.** Las reglas asumen un proyecto dbt en control de versiones con CI. Si ejecutas queries ad hoc en un notebook y exportas manualmente a Google Sheets, las reglas mostrarán orientación que no aplica a tu configuración y puede confundirte más que ayudarte.
+- **Tu warehouse no es Snowflake ni BigQuery.** Las subsecciones específicas por herramienta hacen referencia directa a endpoints, límites y patrones de Snowflake y BigQuery. En Redshift, Databricks o DuckDB, los principios generales (idempotencia, tests, higiene de secretos) aplican, pero la orientación específica apuntará a las APIs incorrectas.
+
+## Configuración
+
+1. **Copia el artifact.** Toma `.cursorrules` de `apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules` y colócalo en el directorio `.cursor/rules/` de tu repositorio de datos. El indicador Project Rules de Cursor confirma que está cargado.
+2. **Recorta lo que no aplica.** El archivo tiene secciones para Snowflake, BigQuery, Census, Hightouch, n8n y Airflow. Elimina las secciones de herramientas que no usas — la orientación no utilizada diluye la señal y ocasionalmente genera sugerencias para herramientas que no están en tu stack.
+3. **Establece los nombres de service account.** Varias reglas hacen referencia a `svc_dbt_prod@company.iam` como placeholder. Edítalo con el nombre real de tu service account para que cuando Cursor sugiera código que corre bajo un service account, sugiera el correcto.
+4. **Configura el gestor de secretos.** Las reglas prohíben credenciales en línea y hacen referencia a un gestor de secretos. Edita la sección "Secrets" para nombrar el tuyo (`$DBT_SNOWFLAKE_PASSWORD` desde AWS Secrets Manager, Doppler, 1Password CLI — elige el que usa tu equipo) para que las sugerencias apunten a la llamada correcta.
+5. **Confirma con una tarea de prueba.** Pídele a Cursor: "Escribe un modelo dbt incremental para oportunidades de Salesforce que haga merge en `opportunity_id`, con un test `unique` y un test `not_null` en `account_id`." El resultado debería usar `{{ ref() }}`, declarar `unique_key = 'opportunity_id'`, incluir `incremental_strategy = 'merge'` y venir con ambos tests. Si no es así, verifica el indicador Project Rules de Cursor.
+
+## Qué hacen realmente las reglas
+
+El bundle está estructurado en cinco capas aplicadas a cada prompt de Cursor.
+
+**Un preámbulo "antes de escribir código, pregunta".** Cinco preguntas que el modelo plantea antes de generar: el grain del modelo, el consumidor downstream, la decisión incremental vs full-refresh, la ruta de recuperación ante fallos, y dónde viven las credenciales. Estas parecen obvias escritas así. Son las preguntas que no se hacen cuando un ingeniero está bajo presión de deadline para entregar el siguiente modelo de datos del sprint.
+
+**Orientación específica por herramienta** para dbt (tests unique, `ref()`, estrategia incremental, source freshness, disciplina con service accounts), Snowflake (tamaño del warehouse, auto-suspend, caché de resultados de queries, valores por defecto de retención Time Travel), BigQuery (requisitos de particionamiento, reservas de slots, Storage Write API, column-level policy tags, query labels), Census (requisito de fuente materializada, límite de API de 60 req/min, configuración de identificador de sync, campo cursor incremental), Hightouch (misma regla de materialización, límite de API de 100 req/min, riesgos del match-boosting en syncs de actualización), [n8n](/es/tools/n8n/) (executionOrder, timezone por nodo, regla Code-sobre-nodo-IF, límite de 1.000 items por ejecución) y Airflow (valores por defecto de retry, catchup=False, límites de tamaño de XCom, secret backend).
+
+**Valores por defecto a aplicar — los cuatro con valores concretos.** Este es el núcleo de ingeniería de las reglas:
+
+- *Rate limiting:* Census API a 60 req/min, Hightouch a 100 req/min, Snowflake REST a 10 req/seg con backoff exponencial (base 1s, máximo 30s, factor 2, 5 reintentos), BigQuery on-demand a 10 GB por query para desarrollo. Cada llamador usa un rate limiter; sin bursts sin guardia.
+- *Idempotencia:* cada modelo dbt incremental declara `unique_key`; cada sync de reverse-ETL se vincula a la clave primaria del destino; cada manejador de webhook se vincula a un ID de evento fuente o hash del payload; cada job orquestado tolera ser re-ejecutado desde el inicio de la ventana actual.
+- *Observabilidad:* cada dbt build reporta modelos ejecutados/fallidos y tests pasados/fallidos; cada sync de reverse-ETL reporta filas procesadas/exitosas/fallidas/omitidas; cada job de n8n y Airflow escribe un resumen estructurado a un canal de data-ops; los fallos de source freshness se enrutan al mismo canal.
+- *Secretos:* los perfiles dbt leen desde variables de entorno (`$DBT_SNOWFLAKE_ACCOUNT`, `$DBT_BQ_PROJECT`), no desde `~/.dbt/profiles.yml`; un service account de warehouse por entorno; las API keys de Census y Hightouch en el gestor de secretos, rotadas trimestralmente; solo `.env.example`, nunca `.env` con valores reales.
+
+La razón por la que la idempotencia es el valor por defecto y no una opción: los datos de ops se reconcilian contra sistemas financieros. Un job que no puede re-ejecutarse de manera segura desde el inicio en algún momento se ejecutará dos veces — durante una transición de horario de verano, un reinicio del scheduler, una recuperación fallida a mitad de ejecución. Cuando eso ocurra, las opciones son "tolerar duplicados" o "corrupción de datos". Las reglas eliminan la opción de tolerar duplicados.
+
+La razón por la que la observabilidad tiene objetivos concretos en lugar de "añade logging": un job de datos que termina con código 0 pero procesó 0 filas es un fallo silencioso. Los equipos de ops no notan datos obsoletos hasta que afectan un reporte. La línea de resumen estructurado es el mecanismo que hace visible "procesó 0 filas" antes de que llegue a la revisión de pipeline del lunes.
+
+**Anti-patterns a rechazar.** Patrones que el modelo rechaza directamente: full-refresh en un modelo incremental grande; `dbt run --full-refresh` como valor por defecto programado en CI de producción; secretos en `dbt --vars`; syncs de reverse-ETL que tienen como fuente views; modelos dbt sin test `unique` en la clave primaria; escrituras directas al warehouse desde notebooks sin log de auditoría; `SELECT *` en modelos de producción; Airflow `catchup=True` en DAGs con una start_date de más de 7 días atrás.
+
+**Una sección "cuando el usuario está equivocado".** Los atajos que se sienten rápidos bajo presión de deadline y cuestan tiempo después: full-refresh en una tabla grande "porque es más fácil", omitir tests `unique` "porque la fuente garantiza unicidad", credenciales personales para ejecuciones dbt en producción, reverse-ETL con fuente en una view "porque es más rápido configurar", omitir source freshness checks "porque sabemos cuándo carga los datos". El modelo rechaza estos y explica por qué — no como una lección, sino como una redirección de una línea al patrón que no se romperá a las 2am.
+
+## Realidad de costos
+
+- **Costo en tokens: cero.** Las reglas de Cursor son contexto local en cada prompt — sin cargo por solicitud más allá de los ~6 KB que ocupan en la ventana de contexto.
+- **Tiempo de configuración: 15-30 minutos.** Coloca el archivo, recorta las secciones de herramientas, establece nombres de service account y la referencia al gestor de secretos, ejecuta la tarea de verificación.
+- **Sobrecarga por tarea: 1-2 turnos de diálogo** antes de la generación, por las preguntas del preámbulo. Para una query de tres líneas, esto es sobrecarga. Para un nuevo modelo incremental o una definición de sync de reverse-ETL, las preguntas sacan a la luz decisiones que de otro modo emergerían como bugs en producción o como hallazgos en una revisión de calidad de datos.
+- **Costo evitado: ~2-4 horas por incidente de calidad de datos.** Un equipo de ops que descubre que un modelo ha estado produciendo duplicados durante dos semanas — rastrear la causa raíz, identificar registros afectados, escribir un fix, comunicar el impacto — consume 2-4 horas de tiempo de ingeniería y erosiona la confianza en el pipeline durante semanas. Las reglas que previenen el duplicado (test `unique` obligatorio, `unique_key` incremental) tardan menos de 10 segundos por modelo en aplicarse a través de sugerencias de Cursor.
+- **Mantenimiento: ~30 minutos por trimestre.** Las versiones menores de dbt salen cada pocos meses. Las versiones de API de Census y Hightouch son estables pero vale la pena verificarlas. Los límites de Snowflake y BigQuery son estables año tras año. Una revisión trimestral de las reglas etiquetadas por versión mantiene el archivo preciso.
+
+## Modos de fallo
+
+**El modelo está marcado como incremental pero no tiene `unique_key`.**
+Sin `unique_key`, la estrategia `merge` de dbt no tiene nada sobre qué hacer merge y cae en `append`. La tabla acumula duplicados en cada ejecución. En un modelo de revenue pipeline, esto significa que los conteos de oportunidades se inflan silenciosamente. Guard: las reglas rechazan generar un modelo incremental sin `unique_key` declarado, y el test `unique` en la clave primaria captura los que se escapen.
+
+**El sync de reverse-ETL tiene como fuente una view de dbt.**
+El sync corre cada 15 minutos. Cada ejecución re-ejecuta la query de la view contra la tabla completa del warehouse. Con alta frecuencia de sync en una tabla grande, esto consume créditos del warehouse e introduce latencia por contención de queries que ralentiza otros pipelines. Guard: las reglas rechazan generar una definición de sync que apunte a una view, y la materialización del modelo dbt (`table` o `incremental`) se verifica antes de generar la configuración de la fuente del sync.
+
+**Las credenciales aparecen en `dbt --vars` o en una variable de entorno que se registra.**
+`dbt --vars '{"api_key": "sk-..."}'` escribe el valor en `dbt.log` y en cualquier colector de logs de CI. Un sistema de CI que registra `env` al inicio captura todas las variables de entorno. Guard: las reglas rechazan generar código con valores de credenciales en línea y siempre hacen referencia al gestor de secretos por nombre de variable. Se genera `.env.example` con valores `PLACEHOLDER_<VAR>`; `.env` con valores reales se rechaza.
+
+**DAG de Airflow desplegado con `catchup=True` y una `start_date` de hace 90 días.**
+En el primer despliegue, Airflow genera 90 × (ejecuciones_por_día) DAG runs y los encola. El scheduler se satura; las tareas que debían ejecutarse hoy no lo hacen hasta que se agota el backlog. En un DAG que dispara dbt, esto significa que los modelos de producción no se actualizan mientras se drena el backlog. Guard: las reglas rechazan generar un DAG con `catchup=True` y una `start_date` de más de 7 días en el pasado, y siempre establecen `catchup=False` como valor por defecto para nuevos DAGs a menos que el usuario documente explícitamente la necesidad de backfill histórico.
+
+**Source freshness check no declarado en una fuente de ops.**
+Un pipeline upstream se rompe. La tabla fuente deja de cargar. dbt continúa ejecutándose contra los últimos datos cargados, produciendo métricas de pipeline que parecen correctas pero tienen 72 horas de retraso. El equipo de ops presenta los números en un QBR. Guard: las reglas requieren declaraciones de `loaded_at_field`, `warn_after` y `error_after` en `sources.yml` para cada tabla fuente, y muestran un fallo de source freshness antes de que el build de dbt continúe.
+
+## Versus las alternativas
+
+**Sin reglas (status quo).** Cursor genera SQL de dbt plausible sin tests `unique`, usando `SELECT *`, y materializado como view porque ese es el valor por defecto. La primera vez que un sync de reverse-ETL corre contra una view en una tabla de 200M filas y llega la factura del warehouse, o la primera vez que un modelo de ops produce números de pipeline duplicados que el CRO tiene que explicar en una reunión de directorio, la ausencia de reglas se vuelve visible.
+
+**Una guía de estilo de ingeniería de datos del equipo en Notion.** Funcionalmente equivalente a no tener reglas para la generación de IA — la guía de estilo no está en el contexto del modelo. El archivo de reglas de Cursor es la guía de estilo que está presente en cada prompt. El doc de Notion y el archivo `.cursorrules` pueden coexistir: el doc de Notion es para incorporar personas; el archivo de reglas es para guiar a Cursor.
+
+**Un linter o analizador estático (dbt-checkpoint, sqlfluff).** Estos capturan patrones después de que el código está escrito — una verificación post-generación. Conviven bien con las reglas de Cursor: las reglas evitan que el anti-pattern se genere en primer lugar; el linter captura los casos que se escapen. Ejecutar ambos reduce el conjunto de problemas que llegan a la revisión de código.
+
+**Valores por defecto genéricos del asistente de código con IA.** Una sesión de Cursor de propósito general sugerirá el patrón más rápido de escribir para un prompt dado. Para dbt, eso suele ser `SELECT *`, sin tests, materializado como view. Para un sync de reverse-ETL, eso suele ser "obtén la fuente de la view, puedes cambiarlo después". Las reglas desplazan el valor por defecto de "más rápido de escribir" a "correcto bajo el escrutinio del equipo de ops".
+
+## Referencia
+
+Bundle: `apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules`
+
+Colócalo en tu repositorio en: `.cursor/rules/data-engineer-ops.md`

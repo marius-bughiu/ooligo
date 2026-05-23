@@ -1,0 +1,99 @@
+---
+slug: cursor-rules-data-engineer-ops
+canonical_slug: cursor-rules-data-engineer-ops
+locale: fr
+verticals: [revops, legal-ops, recruiting]
+title: Cursor rules pour le data engineer orienté ops
+artifact_type: cursor-rule
+tools_used: [cursor, n8n]
+roles: [data-engineer]
+difficulty: intermediate
+time_to_setup: 15-30 min
+human_tested: false
+---
+
+Un fichier `.cursorrules` pour le data engineer dont les principaux clients internes sont des équipes ops : RevOps, Legal Ops et Recruiting. Le bundle se trouve à `apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules`. Placez-le dans `.cursor/rules/` dans votre dépôt de data platform et cessez de redébattre « ce modèle devrait-il être incrémental ? » ou « ce sync a-t-il besoin d'un `unique_key` ? » avec votre assistant IA pour le prochain trimestre.
+
+La propriété définissante du travail de données orienté ops est que vos pipelines alimentent des décisions, pas seulement des dashboards. Une ligne dupliquée dans un modèle de revenue pipeline ne déclenche aucune alerte — elle gonfle silencieusement le nombre d'opportunités que le VP Sales utilise pour fixer les quotas. Un sync de reverse-ETL défectueux n'échoue pas visiblement — il écrase des enregistrements Salesforce avec des données obsolètes que le modèle de forecast traite comme actuelles. Les règles de ce bundle codifient les choix d'ingénierie qui maintiennent la précision des données ops sous pression : idempotence par défaut, tests `unique` obligatoires, sources de sync matérialisées dans le warehouse, rate limits explicites sur chaque appel externe, et un chemin d'escalade structuré quand l'utilisateur cherche un raccourci.
+
+## Quand utiliser ceci
+
+Vous construisez et maintenez des pipelines de données avec dbt, un warehouse cloud (Snowflake ou BigQuery), un outil de reverse-ETL (Census ou Hightouch) et un orchestrateur (n8n ou Airflow). Vos modèles alimentent des forecasts GTM, des analyses de contrats pour Legal Ops ou des modèles de headcount pour le Recruiting — pas seulement des dashboards BI. Vous écrivez du SQL et du Python dans [Cursor](/fr/tools/cursor/) et vous souhaitez que l'IA adopte par défaut les patterns d'ingénierie de données qui préviennent les erreurs silencieuses de correction, plutôt que les patterns les plus rapides à taper.
+
+## Quand NE PAS utiliser ceci
+
+- **Votre pipeline alimente un dashboard de product analytics, pas de l'ops.** Le product analytics tolère la cohérence éventuelle et les comptages approximatifs. Les règles ici sont calibrées pour le rayon d'impact des erreurs de données ops (enregistrements CRM incorrects, modèles de headcount erronés, comptages de contrats obsolètes). Le surcoût — tests obligatoires, valeurs par défaut incrémentielles, audit logging — est disproportionné pour un dashboard qui se rafraîchit toutes les 30 minutes et pour lequel personne ne vous demandera de comptes sur une variance de 0,5 %.
+- **Vous êtes un analyste solo qui ne fait pas tourner dbt en production.** Les règles supposent un projet dbt en contrôle de version avec CI. Si vous exécutez des requêtes ad hoc dans un notebook et exportez manuellement vers Google Sheets, les règles afficheront des conseils qui ne s'appliquent pas à votre configuration et pourront semer la confusion plutôt qu'aider.
+- **Votre warehouse n'est pas Snowflake ni BigQuery.** Les sous-sections spécifiques aux outils font directement référence aux endpoints, limites et patterns de Snowflake et BigQuery. Sur Redshift, Databricks ou DuckDB, les principes généraux (idempotence, tests, hygiène des secrets) s'appliquent, mais les conseils spécifiques pointeront vers les mauvaises APIs.
+
+## Configuration
+
+1. **Copiez l'artifact.** Récupérez `.cursorrules` depuis `apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules` et déposez-le dans le répertoire `.cursor/rules/` de votre dépôt de données. L'indicateur Project Rules de Cursor confirme qu'il est chargé.
+2. **Supprimez ce qui ne s'applique pas.** Le fichier contient des sections pour Snowflake, BigQuery, Census, Hightouch, n8n et Airflow. Supprimez les sections des outils que vous n'utilisez pas — les conseils inutilisés diluent le signal et génèrent parfois des suggestions pour des outils absents de votre stack.
+3. **Définissez les noms de service account.** Plusieurs règles référencent `svc_dbt_prod@company.iam` comme placeholder. Modifiez-les avec le nom réel de votre service account pour que Cursor, lorsqu'il suggère du code s'exécutant sous un service account, suggère le bon.
+4. **Configurez le gestionnaire de secrets.** Les règles interdisent les credentials inline et font référence à un gestionnaire de secrets. Modifiez la section « Secrets » pour nommer le vôtre (`$DBT_SNOWFLAKE_PASSWORD` depuis AWS Secrets Manager, Doppler, 1Password CLI — choisissez celui que votre équipe utilise) afin que les suggestions pointent vers le bon appel.
+5. **Confirmez avec une tâche de test.** Demandez à Cursor : « Écris un modèle dbt incrémental pour les opportunités Salesforce qui merge sur `opportunity_id`, avec un test `unique` et un test `not_null` sur `account_id`. » La sortie devrait utiliser `{{ ref() }}`, déclarer `unique_key = 'opportunity_id'`, inclure `incremental_strategy = 'merge'` et être livrée avec les deux tests. Si ce n'est pas le cas, vérifiez l'indicateur Project Rules de Cursor.
+
+## Ce que les règles font réellement
+
+Le bundle est structuré en cinq couches appliquées à chaque prompt Cursor.
+
+**Un préambule « avant d'écrire du code, demandez ».** Cinq questions que le modèle pose avant de générer : le grain du modèle, le consommateur downstream, la décision incrémental vs full-refresh, le chemin de récupération en cas d'échec, et où vivent les credentials. Ces questions semblent évidentes ainsi formulées. Ce sont les questions qui ne sont pas posées quand un ingénieur est sous pression de deadline pour livrer le prochain modèle de données du sprint.
+
+**Conseils spécifiques aux outils** pour dbt (tests unique, `ref()`, stratégie incrémentale, source freshness, discipline avec les service accounts), Snowflake (dimensionnement du warehouse, auto-suspend, cache des résultats de requêtes, valeurs par défaut de rétention Time Travel), BigQuery (exigences de partitionnement, réservations de slots, Storage Write API, column-level policy tags, query labels), Census (exigence de source matérialisée, rate limit API de 60 req/min, configuration de l'identifiant de sync, champ cursor incrémental), Hightouch (même règle de matérialisation, rate limit API de 100 req/min, risques du match-boosting sur les syncs de mise à jour), [n8n](/fr/tools/n8n/) (executionOrder, timezone par nœud, règle Code-sur-nœud-IF, limite de 1 000 items par exécution) et Airflow (valeurs par défaut de retry, catchup=False, limites de taille XCom, secret backend).
+
+**Valeurs par défaut à appliquer — les quatre avec des valeurs concrètes.** C'est le noyau d'ingénierie des règles :
+
+- *Rate limiting :* Census API à 60 req/min, Hightouch à 100 req/min, Snowflake REST à 10 req/sec avec backoff exponentiel (base 1s, maximum 30s, facteur 2, 5 tentatives), BigQuery on-demand à 10 Go par requête pour le développement. Chaque appelant utilise un rate limiter ; pas de bursts sans protection.
+- *Idempotence :* chaque modèle dbt incrémental déclare `unique_key` ; chaque sync de reverse-ETL est lié à la clé primaire de la destination ; chaque handler de webhook est lié à un ID d'événement source ou un hash du payload ; chaque job orchestré tolère une ré-exécution depuis le début de la fenêtre actuelle.
+- *Observabilité :* chaque dbt build rapporte les modèles exécutés/échoués et les tests passés/échoués ; chaque sync de reverse-ETL rapporte les lignes traitées/réussies/échouées/ignorées ; chaque job n8n et Airflow écrit un résumé structuré dans un channel data-ops ; les échecs de source freshness sont routés vers le même channel.
+- *Secrets :* les profils dbt lisent depuis des variables d'environnement (`$DBT_SNOWFLAKE_ACCOUNT`, `$DBT_BQ_PROJECT`), pas depuis `~/.dbt/profiles.yml` ; un service account de warehouse par environnement ; les API keys Census et Hightouch dans le gestionnaire de secrets, tournées trimestriellement ; uniquement `.env.example`, jamais `.env` avec de vraies valeurs.
+
+La raison pour laquelle l'idempotence est la valeur par défaut et non une option : les données ops sont réconciliées avec des systèmes financiers. Un job qui ne peut pas être ré-exécuté en toute sécurité depuis le début tournera, à un moment ou à un autre, deux fois — lors d'un changement d'heure, d'un redémarrage du scheduler, d'une récupération échouée en milieu d'exécution. Quand cela arrive, les options sont « tolérer les doublons » ou « corruption des données ». Les règles suppriment l'option de tolérer les doublons.
+
+La raison pour laquelle l'observabilité a des cibles concrètes plutôt que « ajoutez du logging » : un job de données qui se termine avec le code 0 mais a traité 0 lignes est un échec silencieux. Les équipes ops ne remarquent pas les données obsolètes jusqu'à ce qu'elles affectent un rapport. La ligne de résumé structuré est le mécanisme qui rend « 0 lignes traitées » visible avant que cela n'atteigne la revue de pipeline du lundi matin.
+
+**Anti-patterns à refuser.** Les patterns que le modèle rejette directement : full-refresh sur un grand modèle incrémental ; `dbt run --full-refresh` comme valeur par défaut planifiée en CI de production ; secrets dans `dbt --vars` ; syncs de reverse-ETL sourcés depuis des views ; modèles dbt sans test `unique` sur la clé primaire ; écritures directes dans le warehouse depuis des notebooks sans log d'audit ; `SELECT *` dans des modèles de production ; Airflow `catchup=True` sur des DAGs avec une start_date antérieure de plus de 7 jours.
+
+**Une section « quand l'utilisateur a tort ».** Les raccourcis qui semblent rapides sous pression de deadline et coûtent du temps après : full-refresh sur une grande table « parce que c'est plus simple », passer les tests `unique` « parce que la source garantit l'unicité », credentials personnelles pour les exécutions dbt en production, reverse-ETL sourcé depuis une view « parce que c'est plus rapide à configurer », passer les source freshness checks « parce qu'on sait quand les données chargent ». Le modèle refuse ces demandes et explique pourquoi — pas comme une leçon, mais comme une redirection en une ligne vers le pattern qui ne cassera pas à 2h du matin.
+
+## Réalité des coûts
+
+- **Coût en tokens : zéro.** Les règles Cursor sont du contexte local à chaque prompt — pas de facturation par requête au-delà des ~6 Ko qu'elles occupent dans la fenêtre de contexte.
+- **Temps de configuration : 15-30 minutes.** Déposer le fichier, couper les sections d'outils, définir les noms de service account et la référence au gestionnaire de secrets, exécuter la tâche de vérification.
+- **Surcoût par tâche : 1-2 tours de dialogue** avant la génération, issus des questions du préambule. Pour une requête de trois lignes, c'est du surcoût. Pour un nouveau modèle incrémental ou une définition de sync de reverse-ETL, les questions font émerger des décisions qui autrement apparaîtraient comme des bugs en production ou des constats lors d'une revue de qualité de données.
+- **Coût évité : ~2-4 heures par incident de qualité de données.** Une équipe ops qui découvre qu'un modèle produit des doublons depuis deux semaines — remonter à la cause racine, identifier les enregistrements affectés, écrire un correctif, communiquer l'impact — consomme 2-4 heures de temps d'ingénierie et érode la confiance dans le pipeline pendant des semaines. Les règles qui préviennent le doublon (test `unique` obligatoire, `unique_key` incrémental) prennent moins de 10 secondes par modèle à appliquer via les suggestions Cursor.
+- **Maintenance : ~30 minutes par trimestre.** Les versions mineures de dbt sortent tous les quelques mois. Les versions d'API de Census et Hightouch sont stables mais méritent une vérification rapide. Les limites de Snowflake et BigQuery sont stables d'une année à l'autre. Une révision trimestrielle des règles taguées par version maintient le fichier précis.
+
+## Modes d'échec
+
+**Le modèle est marqué incrémental mais n'a pas de `unique_key`.**
+Sans `unique_key`, la stratégie `merge` de dbt n'a rien sur quoi merger et retombe sur `append`. La table accumule des doublons à chaque exécution. Dans un modèle de revenue pipeline, cela signifie que les comptes d'opportunités gonflent silencieusement. Guard : les règles refusent de générer un modèle incrémental sans `unique_key` déclaré, et le test `unique` sur la clé primaire attrape ceux qui passent à travers.
+
+**Le sync de reverse-ETL source depuis une view dbt.**
+Le sync tourne toutes les 15 minutes. Chaque exécution ré-exécute la requête de la view contre la table complète du warehouse. À haute fréquence de sync sur une grande table, cela brûle des crédits warehouse et introduit de la latence par contention de requêtes qui ralentit les autres pipelines. Guard : les règles refusent de générer une définition de sync pointant vers une view, et la matérialisation du modèle dbt (`table` ou `incremental`) est vérifiée avant de générer la configuration de la source de sync.
+
+**Les credentials apparaissent dans `dbt --vars` ou dans une variable d'environnement loguée.**
+`dbt --vars '{"api_key": "sk-..."}'` écrit la valeur dans `dbt.log` et tout collecteur de logs CI. Un système CI qui logue `env` au démarrage capture toutes les variables d'environnement. Guard : les règles refusent de générer du code avec des valeurs de credentials inline et référencent toujours le gestionnaire de secrets par nom de variable. `.env.example` avec des valeurs `PLACEHOLDER_<VAR>` est généré ; `.env` avec de vraies valeurs est refusé.
+
+**DAG Airflow déployé avec `catchup=True` et une `start_date` vieille de 90 jours.**
+Au premier déploiement, Airflow génère 90 × (exécutions_par_jour) DAG runs et les met en file d'attente. Le scheduler est saturé ; les tâches censées tourner aujourd'hui ne tournent pas tant que le backlog n'est pas épuisé. Dans un DAG qui déclenche dbt, cela signifie que les modèles de production ne se rafraîchissent pas pendant que le backlog se résorbe. Guard : les règles refusent de générer un DAG avec `catchup=True` et une `start_date` antérieure de plus de 7 jours, et définissent toujours `catchup=False` comme valeur par défaut pour les nouveaux DAGs, sauf si l'utilisateur documente explicitement le besoin d'un backfill historique.
+
+**Source freshness check non déclaré pour une source ops.**
+Un pipeline upstream tombe en panne. La table source arrête de charger. dbt continue à tourner contre les dernières données chargées, produisant des métriques de pipeline qui semblent correctes mais ont 72 heures de retard. L'équipe ops présente les chiffres dans un QBR. Guard : les règles exigent des déclarations `loaded_at_field`, `warn_after` et `error_after` dans `sources.yml` pour chaque table source, et signalent un échec de source freshness avant que le build dbt ne continue.
+
+## Versus les alternatives
+
+**Aucune règle (statu quo).** Cursor génère du SQL dbt plausible sans tests `unique`, avec `SELECT *`, et matérialisé comme view parce que c'est la valeur par défaut. La première fois qu'un sync de reverse-ETL tourne contre une view sur une table de 200 millions de lignes et que la facture warehouse arrive, ou la première fois qu'un modèle ops produit des chiffres de pipeline dupliqués que le CRO doit expliquer lors d'un board, l'absence de règles devient visible.
+
+**Un guide de style data engineering de l'équipe dans Notion.** Fonctionnellement équivalent à aucune règle pour la génération IA — le guide de style n'est pas dans le contexte du modèle. Le fichier de règles Cursor est le guide de style présent à chaque prompt. Le document Notion et le fichier `.cursorrules` peuvent coexister : le document Notion sert à l'onboarding des personnes ; le fichier de règles sert à guider Cursor.
+
+**Un linter ou analyseur statique (dbt-checkpoint, sqlfluff).** Ces outils détectent les patterns une fois le code écrit — une vérification post-génération. Ils s'associent bien aux règles Cursor : les règles empêchent l'anti-pattern d'être généré ; le linter attrape les cas qui passent à travers. Faire tourner les deux réduit l'ensemble des problèmes qui atteignent la revue de code.
+
+**Valeurs par défaut génériques d'assistant IA pour le code.** Une session Cursor générique suggérera le pattern le plus rapide à taper pour un prompt donné. Pour dbt, c'est souvent `SELECT *`, pas de tests, matérialisé comme view. Pour un sync de reverse-ETL, c'est souvent « sourcez depuis la view, vous pourrez changer plus tard ». Les règles déplacent la valeur par défaut de « plus rapide à taper » vers « correct sous le regard de l'équipe ops ».
+
+## Référence
+
+Bundle : `apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules`
+
+À placer dans votre dépôt sous : `.cursor/rules/data-engineer-ops.md`

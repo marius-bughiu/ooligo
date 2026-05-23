@@ -1,0 +1,99 @@
+---
+slug: cursor-rules-data-engineer-ops
+canonical_slug: cursor-rules-data-engineer-ops
+locale: ja
+verticals: [revops, legal-ops, recruiting]
+title: ops 寄り Data Engineer のための Cursor rules
+artifact_type: cursor-rule
+tools_used: [cursor, n8n]
+roles: [data-engineer]
+difficulty: intermediate
+time_to_setup: 15-30 min
+human_tested: false
+---
+
+RevOps・Legal Ops・Recruiting などの ops チームを主要な社内顧客とする Data Engineer 向けの `.cursorrules` ファイルです。bundle は `apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules` にあります。data platform リポジトリの `.cursor/rules/` に配置すれば、「このモデルは incremental にすべきか？」「この sync には `unique_key` が必要か？」という議論を AI アシスタントと繰り返すことなく、次の四半期を過ごせます。
+
+ops 寄りのデータ業務の本質は、パイプラインがダッシュボードだけでなく意思決定を支えている点です。revenue pipeline モデルの重複行はアラートを発しません。VP Sales がクォータ設定に使う商談数を静かに水増しするだけです。不具合のある reverse-ETL sync は目に見える形で失敗しません。Salesforce レコードを古いデータで上書きし、forecast モデルがそれを最新として扱います。このbundleのルールは、プレッシャー下でも ops データの精度を保つエンジニアリング上の判断を体系化しています。デフォルトの idempotence、必須の `unique` テスト、warehouse にマテリアライズされた sync ソース、外部呼び出しごとの明示的な rate limit、そしてユーザーが近道を取ろうとしたときの構造化されたエスカレーションパスです。
+
+## このルールを使う場面
+
+dbt、クラウド warehouse（Snowflake または BigQuery）、reverse-ETL ツール（Census または Hightouch）、オーケストレーター（n8n または Airflow）でデータパイプラインを構築・運用しています。モデルは BI ダッシュボードだけでなく、GTM forecast、Legal Ops 向けの契約分析、Recruiting 向けのヘッドカウントモデルを支えています。[Cursor](/ja/tools/cursor/) で SQL と Python を書いており、AI が最速で入力できるパターンではなく、サイレントな正確性エラーを防ぐデータエンジニアリングパターンをデフォルトで提案してほしいと考えています。
+
+## 使うべきでない場面
+
+- **パイプラインが ops ではなく product analytics ダッシュボードを支えている場合。** Product analytics は結果整合性と近似カウントを許容します。ここのルールは ops データエラーのブラスト半径（誤った CRM レコード、誤ったヘッドカウントモデル、古い契約カウント）に合わせてキャリブレーションされています。30 分ごとにリフレッシュされ、0.5% の差異に誰も責任を問わないダッシュボードに、必須テスト・incremental デフォルト・audit ログというオーバーヘッドは不釣り合いです。
+- **本番で dbt を運用していない個人アナリストの場合。** ルールは CI 付きのバージョン管理 dbt プロジェクトを前提としています。ノートブックでアドホッククエリを実行して Google Sheets に手動でエクスポートしているなら、ルールは適用されないガイダンスを表示し、混乱を招く可能性があります。
+- **Warehouse が Snowflake でも BigQuery でもない場合。** ツール別サブセクションは Snowflake と BigQuery のエンドポイント・制限・パターンを直接参照しています。Redshift、Databricks、DuckDB では、一般原則（idempotence、テスト、シークレット衛生）は適用されますが、具体的なガイダンスは誤った API を指します。
+
+## セットアップ
+
+1. **artifact をコピーする。** `apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules` から `.cursorrules` を取得し、データリポジトリの `.cursor/rules/` ディレクトリに配置します。Cursor の Project Rules インジケーターがロードを確認します。
+2. **不要なものを削除する。** Snowflake、BigQuery、Census、Hightouch、n8n、Airflow のセクションが含まれます。使用していないツールのセクションを削除してください。未使用のガイダンスはシグナルを希薄化し、スタックにないツールへの提案を生成することがあります。
+3. **service account 名を設定する。** いくつかのルールはプレースホルダーとして `svc_dbt_prod@company.iam` を参照しています。実際の service account 名に編集することで、Cursor が service account で実行するコードを提案する際に正しいものを提案します。
+4. **シークレットマネージャーを設定する。** ルールはインライン credentials を禁止し、シークレットマネージャーを参照します。「Secrets」セクションを編集してあなたのシークレットマネージャーを指定してください（`$DBT_SNOWFLAKE_PASSWORD` を AWS Secrets Manager、Doppler、1Password CLI から — チームが使用しているものを選択）。提案が正しい呼び出しを指すようになります。
+5. **テストタスクで確認する。** Cursor に「`opportunity_id` で merge し、`unique` テストと `account_id` の `not_null` テストを含む Salesforce opportunity の incremental dbt モデルを書いて」と依頼します。出力は `{{ ref() }}` を使用し、`unique_key = 'opportunity_id'` を宣言し、`incremental_strategy = 'merge'` を含み、両テストを含むはずです。含まれない場合は Cursor の Project Rules インジケーターを確認してください。
+
+## ルールが実際に行うこと
+
+bundle は Cursor の各プロンプトに適用される 5 つの層で構成されています。
+
+**「コードを書く前に質問する」プリアンブル。** モデルが生成前に立ち上げる 5 つの質問：モデルの grain、downstream コンシューマー、incremental vs full-refresh の判断、失敗時の復旧パス、credentials の格納場所。書き出すと明らかに見えますが、エンジニアが次のスプリントのデータモデルをデッドラインプレッシャー下で納品しようとしているときに問われない質問です。
+
+**ツール別ガイダンス** — dbt（unique テスト、`ref()`、incremental 戦略、source freshness、service account 規律）、Snowflake（warehouse サイジング、auto-suspend、クエリ結果キャッシュ、Time Travel 保持デフォルト）、BigQuery（パーティション要件、スロット予約、Storage Write API、列レベルポリシータグ、クエリラベル）、Census（マテリアライズドソース要件、API rate limit 60 req/min、sync identifier 設定、incremental カーソルフィールド）、Hightouch（同じマテリアライゼーションルール、API rate limit 100 req/min、update sync での match-boosting リスク）、[n8n](/ja/tools/n8n/)（executionOrder、ノードごとの timezone、Code-over-IF-node ルール、実行あたり 1,000 アイテム上限）、Airflow（retry デフォルト、catchup=False、XCom サイズ制限、secret backend）。
+
+**適用するデフォルト — 具体的な値を含む 4 つすべて。** これがルールのエンジニアリングコアです：
+
+- *Rate limiting：* Census API は 60 req/min、Hightouch は 100 req/min、Snowflake REST は指数バックオフ付き 10 req/sec（ベース 1s、最大 30s、係数 2、5 回リトライ）、BigQuery オンデマンドは開発クエリあたり 10 GB。すべての呼び出し元が rate limiter を使用します。保護なしのバーストは拒否されます。
+- *Idempotence：* すべての incremental dbt モデルが `unique_key` を宣言する；すべての reverse-ETL sync が送信先のプライマリキーにキーイングされる；すべての webhook ハンドラーがソースイベント ID またはペイロードハッシュにキーイングされる；すべてのオーケストレーションジョブが現在のウィンドウの最初から再実行を許容する。
+- *Observability：* すべての dbt build が実行/失敗モデルと合格/失敗テストを報告する；すべての reverse-ETL sync が処理/成功/失敗/スキップ行を報告する；すべての n8n と Airflow ジョブが data-ops チャンネルに構造化サマリーを書き込む；source freshness の失敗が同じチャンネルにルーティングされる。
+- *シークレット：* dbt プロファイルは `~/.dbt/profiles.yml` ではなく環境変数（`$DBT_SNOWFLAKE_ACCOUNT`、`$DBT_BQ_PROJECT`）から読み取る；環境ごとに 1 つの warehouse service account；Census と Hightouch の API キーはシークレットマネージャーに格納し、四半期ごとにローテーション；`.env.example` のみ、実際の値を含む `.env` は生成しない。
+
+idempotence がオプションではなくデフォルトである理由：ops データは財務システムと照合されます。最初から安全に再実行できないジョブはいつか 2 回実行されます。夏時間の移行中、スケジューラの再起動中、途中失敗からの復旧中のいずれかで。その時、選択肢は「重複を許容する」か「データ破損」です。ルールは重複を許容するオプションを排除します。
+
+observability に「ログを追加する」ではなく具体的な目標がある理由：終了コード 0 で終了したが 0 行を処理したデータジョブはサイレント失敗です。ops チームはデータが古くなっていることをレポートに影響するまで気づきません。構造化サマリー行は、「0 行処理」が月曜日のパイプラインレビューに届く前に可視化するメカニズムです。
+
+**拒否すべきアンチパターン。** モデルが直接拒否するパターン：大きな incremental モデルへの full-refresh；本番 CI のスケジュールされたデフォルトとしての `dbt run --full-refresh`；`dbt --vars` へのシークレット格納；view をソースとした reverse-ETL sync；プライマリキーに `unique` テストのない dbt モデル；audit ログなしでノートブックから warehouse への直接書き込み；本番モデルでの `SELECT *`；start_date が 7 日以上前の DAG への Airflow `catchup=True`。
+
+**「ユーザーが間違っているとき」セクション。** デッドラインプレッシャー下では速く感じるが後からコストがかかる近道：大きなテーブルへの full-refresh「簡単だから」、`unique` テストのスキップ「ソースが一意性を保証するから」、本番 dbt 実行への個人 credentials 使用、view をソースとした reverse-ETL「設定が速いから」、source freshness チェックのスキップ「データがいつ読み込まれるか分かっているから」。モデルはこれらを拒否し、理由を説明します。講義としてではなく、午前 2 時に壊れないパターンへの 1 行リダイレクトとして。
+
+## コストの現実
+
+- **トークンコスト：ゼロ。** Cursor のルールは各プロンプトのローカルコンテキストです。コンテキストウィンドウで占める約 6 KB を超えるリクエストあたりの課金はありません。
+- **セットアップ時間：15〜30 分。** ファイルを配置し、ツールセクションをトリムし、service account 名とシークレットマネージャー参照を設定し、検証タスクを実行します。
+- **タスクあたりのオーバーヘッド：1〜2 ターンの対話** — プリアンブルの質問による生成前の対話。3 行のクエリにはオーバーヘッドです。新しい incremental モデルや reverse-ETL sync 定義には、本番バグやデータ品質レビューの指摘として現れるであろう判断を引き出します。
+- **回避コスト：データ品質インシデントあたり約 2〜4 時間。** モデルが 2 週間重複を生成し続けていたことに ops チームが気づいた場合 — 根本原因の追跡、影響レコードの特定、修正の作成、影響の伝達 — 2〜4 時間のエンジニアリング時間を消費し、数週間にわたってパイプラインへの信頼を損ないます。重複を防ぐルール（必須 `unique` テスト、incremental `unique_key`）は Cursor の提案を通じて、モデルあたり 10 秒未満で適用されます。
+- **メンテナンス：四半期あたり約 30 分。** dbt マイナーバージョンは数ヶ月ごとにリリースされます。Census と Hightouch の API バージョンは安定していますが、スポットチェックの価値があります。Snowflake と BigQuery の制限は年をまたいで安定しています。バージョンタグ付きルールの四半期レビューでファイルの精度を維持します。
+
+## 失敗モード
+
+**モデルが incremental とマークされているが `unique_key` がない。**
+`unique_key` なしでは dbt の `merge` 戦略はマージする対象がなく `append` にフォールバックします。テーブルは実行のたびに重複を蓄積します。revenue pipeline モデルでは、商談カウントが静かに水増しされます。Guard：ルールは `unique_key` を宣言せずに incremental モデルを生成することを拒否し、プライマリキーの `unique` テストが漏れたものをキャッチします。
+
+**reverse-ETL sync が dbt view をソースとしている。**
+sync は 15 分ごとに実行されます。各実行で view のクエリが warehouse の完全なテーブルに対して再実行されます。大きなテーブルでの高頻度 sync は warehouse クレジットを消費し、他のパイプラインを遅らせるクエリ競合レイテンシを導入します。Guard：ルールは view を指す sync 定義の生成を拒否し、dbt モデルのマテリアライゼーション（`table` または `incremental`）が sync ソース設定を生成する前に確認されます。
+
+**credentials が `dbt --vars` またはログに記録される環境変数に現れる。**
+`dbt --vars '{"api_key": "sk-..."}'` は値を `dbt.log` と任意の CI ログコレクターに書き込みます。起動時に `env` をログに記録する CI システムはすべての環境変数をキャプチャします。Guard：ルールはインライン credentials 値のコード生成を拒否し、常に変数名でシークレットマネージャーを参照します。`PLACEHOLDER_<VAR>` 値を含む `.env.example` が生成されます。実際の値を含む `.env` は拒否されます。
+
+**Airflow DAG が `catchup=True` と 90 日前の `start_date` でデプロイされる。**
+初回デプロイ時、Airflow は 90 × (日次実行数) の DAG run を生成してキューに入れます。スケジューラーは過負荷になり、今日実行されるべきタスクはバックログが解消されるまで実行されません。dbt をトリガーする DAG では、バックログが解消されるまで本番モデルがリフレッシュされません。Guard：ルールは `catchup=True` と 7 日以上前の `start_date` を持つ DAG の生成を拒否し、ユーザーが歴史的バックフィルの必要性を明示的に文書化しない限り、常に新しい DAG のデフォルトとして `catchup=False` を設定します。
+
+**ops ソースに source freshness チェックが宣言されていない。**
+上流パイプラインが壊れます。ソーステーブルの読み込みが止まります。dbt は最後に読み込まれたデータに対して実行を続け、正確に見えるが 72 時間古いパイプラインメトリクスを生成します。ops チームは QBR で数字を提示します。Guard：ルールはすべてのソーステーブルに対して `sources.yml` での `loaded_at_field`、`warn_after`、`error_after` 宣言を要求し、dbt ビルドが続行する前に source freshness の失敗を示します。
+
+## 代替手段との比較
+
+**ルールなし（現状維持）。** Cursor は `unique` テストなし、`SELECT *` 使用、view としてマテリアライズされたもっともらしい dbt SQL を生成します。それがデフォルトだからです。reverse-ETL sync が 2 億行のテーブルの view に対して実行されて warehouse の請求書が届くとき、または ops モデルが CRO がボード会議で説明しなければならない重複パイプライン数値を生成するとき、ルールの不在が可視化されます。
+
+**Notion のチームデータエンジニアリングスタイルガイド。** AI 生成においてルールなしと機能的に同等です — スタイルガイドはモデルのコンテキストにありません。Cursor のルールファイルは各プロンプトに存在するスタイルガイドです。Notion ドキュメントと `.cursorrules` ファイルは共存できます。Notion ドキュメントは人のオンボーディング用、ルールファイルは Cursor のガイド用です。
+
+**リンターまたは静的解析ツール（dbt-checkpoint、sqlfluff）。** これらはコードが書かれた後にパターンをキャッチします — 生成後チェックです。Cursor のルールとうまく組み合わせられます。ルールはアンチパターンが最初から生成されることを防ぎ、リンターは漏れたものをキャッチします。両方を実行することでコードレビューに届く問題のセットを削減します。
+
+**汎用 AI コードアシスタントのデフォルト。** 汎用の Cursor セッションは与えられたプロンプトに対して最速で入力できるパターンを提案します。dbt では多くの場合 `SELECT *`、テストなし、view としてマテリアライズが提案されます。reverse-ETL sync では多くの場合「view をソースとして使用し、後で変更できます」が提案されます。ルールはデフォルトを「最速で入力できる」から「ops チームの精査に耐える」にシフトします。
+
+## 参照
+
+Bundle：`apps/web/public/artifacts/cursor-rules-data-engineer-ops/.cursorrules`
+
+リポジトリ内の配置先：`.cursor/rules/data-engineer-ops.md`
