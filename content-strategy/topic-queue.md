@@ -72,19 +72,19 @@ Format per item:
 
 ## Workflows
 
-- [type:workflow] [vertical:revops] mcp-server-clari-revops — MCP server exposing Clari forecast and pipeline data to Claude for natural-language forecast Q&A; artifact_type: mcp-server
-- [type:workflow] [vertical:revops] mcp-server-vitally-cs — MCP server exposing Vitally accounts + health into Claude for CS conversations; artifact_type: mcp-server
-- [type:workflow] [vertical:legal-ops] mcp-server-clio-legal — MCP server exposing Clio matter and time data to Claude for in-house / small-firm legal queries; artifact_type: mcp-server
-- [type:workflow] [vertical:legal-ops] mcp-server-relativity-ediscovery — MCP server exposing Relativity workspace + review-set metadata to Claude for review-batch triage; artifact_type: mcp-server
-- [type:workflow] [vertical:revops] signal-bundler-account-execs-claude-skill — claude skill that bundles intent + engagement + product signals into one daily AE digest per named account; artifact_type: claude-skill
-- [type:workflow] [vertical:revops] lost-deal-postmortem-claude-skill — claude skill that turns closed-lost notes + call recordings into a structured postmortem ready for Gong/Salesforce; artifact_type: claude-skill
-- [type:workflow] [vertical:revops] abm-list-quality-audit-skill — claude skill that audits an ABM list against ICP rubric and flags weak accounts with a defect taxonomy; artifact_type: claude-skill
-- [type:workflow] [vertical:revops] intent-spike-handler-n8n — n8n flow that takes an intent spike (6sense/Bombora/Common Room) and assigns + notifies + drafts first-touch outreach; artifact_type: n8n-flow
-- [type:workflow] [vertical:recruiting] interview-scheduling-resolver-n8n — n8n flow that resolves recruiter↔panel↔candidate time conflicts using Google Calendar + Greenhouse data; artifact_type: n8n-flow
-- [type:workflow] [vertical:recruiting] candidate-personalization-at-scale-skill — claude skill that personalizes outreach to a sourced list using LinkedIn + GitHub + JD signals; artifact_type: claude-skill
-- [type:workflow] [vertical:legal-ops] nda-clause-redline-prompt-pack — prompt pack of paired prompts for redlining the 12 most-negotiated NDA clauses; artifact_type: prompt
-- [type:workflow] [vertical:legal-ops] ediscovery-custodian-questionnaire-skill — claude skill that generates a custodian interview questionnaire from a legal-hold scope; artifact_type: claude-skill
-- [type:workflow] [vertical:cross] cursor-rules-data-engineer-ops — cursor rules tailored for an ops-adjacent data engineer (dbt + reverse-ETL + warehouse hygiene); artifact_type: cursor-rule
+- [type:workflow] [vertical:revops] mcp-server-clari-revops — MCP server exposing Clari forecast and pipeline data to Claude for natural-language forecast Q&A; artifact_type: mcp-server → slug: mcp-server-clari-revops
+- [type:workflow] [vertical:revops] mcp-server-vitally-cs — MCP server exposing Vitally accounts + health into Claude for CS conversations; artifact_type: mcp-server → slug: mcp-server-vitally-cs
+- [type:workflow] [vertical:legal-ops] mcp-server-clio-legal — MCP server exposing Clio matter and time data to Claude for in-house / small-firm legal queries; artifact_type: mcp-server → slug: mcp-server-clio-legal
+- [type:workflow] [vertical:legal-ops] mcp-server-relativity-ediscovery — MCP server exposing Relativity workspace + review-set metadata to Claude for review-batch triage; artifact_type: mcp-server → slug: mcp-server-relativity-ediscovery
+- [type:workflow] [vertical:revops] signal-bundler-account-execs-claude-skill — claude skill that bundles intent + engagement + product signals into one daily AE digest per named account; artifact_type: claude-skill → slug: signal-bundler-account-execs-claude-skill
+- [type:workflow] [vertical:revops] lost-deal-postmortem-claude-skill — claude skill that turns closed-lost notes + call recordings into a structured postmortem ready for Gong/Salesforce; artifact_type: claude-skill → slug: lost-deal-postmortem-claude-skill
+- [type:workflow] [vertical:revops] abm-list-quality-audit-skill — claude skill that audits an ABM list against ICP rubric and flags weak accounts with a defect taxonomy; artifact_type: claude-skill → slug: abm-list-quality-audit-skill
+- [type:workflow] [vertical:revops] intent-spike-handler-n8n — n8n flow that takes an intent spike (6sense/Bombora/Common Room) and assigns + notifies + drafts first-touch outreach; artifact_type: n8n-flow → slug: intent-spike-handler-n8n
+- [type:workflow] [vertical:recruiting] interview-scheduling-resolver-n8n — n8n flow that resolves recruiter↔panel↔candidate time conflicts using Google Calendar + Greenhouse data; artifact_type: n8n-flow → slug: interview-scheduling-resolver-n8n
+- [type:workflow] [vertical:recruiting] candidate-personalization-at-scale-skill — claude skill that personalizes outreach to a sourced list using LinkedIn + GitHub + JD signals; artifact_type: claude-skill → slug: candidate-personalization-at-scale-skill
+- [type:workflow] [vertical:legal-ops] nda-clause-redline-prompt-pack — prompt pack of paired prompts for redlining the 12 most-negotiated NDA clauses; artifact_type: prompt → slug: nda-clause-redline-prompt-pack
+- [type:workflow] [vertical:legal-ops] ediscovery-custodian-questionnaire-skill — claude skill that generates a custodian interview questionnaire from a legal-hold scope; artifact_type: claude-skill → slug: ediscovery-custodian-questionnaire-skill
+- [type:workflow] [vertical:cross] cursor-rules-data-engineer-ops — cursor rules tailored for an ops-adjacent data engineer (dbt + reverse-ETL + warehouse hygiene); artifact_type: cursor-rule → slug: cursor-rules-data-engineer-ops
 
 ## Learn
 
