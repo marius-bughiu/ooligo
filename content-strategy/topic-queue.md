@@ -88,21 +88,21 @@ Format per item:
 
 ## Learn
 
-- [type:learn] [vertical:cross] definition: claude-skill-vs-mcp-server — what each is, when each fits, and how they compose for ops workflows
-- [type:learn] [vertical:cross] definition: prompt-pack-vs-claude-skill — when a prompt library is enough vs when to package a skill
-- [type:learn] [vertical:cross] definition: mcp-server-explained — Model Context Protocol primer aimed at non-engineer ops leaders evaluating vendors that claim "MCP support"
-- [type:learn] [vertical:cross] definition: ai-agent-for-ops — what makes an AI "agent" for ops vs a workflow; the diagnostic questions a buyer should ask vendors
-- [type:learn] [vertical:revops] definition: ai-sdr — what AI SDR vendors actually do, the four common architectures, and how to evaluate them
-- [type:learn] [vertical:revops] definition: product-led-sales-pls — PLS primer, the signal stack (intent, product, fit), and where Pocus/Koala/Endgame fit
-- [type:learn] [vertical:revops] concept: signal-orchestration — orchestrating buyer signals across intent, product, engagement, and ecosystem to drive plays
-- [type:learn] [vertical:revops] concept: forecast-categories-explained — Commit/Best/Pipeline/Omitted categories and how Clari/Aviso/BoostUp differ in defaults
-- [type:learn] [vertical:revops] policy: ai-policy-for-revops-teams — a one-page AI-use policy template for RevOps (data residency, vendor review, allowed tasks)
-- [type:learn] [vertical:recruiting] policy: ai-policy-for-recruiting-teams — AI-use policy for TA (NYC LL144 awareness, bias audits, candidate notification, vendor due-diligence)
-- [type:learn] [vertical:recruiting] regulation: nyc-local-law-144 — what NYC LL144 requires for AEDTs and how recruiting teams comply
-- [type:learn] [vertical:recruiting] concept: talent-intelligence-platform — what a TI platform is vs a CRM vs an ATS; vendor map and buying criteria
-- [type:learn] [vertical:legal-ops] concept: contract-data-extraction — how AI extracts structured clause data from contracts; precision/recall tradeoffs and validation patterns
-- [type:learn] [vertical:legal-ops] concept: legal-hold-process — the end-to-end legal-hold lifecycle (issue → custodian → preservation → release) and where automation helps
-- [type:learn] [vertical:legal-ops] concept: data-room-vs-deal-room — distinctions for legal/finance buyers and where AI document analysis applies
+- [type:learn] [vertical:cross] definition: claude-skill-vs-mcp-server — what each is, when each fits, and how they compose for ops workflows → slug: claude-skill-vs-mcp-server
+- [type:learn] [vertical:cross] definition: prompt-pack-vs-claude-skill — when a prompt library is enough vs when to package a skill → slug: prompt-pack-vs-claude-skill
+- [type:learn] [vertical:cross] definition: mcp-server-explained — Model Context Protocol primer aimed at non-engineer ops leaders evaluating vendors that claim "MCP support" → slug: mcp-server-explained
+- [type:learn] [vertical:cross] definition: ai-agent-for-ops — what makes an AI "agent" for ops vs a workflow; the diagnostic questions a buyer should ask vendors → slug: ai-agent-for-ops
+- [type:learn] [vertical:revops] definition: ai-sdr — what AI SDR vendors actually do, the four common architectures, and how to evaluate them → slug: ai-sdr
+- [type:learn] [vertical:revops] definition: product-led-sales-pls — PLS primer, the signal stack (intent, product, fit), and where Pocus/Koala/Endgame fit → slug: product-led-sales-pls
+- [type:learn] [vertical:revops] concept: signal-orchestration — orchestrating buyer signals across intent, product, engagement, and ecosystem to drive plays → slug: signal-orchestration
+- [type:learn] [vertical:revops] concept: forecast-categories-explained — Commit/Best/Pipeline/Omitted categories and how Clari/Aviso/BoostUp differ in defaults → slug: forecast-categories-explained
+- [type:learn] [vertical:revops] policy: ai-policy-for-revops-teams — a one-page AI-use policy template for RevOps (data residency, vendor review, allowed tasks) → slug: ai-policy-for-revops-teams
+- [type:learn] [vertical:recruiting] policy: ai-policy-for-recruiting-teams — AI-use policy for TA (NYC LL144 awareness, bias audits, candidate notification, vendor due-diligence) → slug: ai-policy-for-recruiting-teams
+- [type:learn] [vertical:recruiting] regulation: nyc-local-law-144 — what NYC LL144 requires for AEDTs and how recruiting teams comply → slug: nyc-local-law-144
+- [type:learn] [vertical:recruiting] concept: talent-intelligence-platform — what a TI platform is vs a CRM vs an ATS; vendor map and buying criteria → slug: talent-intelligence-platform
+- [type:learn] [vertical:legal-ops] concept: contract-data-extraction — how AI extracts structured clause data from contracts; precision/recall tradeoffs and validation patterns → slug: contract-data-extraction
+- [type:learn] [vertical:legal-ops] concept: legal-hold-process — the end-to-end legal-hold lifecycle (issue → custodian → preservation → release) and where automation helps → slug: legal-hold-process
+- [type:learn] [vertical:legal-ops] concept: data-room-vs-deal-room — distinctions for legal/finance buyers and where AI document analysis applies → slug: data-room-vs-deal-room
 
 ## Stacks
 
