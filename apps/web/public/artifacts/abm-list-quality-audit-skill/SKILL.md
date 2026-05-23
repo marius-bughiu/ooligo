@@ -1,6 +1,6 @@
 ---
 name: abm-list-quality-audit
-description: Audit an ABM target list against an explicit ICP rubric and return a defect report for every account that fails. Produces a per-account defect taxonomy (wrong-size, wrong-industry, wrong-geo, stale-data, low-intent, missing-field), a list-level quality score, and a prioritized remediation queue. Use before any ABM campaign goes live — not as a substitute for ICP strategy work.
+description: Audit an ABM target list against an explicit ICP rubric and return a defect report for every account that fails. Produces a per-account defect taxonomy (wrong-size, wrong-industry, wrong-geo, wrong-funding, tech-mismatch, stale-data, low-intent, missing-field), a list-level quality score, and a prioritized remediation queue. Use before any ABM campaign goes live — not as a substitute for ICP strategy work.
 ---
 
 # ABM list quality audit
@@ -107,8 +107,8 @@ Priority: re-enrich 2 Q2 accounts with missing headcount data; remove 1 Q4 accou
 |---|---|---|---|
 | northwind.com | Q1 | 8.6 | none |
 | tailspin.io | Q2 | 7.1 | missing-field:headcount, stale-data |
-| fabrikam.de | Q2 | 6.3 | wrong-size:too-small, low-intent |
-| contoso.com | Q3 | 5.0 | wrong-industry, missing-field:tech_stack |
+| fabrikam.de | Q2 | 6.3 | wrong-size:too-small, wrong-funding, low-intent |
+| contoso.com | Q3 | 5.0 | wrong-industry, tech-mismatch, missing-field:tech_stack |
 | adventure-works.com | Q4 | 3.2 | wrong-size:too-large, wrong-geo, missing-field:revenue |
 
 ## Defect frequency table
@@ -120,6 +120,8 @@ Priority: re-enrich 2 Q2 accounts with missing headcount data; remove 1 Q4 accou
 | wrong-size | 2 | Review headcount band in rubric — may be over-restricted |
 | wrong-industry | 1 | Confirm industry mapping — SIC code may be miscategorized |
 | wrong-geo | 1 | Remove if DACH-only campaign; keep for global list |
+| wrong-funding | 1 | Move to pre-series A nurture vs. growth-stage ABM segment |
+| tech-mismatch | 1 | Re-enrich tech stack via BuiltWith or Clay; remove if confirmed miss |
 | low-intent | 1 | Move to nurture; re-activate when intent signal appears |
 | missing-field:tech_stack | 1 | Re-enrich via BuiltWith or Clay tech-stack column |
 

@@ -7,7 +7,7 @@
         "path": "interview-scheduling-resolver",
         "responseMode": "responseNode",
         "options": {
-          "rawBody": false
+          "rawBody": true
         }
       },
       "id": "3a3a3a3a-0003-0000-0000-000000000001",
@@ -37,7 +37,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Verify Greenhouse webhook HMAC-SHA256 signature.\n// Greenhouse sends the signature in the header 'Signature' as:\n//   sha256=<hex-digest>\n// The secret is set on the webhook in the Greenhouse Dev Center.\n\nconst crypto = require('crypto');\n\nconst secret = $env['GREENHOUSE_WEBHOOK_SECRET'] || '';\nconst signatureHeader = ($input.first().json.headers?.['signature'] ||\n                         $input.first().json.headers?.['Signature'] || '').trim();\nconst rawBody = $input.first().json.rawBody || JSON.stringify($input.first().json.body || {});\n\nif (!secret) {\n  throw new Error('GREENHOUSE_WEBHOOK_SECRET env var is not set. Cannot verify signature.');\n}\n\nif (!signatureHeader) {\n  throw new Error('No Signature header found in webhook request. Rejecting.');\n}\n\nconst expected = 'sha256=' + crypto\n  .createHmac('sha256', secret)\n  .update(rawBody)\n  .digest('hex');\n\nif (!crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected))) {\n  throw new Error(`Signature mismatch. Expected ${expected}, got ${signatureHeader}. Dropping webhook.`);\n}\n\n// Verified. Extract the fields we need for the rest of the flow.\nconst payload = $input.first().json.body?.payload || $input.first().json.body || {};\nconst application = payload.application || {};\nconst candidate = application.candidate || payload.candidate || {};\nconst job = application.jobs?.[0] || payload.job || {};\nconst currentStage = payload.current_stage || application.current_stage || {};\n\n// Collect interviewers from the current stage's interviews array.\n// Each interview has an interviewers[] array with email addresses.\nconst interviews = currentStage.interviews || [];\nconst interviewerEmails = [];\nfor (const interview of interviews) {\n  for (const iv of (interview.interviewers || [])) {\n    if (iv.email && !interviewerEmails.includes(iv.email)) {\n      interviewerEmails.push(iv.email);\n    }\n  }\n}\n\n// Recruiter email comes from the organizer field of the application or the\n// assigned recruiter on the job.\nconst recruiterEmail = application.recruiter?.email ||\n                       payload.recruiter?.email ||\n                       job.recruiter?.email || '';\n\nreturn [{\n  json: {\n    applicationId: String(application.id || ''),\n    candidateName: candidate.name || `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim(),\n    candidateEmail: (candidate.email_addresses || []).find(e => e.type === 'work')?.value ||\n                    (candidate.email_addresses || [])[0]?.value || candidate.email || '',\n    jobId: String(job.id || ''),\n    jobName: job.name || '',\n    stageName: currentStage.name || '',\n    recruiterEmail,\n    interviewerEmails,\n    allCalendarIds: [...new Set([recruiterEmail, ...interviewerEmails].filter(Boolean))],\n    greenhouseApplicationId: String(application.id || ''),\n    receivedAt: new Date().toISOString(),\n  }\n}];"
+        "jsCode": "// Verify Greenhouse webhook HMAC-SHA256 signature.\n// Greenhouse sends the signature in the header 'Signature' as:\n//   sha256 <hex-digest>      (algorithm, a SPACE, then the hex digest)\n// NOT 'sha256=<hex-digest>'. We split on the space and compare against the hash.\n// The HMAC must be computed over the EXACT raw request body bytes Greenhouse sent\n// (Unicode escaped as \\uXXXX), so the Webhook node is configured with rawBody: true.\n// The secret is set on the webhook in the Greenhouse Dev Center.\n\nconst crypto = require('crypto');\n\nconst secret = $env['GREENHOUSE_WEBHOOK_SECRET'] || '';\nconst headers = $input.first().json.headers || {};\nconst signatureHeader = (headers['signature'] || headers['Signature'] || '').trim();\n\n// With rawBody: true the Webhook node exposes the original bytes as a base64\n// binary property named 'data'. Decode those bytes for the HMAC so the digest\n// byte-matches Greenhouse's original payload. Fall back to the rawBody string if\n// present; only as a last resort re-stringify (which will not match Greenhouse's\n// Unicode escaping and is provided to avoid a hard crash, not for verification).\nlet rawBodyBuf = null;\nconst binary = $input.first().binary;\nif (binary?.data?.data) {\n  rawBodyBuf = Buffer.from(binary.data.data, 'base64');\n} else if (typeof $input.first().json.rawBody === 'string') {\n  rawBodyBuf = Buffer.from($input.first().json.rawBody, 'utf8');\n} else if (Buffer.isBuffer($input.first().json.rawBody)) {\n  rawBodyBuf = $input.first().json.rawBody;\n} else {\n  rawBodyBuf = Buffer.from(JSON.stringify($input.first().json.body || {}), 'utf8');\n}\n\nif (!secret) {\n  throw new Error('GREENHOUSE_WEBHOOK_SECRET env var is not set. Cannot verify signature.');\n}\n\nif (!signatureHeader) {\n  throw new Error('No Signature header found in webhook request. Rejecting.');\n}\n\n// Header is 'sha256 <hex>'. Take everything after the first space as the digest.\nconst spaceIdx = signatureHeader.indexOf(' ');\nconst receivedHex = (spaceIdx === -1 ? signatureHeader : signatureHeader.slice(spaceIdx + 1)).trim().toLowerCase();\n\nconst expectedHex = crypto\n  .createHmac('sha256', secret)\n  .update(rawBodyBuf)\n  .digest('hex');\n\n// Constant-time compare. Both buffers must be the same length for timingSafeEqual,\n// so guard on length first (a length mismatch is itself a failed verification).\nconst receivedBuf = Buffer.from(receivedHex, 'hex');\nconst expectedBuf = Buffer.from(expectedHex, 'hex');\nif (receivedBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(receivedBuf, expectedBuf)) {\n  throw new Error('Signature mismatch. Dropping webhook (computed HMAC did not match the Signature header).');\n}\n\n// Verified. Extract the fields we need for the rest of the flow.\nconst payload = $input.first().json.body?.payload || $input.first().json.body || {};\nconst application = payload.application || {};\nconst candidate = application.candidate || payload.candidate || {};\nconst job = application.jobs?.[0] || payload.job || {};\nconst currentStage = payload.current_stage || application.current_stage || {};\n\n// Collect interviewers from the current stage's interviews array.\n// Each interview has an interviewers[] array with email addresses.\nconst interviews = currentStage.interviews || [];\nconst interviewerEmails = [];\nfor (const interview of interviews) {\n  for (const iv of (interview.interviewers || [])) {\n    if (iv.email && !interviewerEmails.includes(iv.email)) {\n      interviewerEmails.push(iv.email);\n    }\n  }\n}\n\n// Recruiter email comes from the organizer field of the application or the\n// assigned recruiter on the job.\nconst recruiterEmail = application.recruiter?.email ||\n                       payload.recruiter?.email ||\n                       job.recruiter?.email || '';\n\nreturn [{\n  json: {\n    applicationId: String(application.id || ''),\n    candidateName: candidate.name || `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim(),\n    candidateEmail: (candidate.email_addresses || []).find(e => e.type === 'work')?.value ||\n                    (candidate.email_addresses || [])[0]?.value || candidate.email || '',\n    jobId: String(job.id || ''),\n    jobName: job.name || '',\n    stageName: currentStage.name || '',\n    recruiterEmail,\n    interviewerEmails,\n    allCalendarIds: [...new Set([recruiterEmail, ...interviewerEmails].filter(Boolean))],\n    greenhouseApplicationId: String(application.id || ''),\n    receivedAt: new Date().toISOString(),\n  }\n}];"
       },
       "id": "3a3a3a3a-0003-0000-0000-000000000003",
       "name": "Verify Signature + Extract Participants",
@@ -45,7 +45,7 @@
       "typeVersion": 2,
       "position": [420, 300],
       "notesInFlow": true,
-      "notes": "Verifies the Greenhouse HMAC-SHA256 webhook signature to reject spoofed requests. Extracts recruiter, interviewers, candidate contact, and job context. If GREENHOUSE_WEBHOOK_SECRET is unset or signature mismatches, this node throws and halts the execution — the error is visible in n8n Executions."
+      "notes": "Verifies the Greenhouse HMAC-SHA256 webhook signature to reject spoofed requests. Greenhouse sends the 'Signature' header as 'sha256 <hex-digest>' (algorithm, a space, then the hash) and signs the entire raw request body, so the Webhook node uses rawBody: true and this node hashes the original bytes and compares (constant-time) against the hash after the space. Extracts recruiter, interviewers, candidate contact, and job context. If GREENHOUSE_WEBHOOK_SECRET is unset or the signature mismatches, this node throws and halts the execution — the error is visible in n8n Executions."
     },
     {
       "parameters": {
@@ -194,12 +194,12 @@
       "typeVersion": 1.2,
       "position": [200, 680],
       "notesInFlow": true,
-      "notes": "Fires at 08:00 America/New_York on weekdays. Sweeps Greenhouse for applications stuck in a 'to_be_scheduled' interview status for more than 48 hours and replays them through the resolver. This catches webhook delivery failures or cases where the stage-change event was missed. The backstop calls the Greenhouse Harvest API GET /v1/scheduled_interviews filtered by status and created_at range."
+      "notes": "Fires at 08:00 America/New_York on weekdays. Sweeps Greenhouse for interviews that are still unscheduled (no confirmed start time) more than 48 hours after creation and replays them through the resolver. This catches webhook delivery failures or cases where the stage-change event was missed. The backstop calls the Greenhouse Harvest API GET /v1/scheduled_interviews filtered by created_before (48h ago), then filters for unscheduled/stale interviews client-side in a Code node (the endpoint has no status query param)."
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://harvest.greenhouse.io/v1/scheduled_interviews?status=to_be_scheduled&created_before={{ $now.minus({hours: 48}).toISO() }}&per_page=50",
+        "url": "=https://harvest.greenhouse.io/v1/scheduled_interviews?created_before={{ $now.minus({hours: 48}).toISO() }}&per_page=50",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "httpHeaderAuth",
         "options": {
@@ -224,7 +224,19 @@
         }
       },
       "notesInFlow": true,
-      "notes": "Queries Greenhouse Harvest API for interviews in to_be_scheduled status created more than 48 hours ago. Credentials: PLACEHOLDER_GREENHOUSE_CRED_ID — set up a Greenhouse API key (Harvest scope) and store it as HTTP Header Auth (header name: Authorization, value: Basic base64(api_key:))."
+      "notes": "Queries Greenhouse Harvest API for scheduled_interviews created more than 48 hours ago. The scheduled_interviews endpoint has NO 'status' query param (valid filters: created_before/after, starts_before/after, ends_before/after, actionable, per_page, page), so the sweep filters for unscheduled/stale interviews client-side in the next Code node. Credentials: PLACEHOLDER_GREENHOUSE_CRED_ID — set up a Greenhouse API key (Harvest scope) and store it as HTTP Header Auth (header name: Authorization, value: Basic base64(api_key:))."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Client-side filter for stale UNSCHEDULED interviews.\n// The Harvest scheduled_interviews endpoint has no 'status' query param, so the\n// HTTP node fetched ALL interviews created >48h ago. Here we keep only the ones\n// that still have no confirmed time slot — i.e. the ones the resolver should chase.\n//\n// A scheduled_interviews record carries:\n//   status: 'scheduled' | 'awaiting_feedback' | 'complete'\n//   start:  { date_time: <ISO> } | { date: <YYYY-MM-DD> } | null when unscheduled\n//   interviewers[]: { response_status: 'needs_action'|'declined'|'tentative'|'accepted', ... }\n//\n// 'Unscheduled / stale' = no concrete start.date_time has been set yet. We also\n// exclude anything already complete or awaiting feedback (those are past the\n// scheduling stage). Records the API returns as a bare array land in $json.body\n// (HTTP node: fullResponse:false). With neverError:true, an error response would\n// not be an array — guard for that and emit nothing rather than crash.\n\nconst raw = $input.first().json.body;\nconst interviews = Array.isArray(raw) ? raw : (Array.isArray(raw?.body) ? raw.body : []);\n\nconst stale = interviews.filter((iv) => {\n  if (!iv || typeof iv !== 'object') return false;\n  // Already scheduled with a concrete time → not our problem.\n  const hasConfirmedTime = !!(iv.start && iv.start.date_time);\n  if (hasConfirmedTime) return false;\n  // Past the scheduling stage entirely.\n  if (iv.status === 'complete' || iv.status === 'awaiting_feedback') return false;\n  return true;\n});\n\n// Re-wrap as a single item carrying the filtered array under 'body' so the\n// downstream Split Out node (fieldToSplitOut: 'body') can fan it back out.\nreturn [{ json: { body: stale, fetchedCount: interviews.length, staleCount: stale.length } }];"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000013",
+      "name": "Filter Stale Unscheduled (client-side)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 680],
+      "notesInFlow": true,
+      "notes": "Filters the full scheduled_interviews list down to interviews that still have no confirmed start.date_time (and are not complete/awaiting_feedback). This replaces the removed 'status=to_be_scheduled' query param, which the Harvest endpoint silently ignores. Emits a single item whose 'body' is the filtered array for the Split Out node to fan back out."
     },
     {
       "parameters": {
@@ -237,7 +249,7 @@
       "name": "Split Into Items",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [640, 680],
+      "position": [760, 680],
       "notesInFlow": true,
       "notes": "Splits the Greenhouse response array into individual items so each stale interview is processed independently through the resolver chain."
     }
@@ -298,6 +310,13 @@
       ]
     },
     "Greenhouse — List Stale Unscheduled Interviews": {
+      "main": [
+        [
+          { "node": "Filter Stale Unscheduled (client-side)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Filter Stale Unscheduled (client-side)": {
       "main": [
         [
           { "node": "Split Into Items", "type": "main", "index": 0 }

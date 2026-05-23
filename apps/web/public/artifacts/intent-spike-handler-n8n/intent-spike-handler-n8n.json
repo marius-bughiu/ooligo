@@ -49,79 +49,15 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://{{ $env.N8N_SELF_URL_HOST }}/api/v1/workflows/{{ $workflow.id }}/static-data/dedup/{{ $json.dedupKey }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-N8N-API-KEY", "value": "={{ $env.N8N_API_KEY }}" }
-          ]
-        },
-        "options": {
-          "timeout": 5000,
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "neverError": true
-            }
-          }
-        }
-      },
-      "id": "3a3a3a3a-0003-0000-0000-000000000004",
-      "name": "Dedup Check — Fetch Static Data",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [640, 300],
-      "notesInFlow": true,
-      "notes": "Reads n8n static workflow data to check if this domain was already actioned today (day-level dedup window). A 404 means first spike of the day — proceed. A 200 means duplicate — skip. Requires N8N_API_KEY env var."
-    },
-    {
-      "parameters": {
-        "jsCode": "// Dedup gate: if the static-data GET returned 200 with a stored timestamp, this spike\n// was already processed today. Skip it by returning an empty array (no output items).\n// If GET returned 404 or any error, this is the first spike for this domain today — proceed.\n\nconst statusCode = $json.statusCode || $json.status || 200;\nconst alreadyProcessed = statusCode === 200 && $json.body?.value;\n\nif (alreadyProcessed) {\n  // Duplicate spike — output nothing so downstream nodes don't fire\n  return [];\n}\n\n// First spike of the day — pass through the normalized payload from two nodes back\nconst normalized = $('Normalize Intent Payload').item.json;\nreturn [{ json: { ...normalized, dedupPassed: true } }];"
+        "jsCode": "// Day-level dedup using n8n workflow static data (the only correct way to persist\n// cross-execution state from a Code node — there is NO public REST API for static data).\n//\n// $getWorkflowStaticData('global') returns a plain object that n8n persists in its DB\n// after the execution finishes. NOTE: static data only persists for PRODUCTION executions\n// (webhook / schedule trigger), not manual test runs.\n//\n// Logic:\n//   1. Read the global static-data object.\n//   2. Prune keys whose date is older than today (keeps the store small — addresses the\n//      \"static data accumulates indefinitely\" failure mode without a separate cron).\n//   3. If this domain+date key already exists, this is a duplicate spike today — return []\n//      so no downstream node fires.\n//   4. Otherwise stamp the key (mark BEFORE any external call so two concurrent spikes for\n//      the same domain can't both pass) and pass the normalized payload through.\n\nconst staticData = $getWorkflowStaticData('global');\n\nconst normalized = $json;\nconst domain = normalized.domain;\nconst today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD\nconst key = `dedup_${domain}_${today}`;\n\n// 2. Prune stale keys (any dedup_* key not suffixed with today's date).\nfor (const k of Object.keys(staticData)) {\n  if (k.startsWith('dedup_') && !k.endsWith(`_${today}`)) {\n    delete staticData[k];\n  }\n}\n\n// 3. Duplicate check.\nif (staticData[key]) {\n  // Already actioned this domain today — drop silently.\n  return [];\n}\n\n// 4. Mark and pass through.\nstaticData[key] = normalized.receivedAt || new Date().toISOString();\n\nreturn [{ json: { ...normalized, dedupPassed: true } }];"
       },
       "id": "3a3a3a3a-0003-0000-0000-000000000005",
-      "name": "Dedup Gate",
+      "name": "Dedup Gate (Static Data)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 300],
+      "position": [640, 300],
       "notesInFlow": true,
-      "notes": "Returns empty array (halts execution) for duplicate spikes. Passes through on first spike of the day. Day-level window prevents SDR fatigue from the same account re-spiking within a single day."
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://{{ $env.N8N_SELF_URL_HOST }}/api/v1/workflows/{{ $workflow.id }}/static-data/dedup/{{ $json.dedupKey }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-N8N-API-KEY", "value": "={{ $env.N8N_API_KEY }}" },
-            { "name": "Content-Type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={ \"value\": \"{{ $json.receivedAt }}\" }",
-        "options": {
-          "timeout": 5000,
-          "response": {
-            "response": {
-              "fullResponse": false,
-              "neverError": true
-            }
-          }
-        }
-      },
-      "id": "3a3a3a3a-0003-0000-0000-000000000006",
-      "name": "Dedup Mark — Write Static Data",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1080, 300],
-      "notesInFlow": true,
-      "notes": "Stamps this domain+date key as processed so subsequent spikes today are dropped by the Dedup Gate."
+      "notes": "Day-level dedup via $getWorkflowStaticData('global'). Reads/writes a per-domain-per-day key inside this Code node — n8n's public REST API has no static-data resource, so this is the only correct approach. Marks the key before passing through (race-safe) and prunes keys from previous days. Returns an empty array for duplicate spikes today, halting execution silently. Static data persists only on production (webhook/schedule) executions, not manual runs."
     },
     {
       "parameters": {
@@ -162,7 +98,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Assignment logic: determine which rep owns this spike and at what urgency.\n//\n// Rules (in priority order):\n// 1. If a Salesforce Account exists and has an Owner, that owner gets the spike — they own the account.\n// 2. If no SFDC Account found, route to the SDR assignment pool based on territory:\n//    - US/CA/AU/NZ → SDR_POOL_AMER (env var: SDR_POOL_AMER_EMAIL, SDR_POOL_AMER_SLACK)\n//    - DE/AT/CH/FR/NL/SE/DK/NO/FI/BE → SDR_POOL_EMEA (env var: SDR_POOL_EMEA_EMAIL, SDR_POOL_EMEA_SLACK)\n//    - All others → SDR_POOL_ROW (env var: SDR_POOL_ROW_EMAIL, SDR_POOL_ROW_SLACK)\n// 3. Urgency: high-severity spikes get flagged urgent; mid/low get standard.\n\nconst spikeData = $('Dedup Gate').item.json;\nconst sfRecord = $json?.records?.[0] || null;\n\nlet assigneeEmail = '';\nlet assigneeName = '';\nlet assigneeSlack = '';\nlet sfdcAccountId = spikeData.sfdcAccountId || '';\nlet assignmentSource = '';\n\nif (sfRecord) {\n  // Account exists in Salesforce — keep existing owner\n  assigneeEmail = sfRecord.Owner?.Email || $env.SDR_POOL_AMER_EMAIL;\n  assigneeName = sfRecord.Owner?.Name || 'Account Owner';\n  assigneeSlack = sfRecord.Owner?.Slack_Handle__c || '';\n  sfdcAccountId = sfRecord.Id || sfdcAccountId;\n  assignmentSource = 'sfdc-existing-owner';\n} else {\n  // No SFDC Account — territory-based pool assignment\n  const country = (spikeData.country || '').toUpperCase();\n  const amer = new Set(['US', 'CA', 'AU', 'NZ', 'MX', 'BR', 'AR', 'CL', 'CO']);\n  const emea = new Set(['DE', 'AT', 'CH', 'FR', 'NL', 'SE', 'DK', 'NO', 'FI', 'BE', 'GB', 'IE', 'ES', 'PT', 'IT']);\n\n  if (amer.has(country) || country === '') {\n    assigneeEmail = $env.SDR_POOL_AMER_EMAIL || 'sdr-amer@example.com';\n    assigneeName = 'SDR Pool — AMER';\n    assigneeSlack = $env.SDR_POOL_AMER_SLACK || '';\n    assignmentSource = 'pool-amer';\n  } else if (emea.has(country)) {\n    assigneeEmail = $env.SDR_POOL_EMEA_EMAIL || 'sdr-emea@example.com';\n    assigneeName = 'SDR Pool — EMEA';\n    assigneeSlack = $env.SDR_POOL_EMEA_SLACK || '';\n    assignmentSource = 'pool-emea';\n  } else {\n    assigneeEmail = $env.SDR_POOL_ROW_EMAIL || 'sdr-row@example.com';\n    assigneeName = 'SDR Pool — ROW';\n    assigneeSlack = $env.SDR_POOL_ROW_SLACK || '';\n    assignmentSource = 'pool-row';\n  }\n}\n\nconst isUrgent = spikeData.spikeSeverity === 'high';\n\nreturn [{\n  json: {\n    ...spikeData,\n    sfdcAccountId,\n    assigneeEmail,\n    assigneeName,\n    assigneeSlack,\n    assignmentSource,\n    isUrgent,\n    sfdcAccountFound: !!sfRecord,\n    sfdcAccountName: sfRecord?.Name || spikeData.accountName,\n  }\n}];"
+        "jsCode": "// Assignment logic: determine which rep owns this spike and at what urgency.\n//\n// Rules (in priority order):\n// 1. If a Salesforce Account exists and has an Owner, that owner gets the spike — they own the account.\n// 2. If no SFDC Account found, route to the SDR assignment pool based on territory:\n//    - US/CA/AU/NZ → SDR_POOL_AMER (env var: SDR_POOL_AMER_EMAIL, SDR_POOL_AMER_SLACK)\n//    - DE/AT/CH/FR/NL/SE/DK/NO/FI/BE → SDR_POOL_EMEA (env var: SDR_POOL_EMEA_EMAIL, SDR_POOL_EMEA_SLACK)\n//    - All others → SDR_POOL_ROW (env var: SDR_POOL_ROW_EMAIL, SDR_POOL_ROW_SLACK)\n// 3. Urgency: high-severity spikes get flagged urgent; mid/low get standard.\n\nconst spikeData = $('Dedup Gate (Static Data)').item.json;\nconst sfRecord = $json?.records?.[0] || null;\n\nlet assigneeEmail = '';\nlet assigneeName = '';\nlet assigneeSlack = '';\nlet sfdcAccountId = spikeData.sfdcAccountId || '';\nlet sfdcOwnerId = ''; // Salesforce User Id (15/18-char, starts with 005) — used as Task OwnerId\nlet assignmentSource = '';\n\nif (sfRecord) {\n  // Account exists in Salesforce — keep existing owner\n  assigneeEmail = sfRecord.Owner?.Email || $env.SDR_POOL_AMER_EMAIL;\n  assigneeName = sfRecord.Owner?.Name || 'Account Owner';\n  assigneeSlack = sfRecord.Owner?.Slack_Handle__c || '';\n  sfdcAccountId = sfRecord.Id || sfdcAccountId;\n  sfdcOwnerId = sfRecord.OwnerId || ''; // a real User Id we can assign the Task to\n  assignmentSource = 'sfdc-existing-owner';\n} else {\n  // No SFDC Account — territory-based pool assignment\n  const country = (spikeData.country || '').toUpperCase();\n  const amer = new Set(['US', 'CA', 'AU', 'NZ', 'MX', 'BR', 'AR', 'CL', 'CO']);\n  const emea = new Set(['DE', 'AT', 'CH', 'FR', 'NL', 'SE', 'DK', 'NO', 'FI', 'BE', 'GB', 'IE', 'ES', 'PT', 'IT']);\n\n  if (amer.has(country) || country === '') {\n    assigneeEmail = $env.SDR_POOL_AMER_EMAIL || 'sdr-amer@example.com';\n    assigneeName = 'SDR Pool — AMER';\n    assigneeSlack = $env.SDR_POOL_AMER_SLACK || '';\n    assignmentSource = 'pool-amer';\n  } else if (emea.has(country)) {\n    assigneeEmail = $env.SDR_POOL_EMEA_EMAIL || 'sdr-emea@example.com';\n    assigneeName = 'SDR Pool — EMEA';\n    assigneeSlack = $env.SDR_POOL_EMEA_SLACK || '';\n    assignmentSource = 'pool-emea';\n  } else {\n    assigneeEmail = $env.SDR_POOL_ROW_EMAIL || 'sdr-row@example.com';\n    assigneeName = 'SDR Pool — ROW';\n    assigneeSlack = $env.SDR_POOL_ROW_SLACK || '';\n    assignmentSource = 'pool-row';\n  }\n}\n\nconst isUrgent = spikeData.spikeSeverity === 'high';\n\nreturn [{\n  json: {\n    ...spikeData,\n    sfdcAccountId,\n    sfdcOwnerId,\n    assigneeEmail,\n    assigneeName,\n    assigneeSlack,\n    assignmentSource,\n    isUrgent,\n    sfdcAccountFound: !!sfRecord,\n    sfdcAccountName: sfRecord?.Name || spikeData.accountName,\n  }\n}];"
       },
       "id": "3a3a3a3a-0003-0000-0000-000000000008",
       "name": "Assignment Logic",
@@ -170,7 +106,7 @@
       "typeVersion": 2,
       "position": [1520, 300],
       "notesInFlow": true,
-      "notes": "Priority: SFDC existing owner → territory pool (AMER/EMEA/ROW). urgency flag set on high-severity spikes. All env vars have fallback strings so the flow never throws on missing config."
+      "notes": "Priority: SFDC existing owner → territory pool (AMER/EMEA/ROW). Captures the owner's Salesforce User Id (sfdcOwnerId, starts with 005) for the Task OwnerId — never an email. urgency flag set on high-severity spikes. All env vars have fallback strings so the flow never throws on missing config."
     },
     {
       "parameters": {
@@ -270,7 +206,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"Subject\": \"Intent spike: {{ $json.sfdcAccountName }} — {{ $json.spikeSeverity }} severity\",\n  \"Description\": \"Source: {{ $json.source }}\\nBuying stage: {{ $json.buyingStage || 'n/a' }}\\nIntent score: {{ $json.intentScore !== null ? $json.intentScore : 'n/a' }}\\nTop topics: {{ $json.topTopics.join(', ') }}\\nDraft subject: {{ $json.draftSubject }}\\nDraft body: {{ $json.draftBody }}\\nTalking point: {{ $json.draftTalkingPoint }}\\nDraft source: {{ $json.draftSource }}\\nAssignment: {{ $json.assignmentSource }}\",\n  \"OwnerId\": \"{{ $json.sfdcAccountId ? $json.assigneeEmail : '' }}\",\n  \"WhatId\": \"{{ $json.sfdcAccountId || '' }}\",\n  \"Priority\": \"{{ $json.isUrgent ? 'High' : 'Normal' }}\",\n  \"Status\": \"Not Started\",\n  \"ActivityDate\": \"{{ $now.plus({days: $json.isUrgent ? 1 : 3}).toFormat('yyyy-MM-dd') }}\",\n  \"Type\": \"Call\",\n  \"Intent_Spike_Source__c\": \"{{ $json.source }}\",\n  \"Intent_Score__c\": {{ $json.intentScore || 'null' }},\n  \"Intent_Buying_Stage__c\": \"{{ $json.buyingStage || '' }}\"\n}",
+        "jsonBody": "={{ (() => {\n  const j = $json;\n  const task = {\n    Subject: `Intent spike: ${j.sfdcAccountName} — ${j.spikeSeverity} severity`,\n    Description: `Source: ${j.source}\\nBuying stage: ${j.buyingStage || 'n/a'}\\nIntent score: ${j.intentScore !== null ? j.intentScore : 'n/a'}\\nTop topics: ${j.topTopics.join(', ')}\\nDraft subject: ${j.draftSubject}\\nDraft body: ${j.draftBody}\\nTalking point: ${j.draftTalkingPoint}\\nDraft source: ${j.draftSource}\\nAssignment: ${j.assignmentSource}\\nAssignee (intended rep): ${j.assigneeName} <${j.assigneeEmail}>`,\n    Priority: j.isUrgent ? 'High' : 'Normal',\n    Status: 'Not Started',\n    ActivityDate: $now.plus({ days: j.isUrgent ? 1 : 3 }).toFormat('yyyy-MM-dd'),\n    Type: 'Call',\n    Intent_Spike_Source__c: j.source,\n    Intent_Score__c: j.intentScore != null ? j.intentScore : null,\n    Intent_Buying_Stage__c: j.buyingStage || ''\n  };\n  // OwnerId must be a Salesforce User Id (15/18-char, starts with 005) — never an email.\n  // Only set it when we resolved the account owner's User Id; otherwise omit so the Task\n  // defaults to the integration (running) user. Omitting (not '') avoids MALFORMED_ID.\n  if (j.sfdcOwnerId) task.OwnerId = j.sfdcOwnerId;\n  // WhatId links the Task to the Account; omit when there is no Account (avoids MALFORMED_ID).\n  if (j.sfdcAccountId) task.WhatId = j.sfdcAccountId;\n  return JSON.stringify(task);\n})() }}",
         "options": {
           "timeout": 8000,
           "response": {
@@ -293,7 +229,7 @@
         }
       },
       "notesInFlow": true,
-      "notes": "Creates a Salesforce Task on the Account (WhatId). Due date: +1 day for urgent, +3 days for standard. Three custom fields (Intent_Spike_Source__c, Intent_Score__c, Intent_Buying_Stage__c) must be created before activating — see _README.md."
+      "notes": "Creates a Salesforce Task. OwnerId is set ONLY to the account owner's Salesforce User Id (sfdcOwnerId, starts with 005) when one was resolved — never an email; otherwise OwnerId is omitted so the Task defaults to the integration user. WhatId (Account link) and OwnerId are omitted rather than sent empty to avoid MALFORMED_ID. The intended rep is recorded in the Description. Due date: +1 day urgent, +3 standard. Three custom fields (Intent_Spike_Source__c, Intent_Score__c, Intent_Buying_Stage__c) must be created before activating — see _README.md."
     },
     {
       "parameters": {
@@ -407,20 +343,10 @@
     },
     "Normalize Intent Payload": {
       "main": [
-        [{ "node": "Dedup Check — Fetch Static Data", "type": "main", "index": 0 }]
+        [{ "node": "Dedup Gate (Static Data)", "type": "main", "index": 0 }]
       ]
     },
-    "Dedup Check — Fetch Static Data": {
-      "main": [
-        [{ "node": "Dedup Gate", "type": "main", "index": 0 }]
-      ]
-    },
-    "Dedup Gate": {
-      "main": [
-        [{ "node": "Dedup Mark — Write Static Data", "type": "main", "index": 0 }]
-      ]
-    },
-    "Dedup Mark — Write Static Data": {
+    "Dedup Gate (Static Data)": {
       "main": [
         [{ "node": "Salesforce — Account Lookup", "type": "main", "index": 0 }]
       ]

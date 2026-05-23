@@ -84,7 +84,7 @@ Activate the workflow only after all five paths below pass. Use n8n's **Test Wor
 
 ### 1. Signature verification — valid payload
 
-Send a test POST to your n8n webhook URL with the header `Signature: sha256=<correct-hmac>` computed against a sample body and your `GREENHOUSE_WEBHOOK_SECRET`. Expected: the `Verify Signature + Extract Participants` node passes and outputs a normalized JSON item. Confirm `applicationId`, `recruiterEmail`, and `interviewerEmails` are populated.
+Send a test POST to your n8n webhook URL with the header `Signature: sha256 <correct-hmac>` (Greenhouse's format is the algorithm, a single space, then the hex HMAC — not `sha256=<hmac>`) computed against the exact raw request body and your `GREENHOUSE_WEBHOOK_SECRET`. The Webhook node uses `rawBody: true` so the HMAC is verified against the original bytes Greenhouse sent. Expected: the `Verify Signature + Extract Participants` node passes and outputs a normalized JSON item. Confirm `applicationId`, `recruiterEmail`, and `interviewerEmails` are populated.
 
 ### 2. Signature verification — invalid payload
 
@@ -100,6 +100,6 @@ Temporarily edit the `Candidate Availability Intake` node's `windows` array to r
 
 ### 5. Backstop cron path
 
-Trigger `Daily Backstop Cron — 8am ET weekdays` manually. Expected: `Greenhouse — List Stale Unscheduled Interviews` calls the Harvest API; if at least one stale interview exists, `Split Into Items` outputs one item per interview. If Greenhouse returns an empty array the run ends cleanly with no items — that is correct behavior.
+Trigger `Daily Backstop Cron — 8am ET weekdays` manually. Expected: `Greenhouse — List Stale Unscheduled Interviews` calls the Harvest API with `created_before=<48h-ago>` (the `scheduled_interviews` endpoint has no `status` query param, so this fetches every interview created more than 48 hours ago); `Filter Stale Unscheduled (client-side)` then drops any interview that already has a confirmed `start.date_time` or is `complete`/`awaiting_feedback`, keeping only the genuinely unscheduled ones; `Split Into Items` outputs one item per remaining interview. If Greenhouse returns an empty array, or every interview is already scheduled, the run ends cleanly with no items — that is correct behavior.
 
 Only after all five paths pass should you activate the Greenhouse webhook trigger and the cron node.

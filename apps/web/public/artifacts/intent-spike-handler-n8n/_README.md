@@ -11,12 +11,14 @@ Two entry points:
 
 The webhook normalizes multi-source intent payloads (Common Room organization shape, 6sense CRM-sync shape, Bombora CRM-sync shape) into a single internal record. A day-level dedup check prevents the same account from firing multiple times in a day — a direct response to the reality that intent platforms re-evaluate scores on short windows and will otherwise flood reps with repeat notifications for the same signal. The dedup window is set at day-level (not hour-level) because the relevant question is not "did the score tick up again?" but "has this rep been notified today?"
 
+Dedup runs entirely inside one Code node (`Dedup Gate (Static Data)`) using n8n's workflow static data — `$getWorkflowStaticData('global')`. That is the only correct way to persist cross-execution state from a Code node: n8n's public REST API has **no** static-data resource, so an HTTP-based approach would 404 and the gate would never fire. The node reads/writes a `dedup_<domain>_<date>` key, prunes keys from previous days on every run (so the store stays small), and stamps the key before any external call so two concurrent spikes for the same domain can't both pass. Important: workflow static data only persists for **production** executions (webhook / Schedule Trigger) — not manual test runs — so dedup is verified live (see step 2 below), not via the manual Execute Workflow button.
+
 Assignment logic prioritizes the existing Salesforce Account owner. If no Account exists, the spike routes to a territory-based SDR pool (AMER, EMEA, ROW) configured via environment variables. Claude generates a three-part draft: a subject line, a short outreach body anchored to the specific topics the account is researching, and a talking point for the SDR's call prep. The draft is explicitly labeled a starting point in the Slack message — it ships as prose the rep edits, not as a send-ready email.
 
 ## Import
 
 1. In n8n, open **Workflows → Import from File** and select `intent-spike-handler-n8n.json`.
-2. Open the workflow's **Settings** and confirm `Execution Order` is `v1` and `Timezone` is set to match your business hours (defaults to `America/New_York`). The cron and dedup window both interpret times in this zone.
+2. Open the workflow's **Settings** and confirm `Execution Order` is `v1` and `Timezone` is set to match your business hours (defaults to `America/New_York`). The cron interprets its schedule in this zone. The dedup window rolls over at UTC midnight (the key uses the UTC date); if you need it aligned to a local business day, change the date derivation in `Dedup Gate (Static Data)` to use the workflow timezone.
 3. Set the environment variables listed in the **Environment variables** section below.
 4. Wire all four credentials listed in the **Credentials** section.
 5. Create the three Salesforce custom fields listed in the **Salesforce custom fields** section.
@@ -28,8 +30,7 @@ Set these in your n8n instance's environment (n8n Cloud: **Settings → Environm
 
 | Variable | Where to find it | Example |
 |---|---|---|
-| `N8N_SELF_URL_HOST` | Your n8n instance's public hostname, no trailing slash | `n8n.example.com` |
-| `N8N_API_KEY` | n8n Settings → API → Create API key | `n8n_abc123…` |
+| `N8N_SELF_URL_HOST` | Your n8n instance's public hostname, no trailing slash. Used by the polling path to self-POST forwarded spikes to the ingest webhook. | `n8n.example.com` |
 | `SFDC_INSTANCE_URL` | Salesforce Setup → Company Information → Salesforce.com Base URL | `https://yourorg.my.salesforce.com` |
 | `SFDC_ACCESS_TOKEN` | From your Salesforce connected app OAuth flow | `00D…` |
 | `SDR_POOL_AMER_EMAIL` | SDR pool lead email for AMER territory | `sdr-amer@yourcompany.com` |
@@ -54,6 +55,8 @@ Used by `Slack — Notify Assignee`. Create a Slack app at `https://api.slack.co
 ### `PLACEHOLDER_SALESFORCE_CRED_ID` — Salesforce Bearer token
 
 Used by `Salesforce — Account Lookup`, `Salesforce — Create Task`, and `Salesforce — Poll Intent Fields`. In n8n, add an **HTTP Header Auth** credential with header name `Authorization` and value `Bearer <your_token>`. For a stable long-running credential, create a Salesforce Connected App with OAuth 2.0 and configure a token refresh; the raw Bearer approach works for initial setup but rotates every 2 hours by default. The credential requires `api`, `read`, `write`, and `chatter_api` OAuth scopes at minimum.
+
+**Task ownership.** When the account lookup finds an existing Account, `Salesforce — Create Task` sets the Task's `OwnerId` to that Account owner's Salesforce **User Id** (a 15/18-char Id starting with `005`), which the lookup returns. Salesforce `OwnerId` does not accept an email address — passing one fails with `MALFORMED_ID`. When no Account is found (the spike routes to a territory SDR pool), `OwnerId` is omitted entirely, so the Task defaults to the user behind this credential (the integration/running user); the intended SDR pool is recorded in the Task Description and the rep is @-mentioned in the Slack notification. To hand these pool Tasks off to a real Salesforce queue or user, add a step that resolves a User/Queue Id (prefix `005`/`00G`) and set `OwnerId` to it.
 
 ### `PLACEHOLDER_6SENSE_CRED_ID` / Common Room (for real-time path)
 
@@ -82,7 +85,9 @@ If your managed package uses different API names, update the SOQL query in `Sale
 
 Run each path before enabling the cron or wiring Common Room:
 
-1. **High-severity spike (Common Room shape).** Use n8n's **Execute Workflow** on the webhook node with:
+**Note on testing dedup:** workflow static data only persists across **production** executions (a real `POST` to the webhook URL, or a Schedule Trigger run), not manual **Execute Workflow** runs. Activate the workflow and `curl` the webhook for steps 1–2 so the dedup key actually persists between the two requests.
+
+1. **High-severity spike (Common Room shape).** `POST` to `https://<your-n8n-host>/webhook/intent-spike-handler` (workflow active) with:
    ```json
    {
      "body": {
@@ -104,7 +109,7 @@ Run each path before enabling the cron or wiring Common Room:
    ```
    Expected: dedup passes (no prior key), Slack message lands in `#intent-spikes` with red circle, Salesforce Task created with `Priority: High`, Claude draft present.
 
-2. **Dedup block — same domain same day.** Send the identical payload from step 1 a second time. Expected: `Dedup Gate` returns empty array, no Slack message, no Salesforce Task.
+2. **Dedup block — same domain same day.** `POST` the identical payload from step 1 a second time (workflow still active). Expected: `Dedup Gate (Static Data)` finds the existing `dedup_acme-test-spike.com_<today>` key and returns an empty array — no Slack message, no Salesforce Task.
 
 3. **Mid-severity spike (Bombora CRM-sync shape).** Send:
    ```json

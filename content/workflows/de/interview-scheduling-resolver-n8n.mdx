@@ -12,7 +12,7 @@ time_to_setup: "1-2 hours"
 human_tested: false
 ---
 
-Ein [n8n](/de/tools/n8n/)-Flow, der das Koordinationsproblem zwischen mehreren Beteiligten löst, das zwischen „Kandidat wechselt in die Interview-Stufe" und „Kalendereinladung wird versendet" entsteht. Der Flow empfängt einen [Greenhouse](/de/tools/greenhouse/)-Webhook bei einem Stufenwechsel, fragt die freeBusy-API von Google Calendar für jeden Panelisten und den Recruiter gleichzeitig ab, intersektiert diese belegten Fenster mit der angegebenen Verfügbarkeit des Kandidaten, ordnet die resultierenden freien Zeitfenster anhand von Tiebreaker-Regeln und veröffentlicht die 3 besten vorgeschlagenen Zeiten in einem Slack-Kanal, damit der Recruiter bestätigen und buchen kann. Ein täglicher Backup-Cron durchsucht Bewerbungen, die seit mehr als 48 Stunden im Status `to_be_scheduled` feststecken, und verarbeitet sie erneut durch denselben Pfad.
+Ein [n8n](/de/tools/n8n/)-Flow, der das Koordinationsproblem zwischen mehreren Beteiligten löst, das zwischen „Kandidat wechselt in die Interview-Stufe" und „Kalendereinladung wird versendet" entsteht. Der Flow empfängt einen [Greenhouse](/de/tools/greenhouse/)-Webhook bei einem Stufenwechsel, fragt die freeBusy-API von Google Calendar für jeden Panelisten und den Recruiter gleichzeitig ab, intersektiert diese belegten Fenster mit der angegebenen Verfügbarkeit des Kandidaten, ordnet die resultierenden freien Zeitfenster anhand von Tiebreaker-Regeln und veröffentlicht die 3 besten vorgeschlagenen Zeiten in einem Slack-Kanal, damit der Recruiter bestätigen und buchen kann. Ein täglicher Backup-Cron durchsucht Interviews, die seit mehr als 48 Stunden ungeplant geblieben sind, und verarbeitet sie erneut durch denselben Pfad.
 
 Das Artefakt-Bundle befindet sich unter `apps/web/public/artifacts/interview-scheduling-resolver-n8n/` und enthält `interview-scheduling-resolver-n8n.json` (den vollständigen n8n-Flow-Export) und `_README.md` (Import-Schritte, Credential-Setup pro Credential, Verifizierungsverfahren für den ersten Lauf).
 
@@ -44,7 +44,7 @@ Das Artefakt-Bundle befindet sich unter `apps/web/public/artifacts/interview-sch
 
 ## Was der Flow tut
 
-Zwölf Nodes über zwei Trigger-Pfade.
+Dreizehn Nodes über zwei Trigger-Pfade.
 
 **Webhook-Pfad (Echtzeit):**
 
@@ -60,8 +60,9 @@ Zwölf Nodes über zwei Trigger-Pfade.
 **Täglicher Backup-Cron-Pfad:**
 
 9. **Daily Backstop Cron — 8am ET weekdays** — läuft um 08:00 `America/New_York`, Montag bis Freitag (Cron: `0 8 * * 1-5`).
-10. **Greenhouse — List Stale Unscheduled Interviews** — ruft Greenhouse Harvest `GET /v1/scheduled_interviews?status=to_be_scheduled&created_before=<48h-ago>` auf, um Interviews zu finden, bei denen der Webhook verpasst wurde oder die Zustellung fehlschlug.
-11. **Split Into Items** — teilt das Antwort-Array in einzelne Items für die Verarbeitung pro Bewerbung auf.
+10. **Greenhouse — List Stale Unscheduled Interviews** — ruft Greenhouse Harvest `GET /v1/scheduled_interviews?created_before=<48h-ago>` auf, um Interviews zu finden, bei denen der Webhook verpasst wurde oder die Zustellung fehlschlug. Der `scheduled_interviews`-Endpoint hat keinen `status`-Query-Parameter, daher ruft der Sweep alles ab, was vor mehr als 48 Stunden erstellt wurde, und filtert im nächsten Node.
+11. **Filter Stale Unscheduled (client-side)** — verwirft jedes Interview, das bereits eine bestätigte `start.date_time` hat (oder `complete`/`awaiting_feedback` ist), und behält nur die tatsächlich ungeplanten Datensätze. Dies ersetzt den nicht existierenden `status`-Query-Filter, den der Harvest-Endpoint stillschweigend ignoriert.
+12. **Split Into Items** — teilt das gefilterte Array in einzelne Items für die Verarbeitung pro Bewerbung auf.
 
 ## Engineering-Entscheidungen: der Verfügbarkeits-Intersektions-Algorithmus
 
@@ -94,7 +95,7 @@ Pro 100 gelöste Scheduling-Anfragen:
 *Guard:* wenn Google Calendar eines Panelisten in der freeBusy-Antwort einen Fehler zurückgibt, protokolliert der Code-Node den Fehler und behandelt diesen Panelisten als frei — er stoppt nicht. Die Slack-Nachricht enthält die vollständige `allCalendarIds`-Liste; der Recruiter kann erkennen, welche E-Mail einen freeBusy-Fehler ausgelöst hat, indem er das n8n-Ausführungsprotokoll prüft.
 
 **Webhook-Zustellungsfehler (verpasstes Stage-Change-Ereignis).**
-*Guard:* der tägliche Backup-Cron um 08:00 ET durchsucht Greenhouse nach Interviews im Status `to_be_scheduled`, die vor mehr als 48 Stunden erstellt wurden, und verarbeitet sie erneut. Der 48-Stunden-Schwellenwert verhindert die Neuverarbeitung von Interviews, die gerade erst erstellt wurden und deren Webhook noch in Zustellung sein könnte.
+*Guard:* der tägliche Backup-Cron um 08:00 ET durchsucht Greenhouse nach Interviews, die vor mehr als 48 Stunden erstellt wurden und weiterhin ungeplant sind (ohne bestätigte `start.date_time`), und verarbeitet sie erneut. Da der `scheduled_interviews`-Endpoint von Harvest keinen `status`-Query-Parameter bereitstellt, ruft der Sweep alles vor dem Stichzeitpunkt Erstellte ab und wendet den „ungeplant"-Filter clientseitig in einem Code-Node an. Der 48-Stunden-Schwellenwert verhindert die Neuverarbeitung von Interviews, die gerade erst erstellt wurden und deren Webhook noch in Zustellung sein könnte.
 
 **Abgelaufener OAuth2-Token, der den freeBusy-Aufruf ungültig macht.**
 *Guard:* der OAuth2-Credential-Handler von n8n aktualisiert Access-Tokens automatisch vor jeder Anfrage, wenn ein Refresh-Token vorhanden ist. Wenn der Refresh-Token selbst abläuft oder widerrufen wird, wirft der freeBusy-Node einen 401-Fehler. Den Error-Workflow von n8n (Einstellungen → Error-Workflow) konfigurieren, um eine Slack-Warnung zu senden, wenn eine Ausführung fehlschlägt.
@@ -126,7 +127,7 @@ Calendly Teams wählen, wenn die kandidatenseitige Self-Scheduling-Erfahrung Pri
 
 Bundle-Dateien:
 
-- `apps/web/public/artifacts/interview-scheduling-resolver-n8n/interview-scheduling-resolver-n8n.json` — der n8n-Flow-Export (12 Nodes, vollständig konfiguriert, Placeholder-Credentials benannt)
+- `apps/web/public/artifacts/interview-scheduling-resolver-n8n/interview-scheduling-resolver-n8n.json` — der n8n-Flow-Export (13 Nodes, vollständig konfiguriert, Placeholder-Credentials benannt)
 - `apps/web/public/artifacts/interview-scheduling-resolver-n8n/_README.md` — Import-Prozedur, Credential-Setup pro Credential, Kandidaten-Verfügbarkeits-Verdrahtung, Algorithmus-Zusammenfassung, Erstverifizierung (5 Testfälle)
 
 Tools: [n8n](/de/tools/n8n/) (Orchestrierung), [Greenhouse](/de/tools/greenhouse/) (ATS-Webhook + Harvest-API), [Calendly](/de/tools/calendly/) (Kandidaten-Verfügbarkeit — optional, ersetzt den Stub-Node). Die Google Calendar freeBusy-API und Slack werden direkt über HTTP-Request- und Slack-Nodes verwendet.

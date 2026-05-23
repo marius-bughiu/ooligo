@@ -12,7 +12,7 @@ time_to_setup: "1-2 hours"
 human_tested: false
 ---
 
-「候補者が面接ステージへ進んだ」から「カレンダー招待を送信する」までの間にある、複数参加者のスケジュール調整問題を解決する [n8n](/ja/tools/n8n/) フローです。ステージ変更時に [Greenhouse](/ja/tools/greenhouse/) の webhook を受信し、Google Calendar の freeBusy API で全パネリストと recruiter の空き情報を同時取得、それを候補者が申告した空き時間と交差させ、タイブレークルールによって空き枠をランク付けし、上位 3 件の提案時間を Slack チャンネルに投稿して recruiter が確認・予約できるようにします。毎日の定時 cron が `to_be_scheduled` 状態のまま 48 時間以上停滞している候補者を検索し、同じパスで再処理します。
+「候補者が面接ステージへ進んだ」から「カレンダー招待を送信する」までの間にある、複数参加者のスケジュール調整問題を解決する [n8n](/ja/tools/n8n/) フローです。ステージ変更時に [Greenhouse](/ja/tools/greenhouse/) の webhook を受信し、Google Calendar の freeBusy API で全パネリストと recruiter の空き情報を同時取得、それを候補者が申告した空き時間と交差させ、タイブレークルールによって空き枠をランク付けし、上位 3 件の提案時間を Slack チャンネルに投稿して recruiter が確認・予約できるようにします。毎日の定時 cron が 48 時間以上未スケジュールのままになっている面接を検索し、同じパスで再処理します。
 
 アーティファクトバンドルは `apps/web/public/artifacts/interview-scheduling-resolver-n8n/` にあり、`interview-scheduling-resolver-n8n.json`（完全な n8n フローのエクスポート）と `_README.md`（インポート手順、credential セットアップ、初回実行時の検証手順）を含んでいます。
 
@@ -44,7 +44,7 @@ human_tested: false
 
 ## フローの処理内容
 
-2 つのトリガーパスにわたる 12 のノード。
+2 つのトリガーパスにわたる 13 のノード。
 
 **Webhook パス（リアルタイム）：**
 
@@ -60,8 +60,9 @@ human_tested: false
 **毎日のバックアップ cron パス：**
 
 9. **Daily Backstop Cron — 8am ET weekdays** — 月〜金の 08:00 `America/New_York` に実行されます（cron: `0 8 * * 1-5`）。
-10. **Greenhouse — List Stale Unscheduled Interviews** — webhook が見逃されたか配信が失敗した面接を見つけるために、Greenhouse Harvest `GET /v1/scheduled_interviews?status=to_be_scheduled&created_before=<48h-ago>` を呼び出します。
-11. **Split Into Items** — レスポンス配列を応募ごとの処理のために個別アイテムに分割します。
+10. **Greenhouse — List Stale Unscheduled Interviews** — webhook が見逃されたか配信が失敗した面接を見つけるために、Greenhouse Harvest `GET /v1/scheduled_interviews?created_before=<48h-ago>` を呼び出します。`scheduled_interviews` エンドポイントには `status` クエリパラメータがないため、このスイープは 48 時間以上前に作成されたものをすべて取得し、次のノードで絞り込みます。
+11. **Filter Stale Unscheduled (client-side)** — 確定した `start.date_time` を既に持つ面接（または `complete`/`awaiting_feedback` 状態のもの）を除外し、本当に未スケジュールのレコードのみを残します。これは、Harvest エンドポイントが黙って無視する存在しない `status` クエリフィルターを置き換えるものです。
+12. **Split Into Items** — 絞り込んだ配列を応募ごとの処理のために個別アイテムに分割します。
 
 ## エンジニアリング上の選択：空き時間交差アルゴリズム
 
@@ -94,7 +95,7 @@ human_tested: false
 *Guard:* freeBusy レスポンスでパネリストの Google Calendar がエラーを返した場合、Code ノードはエラーをログに記録し、そのパネリストを空き扱いとします — 実行を停止しません。Slack メッセージには `allCalendarIds` の完全なリストが含まれています。Recruiter は n8n の実行ログを確認することで、どのメールアドレスが freeBusy エラーを引き起こしたかを特定できます。
 
 **Webhook 配信失敗（ステージ変更イベントの見逃し）。**
-*Guard:* 毎朝 08:00 ET の日次バックアップ cron が、48 時間以上前に作成された `to_be_scheduled` 状態の面接を Greenhouse で検索して再処理します。48 時間の閾値は、まだ送信中の webhook がある可能性のある最近作成された面接を再処理しないためのものです。
+*Guard:* 毎朝 08:00 ET の日次バックアップ cron が、48 時間以上前に作成され、いまだ未スケジュール（確定した `start.date_time` がない）の面接を Greenhouse で検索して再処理します。Harvest の `scheduled_interviews` エンドポイントは `status` クエリパラメータを公開していないため、このスイープは閾値より前に作成されたものをすべて取得し、Code ノードでクライアント側の「未スケジュール」フィルターを適用します。48 時間の閾値は、まだ送信中の webhook がある可能性のある最近作成された面接を再処理しないためのものです。
 
 **freeBusy 呼び出しを無効にする期限切れ OAuth2 トークン。**
 *Guard:* n8n の OAuth2 credential ハンドラーは、リフレッシュトークンが存在する場合、各リクエストの前にアクセストークンを自動的に更新します。リフレッシュトークン自体が期限切れまたは取り消された場合、freeBusy ノードは 401 エラーをスローします。いずれかの実行が失敗した場合に Slack アラートを投稿するよう、n8n のエラーワークフロー（設定 → Error Workflow）を設定してください。
@@ -126,7 +127,7 @@ n8n フローを選ぶ場合：週 50 件未満のパネル面接、他のワー
 
 バンドルファイル：
 
-- `apps/web/public/artifacts/interview-scheduling-resolver-n8n/interview-scheduling-resolver-n8n.json` — n8n フローのエクスポート（12 ノード、完全に設定済み、プレースホルダー credential 名付き）
+- `apps/web/public/artifacts/interview-scheduling-resolver-n8n/interview-scheduling-resolver-n8n.json` — n8n フローのエクスポート（13 ノード、完全に設定済み、プレースホルダー credential 名付き）
 - `apps/web/public/artifacts/interview-scheduling-resolver-n8n/_README.md` — インポート手順、credential ごとのセットアップ、候補者の空き情報の接続、アルゴリズムの概要、初回実行時の検証（5 つのテストケース）
 
 ツール：[n8n](/ja/tools/n8n/)（オーケストレーション）、[Greenhouse](/ja/tools/greenhouse/)（ATS webhook + Harvest API）、[Calendly](/ja/tools/calendly/)（候補者の空き情報 — オプション、スタブノードを置き換え）。Google Calendar freeBusy API と Slack はそれぞれ HTTP Request ノードと Slack ノード経由で直接使用されます。
