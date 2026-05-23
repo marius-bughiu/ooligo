@@ -1,0 +1,100 @@
+---
+slug: mcp-server-clio-legal
+canonical_slug: mcp-server-clio-legal
+locale: pt-BR
+verticals: [legal-ops]
+title: Query Clio matters and time data from Claude via MCP
+artifact_type: mcp-server
+tools_used: [clio, claude]
+roles: [legal-ops-manager]
+difficulty: advanced
+time_to_setup: "1-2 hours"
+human_tested: false
+---
+
+Um servidor de Model Context Protocol (MCP) que conecta o [Clio](/en/tools/clio/) ao [Claude](/en/tools/claude/), permitindo que advogados e gestores de legal-ops perguntem ao Claude para listar matters abertos, buscar entradas de tempo de um caso, recuperar um registro de contato ou resumir atividade de faturamento, tudo a partir de uma conversa no Claude em vez da interface do Clio. O scaffold está em `apps/web/public/artifacts/mcp-server-clio-legal/` e é somente leitura por design: dados de matters e notas de entrada de tempo são comunicações e trabalho protegido pelo privilégio advogado-cliente, então o servidor não registra operações de escrita e registra apenas metadados nos logs (nome do tool, timestamp, contagem de resultados — nunca nomes de matters, notas de atividade ou identificadores de contatos).
+
+## Quando usar
+
+Use isso quando seu time jurídico ou escritório individual opera no Clio e você se encontra navegando pela interface várias vezes ao dia para responder as mesmas perguntas: quantos matters abertos existem em determinada área de prática, qual é o total de horas faturadas em um processo neste mês, quais matters não tiveram atividade nos últimos 30 dias, quais são os dados de contato de um cliente específico. Essas perguntas são mecânicas. Elas comprimem bem em uma conversa de tool no Claude.
+
+O argumento de tempo: um advogado solo que realiza cinco dessas consultas por dia, a 3 minutos cada na interface do Clio, gasta aproximadamente 75 minutos semanais em navegação. Executar as mesmas cinco consultas como chamadas de tool no Claude leva menos de 2 minutos no total. Isso representa aproximadamente 60 horas por ano devolvidas ao trabalho jurídico substantivo. A uma taxa de faturamento de USD 300/hora, o custo de oportunidade de não automatizar essa navegação gira em torno de USD 18.000 anuais (trate como estimativa; sua taxa real e volume de consultas determinam o número exato). Para um escritório onde vários advogados realizam consultas similares sobre um inventário maior de matters, os números escalam proporcionalmente.
+
+Para gestores de legal-ops que geram relatórios semanais de status de matters, comparações de orçamento vs. realizado ou resumos de produtividade por área de prática, o servidor permite que o Claude extraia os dados brutos e redija a narrativa em uma única conversa, sem precisar exportar para Excel como etapa intermediária.
+
+## Quando NÃO usar
+
+Ignore isso se o volume de consultas de matters for inferior a cerca de dez por semana em todo o time. O custo de configuração inclui: registrar uma aplicação de desenvolvedor no Clio, completar o fluxo OAuth para obter um access token, instalar um ambiente Python e revisar as implicações de confidencialidade com quem for responsável pela política de segurança de dados do escritório. Esse custo não se paga com volume baixo. Use a interface do Clio; retome quando o volume crescer.
+
+Ignore isso se seu escritório ainda não tem uma política escrita cobrindo acesso de IA a dados de matters de clientes. O servidor MCP roteia dados do Clio pelo contexto do Claude, o que significa que nomes de clientes, descrições de matters, notas de entrada de tempo e dados de contato trafegam pela API da Anthropic. Revise os termos de processamento de dados da Anthropic e, se sua jurisdição exigir, obtenha o consentimento do cliente para revisão assistida por IA antes de implantar. O scaffold não substitui esse trabalho de política.
+
+Ignore isso se precisar de operações de escrita — criar entradas de tempo pelo Claude, atualizar status de matters, adicionar contatos ou registrar comunicações. O scaffold intencionalmente não expõe tools de escrita. Adicionar escrita requer uma mudança explícita no código, uma revisão do modelo de privilégio e uma avaliação de risco de responsabilidade profissional que está fora do escopo deste scaffold. Consulte um advogado antes de expor qualquer operação de escrita a um assistente de IA operando sobre dados de matters de clientes.
+
+## Configuração
+
+A documentação completa de configuração está em `apps/web/public/artifacts/mcp-server-clio-legal/README.md`. Resumo:
+
+1. Clone o bundle em um repositório privado. Execute `pip install -e .` dentro de um ambiente virtual Python 3.11+.
+2. Registre uma aplicação de desenvolvedor no portal de desenvolvedores do Clio em `https://app.clio.com/settings/developer_applications`. Conceda acesso somente leitura a Matters, Contacts e Activities. Copie o App Key (`CLIO_CLIENT_ID`) e o App Secret (`CLIO_CLIENT_SECRET`).
+3. Complete o fluxo OAuth Authorization Code para obter um access token e um refresh token (o README detalha passo a passo a troca via `curl`).
+4. Configure as variáveis de ambiente: `CLIO_ACCESS_TOKEN`, `CLIO_REGION` (um de `us`, `eu`, `ca`, `au` — deve corresponder à URL de login do Clio) e, opcionalmente, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `CLIO_REFRESH_TOKEN` para a implementação do refresh que você adicionará antes de ir para produção.
+5. Registre o servidor no Claude Desktop usando o trecho JSON do README, ou adicione ao Claude Code com `claude mcp add`.
+6. Verificação básica: peça ao Claude que liste os matters abertos. Confirme que a resposta retorna os campos `display_number` e `status`. Confirme que o log de auditoria mostra apenas `tool=list_matters ts=... results=N` — sem nomes de matters.
+
+O access token OAuth expira após aproximadamente uma hora. O scaffold não implementa refresh automático (item TODO 2 do README). Para uso em produção, implemente o fluxo de refresh antes de distribuir o servidor para advogados.
+
+## O que faz
+
+O servidor registra cinco tools, todos somente leitura:
+
+**`list_matters`** chama `GET /api/v4/matters.json` com um parâmetro `fields` solicitando `id`, `display_number`, `description`, `status`, `open_date`, `close_date`, `client`, `practice_area`, `responsible_attorney`, `originating_attorney` e `custom_field_values`. Suporta filtragem por `status` (open/closed/pending), `client_id` e um cursor de paginação. A API do Clio retorna apenas `id` e `etag` por padrão, a menos que você especifique `fields` explicitamente; a string `fields` em `server.py` é o mecanismo que torna as respostas úteis.
+
+**`get_matter`** chama `GET /api/v4/matters/{id}.json` com o mesmo parâmetro `fields`. Use quando você tiver um ID de matter de `list_matters` e precisar dos metadados completos, incluindo campos personalizados.
+
+**`get_matter_time_entries`** chama `GET /api/v4/activities.json` com filtros `type=TimeEntry` e `matter_id`. Entradas de tempo no Clio são um subtipo do recurso Activities; o filtro `type` as isola. A resposta inclui data, quantidade (horas em decimal), preço unitário, flag de faturabilidade, nome do timekeeper e descrição da atividade. Filtros de intervalo de datas são suportados. Notas de entrada de tempo (`note`) podem conter referências a trabalho protegido por privilégio; advogados que usarem este tool devem tratar a conversa no Claude como qualquer outro canal que carregue conteúdo privilegiado.
+
+**`get_matter_activity`** também chama `GET /api/v4/activities.json` mas sem a restrição `type=TimeEntry`, retornando entradas de tempo, despesas e tarifas fixas juntas. O parâmetro `type` opcional permite filtrar a uma única categoria. Use quando precisar de um panorama completo de faturamento de um matter.
+
+**`get_contact`** chama `GET /api/v4/contacts/{id}.json` com campos para nome, tipo, endereços de email, números de telefone e afiliação empresarial. Registros de contato no Clio incluem clientes, partes adversas, peritos e outros contatos do escritório. A identidade do cliente é protegida por obrigações de confidencialidade; trate os resultados deste tool adequadamente.
+
+A lógica de dispatch está em `apps/web/public/artifacts/mcp-server-clio-legal/src/clio_legal_mcp/server.py`.
+
+## Realidade de custos
+
+Três itens:
+
+**Assinatura do Claude.** Claude Desktop ou Claude Code com MCP habilitado. Pro a USD 20/usuário/mês ou Team a USD 25–30/usuário/mês cobre a maioria dos times jurídicos. Advogados com uso intensivo podem optar pelo Max.
+
+**Hosting do servidor.** Processo Python auto-hospedado. Execute localmente por advogado para desenvolvimento; em uma VM interna pequena (1 vCPU / 1 GB RAM é suficiente para menos de 100 chamadas/dia) atrás da sua VPN para uso compartilhado. Aproximadamente USD 5–20/mês em um provedor de nuvem; gratuito se você já tiver capacidade de servidor interna.
+
+**Cota da API do Clio.** O Clio impõe um limite de 3 requisições/segundo por aplicação. Um time com 50 consultas diárias pelo Claude fica bem dentro desse limite em padrões de uso normais. O limite se torna relevante se você construir uma automação que varre toda a lista de matters em loop.
+
+O item não orçado é o tempo de configuração do OAuth e a revisão da política de confidencialidade. Planeje de 1 a 2 horas de tempo de engenheiro para a configuração e de 1 a 2 horas de tempo de advogado ou compliance para revisar as implicações do fluxo de dados antes da implantação em produção. Escritórios em jurisdições com regras rígidas de soberania de dados podem precisar de revisão adicional sobre se rotear dados de matters de clientes por um provedor de IA sediado nos EUA é permitido — consulte um advogado sobre essa questão.
+
+## Modos de falha
+
+**Expiração do access token no meio de uma sessão.** Access tokens do Clio expiram após aproximadamente uma hora. Se o token expirar enquanto um advogado estiver em uma conversa no Claude, chamadas de tool subsequentes retornam HTTP 401, que aparece no Claude como um erro ou como uma resposta sugerindo que os dados estão indisponíveis. O advogado pode não perceber que o token expirou.
+
+Guard: implemente o fluxo de refresh OAuth (item TODO 2 do README em `apps/web/public/artifacts/mcp-server-clio-legal/README.md`) antes de distribuir o servidor além do engenheiro que o configurou. O refresh token não expira no mesmo prazo que o access token; uma chamada de refresh na inicialização do servidor garante que o access token esteja válido antes de qualquer chamada de tool visível para o usuário.
+
+**Ativação do limite de taxa em consultas em rajada.** Um advogado que pede ao Claude para resumir todos os matters abertos e então solicita imediatamente as entradas de tempo de cada um gera N+1 chamadas de API em rápida sucessão. Em uma lista de 50 matters, isso são 51 chamadas sequenciais; ao limite de 3 req/s do Clio, o padrão de rajada gera 429s após os primeiros segundos.
+
+Guard: adicione retries com backoff exponencial a `clio_get()` em `server.py` (item TODO 3 do README). Um padrão simples: ao receber 429, aguarde 1 segundo, tente novamente; ao segundo 429, aguarde 2 segundos, tente novamente; cap em 60 segundos; falhe após 5 tentativas.
+
+**Vazamento de confidencialidade advogado-cliente pelo contexto do Claude.** Quando `get_matter_time_entries` ou `get_matter_activity` retorna resultados, o campo de notas de atividade pode conter informação privilegiada: discussões de estratégia, argumentos em rascunho, parâmetros de acordo, instruções do cliente. Essas notas chegam ao contexto do Claude, o que significa que trafegam pela API da Anthropic e podem aparecer no texto de resposta do Claude. Se o advogado compartilhar sua conversa com o Claude, pode inadvertidamente incluir conteúdo privilegiado que se originou nas notas do Clio.
+
+Guard: revise as práticas de notas de entrada de tempo com os advogados que usarão este servidor antes da implantação. Considere se a convenção do seu escritório é manter notas gerais (códigos de tempo e descrições breves) ou detalhadas (resumos de estratégia). Se as notas forem detalhadas, decida se remove o campo `note` de `TIME_ENTRY_FIELDS` e `ACTIVITY_FIELDS` em `server.py` antes do deploy. As strings de campos ficam no topo de `server.py` e são simples de editar.
+
+**Região incorreta produzindo 404s que parecem dados ausentes.** Se `CLIO_REGION` estiver configurado como `us` mas a conta Clio do escritório estiver na região EU ou CA, cada chamada de API chega à URL base errada e retorna 404. O Claude interpreta a resposta vazia como "nenhum matter encontrado" em vez de "endpoint incorreto".
+
+Guard: verifique sua região antes do deploy conferindo a URL que você usa para fazer login no Clio. Configure `CLIO_REGION` adequadamente. O passo de verificação básica do README detecta isso: se você sabe que há matters abertos mas `list_matters` retorna zero resultados, a primeira coisa a verificar é a região.
+
+## Versus as alternativas
+
+**Relatórios nativos do Clio e funcionalidades de IA nativas.** O Clio inclui relatórios integrados (relatórios de matters, relatórios de tempo, resumos de faturamento) e começou a integrar funcionalidades de IA em seu produto. Escolha os relatórios nativos se seus padrões de consulta estiverem cobertos pelos templates de relatório do Clio e a resposta permanecer dentro do Clio. Escolha este servidor MCP se a resposta precisar chegar a uma conversa do Claude que também incorpora outro contexto — redigir um email de atualização ao cliente usando tanto o resumo de entradas de tempo quanto um template de brief separado, ou comparar atividade de matters entre duas áreas de prática em uma única resposta narrativa.
+
+**Exportação manual de CSV e upload para o Claude.** Uma alternativa que não requer configuração de servidor: exportar um relatório de matters do Clio como CSV, fazer upload para o Claude, pedir ao Claude que analise. Isso funciona para análises pontuais e evita completamente a sobrecarga de OAuth e hosting. Escolha essa abordagem se a frequência de consultas for baixa (menos de dez vezes por semana), se os dados não precisarem ser em tempo real, ou se a política de TI do seu escritório proibir executar um processo de servidor local. Escolha o servidor MCP quando as consultas forem frequentes, precisarem de dados atualizados ou precisarem ser incorporadas em uma conversa contínua do Claude sem interrupções para fazer upload de um arquivo.
+
+## Stack
+
+Servidor Python MCP auto-hospedado (SDK oficial `mcp`, `httpx`, `pydantic`) comunicando-se com a API v4 do Clio no backend; [Claude](/en/tools/claude/) Desktop ou Code no frontend. Opcional: logging estruturado via `python-json-logger` integrado ao seu trail de auditoria de gestão de matters; exportação Sentry / OpenTelemetry com nomes de matters e texto de notas removidos antes da transmissão. Fonte em `apps/web/public/artifacts/mcp-server-clio-legal/src/clio_legal_mcp/server.py`.

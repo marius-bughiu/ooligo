@@ -1,0 +1,102 @@
+---
+slug: mcp-server-clio-legal
+canonical_slug: mcp-server-clio-legal
+locale: en
+verticals: [legal-ops]
+title: Query Clio matters and time data from Claude via MCP
+artifact_type: mcp-server
+tools_used: [clio, claude]
+roles: [legal-ops-manager]
+difficulty: advanced
+time_to_setup: "1-2 hours"
+human_tested: false
+---
+
+A Model Context Protocol (MCP) server that connects [Clio](/en/tools/clio/) to [Claude](/en/tools/claude/) — letting attorneys and legal-ops managers ask Claude to list open matters, pull time entries for a matter, retrieve a contact record, or summarize billing activity, all from a Claude conversation rather than the Clio UI. The scaffold lives at `apps/web/public/artifacts/mcp-server-clio-legal/` and is read-only by design: Clio matter data and time-entry notes are attorney-client communications and work product, so the server registers no write operations and logs only metadata (tool name, timestamp, result count — never matter names, activity notes, or contact identifiers).
+
+## When to use
+
+Reach for this when your legal team or solo practice runs on Clio and you find yourself clicking through the Clio UI several times a day to answer the same questions: how many open matters are in a given practice area, what is the total billed time on a specific file this month, which matters have had no activity in the last 30 days, what are the contact details for a specific client. Those questions are mechanical. They require identifying a filter, running a search, reading a number from a list. They compress well into a Claude tool conversation.
+
+The time argument: a solo attorney who runs five of these lookups a day, at three minutes each in the Clio UI (open browser tab, navigate to Matters, set filters, read result, copy number to notes), spends roughly 75 minutes a week on navigation. Running the same five lookups as Claude tool calls takes under two minutes total. That is approximately 60 hours a year returned to substantive legal work. At a $300/hour billing rate, the opportunity cost of not automating that navigation is around $18,000 annually — and that estimate applies to a solo practice with light query volume. For a firm where multiple attorneys run similar lookups across a larger matter inventory, the numbers scale accordingly (treat this as an estimate; your actual billing rate and query volume determine the real figure).
+
+For legal-ops managers who generate weekly matter-status reports, budget-vs-actual comparisons, or practice-area productivity summaries, the server lets Claude pull the raw data and draft the narrative in one conversation rather than requiring export-to-Excel as an intermediate step.
+
+## When NOT to use
+
+Skip this if your matter query volume is under roughly ten lookups per week across the whole team. The setup cost includes: registering a Clio developer application, completing the OAuth dance to obtain an access token, installing a Python environment, and reviewing the confidentiality implications with whoever is responsible for your firm's data security policy. That setup cost does not pay back at low query volume. Use the Clio UI; revisit when volume grows.
+
+Skip this if your firm does not yet have a written policy covering AI access to client matter data. The MCP server routes Clio data through Claude's context window, which means client names, matter descriptions, time-entry notes, and contact details flow through Anthropic's API. Review Anthropic's data processing terms and, if your jurisdiction requires it, obtain client consent for AI-assisted matter review before deploying. The scaffold is not a substitute for that policy work.
+
+Skip this if your Clio account does not have the practice management tier that exposes the API v4. Clio's API is available on EasyStart, Essentials, Advanced, and Complete plans, but feature availability varies. Verify that your plan includes API access before investing in the setup.
+
+Skip this if you need write operations — creating time entries from Claude, updating matter status, adding contacts, or logging communications. The scaffold intentionally exposes no write tools. Adding writes requires an explicit code change, a reviewed privilege posture, and malpractice-risk assessment that is outside the scope of this scaffold. Consult counsel before exposing any write path to an AI assistant operating over client matter data.
+
+## Setup
+
+Full setup documentation is in `apps/web/public/artifacts/mcp-server-clio-legal/README.md`. Summary:
+
+1. Clone the bundle into a private repository. Run `pip install -e .` inside a Python 3.11+ virtual environment.
+2. Register a developer application in the Clio developer portal at `https://app.clio.com/settings/developer_applications`. Grant read-only access to Matters, Contacts, and Activities. Copy the App Key (`CLIO_CLIENT_ID`) and App Secret (`CLIO_CLIENT_SECRET`).
+3. Complete the OAuth Authorization Code dance to obtain an access token and refresh token (the README walks through the `curl` exchange step by step).
+4. Set environment variables: `CLIO_ACCESS_TOKEN`, `CLIO_REGION` (one of `us`, `eu`, `ca`, `au` — match your Clio sign-in URL), and optionally `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `CLIO_REFRESH_TOKEN` for the refresh implementation you will add before going to production.
+5. Register the server with Claude Desktop via the JSON snippet in the README, or add it to Claude Code with `claude mcp add`.
+6. Sanity-check: ask Claude to list open matters. Confirm the response returns `display_number` and `status` fields. Confirm the audit log shows only `tool=list_matters ts=... results=N` — no matter names.
+
+The OAuth token expires after approximately one hour. The scaffold does not implement automatic refresh (TODO item 2 in the README). For production use, implement the refresh flow before distributing the server to attorneys — an expired token produces 401 errors that look like missing data inside a Claude conversation, eroding trust in the integration.
+
+## What it does
+
+The server registers five tools, all read-only:
+
+**`list_matters`** calls `GET /api/v4/matters.json` with a `fields` param requesting `id`, `display_number`, `description`, `status`, `open_date`, `close_date`, `client`, `practice_area`, `responsible_attorney`, `originating_attorney`, and `custom_field_values`. It supports filtering by `status` (open/closed/pending), `client_id`, and a page cursor for pagination. The Clio API returns only `id` and `etag` by default unless you specify `fields` explicitly — the `fields` string in `server.py` is the mechanism that makes responses useful.
+
+**`get_matter`** calls `GET /api/v4/matters/{id}.json` with the same `fields` param. Use this when you have a matter ID from `list_matters` and need the full metadata including custom fields.
+
+**`get_matter_time_entries`** calls `GET /api/v4/activities.json` with `type=TimeEntry` and `matter_id` as filters. Time entries in Clio are a subtype of the Activities resource; the `type` filter isolates them. The response includes date, quantity (hours as a decimal), price per unit, billable flag, timekeeper name, and activity description. Date-range filters (`start_date`, `end_date`) are supported and map to Clio's `date[gte]` and `date[lte]` query parameters. Time-entry notes (`note` field) may contain privileged work-product references — the server returns them as-is; attorneys using this tool should treat the Claude conversation as they would any other channel carrying privileged content.
+
+**`get_matter_activity`** also calls `GET /api/v4/activities.json` but without the `type=TimeEntry` restriction, returning time entries, expense entries, and flat-rate entries together. The optional `type` parameter lets the caller filter to one category. Use this tool when you need a complete billing picture for a matter rather than time alone.
+
+**`get_contact`** calls `GET /api/v4/contacts/{id}.json` with fields for name, type, email addresses, phone numbers, and company affiliation. Contact records in Clio include clients, opposing parties, experts, and other firm contacts. Client identity is protected by confidentiality obligations — treat results from this tool accordingly.
+
+The dispatch logic is in `apps/web/public/artifacts/mcp-server-clio-legal/src/clio_legal_mcp/server.py`. The `MATTER_FIELDS`, `TIME_ENTRY_FIELDS`, `CONTACT_FIELDS`, and `ACTIVITY_FIELDS` constants at the top of that file are the first things to tune when adapting the scaffold to your account — Clio's default response omits almost everything, and these strings are what populate Claude's context with useful data.
+
+## Cost reality
+
+Three line items:
+
+**Claude subscription.** Claude Desktop or Claude Code with MCP enabled. Pro at $20/user/month or Team at $25–30/user/month covers most legal team setups. Attorneys who use Claude heavily for drafting and research in addition to Clio lookups may want Max.
+
+**Server hosting.** Self-hosted Python process. Run it locally per attorney for development; run it on a small internal VM (1 vCPU / 1 GB RAM is sufficient for sub-100-call/day volume) behind your VPN for shared use. Approximately $5–20/month on a cloud provider; free if you have internal server capacity.
+
+**Clio API quota.** Clio enforces a 3 requests/second per-application rate limit (per Clio's rate limits documentation). A team running 50 Clio lookups per day via Claude stays well inside that limit under normal usage patterns. The limit becomes relevant if you build an automation that scans the full matter list in a loop — that pattern will hit 429s quickly. The README's TODO item 3 flags exponential-backoff retries as required before production use.
+
+The unbudgeted line item is the time cost of the OAuth setup and the confidentiality policy review. Plan for one to two hours of engineer time for setup and one to two hours of attorney or compliance time to review the data-flow implications before production deployment. Firms in jurisdictions with strict data-sovereignty rules (GDPR, Canadian PIPEDA, Australian Privacy Act) may need additional review of whether routing client matter data through a US-hosted AI provider is permissible — consult counsel on that question.
+
+## Failure modes
+
+**Access token expiry mid-session.** Clio access tokens expire after approximately one hour. If the token expires while an attorney is in a Claude conversation, subsequent tool calls return HTTP 401, which surfaces in Claude as an error or as a response suggesting the data is unavailable. The attorney may not realize the token expired; they may interpret the missing data as a Clio outage or a Claude error.
+
+Guard: implement the OAuth refresh flow (TODO item 2 in the README at `apps/web/public/artifacts/mcp-server-clio-legal/README.md`) before rolling the server out beyond the engineer who wired it up. The refresh token does not expire on the same schedule as the access token; a refresh call at server startup ensures the access token is current before any user-facing tool calls run.
+
+**Rate limit triggering on burst queries.** An attorney who asks Claude to summarize all open matters, then immediately asks for time entries on each one, generates N+1 API calls in rapid succession (one `list_matters` plus one `get_matter_time_entries` per matter). On a 50-matter list that is 51 sequential calls; at 3 req/s Clio's limit, the burst pattern generates 429s after the first few seconds.
+
+Guard: add exponential-backoff retries to `clio_get()` in `server.py` (TODO item 3 in the README). A simple pattern: on 429, wait 1 second, retry; on second 429, wait 2 seconds, retry; cap at 60 seconds; fail after 5 retries. This keeps the server functional under burst load without requiring the attorney to re-run the conversation.
+
+**Attorney-client confidentiality leak via Claude context window.** When `get_matter_time_entries` or `get_matter_activity` returns results, the activity notes field may contain privileged information: strategy discussions, draft arguments, settlement parameters, client instructions. These notes land in Claude's context window, which means they flow through Anthropic's API and may appear in Claude's response text. If the attorney is sharing their Claude conversation (e.g., copying a Claude-generated summary into an email), they may inadvertently include privileged content that originated from Clio notes.
+
+Guard: review time-entry and activity note practices with the attorneys who will use this server before deployment. Consider whether your firm's convention is to keep notes general (time codes and brief descriptions) or detailed (strategy summaries). If notes are detailed, decide whether to strip the `note` field from `TIME_ENTRY_FIELDS` and `ACTIVITY_FIELDS` in `server.py` before rollout — that removes the privileged content at the source rather than relying on attorneys to notice it in Claude's output. The field strings live at the top of `server.py` and are straightforward to edit.
+
+**Wrong region producing 404s that look like missing data.** If `CLIO_REGION` is set to `us` but the firm's Clio account is on the EU or CA region, every API call hits the wrong base URL and returns 404. Claude interprets the empty response as "no matters found" rather than "wrong endpoint" — the attorney sees a confident Claude response saying there are no open matters when in reality every matter is unreachable.
+
+Guard: verify your region before deployment by checking the URL you use to sign in to Clio (`app.clio.com` is US; `eu.app.clio.com` is EU; `ca.app.clio.com` is CA; `au.app.clio.com` is AU). Set `CLIO_REGION` accordingly. The sanity-check step in the README catches this: if you know there are open matters but `list_matters` returns zero results, the first thing to verify is the region.
+
+## Versus the alternatives
+
+**Clio's native AI features and reporting.** Clio ships built-in reporting (matter reports, time reports, billing summaries) and has begun integrating AI features in its product roadmap. Pick the native reports if your query patterns are covered by Clio's report templates and the answer stays inside Clio. Pick this MCP server if the answer needs to land in a Claude conversation that also draws on other context — drafting a client update email using both the time-entry summary and a separate brief template, or comparing matter activity across two practice areas in a single narrative response. The value of MCP is that Claude can hold Clio data alongside other tools' data in one reasoning session; the native reports cannot do that.
+
+**Manual CSV export and Claude upload.** An alternative that requires no server setup: export a matter report from Clio as CSV, upload it to Claude, ask Claude to analyze it. This works for one-time analyses and avoids the OAuth and hosting overhead entirely. Pick this approach if the query frequency is low (under ten times per week), if the data is not live-critical (a weekly report rather than a mid-conversation lookup), or if your firm's IT policy prohibits running a local server process. Pick the MCP server when queries are frequent, need fresh data, or need to be embedded in an ongoing Claude conversation without interrupting to upload a file.
+
+## Stack
+
+Self-hosted Python MCP server (official `mcp` SDK, `httpx`, `pydantic`) speaking to the Clio API v4 on the backend; [Claude](/en/tools/claude/) Desktop or Code on the front end. Optional: structured logging via `python-json-logger` piped to your matter-management audit trail; Sentry or OpenTelemetry export with matter names and note text scrubbed before transmission. Source at `apps/web/public/artifacts/mcp-server-clio-legal/src/clio_legal_mcp/server.py`.
