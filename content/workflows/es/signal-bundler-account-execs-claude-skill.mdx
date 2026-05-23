@@ -1,0 +1,90 @@
+---
+slug: signal-bundler-account-execs-claude-skill
+canonical_slug: signal-bundler-account-execs-claude-skill
+locale: es
+verticals: [revops]
+title: Bundle buyer signals into a daily AE digest with Claude
+artifact_type: claude-skill
+tools_used: [claude, common-room, gong]
+roles: [ae]
+difficulty: intermediate
+time_to_setup: 30-60 min
+human_tested: false
+---
+
+Un Claude Skill que extrae señales de intención, eventos de engagement y datos de uso de producto para una cuenta nombrada, y los comprime en un único digest diario que un AE puede leer y activar en menos de cinco minutos. Reemplaza el ritual matutino de alternar entre [Common Room](/es/tools/common-room/), [Gong](/es/tools/gong/) y un dashboard de product analytics para armar un panorama que ya debería haber sido ensamblado. El bundle se encuentra en `apps/web/public/artifacts/signal-bundler-account-execs-claude-skill/` e incluye `SKILL.md` más dos plantillas de referencia que el usuario adapta antes del primer uso.
+
+## Cuándo usar
+
+Usa este skill cuando un AE está gestionando más de seis o siete cuentas nombradas simultáneamente y la sobrecarga cognitiva de monitorear múltiples canales de señales — resúmenes de Gong, feeds de actividad de Common Room, alertas de uso de producto — se ha convertido en el cuello de botella antes del standup matutino. El skill no está diseñado para cuentas donde el AE no ha tenido contacto previo; el bundling de señales requiere una línea de base sobre quiénes integran el comité de compra y cómo luce la actividad "normal" de esa cuenta. Realiza al menos una llamada de discovery antes de invocar el skill en una cuenta.
+
+El skill también es la herramienta adecuada cuando tu equipo tiene las señales pero no tiene una vista compartida de ellas. Common Room captura actividad comunitaria y web; Gong captura inteligencia de conversaciones; product analytics captura el comportamiento dentro de la app. Si estas tres fuentes de datos solo son visibles en tres pestañas separadas, los AEs o están ignorando dos de las tres o construyendo un modelo mental peor al que una simple síntesis les daría.
+
+Concretamente, invócalo desde:
+
+- Una **tarea programada de Claude** que se ejecute cada mañana por AE, itere sobre la lista de cuentas nombradas del AE y envíe cada brief por Slack o email antes del standup.
+- Una **invocación manual en Claude Code** cuando el AE tiene una llamada de QBR o renovación ese día y quiere una vista consolidada de los últimos 14 días de actividad antes de la llamada.
+- Una **columna de Clay AI** sobre una tabla de cuentas, activada cuando un webhook de "cuenta activa" de Common Room se haya disparado en las últimas 24 horas — para que solo las cuentas con señales recientes generen un brief ese día.
+
+## Cuándo NO usar
+
+Omite este skill cuando:
+
+- **El AE gestiona menos de cinco cuentas.** Por debajo de ese umbral, el AE generalmente mantiene el panorama completo de señales en su mente de todos modos, y el costo de configuración (calibración de taxonomía, cableado de tarea programada) no vale la pena.
+- **Los feeds de señales no están conectados.** Si Common Room no exporta datos de actividad estructurados y los transcritos de Gong no están disponibles en formato parseable, el skill no tiene nada que sintetizar. Primero realiza el trabajo de integración; el skill no es un scraper.
+- **Quieres que el skill escriba la actualización del CRM.** El digest es para la memoria de trabajo del AE. No es un sustituto de registrar actividades en Salesforce. Conecta un paso de writeback al CRM downstream del brief, o capacita a los AEs para pegar el campo "Recommended first move" manualmente en el registro de actividad.
+- **La cuenta pertenece a una industria regulada con requisitos estrictos de residencia de datos.** Pasar señales de engagement de clientes a través de la API de Claude significa que esas señales transitan la infraestructura de Anthropic. Revisa tus acuerdos de procesamiento de datos antes de conectar datos de comportamiento de clientes externos a cualquier llamada LLM.
+
+## Configuración
+
+La configuración toma entre 30 y 60 minutos una vez que Common Room y Gong están exportando datos estructurados. Configurar esas exportaciones es la dependencia más larga.
+
+1. **Instala el Skill.** Copia `apps/web/public/artifacts/signal-bundler-account-execs-claude-skill/SKILL.md` y la carpeta `references/` en tu directorio `.claude/skills/signal-bundler/`, o súbelo como un Skill en claude.ai. El `name` y `description` del frontmatter son el disparador en prompts relevantes.
+2. **Configura la taxonomía de señales.** Abre `references/1-signal-taxonomy.md`. Reemplaza las filas de tipo de evento por defecto con los tipos de evento reales que Common Room y Gong producen en tu instancia — los nombres de eventos de Common Room varían según los canales que hayas conectado. Asigna `urgency_tier` a cada uno. Si tu producto emite eventos personalizados (nombres de activación de features, umbrales de uso), agrega filas para ellos.
+3. **Configura la plantilla de digest.** Abre `references/2-digest-template.md`. Actualiza los nombres de campos de Salesforce en la sección de CRM-writeback si quieres enviar el brief de vuelta al registro de cuenta. Actualiza las notas de bloques de Slack para que coincidan con el naming de tu canal.
+4. **Conecta las fuentes de entrada.** Common Room: usa la API de exportación de actividad de cuenta o la integración de Zapier para enviar ventanas de actividad de 48 horas a una tabla de staging. Gong: usa la API de Gong (`/v2/calls`) para extraer resúmenes y fragmentos de transcritos para una cuenta determinada. Eventos de producto: exporta desde tu warehouse (Snowflake, BigQuery, Redshift) o desde Amplitude/Mixpanel vía sus APIs de exportación, con scope a los emails de usuario de la cuenta.
+5. **Prueba en tres cuentas.** Ejecuta el skill manualmente sobre tres cuentas con actividad reciente conocida. Verifica que: los niveles de urgencia en la tabla de señales coincidan con la intuición de tu equipo sobre lo que fue importante; el narrativo nombre a los actores correctos; el "Recommended first move" sea algo que un AE realmente haría, no un genérico "seguimiento con la cuenta." Ajusta la taxonomía si los niveles se sienten incorrectos.
+6. **Programa o automatiza.** Configura una tarea programada (tarea programada de Claude Code, cron job o flow de n8n) que ejecute el skill por AE a una hora consistente cada mañana. Cada ejecución debe cubrir la lista completa de cuentas del AE y entregar un brief por cuenta.
+
+## Qué hace el skill en realidad
+
+El skill ejecuta cuatro pasos en un orden fijo.
+
+**Paso 1 — normalización y deduplicación de señales.** Todos los eventos entrantes de Common Room, Gong y product analytics se mapean a un esquema compartido: `{source, actor, event_type, urgency_tier, timestamp, raw_excerpt}`. Los eventos que aparecen en múltiples fuentes (una llamada de Gong que también generó un evento "meeting" de Common Room) se deduplicán en `(actor, event_type, timestamp_hour)`. Por qué normalizar antes de sintetizar: si el modelo recibe esquemas heterogéneos, implícitamente dará más peso a la fuente más verbosa — un transcrito de Gong tiene más tokens que una fila de evento de Common Room — en lugar de ponderar por urgencia real de la señal.
+
+**Paso 2 — clasificación de urgencia mediante búsqueda en taxonomía.** Cada evento normalizado se compara con `references/1-signal-taxonomy.md` para asignar un nivel de urgencia (hot / warm / cold). Los eventos no presentes en la taxonomía toman por defecto `warm`. Las primeras ocurrencias de eventos de nivel hot — eventos que el actor no ha producido en los últimos 7 días — se marcan como especialmente significativas. Por qué basado en taxonomía en lugar de juicio libre del LLM: los niveles de urgencia consistentes entre cuentas son lo que hace que el brief sea comparable día a día. Si el modelo re-deriva la urgencia desde cero en cada ejecución, un AE no puede desarrollar la intuición de que un brief con "3 hot" significa algo materialmente diferente a uno con "0 hot."
+
+**Paso 3 — síntesis narrativa.** Con las señales clasificadas, el modelo las agrupa por tema (interés en el producto, mención de competidor, cambio de stakeholder, pico o caída de engagement) y redacta una sección "What happened" de 3-5 oraciones nombrando actores y eventos específicos en orden de urgencia. Identifica la señal más accionable y redacta un "Recommended first move" en una sola oración. Si se proporciona `account_snapshot` con la etapa actual del deal, señala explícitamente las señales que contradicen la etapa — un champion mencionando a un competidor mientras el deal está en "Proposal Sent" se muestra explícitamente, no enterrado.
+
+**Paso 4 — ensamblado del output.** El digest se renderiza usando `references/2-digest-template.md`: encabezado de cuenta, conteo de señales por nivel, narrativo, acción recomendada, tabla de señales (limitada a 10 filas) y un footer de frescura de datos. El límite de la tabla de señales evita el anti-patrón de "muro de eventos"; los AEs pueden obtener el feed completo de Common Room cuando lo necesiten.
+
+## Realidad de costos
+
+El costo de tokens por cuenta depende de cuántos eventos hay en la ventana y qué tan largos son los transcritos de Gong. Para una ventana típica de 48 horas con 10-15 eventos de Common Room y 1-2 resúmenes de llamada de Gong (no transcritos completos), espera aproximadamente 2.000-3.500 tokens de entrada y 400-600 tokens de salida por cuenta. Con los precios de Claude Sonnet 4.x (aproximadamente $3 por millón de tokens de entrada y $15 por millón de tokens de salida a principios de 2026), eso es alrededor de $0,012-0,02 por brief de cuenta.
+
+Un AE con 15 cuentas nombradas gasta aproximadamente $0,18-0,30 por día en tokens de Claude, o $4-7 por mes. Un equipo de 20 AEs cubriendo cada uno 15 cuentas gasta $80-140 por mes en tokens de Claude — un redondeo frente a la compensación del AE que ahorra en la agregación de señales matutina.
+
+Los costos no relacionados con tokens son mayores. Configurar las exportaciones de Common Room y Gong de manera confiable toma medio día de tiempo de RevOps. La sesión de calibración de taxonomía con el equipo de AEs toma 60-90 minutos. Después de eso, el skill es prácticamente autónomo hasta que cambie el vocabulario de señales (un nuevo feature del producto crea nuevos tipos de eventos, o Common Room agrega una nueva integración de canal).
+
+La longitud del transcrito de Gong es la principal variable de tokens. Si pasas transcritos verbatim completos en lugar de resúmenes de llamada generados por Gong, los tokens de entrada por cuenta pueden alcanzar 8.000-15.000 para una semana con muchas llamadas. Usa el output de resumen nativo de Gong en lugar de transcritos en bruto a menos que tengas una razón específica para necesitar texto verbatim.
+
+## Métrica de éxito
+
+La métrica que indica que el digest está funcionando: **tiempo del AE hasta el primer contacto significativo en cuentas con señal hot.** Antes del skill, una señal hot (revisita a la página de precios, cambio de trabajo del champion) permanecía desapercibida hasta que el AE abría Common Room por casualidad. Después del skill, esa señal debería producir una acción del AE dentro del mismo día hábil. Realiza el seguimiento: etiqueta el "Recommended first move" con una fecha en el CRM cuando el AE registre la actividad, y compara la brecha con el timestamp de la señal. Si la mediana de la brecha no cae por debajo de 8 horas para cuentas con señal hot después de 30 días, el brief no se está leyendo — investiga si el canal de entrega (Slack vs email) es el problema.
+
+Métrica secundaria: **tasa de cobertura del AE** — qué fracción de cuentas nombradas con una señal hot en las últimas 48 horas recibió un contacto del AE en la misma ventana. Una tasa de cobertura superior al 80% indica que el digest está cumpliendo su función.
+
+## Modos de falla
+
+- **Descalibración de la taxonomía.** La primera taxonomía que escribas estará equivocada en al menos dos o tres filas. Un evento de "repo starred" se siente warm en abstracto, pero en la práctica siempre es cold a menos que el actor sea un stakeholder nombrado. Si los AEs te dicen constantemente "el brief marcó X pero yo nunca actuaría sobre eso," el nivel de taxonomía para X necesita bajar. **Guard:** después de las primeras dos semanas de uso en vivo, realiza una retrospectiva: para cada acción que un AE tomó basándose en una recomendación del digest, ¿la señal que la motivó estaba calificada como `hot` o `warm`? Si más del 30% de las señales sobre las que se actuó eran `cold`, la taxonomía es demasiado agresiva y generará ruido que entrenará a los AEs a ignorar el brief.
+- **Brechas en el comité de compra.** Common Room captura actividad de cualquiera en el dominio de la cuenta — ingenieros junior, pasantes de marketing, alguien usando su email laboral para un proyecto personal. Si el skill no filtra por actores del comité de compra, el brief se llena de ruido de no tomadores de decisiones y el AE pierde confianza en él. **Guard:** pasa `account_snapshot` con una lista de contactos nombrados de Salesforce (solo contactos del comité de compra). El skill etiqueta a cada actor de señal como `on-committee`, `unknown` o `not-on-committee` y automáticamente degrada las señales de actores fuera del comité un nivel de urgencia. Revisa los actores "unknown" semanalmente — algunos serán nuevos stakeholders que vale la pena agregar a la oportunidad.
+- **Obsolescencia de transcritos de Gong.** El lookback predeterminado de Gong del skill es 14 días. Para cuentas donde la última llamada fue hace 12 días, el brief describe las señales de esa llamada como si fueran recientes. Un AE que actúa sobre una señal de "competidor mencionado" de hace 12 días puede entrar a una llamada donde la dinámica del deal ya cambió. **Guard:** el skill antepone "Last call: N days ago" a la sección de Gong y degrada todas las señales derivadas de Gong a `warm` (no `hot`) cuando la llamada más reciente tiene más de 7 días. El AE ve la antigüedad claramente antes de decidir si actúa.
+- **Picos de volumen de señales por crawlers automatizados.** Algunas integraciones de Common Room recogen actividad de bots (monitoreo automatizado, pipelines de CI) como "eventos de usuario." Un pipeline de despliegue que toca GitHub 40 veces al día inundará la tabla de señales con eventos `repo_push` calificados como warm y enterrará la señal real. **Guard:** agrega una lista de exclusión `bot_user_patterns` al archivo de taxonomía (una lista de patrones de email o nombres de actor que coincidan con bots conocidos y cuentas automatizadas). Los eventos de esos actores se eliminan en el paso de normalización y no se incluyen en el conteo.
+
+## vs alternativas
+
+**vs revisión manual matutina en tres pestañas.** El status quo para la mayoría de los AEs: abrir Common Room, escanear el feed de la cuenta, cambiar a Gong, encontrar la llamada más reciente, cambiar al dashboard de producto, intentar recordar cuál es la línea de base de uso de la cuenta. Para 5 cuentas esto toma 15-20 minutos y la síntesis es tan buena como la memoria del AE. Para 15 cuentas no es factible y la mayoría de las cuentas quedan sin monitorear. El skill hace la síntesis entre fuentes de manera consistente cada día; el juicio del AE va a la taxonomía y la decisión de seguimiento, no a la agregación.
+
+**vs la vista de Deals integrada de Gong.** La pestaña Deals de Gong muestra actividad de llamadas, próximos pasos y señales de riesgo del deal — pero solo para cuentas con llamadas activas de Gong. No muestra actividad comunitaria de Common Room ni uso de producto. Si tus AEs cubren cuentas que aún no están en un ciclo de llamadas activo (cuentas de alto fit en etapa temprana de pipeline), la vista integrada de Gong está mayormente vacía. Este skill extrae señales de las tres fuentes para cualquier cuenta nombrada independientemente de la frecuencia de llamadas.
+
+**vs una plataforma de inteligencia de ventas especializada** (por ejemplo, el scoring de engagement de cuentas de 6sense o los datos de intención + engagement de Demandbase). Esas plataformas tienen taxonomías de señales prediseñadas, datos de intención más ricos de sus redes propietarias e integraciones nativas con CRM que envían scores automáticamente. La compensación: cuestan entre $30.000 y $100.000+ al año para un equipo de mercado medio y sus taxonomías son opacas — no puedes inspeccionar ni editar por qué una cuenta determinada tiene el score que tiene. Este skill cuesta unos pocos dólares al mes en tokens de Claude, es completamente transparente y la taxonomía es tuya para poseer y calibrar. Elige una plataforma si el volumen de señales es muy alto o si necesitas datos de intención fuera de tu propio producto y comunidad; elige este skill si quieres control editorial sobre qué señales importan y no puedes justificar el gasto a nivel de plataforma.

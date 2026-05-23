@@ -1,0 +1,90 @@
+---
+slug: signal-bundler-account-execs-claude-skill
+canonical_slug: signal-bundler-account-execs-claude-skill
+locale: en
+verticals: [revops]
+title: Bundle buyer signals into a daily AE digest with Claude
+artifact_type: claude-skill
+tools_used: [claude, common-room, gong]
+roles: [ae]
+difficulty: intermediate
+time_to_setup: 30-60 min
+human_tested: false
+---
+
+A Claude Skill that pulls intent signals, engagement events, and product-usage data for a named account and compresses them into a single daily digest an AE can read and act on in under five minutes. It replaces the morning ritual of tabbing between [Common Room](/en/tools/common-room/), [Gong](/en/tools/gong/), and a product analytics dashboard to assemble a picture that should have already been assembled. The bundle ships at `apps/web/public/artifacts/signal-bundler-account-execs-claude-skill/` and contains `SKILL.md` plus two reference templates the user adapts before first run.
+
+## When to use
+
+Use this skill when an AE is covering more than six or seven named accounts simultaneously and the cognitive overhead of monitoring multiple signal channels — Gong recaps, Common Room activity feeds, product-usage alerts — has become the bottleneck before morning standup. The skill is not for accounts where the AE has had no prior contact; signal bundling requires a baseline of who the buying committee is and what "normal" activity looks like for that account. Run at least one discovery call before invoking the skill on an account.
+
+The skill is also the right tool when your team has the signals but no shared view of them. Common Room captures community and web activity; Gong captures conversation intelligence; product analytics captures in-app behavior. If these three data streams are only viewable in three separate tabs, AEs are either ignoring two of the three or building a mental model that is worse than what a simple synthesis would give them.
+
+Concretely, invoke it from:
+
+- A **scheduled Claude task** that runs each morning per AE, iterates over the AE's named account list, and pushes each brief to Slack or email before standup.
+- A **manual invocation in Claude Code** when the AE has a QBR prep or renewal call that day and wants a consolidated view of the last 14 days of activity before the call.
+- A **Clay AI column** over an account table, firing when a Common Room "account active" webhook has triggered in the last 24 hours — so only accounts with fresh signal generate a brief that day.
+
+## When NOT to use
+
+Skip this skill when:
+
+- **The AE covers fewer than five accounts.** Below that threshold, the AE usually holds the full signal picture in their head anyway, and the setup cost (taxonomy calibration, scheduled task wiring) is not worth it.
+- **Signal feeds are not connected.** If Common Room is not exporting structured activity data and Gong transcripts are not available in a parseable format, the skill has nothing to synthesize. Do the integration work first; the skill is not a scraper.
+- **You want the skill to write the CRM update.** The digest is for the AE's working memory. It is not a substitute for logging activities in Salesforce. Wire a separate CRM-writeback step downstream of the brief, or train AEs to paste the "Recommended first move" field into the activity log manually.
+- **The account is in a regulated industry with strict data-residency requirements.** Running customer engagement signals through Claude's API means those signals transit Anthropic's infrastructure. Review your data-processing agreements before wiring external customer behavioral data to any LLM call.
+
+## Setup
+
+Setup is 30-60 minutes once Common Room and Gong are exporting structured data. Getting those exports configured is the longer dependency.
+
+1. **Install the Skill.** Drop `apps/web/public/artifacts/signal-bundler-account-execs-claude-skill/SKILL.md` and the `references/` folder into your `.claude/skills/signal-bundler/` directory, or upload as a Skill in claude.ai. The frontmatter `name` and `description` are the trigger on relevant prompts.
+2. **Configure the signal taxonomy.** Open `references/1-signal-taxonomy.md`. Replace the default event-type rows with the actual event types Common Room and Gong produce in your instance — Common Room event names vary by which channels you have connected. Set `urgency_tier` for each. If your product emits custom events (feature-activation names, usage thresholds), add rows for those.
+3. **Configure the digest template.** Open `references/2-digest-template.md`. Update the Salesforce field names in the CRM-writeback section if you want to push the brief back to the account record. Update the Slack block notes to match your channel naming.
+4. **Wire the input sources.** Common Room: use the account-activity export API or the Zapier integration to push 48-hour activity windows to a staging table. Gong: use the Gong API (`/v2/calls`) to pull transcript summaries and snippets for a given account. Product events: export from your warehouse (Snowflake, BigQuery, Redshift) or from Amplitude/Mixpanel via their export APIs, scoped to the account's user emails.
+5. **Test on three accounts.** Run the skill manually over three accounts with known recent activity. Check that: the urgency tiers in the signal table match your team's instinct about what was important; the narrative names the right actors; the "Recommended first move" is something an AE would actually do, not a generic "follow up with the account." Adjust the taxonomy if the tiers feel wrong.
+6. **Schedule or automate.** Set up a scheduled task (Claude Code scheduled task, cron job, or n8n flow) that runs the skill per AE at a consistent time each morning. Each run should cover the AE's full account list and deliver one brief per account.
+
+## What the skill actually does
+
+The skill runs four steps in a fixed order.
+
+**Step 1 — signal normalization and deduplication.** All incoming events from Common Room, Gong, and product analytics are mapped to a shared schema: `{source, actor, event_type, urgency_tier, timestamp, raw_excerpt}`. Events that appear in multiple sources (a Gong call that also generated a Common Room "meeting" event) are deduplicated on `(actor, event_type, timestamp_hour)`. Why normalization before synthesis: if the model receives heterogeneous schemas it will implicitly weight the most verbose source — a Gong transcript has more tokens than a Common Room event row — rather than weighting by actual signal urgency.
+
+**Step 2 — urgency classification via taxonomy lookup.** Each normalized event is matched against `references/1-signal-taxonomy.md` to assign an urgency tier (hot / warm / cold). Events not in the taxonomy default to `warm`. First occurrences of hot-tier events — events the actor has not produced in the last 7 days — are flagged as especially significant. Why taxonomy-driven rather than free-form LLM judgment: consistent urgency tiers across accounts are what makes the brief comparable day-to-day. If the model re-derives urgency from scratch each run, an AE cannot build the intuition that a "3 hot" brief means something materially different from a "0 hot" brief.
+
+**Step 3 — narrative synthesis.** With signals classified, the model groups them by theme (product interest, competitive mention, stakeholder change, engagement spike or drop-off) and drafts a 3-5 sentence "What happened" section naming specific actors and events in urgency order. It identifies the single most actionable signal and drafts a one-sentence recommended first move. If `account_snapshot` is provided with the current deal stage, it flags signals that contradict the stage — a champion mentioning a competitor while the deal is in "Proposal Sent" is surfaced explicitly, not buried.
+
+**Step 4 — output assembly.** The digest is rendered using `references/2-digest-template.md`: account header, signal count by tier, narrative, recommended first move, signal table (capped at 10 rows), and a data-freshness footer. The signal table cap prevents the "wall of events" anti-pattern; AEs can pull the full feed from Common Room when they need it.
+
+## Cost reality
+
+The per-account token cost depends on how many events are in the window and how long the Gong transcripts are. For a typical 48-hour window with 10-15 Common Room events and 1-2 Gong call summaries (not full transcripts), expect roughly 2,000-3,500 input tokens and 400-600 output tokens per account. At Claude Sonnet 4.x pricing (approximately $3 per million input and $15 per million output as of early 2026), that is around $0.012-0.02 per account brief.
+
+An AE with 15 named accounts spends roughly $0.18-0.30 per day in Claude tokens, or $4-7 per month. A team of 20 AEs each covering 15 accounts spends $80-140 per month in Claude tokens — a rounding error against the AE compensation it saves on morning signal aggregation.
+
+The non-token costs are larger. Configuring Common Room and Gong exports reliably takes a half-day of RevOps time. The taxonomy calibration session with the AE team takes 60-90 minutes. After that, the skill is effectively hands-off until signal vocabulary changes (a new product feature creates new event types, or Common Room adds a new channel integration).
+
+Gong transcript length is the main token variable. If you pass full verbatim transcripts instead of Gong-generated call summaries, input tokens per account can reach 8,000-15,000 for a call-heavy week. Use Gong's native summary output rather than raw transcripts unless you have a specific reason to need verbatim text.
+
+## Success metric
+
+The metric that tells you the digest is working: **AE time-to-first-meaningful-touch on hot-signal accounts.** Before the skill, a hot signal (pricing page revisit, champion job change) sat unnoticed until the AE happened to open Common Room. After the skill, that signal should produce an AE action within the same business day. Track it: tag the recommended first move with a date in the CRM when the AE logs the activity, and compare the gap to the signal timestamp. If the median gap does not drop below 8 hours for hot-signal accounts after 30 days, the brief is not being read — investigate whether the delivery channel (Slack vs email) is the issue.
+
+Secondary metric: **AE coverage rate** — what fraction of named accounts with a hot signal in the last 48 hours received an AE touch in the same window. A coverage rate above 80% means the digest is doing its job.
+
+## Failure modes
+
+- **Taxonomy miscalibration.** The first taxonomy you write will be wrong in at least two or three rows. A "repo starred" event feels warm in the abstract but in practice is always cold unless the actor is a named stakeholder. If AEs consistently tell you "the brief flagged X but I would never act on that," the taxonomy tier for X needs to move down. **Guard:** after the first two weeks of live use, run a retrospective: for every action an AE took based on a digest recommendation, was the signal that motivated it rated `hot` or `warm`? If more than 30% of acted-on signals were `cold`, the taxonomy is too aggressive and will generate noise that trains AEs to ignore the brief.
+- **Buying committee gaps.** Common Room captures activity from anyone at the account domain — junior engineers, marketing interns, someone using their work email for a hobby project. If the skill does not filter for buying-committee actors, the brief fills with noise from non-decision-makers and the AE loses trust in it. **Guard:** pass `account_snapshot` with a named contact list from Salesforce (buying committee contacts only). The skill labels each signal actor as `on-committee`, `unknown`, or `not-on-committee` and automatically downgrades non-committee signals by one urgency tier. Review "unknown" actors weekly — some will be new stakeholders worth adding to the opportunity.
+- **Gong transcript staleness.** The skill's default Gong lookback is 14 days. For accounts where the last call was 12 days ago, the brief describes that call's signals as if they are fresh. An AE who acts on a 12-day-old "competitor mentioned" signal may walk into a call where the deal dynamics have already shifted. **Guard:** the skill prepends "Last call: N days ago" to the Gong section and downgrades all Gong-derived signals to `warm` (not `hot`) when the most recent call is more than 7 days old. The AE sees the recency clearly before deciding whether to act.
+- **Signal volume spikes from automated crawlers.** Some Common Room integrations pick up bot activity (automated monitoring, CI pipelines) as "user events." A deployment pipeline that touches GitHub 40 times a day will flood the signal table with `repo_push` events rated warm and bury the real signal. **Guard:** add a `bot_user_patterns` exclusion list to the taxonomy file (a list of email patterns or actor name patterns that match known bots and automated accounts). Events from those actors are dropped at the normalization step, not included in the count.
+
+## vs alternatives
+
+**vs manual morning review across three tabs.** The status quo for most AEs: open Common Room, scan the account feed, switch to Gong, find the most recent call, switch to the product dashboard, try to remember what the account's usage baseline is. For 5 accounts this takes 15-20 minutes and the synthesis is only as good as the AE's memory. For 15 accounts it is not feasible and most accounts go unmonitored. The skill does the cross-source synthesis in a consistent way every day; the AE's judgment goes into the taxonomy and the follow-up decision, not the aggregation.
+
+**vs Gong's built-in Deals intelligence view.** Gong's Deals tab shows call activity, next steps, and deal-risk signals — but only for accounts with active Gong calls. It does not surface Common Room community activity or product usage. If your AEs are covering accounts that are not yet in an active call cycle (high-fit accounts in early pipeline), Gong's built-in view is mostly empty. This skill pulls signals from all three sources for any named account regardless of call frequency.
+
+**vs a purpose-built sales intelligence platform** (e.g. 6sense's account-engagement scoring, Demandbase's intent + engagement data). Those platforms have pre-built signal taxonomies, richer intent data from their proprietary networks, and native CRM integrations that push scores automatically. The trade-off: they cost $30,000-100,000+ per year for a mid-market team and their taxonomies are opaque — you cannot inspect or edit why a given account is scored the way it is. This skill costs a few dollars per month in Claude tokens, is fully transparent, and the taxonomy is yours to own and calibrate. Choose a platform if signal volume is very high or if you need intent data outside your own product and community; choose this skill if you want editorial control over what signals matter and cannot justify platform-level spend.
