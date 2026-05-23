@@ -1,0 +1,90 @@
+---
+slug: lost-deal-postmortem-claude-skill
+canonical_slug: lost-deal-postmortem-claude-skill
+locale: pt-BR
+verticals: [revops]
+title: Turn closed-lost notes and calls into a structured postmortem with Claude
+artifact_type: claude-skill
+tools_used: [claude, gong, salesforce]
+roles: [revops, ae]
+difficulty: intermediate
+time_to_setup: 30-60 min
+human_tested: false
+---
+
+Um Claude Skill que ingere notas de deals fechados como perdidos do Salesforce, transcrições de chamadas do Gong e os metadados do deal disponíveis, e gera um postmortem estruturado: uma razão de perda categorizada com citação de fonte, uma linha do tempo reconstruída dos momentos-chave de decisão, um concorrente ou alternativa identificado pelo nome, uma revisão das ações do vendedor (apenas quando o sinal estava presente no momento, não construído em retrospectiva) e um bloco de campos pronto para colar no Salesforce. O bundle fica em `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/` e contém `SKILL.md`, um template de configuração de postmortem, um template de reconstrução de linha do tempo e um output de exemplo para conexão de parsers.
+
+## Quando usar
+
+Use esse skill depois que um deal é marcado como fechado-perdido no Salesforce e você quer algo mais útil do que a nota de uma linha do AE dizendo "orçamento" antes da próxima revisão de pipeline. Os dois gatilhos mais comuns são: um Salesforce Flow que dispara automaticamente quando `Stage = Closed Lost` e envia o postmortem para o campo de resumo de chamadas do Gong e dois campos personalizados do Salesforce, ou um AE colando seu próprio deal imediatamente após a ligação de perda enquanto o contexto ainda está fresco.
+
+O skill também funciona para análise em lote de RevOps no final de um trimestre. Extraia todas as oportunidades fechadas como perdidas dos últimos 90 dias, vincule cada uma com os IDs de transcrições do Gong e histórico de atividades, e execute o skill para obter uma distribuição de categorias para o deck do QBR. Esse processamento em lote tipicamente leva 2-4 horas em escala, e o detalhamento por categoria é muito mais defensável do que a contagem manual do SDR manager.
+
+O skill requer pelo menos uma fonte — uma transcrição do Gong dos últimos 30 dias do deal, notas de fechamento-perdido do AE, ou um formulário de perda estruturado. Pelo menos 3 eventos com data distintos precisam ser recuperáveis das entradas combinadas antes de o skill produzir análise. Abaixo desse limite, ele retorna `insufficient_data` em vez de adivinhar. Esse limite é configurável em `references/1-postmortem-config.md` e pode ser elevado para 4 ou 5 para equipes cujos AEs registram de forma consistente.
+
+## Quando NÃO usar
+
+Não use esse skill em deals ativos. O skill foi construído para resultados fechados; executá-lo no meio de um deal produz análise especulativa que os AEs interpretam erroneamente como coaching prescritivo e usam para racionalizar uma desaceleração. Use o AE rep-coaching skill para deals em andamento.
+
+Não use para clientes que fizeram churn. Esse skill cobre perdas no ciclo de vendas, não resultados pós-venda. O churn-analysis skill trata esses casos.
+
+Não use quando a única entrada é a nota de fechamento-perdido de um AE sem transcrições de chamadas e sem histórico de estágios. O skill vai retornar `insufficient_data`. A resposta correta é exigir que o AE registre a ligação final ou vincule o link do Gong antes de o postmortem ser executado — não baixar o limite para 1. Uma única nota de "orçamento" de um AE não é um postmortem, e tratá-la como tal é a razão pela qual você termina com um slide de QBR dizendo "42% das perdas foram por orçamento" baseado em dados que na verdade significam "42% dos AEs digitou 'orçamento' ao fechar a oportunidade."
+
+## Configuração
+
+A configuração leva 30-60 minutos para o skill em si. A conexão do Salesforce Flow leva mais meio dia dependendo do seu layout de Flow e propriedades.
+
+1. **Instale o Skill.** Coloque `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/SKILL.md` e a pasta `references/` no seu diretório `.claude/skills/deal-postmortem/`, ou faça upload como Skill no claude.ai. Os campos `name` e `description` do frontmatter são o que aciona o Skill.
+2. **Edite a taxonomia de categorias de perda.** Abra `references/1-postmortem-config.md` e substitua as linhas de categoria com os mesmos valores de picklist que o seu campo `Loss_Reason__c` do Salesforce usa. Se as categorias de output do skill não corresponderem ao Salesforce, o bloco pronto para colar gera valores de picklist inválidos e o writeback falha.
+3. **Defina o limite mínimo de eventos.** No mesmo arquivo, configure `min_timeline_events` para o piso que faz sentido para a disciplina de registro da sua equipe. O padrão é 3. Se seus AEs registram cada chamada no Gong e cada email no Salesforce, aumente para 4.
+4. **Atualize o mapeamento de campos do Salesforce.** Em `references/1-postmortem-config.md`, atualize os nomes de campos da API na tabela de mapeamento para corresponder ao seu esquema real do Salesforce. Os padrões (`Loss_Reason__c`, `Competitor_Mentioned__c`, etc.) são placeholders.
+5. **Conecte a fonte de entrada.** No Salesforce, crie um Flow que dispara quando `Stage = Closed Lost`, que extrai o histórico de atividades da oportunidade e os IDs de chamadas do Gong vinculadas, e que chama o Claude com as entradas concatenadas. Alternativamente, o AE cola o deal manualmente. Ambos funcionam; o Flow é melhor para consistência.
+6. **Conecte o destino de output.** O skill emite um bloco pronto para colar no Salesforce ao final de cada postmortem. O Flow pode fazer o parse e escrever os campos de volta usando uma ação de código personalizado. A colagem manual do AE também funciona se os campos estiverem mapeados.
+
+## O que o skill realmente faz
+
+**Passo 1 — verificação de suficiência de dados.** Antes de qualquer análise, o skill conta eventos com data distintos nas entradas. Menos que o mínimo configurado retorna `insufficient_data` imediatamente. Esse passo detecta a falha de postmortem mais comum: uma narrativa confiante construída sobre uma única nota.
+
+**Passo 2 — reconstrução da linha do tempo.** O skill extrai todos os eventos com data das entradas do Gong e Salesforce e os ordena cronologicamente. Cada evento recebe um rótulo de tipo (chamada de discovery, demo, discussão de preços, mudança de estágio, menção de concorrente, sinal de estagnação), uma fonte e um resumo de uma frase. Construir a linha do tempo para frente — antes de tirar conclusões — é a defesa central contra o viés retrospectivo. Análise que começa pela perda e trabalha para trás sempre encontrará uma história; análise que lê a linha do tempo para frente encontra o que estava realmente visível no momento.
+
+**Passo 3 — classificação da razão de perda.** O skill classifica a razão de perda primária e até duas secundárias contra a sua taxonomia de categorias, citando o evento específico da linha do tempo que sustenta cada classificação. Se a nota CRM do AE diz "orçamento" mas a chamada final do Gong nomeia explicitamente um concorrente, o skill sinaliza o conflito e promove a categoria respaldada pela citação. Não reconcilia silenciosamente. Por que citar em vez de inferir: postmortems alimentam a análise de categorias do QBR. Uma razão de "orçamento" inferida que na verdade foi uma vitória de concorrente infla a categoria de orçamento por um trimestre inteiro e direciona mal o esforço de coaching.
+
+**Passo 4 — identificação do concorrente.** O skill nomeia qualquer concorrente, alternativa de construção interna ou alternativa de status quo mencionados explicitamente nas entradas. Se nenhum estiver presente, retorna `null` — nunca infere um concorrente a partir de linguagem vaga como "estamos comparando opções."
+
+**Passo 5 — revisão das ações do vendedor.** A seção de maior risco. O skill identifica se alguma ação específica do vendedor em um momento específico do deal poderia ter mudado o resultado. Duas condições precisam ser atendidas: o sinal relevante estava presente no deal naquele momento (não apenas visível em retrospectiva) e um deal fechado-ganho comparável sustenta a ação. Se nenhuma das duas condições for atendida, o campo fica em branco e é rotulado como `insufficient_data_for_seller_review`. Isso evita que o skill gere coaching que soa plausível mas que managers vão citar sem verificar.
+
+**Passo 6 — pontuação de confiança.** O skill emite uma pontuação de confiança de 1 a 5 com base na riqueza das entradas. Múltiplas transcrições do Gong mais histórico completo de estágios dá 5. Uma única chamada do Gong sem notas de CRM dá 1. Managers e RevOps devem tratar análises de confiança 1 e 2 como direcionais, não autoritativas.
+
+## Realidade de custos
+
+Cada postmortem consome aproximadamente 2.000-5.000 tokens de entrada (dependendo do tamanho das transcrições e quantas notas do Salesforce são concatenadas) e 600-1.000 tokens de saída. Com os preços do Claude Sonnet 4.x (aproximadamente $3 por milhão de tokens de entrada e $15 por milhão de saída, em meados de 2026), cada postmortem custa aproximadamente $0,02-0,04.
+
+Uma equipe com 100 deals fechados como perdidos por mês gasta $2-4 por mês em tokens do Claude. Uma equipe com 1.000 perdas por mês — uma organização de vendas mid-market com 50+ AEs — gasta aproximadamente $20-40 por mês. Os custos que não são tokens importam mais: a construção do Salesforce Flow é meio dia, calibrar a taxonomia de categorias de perda contra os dados existentes do Salesforce são duas horas, e treinar AEs para vincular suas chamadas do Gong antes de fechar é uma tarefa operacional contínua. O custo de tokens não é a restrição.
+
+Em escala de lote trimestral (500-2.000 deals de uma vez), o prompt caching dos arquivos de configuração e template de linha do tempo reduz o custo de tokens de entrada em 30-40%.
+
+## Métrica de sucesso
+
+A métrica a acompanhar é a **taxa de precisão da razão de perda**: amostre 20 postmortems por trimestre e peça a um analista de RevOps que verifique a categoria de perda primária contra a evidência subjacente. Se a classificação do skill corresponder à leitura do analista em 80%+ dos casos, os dados de categoria que vão para o seu QBR são confiáveis. Abaixo de 80%, a taxonomia de perdas está desalinhada com o que seus compradores realmente dizem — volte ao `references/1-postmortem-config.md` e reescreva as descrições de categoria.
+
+Métrica secundária: **taxa de conclusão do postmortem**. Antes do skill, uma organização típica tem dados de postmortem em 30-50% dos deals fechados como perdidos (o restante são notas de uma linha ou em branco). Após conectar o Salesforce Flow, a taxa de conclusão deve se aproximar de 90%+ para deals com pelo menos uma chamada do Gong registrada. A lacuna restante são deals onde nenhuma chamada foi registrada e as notas do AE estão vazias — o retorno de `insufficient_data` força esses casos a virem à tona para acompanhamento.
+
+## Comparação com alternativas
+
+**vs postmortem manual do AE.** Um AE preenchendo um formulário de perda manualmente leva 5-15 minutos por deal e produz texto não estruturado que requer revisão manual para categorizar. A principal vantagem do manual: AEs podem incluir contexto que nunca chegou ao Gong ou Salesforce — uma conversa nos bastidores, uma mensagem no Slack, algo que o comprador disse informalmente. O skill não pode usar o que nunca foi registrado. A abordagem híbrida funciona bem: o skill produz o postmortem estruturado a partir dos dados registrados, e o AE tem uma etapa de revisão de 2 minutos para adicionar o que não foi capturado. Essa combinação te dá tanto o output estruturado quanto o contexto não registrado.
+
+**vs a análise nativa de deals do Gong.** Os analytics de deals integrados do Gong mostram tendências de chamadas, taxas de tempo de fala e padrões de conversa em um deal. Não produz um postmortem por deal com uma categoria de perda, revisão de ações do vendedor ou writeback para o Salesforce. As duas ferramentas atendem necessidades diferentes: Gong para análise de tendências agregadas em muitos deals; esse skill para postmortems por deal que fluem para o seu CRM. Use ambos.
+
+## Pontos de atenção
+
+- **Viés retrospectivo em linhas do tempo escassas.** Com menos de 3 eventos registrados, qualquer análise é construída a partir do resultado. **Guard:** o skill retorna `insufficient_data` quando a contagem de eventos cai abaixo de `min_timeline_events`. O guard força o processo operacional upstream — AEs precisam registrar chamadas antes de fechar.
+- **Inflação de categorias de perda.** AEs sob pressão de tempo recorrem ao "orçamento" como razão de perda. Um modelo que infere em vez de citar vai replicar esse viés em escala. **Guard:** o skill só atribui uma categoria de perda quando pode citar um evento específico da linha do tempo. Conflitos entre fontes são mostrados explicitamente, não resolvidos silenciosamente.
+- **Contrafactuais fabricados do vendedor.** Coaching que soa plausível mas foi inventado a partir do resultado é pior do que nenhum coaching. **Guard:** a seção de revisão de ações do vendedor fica em branco (`insufficient_data_for_seller_review`) quando nenhuma das duas condições é atendida.
+- **Relatos contraditórios de fontes.** Transcrições do Gong e notas de CRM divergem em aproximadamente 20-30% dos deals. **Guard:** conflitos em pontos materiais são mostrados no output como conflitos explícitos em vez de resolvidos silenciosamente, com a versão respaldada por citação como a primária.
+
+## Bundle de referência
+
+- `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/SKILL.md` — definição completa do skill, entradas, método, formato de output e pontos de atenção.
+- `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/references/1-postmortem-config.md` — taxonomia de categorias de perda, limite mínimo de eventos e mapeamento de campos do Salesforce. O arquivo de calibração principal.
+- `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/references/2-timeline-reconstruction-template.md` — tipos de eventos reconhecidos pelo skill e ponderação de momentos-chave.
+- `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/references/3-sample-output.md` — exemplo de output literal para conexão de parsers e writeback do Salesforce.

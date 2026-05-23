@@ -1,0 +1,90 @@
+---
+slug: lost-deal-postmortem-claude-skill
+canonical_slug: lost-deal-postmortem-claude-skill
+locale: en
+verticals: [revops]
+title: Turn closed-lost notes and calls into a structured postmortem with Claude
+artifact_type: claude-skill
+tools_used: [claude, gong, salesforce]
+roles: [revops, ae]
+difficulty: intermediate
+time_to_setup: 30-60 min
+human_tested: false
+---
+
+A Claude Skill that ingests closed-lost notes from Salesforce, call transcripts from Gong, and whatever deal metadata you can pull, then produces a structured postmortem: a categorized loss reason with a source citation, a reconstructed timeline of key decision moments, a competitor or alternative identified by name, a seller action review (only when the signal was present at the time, not constructed in retrospect), and a Salesforce paste-ready field block. The bundle ships at `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/` and contains `SKILL.md`, a postmortem config template, a timeline reconstruction template, and a sample output for parser wiring.
+
+## When to use
+
+Use this skill after a deal closes lost in Salesforce and you want something more useful than the AE's one-line "budget" note before the next pipeline review. The two most common triggers are: a Salesforce Flow that fires automatically on `Stage = Closed Lost` and feeds the postmortem into Gong's call summary field and two Salesforce custom fields, or an AE pasting their own deal into it immediately after the loss call while context is fresh.
+
+The skill also works for RevOps batch analysis at the end of a quarter. Pull all closed-lost opportunities from the last 90 days, link each to its Gong transcript IDs and activity history, and run them through the skill to get a category distribution for the QBR deck. That batch run typically takes 2-4 hours at scale, and the category breakdown is far more defensible than the SDR manager's manual tally.
+
+The skill requires at least one source — a Gong transcript from the final 30 days of the deal, closed-lost notes from the AE, or a structured loss form. At least 3 distinct datable events need to be recoverable from the combined inputs before the skill will produce analysis. Below that threshold it returns `insufficient_data` rather than guessing. That threshold is configurable in `references/1-postmortem-config.md` and can be raised to 4 or 5 for teams whose AEs log consistently.
+
+## When NOT to use
+
+Do not use this skill on active deals. The skill is built for closed outcomes; running it mid-deal produces speculative analysis that AEs misread as prescriptive coaching and use to rationalize slowing down. Use the AE rep-coaching skill for live deals.
+
+Do not use it for churned customers. This skill covers sales-cycle losses, not post-sale outcomes. The churn-analysis skill handles those.
+
+Do not use it when the only input is an AE's single closed-lost note with no call transcripts and no stage history. The skill will return `insufficient_data`. The correct response is to require the AE to log the final call or attach the Gong link before the postmortem runs — not to lower the threshold to 1. A single "budget" note from an AE is not a postmortem, and treating it like one is how you end up with a QBR slide that says "42% of losses were budget-related" based on data that is actually "42% of AEs typed 'budget' when they closed the opp."
+
+## Setup
+
+Setup takes 30-60 minutes for the skill itself. The Salesforce Flow wiring takes an additional half-day depending on your Flow and property layout.
+
+1. **Install the Skill.** Drop `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/SKILL.md` and the `references/` folder into your `.claude/skills/deal-postmortem/` directory, or upload as a Skill in claude.ai. The frontmatter `name` and `description` fields are what triggers the Skill.
+2. **Edit the loss category taxonomy.** Open `references/1-postmortem-config.md` and replace the category rows with the same picklist values your Salesforce `Loss_Reason__c` field uses. If the skill's output categories don't match Salesforce, the paste-ready block generates invalid picklist values and the writeback fails.
+3. **Set the minimum event threshold.** In the same file, set `min_timeline_events` to the floor that makes sense for your team's logging discipline. Default is 3. If your AEs log every call in Gong and every email in Salesforce, raise it to 4.
+4. **Update the Salesforce field mapping.** In `references/1-postmortem-config.md`, update the API field names in the field-mapping table to match your actual Salesforce schema. The defaults (`Loss_Reason__c`, `Competitor_Mentioned__c`, etc.) are placeholders.
+5. **Wire the input source.** In Salesforce, build a Flow that fires on `Stage = Closed Lost`, pulls the opportunity's activity history and the linked Gong call IDs, and calls Claude with the concatenated inputs. Alternatively, the AE pastes the deal manually. Both work; the Flow is better for consistency.
+6. **Wire the output destination.** The skill emits a Salesforce paste-ready block at the end of every postmortem. The Flow can parse it and write the fields back using a custom-code action. Manual AE paste also works if the fields are mapped.
+
+## What the skill actually does
+
+**Step 1 — data sufficiency check.** Before any analysis, the skill counts distinct datable events in the inputs. Fewer than the configured minimum returns `insufficient_data` immediately. This step catches the most common postmortem failure: a confident narrative built on a single note.
+
+**Step 2 — timeline reconstruction.** The skill pulls all datable events from Gong and Salesforce inputs and sorts them chronologically. Each event gets a type label (discovery call, demo, pricing discussion, stage change, competitor mention, stall signal), a source, and a one-sentence summary. Building the timeline forward — before drawing any conclusions — is the core defense against hindsight bias. Analysis that starts from the loss and works backward will always find a story; analysis that reads the timeline forward finds what was actually visible at the time.
+
+**Step 3 — loss reason classification.** The skill classifies the primary and up to two secondary loss reasons against your category taxonomy, citing the specific timeline event that supports each classification. If the AE's CRM note says "budget" but the final Gong call has a competitor named explicitly, the skill flags the conflict and promotes the citation-backed category. It does not reconcile silently. Why cite-over-infer: postmortems feed QBR category analysis. An inferred "budget" reason that was actually a competitor win inflates the budget category for a full quarter and misroutes the rep-coaching effort.
+
+**Step 4 — competitor identification.** The skill names any competitor, build-internally alternative, or status-quo alternative mentioned explicitly in the inputs. If none are present, it returns `null` — it never infers a competitor from vague language like "we're comparing options."
+
+**Step 5 — seller action review.** The highest-risk section. The skill identifies whether any specific seller action at a specific moment in the deal might have changed the outcome. Two conditions must both hold: the relevant signal was present in the deal at that time (not only visible in retrospect), and a comparable closed-won deal supports the action. If both conditions do not hold, the field is left blank and labeled `insufficient_data_for_seller_review`. This prevents the skill from generating plausible-sounding coaching that managers will cite without verifying.
+
+**Step 6 — confidence scoring.** The skill emits a confidence score from 1-5 based on input richness. Multiple Gong transcripts plus complete stage history gives a 5. A single Gong call with no CRM notes gives a 1. Managers and RevOps should treat confidence-1 and confidence-2 analyses as directional, not authoritative.
+
+## Cost reality
+
+Each postmortem run consumes roughly 2,000-5,000 input tokens (depending on transcript length and how many Salesforce notes are concatenated) and 600-1,000 output tokens. At Claude Sonnet 4.x pricing (approximately $3 per million input and $15 per million output, as of mid-2026), each postmortem costs roughly $0.02-0.04.
+
+A team running 100 closed-lost deals per month spends $2-4 per month in Claude tokens. A team running 1,000 loses per month — a mid-market sales org with 50+ AEs — spends roughly $20-40 per month. The non-token costs matter more: the Salesforce Flow build is half a day, calibrating the loss category taxonomy against your existing Salesforce data is two hours, and training AEs to link their Gong calls before closing is an ongoing ops task. Token cost is not the constraint.
+
+At quarterly batch scale (500-2,000 deals at once), prompt caching of the config and timeline template files reduces input token cost by 30-40%.
+
+## Success metric
+
+The metric to track is **loss reason accuracy rate**: sample 20 postmortems per quarter and have a RevOps analyst verify the primary loss category against the underlying evidence. If the skill's classification matches the analyst's reading in 80%+ of cases, the category data going into your QBR is credible. Below 80%, the loss taxonomy is misaligned with what your buyers actually say — go back to `references/1-postmortem-config.md` and rewrite the category descriptions.
+
+Secondary metric: **postmortem completion rate**. Before the skill, a typical org has postmortem data on 30-50% of closed-lost deals (the rest are one-line notes or blank). After wiring the Salesforce Flow trigger, completion rate should approach 90%+ for deals with at least one logged Gong call. The remaining gap is deals where no calls were logged and the AE notes are empty — the `insufficient_data` return forces those to the surface for follow-up.
+
+## vs alternatives
+
+**vs manual AE postmortem.** An AE filling a loss form manually takes 5-15 minutes per deal and produces unstructured text that requires manual review to categorize. The main advantage of manual: AEs can include context that never made it into Gong or Salesforce — a hallway conversation, a Slack message, something the buyer said off the record. The skill cannot use what was never logged. The hybrid approach works well: the skill produces the structured postmortem from logged data, and the AE has a 2-minute review step to add anything not captured. That combination gives you both the structured output and the unlogged context.
+
+**vs Gong's native deal analysis.** Gong's built-in deal analytics surfaces call trends, talk-time ratios, and conversation patterns across a deal. It does not produce a per-deal postmortem with a loss category, seller action review, or Salesforce writeback. The two tools address different needs: Gong shows patterns across many deals; this skill produces a structured artifact for a single deal. Use both — Gong for aggregate trend analysis, this skill for per-deal postmortems that flow into your CRM.
+
+## Watch-outs
+
+- **Hindsight bias on thin timelines.** With fewer than 3 logged events, any analysis is reverse-engineered from the outcome. **Guard:** the skill returns `insufficient_data` when the event count falls below `min_timeline_events`. The guard forces the ops process upstream — AEs need to log calls before closing — rather than producing thin analysis and calling it credible.
+- **Loss category inflation.** AEs under time pressure default to "budget" as the loss reason. A model that infers rather than cites will replicate this bias at scale. **Guard:** the skill only assigns a loss category when it can cite a specific timeline event. Conflicts between sources (AE note says "budget," Gong call names a competitor) are surfaced explicitly, not resolved silently.
+- **Fabricated seller counterfactuals.** Plausible-sounding coaching invented from the outcome is worse than no coaching. **Guard:** the seller action review section is left blank (`insufficient_data_for_seller_review`) when neither condition holds — the signal was not present at the time, or no comparable closed-won deal supports the action.
+- **Conflicting source accounts.** Gong transcripts and CRM notes disagree in roughly 20-30% of deals, based on typical logging gaps. **Guard:** conflicts on material points (loss reason, competitor, final outcome) are surfaced in the output as explicit conflicts rather than silently resolved, with the citation-backed version as the primary.
+
+## Reference bundle
+
+- `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/SKILL.md` — full skill definition, inputs, method, output format, and watch-outs.
+- `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/references/1-postmortem-config.md` — loss category taxonomy, minimum event threshold, and Salesforce field mapping. The main calibration file.
+- `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/references/2-timeline-reconstruction-template.md` — event types the skill recognizes and key-moment weighting. Adjust if your team tracks different signals.
+- `apps/web/public/artifacts/lost-deal-postmortem-claude-skill/references/3-sample-output.md` — literal example output for parser and Salesforce writeback wiring.
