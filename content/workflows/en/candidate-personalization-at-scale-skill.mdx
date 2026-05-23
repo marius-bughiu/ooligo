@@ -1,0 +1,102 @@
+---
+slug: candidate-personalization-at-scale-skill
+canonical_slug: candidate-personalization-at-scale-skill
+locale: en
+verticals: [recruiting]
+title: Personalize sourced-candidate outreach at scale with Claude
+artifact_type: claude-skill
+tools_used: [claude, gem]
+roles: [recruiter, sourcer]
+difficulty: intermediate
+time_to_setup: 30-60 min
+human_tested: false
+---
+
+A Claude Skill that takes a sourced candidate list — from Gem, LinkedIn Recruiter, or any CSV export — and generates a personalized subject line and 2-3 sentence opening paragraph for each candidate, grounded in real public signals from LinkedIn and GitHub rather than mail-merge placeholders. The skill applies a protected-class proxy check before generating any message, enforces a fabrication guard that refuses to use inferred signals, and returns a clean generic fallback for candidates where no qualifying signal exists, rather than inventing one. The bundle ships at `apps/web/public/artifacts/candidate-personalization-at-scale-skill/` and contains `SKILL.md`, a personalization config template, a signal hierarchy guide, and sample outputs for three confidence levels.
+
+## When to use
+
+Use this skill when your sourcing team is sending more than 20-30 outreach messages per recruiter per day and the first touch is a template that every candidate can recognize as a template. Response rates on generic sourcing messages in technical roles have declined measurably over the past 4 years as candidates received more of them — a message that references a specific public project, a named piece of work from their LinkedIn, or a recent GitHub contribution performs differently from one that does not, because it signals that the sender read something beyond "job title" and "current company."
+
+The skill is designed for outbound sourcing. It is not designed for inbound applicants (who should receive responses that reference their actual application), and it is not designed for roles where personalization based on public profile data requires legal sign-off before use.
+
+Typical invocation points:
+
+- A **Gem sequence** where the first touchpoint is personalized per-candidate before bulk enrollment. The skill runs before enrollment, not inside Gem — you generate the drafts in a batch, review them, and paste the approved versions into the sequence variables.
+- A **sourcer manual workflow** where the sourcer exports a list from LinkedIn Recruiter, runs it through the skill, reviews the drafts, edits the medium-confidence ones, and sends manually or via Gem.
+- A **script over a CSV export** that adds a "personalized_subject" and "personalized_opening" column to each row before the sourcer reviews and enrolls.
+
+## When NOT to use
+
+Do not use this skill for inbound applicants. The relevant context for an applicant is their resume and cover letter, not their public profile — sending them a message that references their GitHub misses that you have the more relevant thing already.
+
+Do not use it when the only available signal for a candidate is demographic — a name, a photo, a school that functions as a demographic proxy. The skill has a hard gate for this. Do not lower the threshold or modify the prompt to override it. Using school affiliation or community membership as a selective personalization hook is disparate treatment in most hiring jurisdictions regardless of intent.
+
+Do not use it above 500 candidates in a single unsupervised batch run. At that volume, a fabrication error or a mismatched signal that would be caught in review ships to hundreds of candidates before anyone sees it. Build in a sample-review step at minimum.
+
+Do not use it for roles where your compliance team restricts the use of public profile data in hiring communications (certain defense, financial, or regulated contexts). Check with legal before deploying.
+
+## Setup
+
+Setup takes 30-60 minutes to configure the skill and calibrate the protected-class proxy list. The sequence wiring depends on how you use Gem.
+
+1. **Install the Skill.** Drop `apps/web/public/artifacts/candidate-personalization-at-scale-skill/SKILL.md` and the `references/` folder into `.claude/skills/candidate-personalization/` or upload as a Skill in claude.ai.
+2. **Edit the personalization config.** Open `references/1-personalization-config.md` and update the tone register to match your employer brand, set the `opening_paragraph_max_chars` to fit your sequence tool's field length, and edit the fallback template to match your standard opening.
+3. **Review the protected-class proxy list.** The default list in `references/1-personalization-config.md` covers photo URL, inferred gender, name-derived ethnicity signals, and schools used as demographic proxies. Have your legal or HR team review and extend this list before first use. This is not optional.
+4. **Adjust the signal hierarchy.** Open `references/2-signal-hierarchy.md` and check the role-family adjustments. If you primarily source engineering roles, the defaults work. If you source design or legal roles, adjust which signal tiers rank highest.
+5. **Set up the input format.** The skill expects a candidate object with `name`, `current_title`, `current_company`, and `linkedin_url` as the minimum. Optionally add `github_handle` for technical roles. Map your CSV export columns to these fields — most LinkedIn Recruiter exports map directly.
+6. **Build the review step.** Configure your workflow so medium-confidence and low-confidence drafts require recruiter edit before sequence enrollment. The skill marks these with `Recruiter action required before send` — wire that flag to a hold state in your process.
+
+## What the skill actually does
+
+**Step 1 — protected-class proxy check.** Before generating any message, the skill checks each candidate's input fields against the protected-class proxy list in `references/1-personalization-config.md`. If the only available signals are on the proxy list — photo URL, inferred gender, name-derived ethnicity signals, schools used as demographic proxies — the skill returns the generic fallback without attempting personalization. This is a hard gate, not a soft warning. The check runs on every candidate, including those where a qualifying non-proxy signal also exists.
+
+Why a hard gate rather than a warning: a warning relies on the recruiter making the right call under queue pressure. A hard gate removes the decision from the workflow entirely. If you have a documented affirmative recruitment program that intentionally uses school affiliation (an HBCU partnership, for example), configure that explicitly in the config file with the legal basis documented — the gate is configurable for intentional programs, not overrideable for convenience.
+
+**Step 2 — signal extraction.** The skill evaluates available signals in the priority order defined in `references/2-signal-hierarchy.md`: recruiter notes first, then GitHub public repos, then LinkedIn role bullets, then headline and summary. It extracts the top 1-2 signals that are (a) specific enough that the candidate would recognize themselves from it — not just their job title and company — and (b) relevant to the target role's JD. A Redis library with 1,200 stars is a signal. "Senior engineer at Acme" is not, because every recruiter can see it and it does not demonstrate any reading of the candidate's actual work.
+
+If no signal meets the minimum specificity threshold, the skill immediately returns the generic fallback rather than lowering the bar to include non-specific signals. Non-specific "personalization" is worse than none — it reads as flattery that missed the point, which is precisely what the candidate has been trained to recognize.
+
+**Step 3 — JD relevance filter.** For each extracted signal, the skill assesses whether it is relevant to the target role's JD. A Python background is a signal; for a design lead role it is not a relevant personalization hook. Irrelevant signals are dropped even if they are specific. Why: referencing something you clearly researched but that has nothing to do with the role signals either that the recruiter did not understand what the role needs, or that the personalization is algorithmic and the relevance check was skipped.
+
+**Step 4 — fabrication guard.** Before drafting, the skill verifies that each signal used can be traced to a specific field in the input data. Inferred signals — "you seem to care about distributed systems" derived from vague role titles — are not used. This is the highest-risk step in personalization at scale. An inferred signal that reads as specific but is wrong causes the candidate to distrust the sender immediately. At scale, a fabrication rate of even 5% means dozens of candidates per week receiving outreach that references something they never did.
+
+**Step 5 — draft generation.** The skill writes a subject line and 2-3 sentence opening paragraph. The subject line references the specific signal rather than the role title. The opening paragraph names the signal in sentence one, connects it to the role in sentence two, and states a clear ask in sentence three. No sell copy in the first touchpoint — the ask is a 20-25 minute conversation, not a feature pitch.
+
+**Step 6 — confidence scoring.** Each draft is tagged high, medium, or low confidence. High: specific, JD-relevant, GitHub-level or recruiter-note signal. Medium: LinkedIn-level signal, specific but less verifiable. Low: fallback used, no qualifying signal. Medium and low confidence outputs require recruiter review before send.
+
+## Cost reality
+
+Per-candidate token cost depends on profile length and whether GitHub data is included, but for a standard candidate row (name, title, company, LinkedIn headline, one or two role bullets) and a JD, expect roughly 800-1,500 input tokens and 200-400 output tokens per candidate. At Claude Sonnet 4.x pricing (approximately $3 per million input and $15 per million output, as of mid-2026), each personalized message costs roughly $0.005-0.01.
+
+A sourcer running 100 candidates per day spends roughly $0.50-$1.00 per day in Claude tokens. A team of 5 sourcers running 200 candidates per day each spends roughly $5-10 per day — around $100-200 per month. At that volume, batching reduces token cost; the more material cost is the recruiter time to review medium-confidence drafts, typically 30-60 seconds per candidate.
+
+Prompt caching of the JD (which is identical across all candidates in a batch) reduces input token cost by 30-50% on batch runs. If you are running the same JD across 200 candidates, include the JD once as a cached prefix rather than appending it to each individual prompt.
+
+## Success metric
+
+The metric to track is **response rate by confidence tier**. High-confidence personalized messages should produce a noticeably higher response rate than medium-confidence and generic fallback messages from the same batch. If all three confidence tiers produce similar response rates, either the signals are not actually specific enough (re-examine the minimum specificity threshold) or the personalization is not being received as genuine by candidates (the message structure needs editing).
+
+Secondary metric: **fabrication catch rate in recruiter review**. During the first month, have sourcers flag every draft where the signal cited is inaccurate or cannot be verified. If the flag rate is above 5%, the fabrication guard threshold in `references/1-personalization-config.md` needs to be tightened.
+
+## vs alternatives
+
+**vs manual personalization.** A skilled recruiter writing personalized messages manually produces better output than this skill — they pick up nuance, context, and tone signals the skill cannot. The skill is not better than a recruiter who has time to write manually; it is better than a recruiter who does not have that time, which is most sourcers running 50-100 outreach messages per day. The right use is to generate a draft that the recruiter edits in 30 seconds, not to replace the recruiter's judgment entirely.
+
+**vs LinkedIn Recruiter InMail templates.** LinkedIn's built-in InMail has template variables (first name, company, title) but no signal extraction. Response rates on InMail templates are lower than on messages that reference specific work, and the gap is most pronounced for senior technical candidates who receive many templated InMails. This skill does not replace InMail as the delivery channel — it replaces the generic template with a draft that reads as written by a person who looked at the profile.
+
+**vs Clay AI columns for personalization.** Clay's AI column approach for outreach personalization is similar in principle — it uses AI to generate personalized copy from enrichment data. The difference is in guard depth: Clay's approach gives the model enrichment data and a prompt; this skill has an explicit fabrication guard, a protected-class proxy check, and a confidence-tiered review workflow. For teams that have already built a Clay personalization workflow, this skill is an alternative if your compliance team requires documented guards. For teams starting fresh, Clay is also a viable path if you layer the same guards externally.
+
+## Watch-outs
+
+- **Fabricated personalization details.** An inferred signal that sounds specific but is wrong — "I noticed you've been leading the microservices migration at Acme" when this was inferred from a title change — breaks trust with the candidate immediately and damages the recruiter's credibility. **Guard:** the skill only uses signals traced to explicit input fields and labels the signal source in every output. Recruiters review the `Signal source` line before sending. Inferred signals are blocked, not warned about.
+- **Protected-class proxy exposure.** A personalization hook referencing an HBCU, a women-in-tech community, or a nationality-coded program constitutes selective disparate treatment in most hiring jurisdictions. **Guard:** the skill's protected-class proxy list is a hard gate checked before any personalization is generated. The list is in `references/1-personalization-config.md` and should be reviewed annually by legal or HR. Do not remove items without legal sign-off.
+- **Generic fallback shipping unedited.** A low-confidence draft contains placeholder text ("[Recruiter: edit before send]") that occasionally ships verbatim when queue pressure is high. **Guard:** low and medium confidence outputs are flagged with `Recruiter action required before send` in the output header. Build a hold state into your sequence enrollment workflow that blocks sending for flagged drafts without a recorded human edit.
+- **Signal staleness.** A GitHub repo active 3 years ago is not evidence of current work. A LinkedIn role that ended 18 months ago is not a current-context signal. **Guard:** the skill applies a 24-month recency filter by default, configurable in `references/1-personalization-config.md`. Signals outside the window are excluded unless the candidate's recent activity references them.
+
+## Reference bundle
+
+- `apps/web/public/artifacts/candidate-personalization-at-scale-skill/SKILL.md` — full skill definition, inputs, method, output format, and watch-outs.
+- `apps/web/public/artifacts/candidate-personalization-at-scale-skill/references/1-personalization-config.md` — tone register, message length cap, fallback template, fabrication guard thresholds, protected-class proxy field list. The main calibration file. Review with legal before first use.
+- `apps/web/public/artifacts/candidate-personalization-at-scale-skill/references/2-signal-hierarchy.md` — signal priority order, minimum specificity per tier, role-family adjustments. Edit if you source primarily non-engineering roles.
+- `apps/web/public/artifacts/candidate-personalization-at-scale-skill/references/3-sample-outputs.md` — three literal examples: high confidence (GitHub signal), medium confidence (LinkedIn bullet), low confidence (generic fallback). Use for recruiter calibration and sequence enrollment wiring.
