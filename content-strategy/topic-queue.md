@@ -43,32 +43,32 @@ Format per item:
 
 ## Comparisons
 
-- [type:comparison] [vertical:revops] pairwise: clari-vs-aviso — forecasting and revenue intelligence; routing rule resolves on whether the buyer wants RevDB depth (Clari) vs guided AI forecast scenarios (Aviso)
-- [type:comparison] [vertical:revops] pairwise: clari-vs-boostup — forecasting; routes on roll-up rigor and CRM-data hygiene posture vs lighter mid-market adoption
-- [type:comparison] [vertical:revops] pairwise: gainsight-vs-churnzero — CS platforms; routes on enterprise CS-Ops depth vs mid-market time-to-value
-- [type:comparison] [vertical:revops] pairwise: gainsight-vs-vitally — CS platforms; routes on configurability and PX bundle vs Notion-native modern UX
-- [type:comparison] [vertical:revops] pairwise: catalyst-vs-vitally — CS platforms; routes on workflow-customization needs vs modern collaboration surface
-- [type:comparison] [vertical:revops] pairwise: amplemarket-vs-apollo — outbound platform with data; routes on AI sequencing depth vs data-pricing leverage
-- [type:comparison] [vertical:revops] pairwise: lavender-vs-regie-ai — AI for outbound copy; routes on rep-side coaching vs full-sequence generation
-- [type:comparison] [vertical:revops] pairwise: lusha-vs-cognism — B2B contact data; routes on EU-coverage / GDPR posture vs broader-but-shallower US data
-- [type:comparison] [vertical:revops] pairwise: sales-navigator-vs-zoominfo — prospect-discovery surface; routes on LinkedIn-graph freshness vs structured firmographic depth
-- [type:comparison] [vertical:recruiting] pairwise: icims-vs-greenhouse — enterprise ATS; routes on enterprise compliance + complex req workflows vs structured-hiring philosophy
-- [type:comparison] [vertical:recruiting] pairwise: smartrecruiters-vs-greenhouse — enterprise ATS; routes on global hiring + CRM bundle vs purist ATS with strong integrations
-- [type:comparison] [vertical:recruiting] pairwise: avature-vs-beamery — talent CRM at enterprise; routes on configurability/complex enterprise vs AI-first talent intelligence
-- [type:comparison] [vertical:recruiting] pairwise: phenom-vs-beamery — talent experience / CRM; routes on candidate-side CX automation vs sourcer-side intelligence
-- [type:comparison] [vertical:recruiting] pairwise: hackerrank-vs-codesignal — technical assessment; routes on bulk-screening cost-per-candidate vs proctored / role-based standardization
-- [type:comparison] [vertical:recruiting] pairwise: testgorilla-vs-hackerrank — skills assessments; routes on broad skills library + SMB pricing vs developer-only depth
-- [type:comparison] [vertical:recruiting] pairwise: vervoe-vs-testgorilla — skills assessments; routes on simulation-based scoring vs validated question library
-- [type:comparison] [vertical:recruiting] pairwise: holly-vs-hireez — AI sourcing; routes on conversational AI-agent sourcing vs structured search + diversity insights
-- [type:comparison] [vertical:recruiting] pairwise: modernloop-vs-goodtime — interview scheduling at scale; routes on workflow flexibility vs CS-grade reliability and reporting
-- [type:comparison] [vertical:recruiting] pairwise: bullhorn-vs-loxo — recruiting CRM (staffing); routes on enterprise staffing-firm workflows vs modern UX + built-in sourcing
-- [type:comparison] [vertical:legal-ops] pairwise: harvey-vs-thomson-reuters-cocounsel — legal AI for in-house and BigLaw; routes on workflow-suite breadth vs Westlaw-grounded answer fidelity
-- [type:comparison] [vertical:legal-ops] pairwise: lexisnexis-protege-vs-thomson-reuters-cocounsel — legal AI assistants; routes on Lexis-grounded research depth vs Westlaw + Practical-Law workflow integration
-- [type:comparison] [vertical:legal-ops] pairwise: ironclad-vs-docusign-iam — CLM vs agreement intelligence; routes on full-lifecycle workflow vs signature-anchored agreement data
-- [type:comparison] [vertical:legal-ops] pairwise: pandadoc-vs-concord — SMB CLM / proposals; routes on sales-doc + e-sig motion vs lightweight CLM repository
-- [type:comparison] [vertical:legal-ops] pairwise: spellbook-vs-draftwise — AI drafting assistants in Word; routes on broad drafting/redline coverage vs precedent-grounded clause retrieval
-- [type:comparison] [vertical:legal-ops] pairwise: reveal-vs-relativity — ediscovery platforms; routes on AI-native review (Reveal-Brainspace) vs Relativity ecosystem and partner depth
-- [type:comparison] [vertical:revops] pairwise: 11x-vs-artisan — AI SDR head-to-head; routes on multi-agent suite (Alice/Jordan/Mike) vs single-rep Ava with email focus
+- [type:comparison] [vertical:revops] pairwise: clari-vs-aviso — forecasting and revenue intelligence; routing rule resolves on whether the buyer wants RevDB depth (Clari) vs guided AI forecast scenarios (Aviso) → slug: clari-vs-aviso
+- [type:comparison] [vertical:revops] pairwise: clari-vs-boostup — forecasting; routes on roll-up rigor and CRM-data hygiene posture vs lighter mid-market adoption → slug: clari-vs-boostup
+- [type:comparison] [vertical:revops] pairwise: gainsight-vs-churnzero — CS platforms; routes on enterprise CS-Ops depth vs mid-market time-to-value → slug: gainsight-vs-churnzero
+- [type:comparison] [vertical:revops] pairwise: gainsight-vs-vitally — CS platforms; routes on configurability and PX bundle vs Notion-native modern UX → slug: gainsight-vs-vitally
+- [type:comparison] [vertical:revops] pairwise: catalyst-vs-vitally — CS platforms; routes on workflow-customization needs vs modern collaboration surface → slug: catalyst-vs-vitally
+- [type:comparison] [vertical:revops] pairwise: amplemarket-vs-apollo — outbound platform with data; routes on AI sequencing depth vs data-pricing leverage → slug: amplemarket-vs-apollo
+- [type:comparison] [vertical:revops] pairwise: lavender-vs-regie-ai — AI for outbound copy; routes on rep-side coaching vs full-sequence generation → slug: lavender-vs-regie-ai
+- [type:comparison] [vertical:revops] pairwise: lusha-vs-cognism — B2B contact data; routes on EU-coverage / GDPR posture vs broader-but-shallower US data → slug: lusha-vs-cognism
+- [type:comparison] [vertical:revops] pairwise: sales-navigator-vs-zoominfo — prospect-discovery surface; routes on LinkedIn-graph freshness vs structured firmographic depth → slug: sales-navigator-vs-zoominfo
+- [type:comparison] [vertical:recruiting] pairwise: icims-vs-greenhouse — enterprise ATS; routes on enterprise compliance + complex req workflows vs structured-hiring philosophy → slug: icims-vs-greenhouse
+- [type:comparison] [vertical:recruiting] pairwise: smartrecruiters-vs-greenhouse — enterprise ATS; routes on global hiring + CRM bundle vs purist ATS with strong integrations → slug: smartrecruiters-vs-greenhouse
+- [type:comparison] [vertical:recruiting] pairwise: avature-vs-beamery — talent CRM at enterprise; routes on configurability/complex enterprise vs AI-first talent intelligence → slug: avature-vs-beamery
+- [type:comparison] [vertical:recruiting] pairwise: phenom-vs-beamery — talent experience / CRM; routes on candidate-side CX automation vs sourcer-side intelligence → slug: phenom-vs-beamery
+- [type:comparison] [vertical:recruiting] pairwise: hackerrank-vs-codesignal — technical assessment; routes on bulk-screening cost-per-candidate vs proctored / role-based standardization → slug: hackerrank-vs-codesignal
+- [type:comparison] [vertical:recruiting] pairwise: testgorilla-vs-hackerrank — skills assessments; routes on broad skills library + SMB pricing vs developer-only depth → slug: testgorilla-vs-hackerrank
+- [type:comparison] [vertical:recruiting] pairwise: vervoe-vs-testgorilla — skills assessments; routes on simulation-based scoring vs validated question library → slug: vervoe-vs-testgorilla
+- [type:comparison] [vertical:recruiting] pairwise: holly-vs-hireez — AI sourcing; routes on conversational AI-agent sourcing vs structured search + diversity insights → slug: holly-vs-hireez
+- [type:comparison] [vertical:recruiting] pairwise: modernloop-vs-goodtime — interview scheduling at scale; routes on workflow flexibility vs CS-grade reliability and reporting → slug: modernloop-vs-goodtime
+- [type:comparison] [vertical:recruiting] pairwise: bullhorn-vs-loxo — recruiting CRM (staffing); routes on enterprise staffing-firm workflows vs modern UX + built-in sourcing → slug: bullhorn-vs-loxo
+- [type:comparison] [vertical:legal-ops] pairwise: harvey-vs-thomson-reuters-cocounsel — legal AI for in-house and BigLaw; routes on workflow-suite breadth vs Westlaw-grounded answer fidelity → slug: harvey-vs-thomson-reuters-cocounsel
+- [type:comparison] [vertical:legal-ops] pairwise: lexisnexis-protege-vs-thomson-reuters-cocounsel — legal AI assistants; routes on Lexis-grounded research depth vs Westlaw + Practical-Law workflow integration → slug: lexisnexis-protege-vs-thomson-reuters-cocounsel
+- [type:comparison] [vertical:legal-ops] pairwise: ironclad-vs-docusign-iam — CLM vs agreement intelligence; routes on full-lifecycle workflow vs signature-anchored agreement data → slug: ironclad-vs-docusign-iam
+- [type:comparison] [vertical:legal-ops] pairwise: pandadoc-vs-concord — SMB CLM / proposals; routes on sales-doc + e-sig motion vs lightweight CLM repository → slug: pandadoc-vs-concord
+- [type:comparison] [vertical:legal-ops] pairwise: spellbook-vs-draftwise — AI drafting assistants in Word; routes on broad drafting/redline coverage vs precedent-grounded clause retrieval → slug: spellbook-vs-draftwise
+- [type:comparison] [vertical:legal-ops] pairwise: reveal-vs-relativity — ediscovery platforms; routes on AI-native review (Reveal-Brainspace) vs Relativity ecosystem and partner depth → slug: reveal-vs-relativity
+- [type:comparison] [vertical:revops] pairwise: 11x-vs-artisan — AI SDR head-to-head; routes on multi-agent suite (Alice/Jordan/Mike) vs single-rep Ava with email focus → slug: 11x-vs-artisan
 
 ## Workflows
 
