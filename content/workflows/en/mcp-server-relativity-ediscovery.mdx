@@ -1,0 +1,97 @@
+---
+slug: mcp-server-relativity-ediscovery
+canonical_slug: mcp-server-relativity-ediscovery
+locale: en
+verticals: [legal-ops]
+title: "Triage Relativity review-set metadata from Claude via MCP"
+artifact_type: mcp-server
+tools_used: [relativity, claude]
+roles: [legal-ops-manager]
+difficulty: advanced
+time_to_setup: "2-4 hours"
+human_tested: false
+---
+
+A Model Context Protocol (MCP) server that surfaces [Relativity](/en/tools/relativity/) workspace, review-set, and saved-search metadata as tools inside a [Claude](/en/tools/claude/) conversation. Legal-ops managers and e-discovery engineers can ask Claude to list active workspaces, pull review-set document counts, or summarize a saved-search definition — without opening the Relativity UI or writing a custom query. The scaffold is at `apps/web/public/artifacts/mcp-server-relativity-ediscovery/` and is read-only by design: no documents are retrieved, no coding decisions are surfaced per document, and no write operations are registered.
+
+## When to use
+
+Reach for this when your team runs Relativity — either RelativityOne cloud or on-prem Relativity Server — and you can name three or more recurring operational questions that require navigating through the Relativity UI several times a week. Typical examples: "How many documents are in the Alpha matter review set and what percentage has been reviewed?", "Which workspaces are currently active and what are their document counts?", "Show me the saved searches in the Bravo matter workspace and who owns them." Those questions are operational navigation; none of them require reading a single document or seeing a single coding decision. They are exactly the shape of work that compresses well into a Claude-tool conversation.
+
+The economic argument is concrete. An e-discovery team managing 8–12 active matters concurrently spends a meaningful fraction of each week pulling status numbers from Relativity — opening workspace dashboards, switching between matter views, checking review-set progress, confirming saved-search definitions for upcoming productions. A reasonable floor estimate (based on the structure of the task, not a tracked study) is 45 minutes per day for a full-time legal-ops manager at this scale. Compressing those lookups to 30-second Claude conversations puts the navigational overhead at under 5 minutes per day. The recovered time goes toward substantive coordination work: communicating review progress to outside counsel, adjusting review-set assignments, and preparing production schedules.
+
+This server is also useful for project onboarding. When a new member joins a matter team, asking Claude to list the workspace's saved searches and review sets is faster than scheduling a walkthrough in Relativity's UI. The metadata portrait of a matter — how many workspaces, what review sets exist, what the key saved searches are — becomes immediately accessible in a Claude conversation.
+
+## When NOT to use
+
+Skip this if your matter count is low — fewer than roughly four active matters at once — or if your team's operational metadata queries run fewer than about fifteen per week. The setup cost covers: credential provisioning with your Relativity administrator, a privilege-posture review with in-house counsel, a security review of the service-account blast radius, and the sandbox-to-production validation cycle described in the sanity-check step. That cost does not pay back at low query volume. Use the Relativity UI directly; revisit when matter count or query frequency grows.
+
+Skip this if your deployment is governed by a protective order that restricts how case data may be transmitted or processed. Relativity workspace names, matter assignments, and review-set names can themselves be subject to confidentiality obligations. Before sending any of that metadata through a Claude session, confirm with counsel that the deployment is consistent with applicable protective orders and any data-handling protocols your firm or client has adopted.
+
+Skip this if your Relativity instance is on a version older than Relativity Server 2022 or if your tenant has not validated the REST API base paths. The scaffold targets the REST API conventions documented for RelativityOne (2024–2025); older on-prem paths diverge. Running against an unvalidated base path produces 404s or malformed responses that appear inside Claude as "no data found" — exactly the failure mode that erodes trust in MCP-mediated legal tooling. Confirm the paths with your Relativity administrator before first use.
+
+Skip this if you do not yet have an AI policy covering Claude access to e-discovery metadata. The policy should address: which matters are in scope, who may query via MCP, and how Claude sessions are logged. Stand the policy up first.
+
+## Setup
+
+Full setup is documented in `apps/web/public/artifacts/mcp-server-relativity-ediscovery/README.md`. Summary:
+
+1. Clone the bundle into a private repository. Run `pip install -e .` inside a Python 3.11+ virtual environment.
+2. Provision credentials. For production use, create an OAuth2 client in Relativity (Home → Authentication → OAuth2 Client Manager → New; Flow Grant Type: Client Credentials; Context User: a service account). Copy the client ID and client secret. For development-only use, Basic auth (username/password) is supported but not recommended for shared environments.
+3. Set environment variables: `RELATIVITY_HOST` (your tenant URL, e.g. `https://your-tenant.relativity.one`), `RELATIVITY_AUTH_MODE` (`oauth2` or `basic`), and the corresponding credential variables.
+4. Register with Claude Desktop via the JSON snippet in the README. The server registers five tools under `relativity-ediscovery`.
+5. Run the sanity check: ask Claude to list your workspaces. Confirm you receive workspace names and ArtifactIDs with no document text. Ask for saved searches in a specific workspace. Confirm the response contains search names and owners only. If any document content appears, stop and investigate before expanding access.
+
+The service account must have read access to the intended workspaces. Provision it at the narrowest scope your deployment needs — not instance-admin.
+
+## What it does
+
+The scaffold registers five tools, all read-only:
+
+**`list_workspaces`** — calls the Workspace Manager REST endpoint (`GET /Relativity.Rest/api/relativity-environment/v1/workspace/`) and returns a paginated list of accessible workspaces with names, ArtifactIDs, statuses, and matter associations. The ArtifactID is the key used in all subsequent tool calls to scope queries to a specific workspace.
+
+**`get_workspace_summary`** — calls the Workspace Manager summary helper (`/summary`) for a single workspace and returns document count and total file size. The engineering choice here is to surface the summary endpoint rather than the full workspace read: the summary endpoint returns the two numbers legal-ops managers ask for most often, without returning workspace configuration fields that are irrelevant to operational status queries.
+
+**`get_review_set_metadata`** — queries the Object Manager (`POST /Relativity.Rest/api/Relativity.ObjectManager/v1/workspace/{id}/object/read`) for a specific review set object. Review Sets in Relativity are Relativity Dynamic Objects (RDOs) whose ArtifactTypeID is assigned when the Review application is installed and is not fixed across instances (unlike Documents, which are always type 10). The scaffold resolves the ArtifactTypeID by querying the object type registry at first call, then caches it for the session. The tool returns review-set-level metadata — name, status, total document count, reviewed document count, reviewer assignments — and explicitly does not surface per-document coding values. The response includes a `_note` field reminding Claude that per-document coding data is intentionally absent.
+
+**`get_saved_search_summary`** — calls the Keyword Search Manager (`POST /Relativity.Rest/api/Relativity.Services.Search.ISearchModule/Keyword Search Manager/ReadSingleAsync`) to return the saved-search definition DTO: name, conditions, field list, and owner. The conditions are returned to the Claude session so attorneys can confirm what a saved search actually searches for — a common operational need before relying on a search for a production batch. The conditions are never written to logs (the `log_invocation()` helper in `server.py` omits them) because a saved search's conditions can reveal legal review strategy.
+
+**`list_saved_searches`** — calls the Keyword Search Manager's query endpoint to return a paginated list of saved searches in a workspace. The response is slimmed to names, ArtifactIDs, owners, and modification dates only; conditions are not included in the list response (only in the individual `get_saved_search_summary` call, so the attorney explicitly requests them).
+
+The dispatch in `src/relativity_ediscovery_mcp/server.py` contains zero write operations. There is no `create_*`, `update_*`, `delete_*`, `code_document`, or production-trigger path. Adding one requires an explicit code change.
+
+## Cost reality
+
+Three line items, all real:
+
+**Claude subscription.** Claude Desktop or Claude Code with MCP enabled. Pro at $20/user/month or Team at $25–30/user/month covers most legal-ops team setups. A team running 200 operational-metadata queries per week across 10 active matters stays within those tiers comfortably; very high-volume deployments (hourly automated matter-status reports, for example) may justify Max.
+
+**Server hosting.** Self-hosted Python process. Run it locally per user for development. For shared team use, a small internal VM (1 vCPU / 1 GB RAM is sufficient for under 200 calls per day) behind your firm's VPN runs at roughly $5–15/month on a hyperscaler, or at zero incremental cost if you have existing internal infrastructure.
+
+**Relativity REST API quota.** Relativity rate-limits REST clients per tenant, with limits that vary by instance version and subscription tier. A team running 200 queries per week at the pattern this server generates (single-object reads, not bulk document exports) stays well inside default quotas. An automation that polls all workspaces every hour across a large instance will hit rate limits; the TODO list in the README flags exponential-backoff retries as a pre-production task.
+
+The unbudgeted line item is counsel and administrator time. Plan for one to three hours of in-house counsel review of the privilege posture before any production deployment, one to two hours with your Relativity administrator to validate API paths and provision the service account at the right scope, and a recurring quarterly check as Relativity ships updates that may change the API surface.
+
+## Failure modes
+
+**Authentication token expiration during a long session.** The scaffold fetches an OAuth2 token once at startup. Tokens expire in approximately one hour. If a Claude session runs longer than an hour and the token expires mid-conversation, subsequent tool calls return 401 errors that surface in the Claude conversation as "Relativity returned an error." Guard: TODO #2 in the README flags OAuth2 token refresh as a required task before production use. Until then, treat this as a development-only posture for sessions under one hour.
+
+**ArtifactTypeID resolution failure for review sets.** Review Sets are RDOs whose ArtifactTypeID is not fixed; the scaffold resolves it by querying the object type registry by name on first call. If the Review application is not installed in the target workspace, or if the object type name differs from "Review Set" in your tenant's configuration, the lookup fails with a descriptive error. Guard: the `resolve_review_set_artifact_type_id()` function in `server.py` raises a clear error message naming the object type it searched for, so the failure is diagnosable. Validate the object type name with your Relativity administrator before production deployment.
+
+**Workspace name or matter name disclosure under a protective order.** Relativity workspace names typically include matter names. Sending those through a Claude session may implicate confidentiality obligations if the matter is governed by a protective order that restricts transmission of case metadata. Guard: before deploying on any active matter, confirm with counsel that the deployment is consistent with applicable protective orders. This is the one failure mode with no technical guard — it requires a legal review step. The README states this explicitly in the security model section.
+
+**Saved-search condition logging.** A naive instrumentation of the server would log query parameters including search conditions, which could create a discoverable record of review strategy. Guard: the `log_invocation()` helper in `server.py` accepts only tool name and result count; the search condition string is never passed to the logger. Restoring condition logging requires a code change reviewed against the privilege policy.
+
+**Response field names diverge from your Relativity version.** The field names in `get_review_set_metadata` (`"Total Documents"`, `"Reviewed Documents"`, `"Reviewers"`) follow common RelativityOne field naming conventions, but they are customizable and your tenant may use different names. If the tool returns empty field values, the field names are wrong for your tenant. Guard: validate field names against your Relativity administrator's field configuration before relying on the tool's output.
+
+## Versus the alternatives
+
+**Relativity's native dashboards and widgets.** Relativity ships matter-status dashboards inside each workspace. Pick those if the answer stays inside Relativity and the person asking has a Relativity login. Pick this MCP server when the answer needs to land in a Claude conversation that also spans email context, matter-management notes, outside-counsel communications, or other tools in your legal-ops stack — that is, when the value is Claude's reasoning across multiple sources, not just Relativity navigation.
+
+**Custom reporting via the Relativity REST API directly.** Any engineer can write a Python script that polls Relativity's REST API and emails or Slacks a status report. That approach is fine for scheduled reporting at fixed formats. Pick the MCP server when the queries are ad hoc — when the attorney doesn't know in advance what they'll need to ask, or when the question emerges from a conversation rather than a fixed reporting template. The MCP approach handles query variability; a fixed script does not.
+
+**Status quo: attorneys and legal-ops staff navigate the Relativity UI.** This is the honest baseline. The MCP server wins only when matter count and query frequency are high enough to amortize the setup cost. Below roughly four active matters and fifteen operational queries per week, the status quo is faster and carries fewer risks.
+
+## Stack
+
+Self-hosted Python MCP server (official `mcp` SDK, `httpx`, `pydantic`) speaking to the Relativity REST API on the backend; [Claude](/en/tools/claude/) Desktop or Code on the front end. The `server.py` source is at `apps/web/public/artifacts/mcp-server-relativity-ediscovery/src/relativity_ediscovery_mcp/server.py`. The full bundle with install instructions, environment variable reference, registration JSON, and the numbered TODO list for production readiness is at `apps/web/public/artifacts/mcp-server-relativity-ediscovery/README.md`.
