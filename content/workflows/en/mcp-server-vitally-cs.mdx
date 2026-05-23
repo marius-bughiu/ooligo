@@ -1,0 +1,102 @@
+---
+slug: mcp-server-vitally-cs
+canonical_slug: mcp-server-vitally-cs
+locale: en
+verticals: [revops]
+title: Pull Vitally account health into Claude via MCP for CS conversations
+artifact_type: mcp-server
+tools_used: [vitally, claude]
+roles: [csm]
+difficulty: advanced
+time_to_setup: 1-2 hours
+human_tested: false
+---
+
+A Model Context Protocol server that gives Claude read access to Vitally account health scores, health component breakdowns, and conversation history. Register it once in Claude Desktop or Claude Code, and any CSM on your team can ask "what's the health score for Acme Corp and why is it red?" or "show me the last five conversations for this account before my renewal call" — and get a structured answer pulled from Vitally in real time, without opening a second tab.
+
+The complete scaffold lives in the artifact bundle at `apps/web/public/artifacts/mcp-server-vitally-cs/`, which ships a `README.md`, `pyproject.toml`, `src/vitally_cs_mcp/__init__.py`, and `src/vitally_cs_mcp/server.py`.
+
+## When to use this
+
+This MCP server pays off when your CS team's workflow involves a recurring pattern: pulling Vitally context before a call, writing a renewal prep doc, triaging the at-risk queue, or building a QBR slide with health data. The pattern works well across two CSM archetypes.
+
+The CSM who manages a book of 80-120 SMB accounts and currently clicks through Vitally's account list every Monday to find who slipped into the red last week. With this server, they can ask Claude "list my at-risk accounts below 40" and get a ranked list in under five seconds, then ask follow-up questions about any account's health component breakdown without navigating multiple Vitally screens.
+
+The enterprise CSM who spends twenty minutes before each EBR digging through Vitally for conversation history, health trends, and the last note a colleague left. With this server, they describe the account to Claude and get a single response with health score, component breakdown, and recent conversation subjects — ready to paste into the prep doc.
+
+It is also the right pattern if your CS team is already using Claude for other work (writing follow-up emails, summarizing call notes, drafting success plans) and you want to connect the conversational surface they already live in to the CS data they need. The MCP server adds Vitally context without changing how they use Claude.
+
+## When NOT to use this
+
+Skip it if any of the following are true:
+
+- **You need to write data back to Vitally.** This scaffold is deliberately read-only. If your workflow requires creating notes, updating traits, or logging conversations from Claude, you need to extend the server with write tools — and pair them with an audit pattern similar to the Salesforce scaffold at `apps/web/public/artifacts/mcp-server-salesforce-revops/`. Do not attempt writes by modifying this scaffold without adding that audit layer.
+- **Your book of business exceeds 100 accounts and you need a full at-risk view.** The `list_at_risk_accounts` tool fetches one page of accounts (up to 100, per Vitally's API cap) and filters locally. Orgs with more than 100 active accounts will get a partial view until cursor pagination is implemented (README TODO #2). For larger books, export a Vitally CSV segment and feed it to Claude directly rather than relying on this server for triage.
+- **Vitally is not your system of record for health.** Some CS teams maintain health scores in Gainsight, ChurnZero, or a homegrown spreadsheet model and push a summary metric into Vitally. If the authoritative health data lives elsewhere, Claude will be reading a derived or stale copy. Point the MCP server at the actual source.
+- **Your data policy prohibits account data from entering a third-party LLM.** Account names, health scores, conversation subjects, and message bodies pass through Claude's context window. If your contracts with enterprise customers restrict AI processing of their data, confirm the legal position before enabling this.
+- **Your CS team has fewer than five active accounts.** Setup takes one to two hours; the ongoing-token cost is real. At very low account counts, opening Vitally directly is faster.
+
+## Setup
+
+The bundle's `README.md` is the definitive reference; the steps below are the orientation. Expect about one hour if your Vitally API key is already available, up to two hours if you are setting up a dedicated service account.
+
+1. **Install the package.** From the bundle root: `python -m venv .venv`, activate, `pip install -e .`. Dependencies are `mcp>=1.2.0`, `httpx>=0.27.0`, and `pydantic>=2.6.0` — no Vitally-specific SDK, just plain HTTP calls.
+2. **Get a Vitally API key.** In Vitally: **Settings → Integrations → API**. Generate a key from a dedicated integration user (not your personal admin account). Vitally uses HTTP Basic Auth — the server handles encoding; you supply the raw key as `VITALLY_API_KEY`.
+3. **Find your subdomain.** If your workspace URL is `acme.vitally.io`, your subdomain is `acme`. EU tenants set `VITALLY_BASE_URL=https://rest.vitally-eu.io` instead.
+4. **Set env vars.** `VITALLY_API_KEY`, `VITALLY_SUBDOMAIN` (or `VITALLY_BASE_URL` for EU), optionally `VITALLY_HEALTH_THRESHOLD` (default `50`) and `VITALLY_PAGE_LIMIT` (default `100`, Vitally's API cap).
+5. **Register with Claude Desktop or Claude Code.** Add the JSON block from the `README.md` to `claude_desktop_config.json` (Desktop) or your project `settings.json` (Code). Restart Claude Desktop.
+6. **Sanity check.** Ask Claude "show me the health score for account ID `<a real account id>`" and compare the response against the Vitally UI. Then ask "list at-risk accounts below 40" and verify the returned accounts actually show health scores at or below 40 in Vitally.
+
+## What it does — and why the tools are shaped this way
+
+Three tools, read-only throughout.
+
+**`get_account_health(account_id)`** makes two sequential GET requests to Vitally: `GET /resources/accounts/:id` for the base account record, and `GET /resources/accounts/:id/healthScores` for the component breakdown. It merges these into a single response with the overall `healthScore`, plus an array of health components, each with a name, score, and status. Two requests instead of one because Vitally's REST API splits the base account record from the health score breakdown — there is no single endpoint that returns both.
+
+**`list_at_risk_accounts(health_threshold?, limit?)`** fetches one page of active accounts (`GET /resources/accounts?limit=100&status=active`), filters to those whose `healthScore` is at or below the threshold, sorts ascending by score (worst first), and trims to the requested return limit. The local-filter approach avoids needing a Vitally server-side filter that the public REST API does not expose — you cannot pass `healthScore[lte]=50` as a query parameter. The tradeoff is that only the first 100 accounts are scanned per call; the README documents this limit and the cursor-pagination path to fix it.
+
+**`get_account_conversations(account_id, limit?)`** calls `GET /resources/accounts/:id/conversations?limit=N`. Vitally returns conversations newest-first by default. The server trims each conversation to the fields most useful in a Claude context window — subject, message count, the first message body, traits, and timestamps — rather than returning the full message array. A 10-conversation response from a verbose account can otherwise run to several thousand tokens; trimming keeps the context window predictable.
+
+**Read-only by construction.** Every tool makes only GET requests. There is no `update_account`, no `create_note`, no `delete_conversation`. The choice is intentional: CS tooling that can write back to the system of record needs a separate, named audit story (who changed what, why, when) before it ships. Adding read-only value first is lower risk and faster to approve.
+
+**Auth by Basic, not Bearer.** Vitally's REST API authenticates via HTTP Basic Auth with the API key as the username and an empty password. This differs from the OAuth Bearer pattern used by Salesforce and HubSpot. The server encodes this correctly at runtime — `Authorization: Basic base64("apikey:")`. You do not need to base64-encode the key yourself; supply the raw key as `VITALLY_API_KEY`.
+
+## Cost reality
+
+Three cost lines to plan for.
+
+**Claude subscription.** Whatever your team is paying for Claude Desktop or Claude Code (Pro at $20/user/month; Max tiers $100–200/user/month; or API consumption at pay-per-token rates). The MCP server does not change this.
+
+**Vitally API quota.** Vitally's REST API allows 1,000 requests per minute on a sliding window, per the API overview documentation. A CSM doing pre-call prep (one `get_account_health` + one `get_account_conversations`) consumes 3 API calls (2 for health, 1 for conversations). A weekly at-risk review (`list_at_risk_accounts`) consumes 1 call. At 20 CSMs doing 5 prep sessions per week plus a weekly triage, that is roughly (20 × 5 × 3) + (20 × 1) = 320 calls/week — well within the rate limit. The limit only becomes relevant if you run automated batch jobs or loop over hundreds of accounts in quick succession.
+
+**Token cost in Claude.** A single `get_account_health` response for a typical account runs to approximately 800–1,500 tokens depending on how many health components your org has configured and how verbose the traits payload is. A `get_account_conversations` response for 10 conversations with trimmed message bodies runs to roughly 2,000–5,000 tokens. At Claude Sonnet input pricing (approximately $3/1M tokens as of May 2026 — verify current pricing at anthropic.com/pricing), a full pre-call prep session of two tool calls costs under $0.02. Ten CSMs running 5 prep sessions per week = $1–5/month in token costs on top of the subscription. Round up generously for longer conversations and call it $10/user/month all-in.
+
+These are estimates based on typical Vitally data shapes; your org's actual token counts depend on trait payload size and conversation volume.
+
+## Failure modes
+
+**Health score is `null` for a new account.** Vitally does not compute a health score for accounts that lack enough data — new customers, accounts with no events ingested, or accounts outside any health score segment. `get_account_health` will return `healthScore: null` and an empty `healthScores` array. Guard: the server passes `null` through rather than raising; Claude will report the absence. Instruct your CSMs to treat a null health score as a signal to check Vitally's data ingestion, not as a healthy account.
+
+**`list_at_risk_accounts` returns an incomplete view for large books.** The tool scans one page of 100 accounts. If your org has 250 active accounts and the worst ones happen to fall on pages 2 or 3, the tool will miss them. Guard: the response payload includes a `note` field that explicitly flags when Vitally returned a `next` cursor (meaning there are more pages). CSMs should treat a non-empty `note` as a signal to either narrow their query or use Vitally's native segment filter for full-book triage until cursor pagination is implemented (README TODO #2).
+
+**Vitally 429 rate limit on rapid sequential calls.** Looping over many accounts back-to-back (for example, calling `get_account_health` on each account in a list) will hit the 1,000 req/min ceiling if the loop is tight enough. Guard: the scaffold has no built-in retry or backoff. For any workflow that calls more than ~50 `get_account_health` requests in a single session, add exponential backoff with jitter around `vitally_get` (README TODO #1 covers a more general token-rotation pattern; a retry decorator addresses the rate-limit case specifically). Claude Code users can add this in a fork of `server.py` in about 15 lines using `httpx`'s retry transport.
+
+**API key expires or is revoked.** Vitally API keys do not have a documented TTL, but keys generated from a user who is later deactivated or whose role changes will stop working. A 401 surfaces as an `httpx.HTTPStatusError` with status 401. Guard: `require_config()` runs at every tool call and will re-raise if the key is missing. For the revoked-but-present case, the 401 from Vitally will propagate as an error message in Claude's response. Set up a monthly calendar reminder to verify the integration key is still active.
+
+## Versus the alternatives
+
+**Vitally's native AI features (Vitally Copilot / in-app AI).** Vitally has been rolling out AI-assisted summaries and suggestions natively within the platform. First-party, no setup, no separate process to host. The tradeoff: the AI surfaces live inside Vitally, which means your CSMs need to be in Vitally to use it. The MCP server pattern keeps Claude as the single chat surface across all your tools — if your team already uses Claude for email drafting, call summaries, and success plans, adding Vitally context there means fewer context switches, not more.
+
+**CSV export + manual paste.** Export a Vitally segment to CSV, paste into Claude. Free, zero setup, works today. The tradeoff: it is a manual step (export, open file, paste), the data is a snapshot not a live query, and it does not compose well with other tools in the same Claude conversation. The MCP server beats this on time-to-answer and beats it more as your team's Claude usage grows.
+
+**Direct Vitally REST API calls in a Claude Code script.** A CSM comfortable with Python can call the Vitally API directly from a Claude Code session with a few lines of `httpx`. The tradeoff: each new session re-authenticates, the code lives in a transient conversation not a persistent registered tool, and other CSMs on the team cannot reuse it without the same setup. The MCP server registers the tools once and makes them available to anyone with the Claude Desktop or Code integration.
+
+## References
+
+Bundle files:
+- `apps/web/public/artifacts/mcp-server-vitally-cs/README.md` — install, env vars, registration JSON, sanity check, security model
+- `apps/web/public/artifacts/mcp-server-vitally-cs/pyproject.toml` — Python package definition
+- `apps/web/public/artifacts/mcp-server-vitally-cs/src/vitally_cs_mcp/__init__.py` — package init
+- `apps/web/public/artifacts/mcp-server-vitally-cs/src/vitally_cs_mcp/server.py` — full server scaffold with the three tools and dispatch
+
+Related tools: [Vitally](/en/tools/vitally/), [Claude](/en/tools/claude/)

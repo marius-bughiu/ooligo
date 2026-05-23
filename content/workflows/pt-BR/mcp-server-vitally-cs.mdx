@@ -1,0 +1,102 @@
+---
+slug: mcp-server-vitally-cs
+canonical_slug: mcp-server-vitally-cs
+locale: pt-BR
+verticals: [revops]
+title: Pull Vitally account health into Claude via MCP for CS conversations
+artifact_type: mcp-server
+tools_used: [vitally, claude]
+roles: [csm]
+difficulty: advanced
+time_to_setup: 1-2 hours
+human_tested: false
+---
+
+Um servidor Model Context Protocol que dá ao Claude acesso somente leitura aos health scores de contas no Vitally, ao detalhamento de componentes de saúde e ao histórico de conversas. Registre uma vez no Claude Desktop ou Claude Code, e qualquer CSM da sua equipe pode perguntar "qual é o health score da Acme Corp e por que está vermelho?" ou "me mostre as últimas cinco conversas desta conta antes da minha chamada de renovação" — e receberá uma resposta estruturada extraída do Vitally em tempo real, sem abrir uma segunda aba.
+
+O scaffold completo está no bundle de artefatos em `apps/web/public/artifacts/mcp-server-vitally-cs/`, que inclui um `README.md`, `pyproject.toml`, `src/vitally_cs_mcp/__init__.py` e `src/vitally_cs_mcp/server.py`.
+
+## Quando usar isto
+
+Este servidor MCP gera valor quando o workflow da sua equipe de CS envolve um padrão recorrente: extrair contexto do Vitally antes de uma chamada, escrever um documento de preparação para renovação, priorizar a fila de contas em risco ou montar um slide de QBR com dados de saúde. O padrão funciona bem para dois arquétipos de CSM.
+
+O CSM que gerencia um portfólio de 80 a 120 contas SMB e atualmente clica pela lista de contas do Vitally toda segunda-feira para identificar quem caiu para o vermelho na semana anterior. Com este servidor, você pode pedir ao Claude "liste minhas contas em risco abaixo de 40" e obter uma lista ordenada em menos de cinco segundos, e depois fazer perguntas de follow-up sobre o detalhamento de componentes de saúde de qualquer conta sem navegar por múltiplas telas do Vitally.
+
+O CSM enterprise que gasta vinte minutos antes de cada EBR vasculhando o Vitally para encontrar histórico de conversas, tendências de saúde e a última nota que um colega deixou. Com este servidor, você descreve a conta para o Claude e recebe uma única resposta com health score, detalhamento de componentes e temas de conversas recentes — pronta para colar no documento de preparação.
+
+Também é o padrão certo se sua equipe de CS já usa Claude para outras tarefas (escrever emails de follow-up, resumir notas de chamadas, redigir planos de sucesso) e você quer conectar a superfície conversacional em que já vivem com os dados de CS que precisam. O servidor MCP adiciona contexto do Vitally sem mudar como eles usam o Claude.
+
+## Quando NÃO usar isto
+
+Pule se qualquer uma das condições a seguir for verdadeira:
+
+- **Você precisa escrever dados de volta ao Vitally.** Este scaffold é deliberadamente somente leitura. Se o seu workflow exige criar notas, atualizar traits ou registrar conversas a partir do Claude, você precisa estender o servidor com ferramentas de escrita — e combiná-las com um padrão de auditoria similar ao scaffold do Salesforce em `apps/web/public/artifacts/mcp-server-salesforce-revops/`. Não tente escritas modificando este scaffold sem adicionar essa camada de auditoria.
+- **Seu portfólio supera 100 contas e você precisa de uma visão completa das contas em risco.** A ferramenta `list_at_risk_accounts` busca uma página de contas (até 100, conforme o limite da API do Vitally) e filtra localmente. Orgs com mais de 100 contas ativas terão uma visão parcial até que a paginação por cursor seja implementada (README TODO #2). Para portfólios maiores, exporte um segmento CSV do Vitally e alimente diretamente ao Claude em vez de depender deste servidor para triagem.
+- **O Vitally não é seu sistema de registro para saúde.** Algumas equipes de CS mantêm health scores no Gainsight, ChurnZero ou em um modelo próprio em planilha, e enviam uma métrica resumida para o Vitally. Se os dados de saúde autorizados vivem em outro lugar, o Claude estará lendo uma cópia derivada ou desatualizada. Aponte o servidor MCP para a fonte real.
+- **Sua política de dados proíbe que dados de contas entrem em um LLM de terceiros.** Nomes de contas, health scores, assuntos de conversas e corpos de mensagens passam pela janela de contexto do Claude. Se seus contratos com clientes enterprise restringem o processamento de IA sobre os dados deles, confirme a posição legal antes de habilitar isto.
+- **Sua equipe de CS tem menos de cinco contas ativas.** A configuração leva de uma a duas horas; o custo em tokens é real. Com poucas contas, abrir o Vitally diretamente é mais rápido.
+
+## Configuração
+
+O `README.md` do bundle é a referência definitiva; os passos abaixo são a orientação geral. Espere cerca de uma hora se sua API key do Vitally já estiver disponível, até duas horas se você estiver configurando uma conta de serviço dedicada.
+
+1. **Instale o pacote.** Da raiz do bundle: `python -m venv .venv`, ative, `pip install -e .`. As dependências são `mcp>=1.2.0`, `httpx>=0.27.0` e `pydantic>=2.6.0` — sem SDK específico do Vitally, apenas chamadas HTTP simples.
+2. **Obtenha uma API key do Vitally.** No Vitally: **Settings → Integrations → API**. Gere uma key a partir de um usuário de integração dedicado (não sua conta de admin pessoal). O Vitally usa HTTP Basic Auth — o servidor cuida da codificação; você fornece a key bruta como `VITALLY_API_KEY`.
+3. **Encontre seu subdomínio.** Se a URL do seu workspace é `acme.vitally.io`, seu subdomínio é `acme`. Tenants da UE configuram `VITALLY_BASE_URL=https://rest.vitally-eu.io`.
+4. **Configure as variáveis de ambiente.** `VITALLY_API_KEY`, `VITALLY_SUBDOMAIN` (ou `VITALLY_BASE_URL` para UE), opcionalmente `VITALLY_HEALTH_THRESHOLD` (padrão `50`) e `VITALLY_PAGE_LIMIT` (padrão `100`, o limite da API do Vitally).
+5. **Registre no Claude Desktop ou Claude Code.** Adicione o bloco JSON do `README.md` ao `claude_desktop_config.json` (Desktop) ou ao `settings.json` do seu projeto (Code). Reinicie o Claude Desktop.
+6. **Verificação de funcionamento.** Pergunte ao Claude "me mostre o health score do account ID `<um ID de conta real>`" e compare a resposta com a interface do Vitally. Depois pergunte "liste contas em risco abaixo de 40" e verifique que as contas retornadas realmente têm health scores nessa faixa no Vitally.
+
+## O que faz — e por que as ferramentas têm esse formato
+
+Três ferramentas, somente leitura em todos os casos.
+
+**`get_account_health(account_id)`** faz duas requisições GET sequenciais ao Vitally: `GET /resources/accounts/:id` para o registro base da conta, e `GET /resources/accounts/:id/healthScores` para o detalhamento de componentes. Mescla essas informações em uma única resposta com o `healthScore` geral, mais um array de componentes de saúde, cada um com nome, pontuação e status. Duas requisições em vez de uma porque a API REST do Vitally separa o registro base da conta do detalhamento do health score — não existe um único endpoint que retorne ambos.
+
+**`list_at_risk_accounts(health_threshold?, limit?)`** busca uma página de contas ativas (`GET /resources/accounts?limit=100&status=active`), filtra as que têm `healthScore` igual ou inferior ao limite, ordena de forma ascendente por pontuação (as piores primeiro) e recorta ao limite de retorno solicitado. A abordagem de filtro local evita precisar de um filtro do lado do servidor do Vitally que a API REST pública não expõe — você não pode passar `healthScore[lte]=50` como parâmetro de consulta. O tradeoff é que apenas as primeiras 100 contas são escaneadas por chamada; o README documenta esse limite e o caminho de paginação por cursor para corrigi-lo.
+
+**`get_account_conversations(account_id, limit?)`** chama `GET /resources/accounts/:id/conversations?limit=N`. O Vitally retorna conversas em ordem do mais recente para o mais antigo por padrão. O servidor recorta cada conversa para os campos mais úteis na janela de contexto do Claude — assunto, contagem de mensagens, o corpo da primeira mensagem, traits e timestamps — em vez de retornar o array completo de mensagens. Uma resposta de 10 conversas de uma conta verbosa pode chegar a vários milhares de tokens; o recorte mantém a janela de contexto previsível.
+
+**Somente leitura por design.** Cada ferramenta faz apenas requisições GET. Não há `update_account`, não há `create_note`, não há `delete_conversation`. A escolha é intencional: ferramentas de CS que podem escrever de volta ao sistema de registro precisam de uma história de auditoria separada e nomeada (quem mudou o quê, por quê, quando) antes de serem implantadas. Entregar valor somente leitura primeiro tem menor risco e é mais rápido de aprovar.
+
+**Auth por Basic, não Bearer.** A API REST do Vitally se autentica via HTTP Basic Auth com a API key como nome de usuário e uma senha vazia. Isso difere do padrão OAuth Bearer usado pelo Salesforce e HubSpot. O servidor codifica isso corretamente em tempo de execução — `Authorization: Basic base64("apikey:")`. Você não precisa codificar a key em base64; forneça a key bruta como `VITALLY_API_KEY`.
+
+## Realidade de custos
+
+Três linhas de custo para planejar.
+
+**Assinatura do Claude.** O que sua equipe já paga pelo Claude Desktop ou Claude Code (Pro a $20/usuário/mês; níveis Max $100–200/usuário/mês; ou consumo de API por token). O servidor MCP não altera isso.
+
+**Cota de API do Vitally.** A API REST do Vitally permite 1.000 requisições por minuto em uma janela deslizante, conforme a documentação da API. Um CSM fazendo preparação pré-chamada (um `get_account_health` + um `get_account_conversations`) consome 3 chamadas API (2 para saúde, 1 para conversas). Uma revisão semanal de contas em risco (`list_at_risk_accounts`) consome 1 chamada. Com 20 CSMs fazendo 5 sessões de preparação por semana mais uma revisão semanal, isso é aproximadamente (20 × 5 × 3) + (20 × 1) = 320 chamadas/semana — bem dentro do limite de taxa. O limite só se torna relevante se você executar jobs de lote automatizados ou percorrer centenas de contas em rápida sucessão.
+
+**Custo em tokens do Claude.** Uma única resposta de `get_account_health` para uma conta típica tem aproximadamente 800–1.500 tokens dependendo de quantos componentes de saúde seu org configurou e quão verboso é o payload de traits. Uma resposta de `get_account_conversations` para 10 conversas com corpos de mensagens recortados tem aproximadamente 2.000–5.000 tokens. Uma sessão completa de preparação pré-chamada de duas chamadas de ferramentas custa menos de $0,02 em tokens. Dez CSMs executando 5 sessões de preparação por semana = $1–5/mês em custos de tokens além da assinatura. Arredonde generosamente para conversas mais longas e considere uns $10/usuário/mês no total.
+
+Estas são estimativas baseadas em formatos de dados típicos do Vitally; os contagens reais de tokens do seu org dependem do tamanho do payload de traits e do volume de conversas.
+
+## Modos de falha
+
+**O health score é `null` para uma conta nova.** O Vitally não calcula um health score para contas que não têm dados suficientes — novos clientes, contas sem eventos ingeridos ou contas fora de qualquer segmento de health score. `get_account_health` retornará `healthScore: null` e um array `healthScores` vazio. Guard: o servidor passa `null` em vez de lançar um erro; o Claude reportará a ausência. Instrua seus CSMs a tratar um health score nulo como sinal para verificar a ingestão de dados do Vitally, não como uma conta saudável.
+
+**`list_at_risk_accounts` retorna uma visão incompleta para portfólios grandes.** A ferramenta escaneia uma página de 100 contas. Se seu org tem 250 contas ativas e as piores estão nas páginas 2 ou 3, a ferramenta vai perdê-las. Guard: o payload de resposta inclui um campo `note` que sinaliza explicitamente quando o Vitally retornou um cursor `next` (significando que há mais páginas). Os CSMs devem tratar um `note` não vazio como sinal para restringir a consulta ou usar o filtro de segmento nativo do Vitally para triagem do portfólio completo até que a paginação por cursor seja implementada (README TODO #2).
+
+**Limite de taxa 429 do Vitally em chamadas sequenciais rápidas.** Percorrer muitas contas consecutivamente (por exemplo, chamar `get_account_health` para cada conta em uma lista) atingirá o limite de 1.000 req/min se o loop for suficientemente rápido. Guard: o scaffold não tem retry ou backoff embutidos. Para qualquer workflow que chame mais de ~50 requisições `get_account_health` em uma única sessão, adicione backoff exponencial com jitter em torno de `vitally_get`. Usuários do Claude Code podem adicionar isso em um fork de `server.py` em aproximadamente 15 linhas usando o transporte de retry do `httpx`.
+
+**A API key expira ou é revogada.** As API keys do Vitally não têm um TTL documentado, mas keys geradas a partir de um usuário que posteriormente é desativado ou tem seu papel alterado deixarão de funcionar. Um 401 se manifesta como um `httpx.HTTPStatusError` com status 401. Guard: `require_config()` é executado em cada chamada de ferramenta e lançará novamente se a key estiver ausente. Para o caso revogada-mas-presente, o 401 do Vitally se propagará como uma mensagem de erro na resposta do Claude. Configure um lembrete mensal no calendário para verificar se a key de integração ainda está ativa.
+
+## Versus as alternativas
+
+**As funcionalidades de IA nativas do Vitally (Vitally Copilot / IA dentro do app).** O Vitally tem lançado resumos e sugestões assistidos por IA nativamente dentro da plataforma. Primeira parte, sem configuração, sem processo separado para hospedar. O tradeoff: a IA fica dentro do Vitally, o que significa que seus CSMs precisam estar no Vitally para usá-la. O padrão de servidor MCP mantém o Claude como a única superfície de chat em todas as suas ferramentas — se sua equipe já usa Claude para redigir emails, resumir chamadas e criar planos de sucesso, adicionar contexto do Vitally lá significa menos trocas de contexto, não mais.
+
+**Exportação CSV + colagem manual.** Exporte um segmento do Vitally para CSV, cole no Claude. Gratuito, sem configuração, funciona hoje. O tradeoff: é um passo manual (exportar, abrir arquivo, colar), os dados são um snapshot e não uma consulta ao vivo, e não se compõe bem com outras ferramentas na mesma conversa do Claude. O servidor MCP supera isso no tempo de resposta e supera mais à medida que o uso do Claude pela equipe cresce.
+
+**Chamadas diretas à API REST do Vitally em um script do Claude Code.** Um CSM confortável com Python pode chamar a API do Vitally diretamente de uma sessão do Claude Code com algumas linhas de `httpx`. O tradeoff: cada nova sessão reautentica, o código fica em uma conversa transitória e não em uma ferramenta registrada persistente, e outros CSMs da equipe não podem reutilizá-lo sem a mesma configuração. O servidor MCP registra as ferramentas uma vez e as disponibiliza para qualquer pessoa com a integração do Claude Desktop ou Code.
+
+## Referências
+
+Arquivos do bundle:
+- `apps/web/public/artifacts/mcp-server-vitally-cs/README.md` — instalação, variáveis de ambiente, JSON de registro, verificação de funcionamento, modelo de segurança
+- `apps/web/public/artifacts/mcp-server-vitally-cs/pyproject.toml` — definição do pacote Python
+- `apps/web/public/artifacts/mcp-server-vitally-cs/src/vitally_cs_mcp/__init__.py` — init do pacote
+- `apps/web/public/artifacts/mcp-server-vitally-cs/src/vitally_cs_mcp/server.py` — scaffold completo do servidor com as três ferramentas e o dispatch
+
+Ferramentas relacionadas: [Vitally](/pt-BR/tools/vitally/), [Claude](/pt-BR/tools/claude/)

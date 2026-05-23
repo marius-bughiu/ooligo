@@ -1,0 +1,102 @@
+---
+slug: mcp-server-vitally-cs
+canonical_slug: mcp-server-vitally-cs
+locale: ja
+verticals: [revops]
+title: Pull Vitally account health into Claude via MCP for CS conversations
+artifact_type: mcp-server
+tools_used: [vitally, claude]
+roles: [csm]
+difficulty: advanced
+time_to_setup: 1-2 hours
+human_tested: false
+---
+
+Vitally のアカウント health score、health コンポーネントの内訳、会話履歴への読み取り専用アクセスを Claude に提供する Model Context Protocol サーバーです。Claude Desktop または Claude Code に1度登録すれば、チームのどの CSM も「Acme Corp の health score はいくつで、なぜ赤なのか」「更新コール前にこのアカウントの直近5件の会話を見せて」と質問でき、Vitally からリアルタイムで取得した構造化された回答を別のタブを開かずに受け取れます。
+
+完全な scaffold はアーティファクトバンドル `apps/web/public/artifacts/mcp-server-vitally-cs/` にあり、`README.md`、`pyproject.toml`、`src/vitally_cs_mcp/__init__.py`、`src/vitally_cs_mcp/server.py` が含まれています。
+
+## 使うべき場面
+
+この MCP サーバーは、CS チームのワークフローに繰り返しのパターンがある場合に効果を発揮します。コール前に Vitally のコンテキストを取得する、更新準備ドキュメントを書く、リスクのあるアカウントのキューを優先順位付けする、health データを使って QBR スライドを作る、といった場面です。このパターンは2つの CSM アーキタイプでうまく機能します。
+
+80〜120 件の SMB アカウントを管理し、毎週月曜日に Vitally のアカウントリストをクリックして先週赤になったアカウントを探している CSM。このサーバーを使えば、Claude に「health score が 40 以下のリスクアカウントをリストアップして」と聞くだけで5秒以内に順位付きリストが得られます。その後、複数の Vitally 画面を行き来せずに任意のアカウントの health コンポーネントの内訳についてフォローアップ質問もできます。
+
+EBR 前に20分かけて Vitally で会話履歴、health トレンド、同僚が残した最新のメモを調べているエンタープライズ CSM。このサーバーを使えば、Claude にアカウントを説明するだけで、health score、コンポーネントの内訳、最近の会話テーマを含む1つの回答を受け取れます。準備ドキュメントにそのまま貼り付けられます。
+
+CS チームがすでに他の業務（フォローアップメールの作成、コールノートの要約、成功計画の草案作成）に Claude を使っており、チームがすでに使っている会話サーフェスと必要な CS データをつなぎたい場合にも適したパターンです。MCP サーバーは Claude の使い方を変えることなく Vitally のコンテキストを追加します。
+
+## 使うべきでない場面
+
+以下のいずれかの条件に当てはまる場合は使用しないでください。
+
+- **Vitally にデータを書き戻す必要がある場合。** このscaffold は意図的に読み取り専用です。ワークフローで Claude からノートの作成、trait の更新、会話の記録が必要な場合は、書き込みツールでサーバーを拡張する必要があります。その際、`apps/web/public/artifacts/mcp-server-salesforce-revops/` の Salesforce scaffold に類似した監査パターンと組み合わせてください。監査レイヤーを追加せずにこの scaffold を修正して書き込みを試みないでください。
+- **ポートフォリオが 100 アカウントを超えており、リスクアカウントの完全なビューが必要な場合。** `list_at_risk_accounts` ツールは1ページ分のアカウント（Vitally の API 上限に従い最大100件）を取得してローカルでフィルタリングします。アクティブアカウントが 100 件を超える org では、カーソルページネーションが実装されるまで（README TODO #2）部分的なビューしか得られません。大規模なポートフォリオの場合は、このサーバーにトリアージを依存するのではなく、Vitally の CSV セグメントをエクスポートして直接 Claude に渡してください。
+- **Vitally が health の系統的な記録ではない場合。** CS チームの中には Gainsight、ChurnZero、または独自のスプレッドシートモデルで health score を管理し、要約メトリクスを Vitally に送り込んでいるチームもあります。信頼できる health データが別の場所にある場合、Claude は派生した古いコピーを読むことになります。MCP サーバーを実際のソースに向けてください。
+- **データポリシーがアカウントデータをサードパーティの LLM に入れることを禁止している場合。** アカウント名、health score、会話の件名、メッセージ本文が Claude のコンテキストウィンドウを通過します。エンタープライズ顧客との契約でデータの AI 処理を制限している場合は、有効化する前に法的立場を確認してください。
+- **CS チームのアクティブアカウントが5件未満の場合。** セットアップに1〜2時間かかり、トークンコストも現実のものです。アカウント数が非常に少ない場合は、Vitally を直接開く方が速いです。
+
+## セットアップ
+
+バンドルの `README.md` が決定的なリファレンスです。以下のステップは概要です。Vitally の API キーがすでに手元にある場合は約1時間、専用のサービスアカウントを設定する場合は最大2時間を見込んでください。
+
+1. **パッケージをインストールする。** バンドルのルートから: `python -m venv .venv`、アクティブ化、`pip install -e .`。依存関係は `mcp>=1.2.0`、`httpx>=0.27.0`、`pydantic>=2.6.0` — Vitally 固有の SDK はなく、シンプルな HTTP 呼び出しのみです。
+2. **Vitally の API キーを取得する。** Vitally で: **Settings → Integrations → API**。個人の admin アカウントではなく、専用のインテグレーションユーザーからキーを生成してください。Vitally は HTTP Basic Auth を使用します。サーバーがエンコードを処理するため、生のキーを `VITALLY_API_KEY` として渡すだけです。
+3. **サブドメインを確認する。** ワークスペース URL が `acme.vitally.io` であれば、サブドメインは `acme` です。EU テナントは代わりに `VITALLY_BASE_URL=https://rest.vitally-eu.io` を設定します。
+4. **環境変数を設定する。** `VITALLY_API_KEY`、`VITALLY_SUBDOMAIN`（EU の場合は `VITALLY_BASE_URL`）、オプションで `VITALLY_HEALTH_THRESHOLD`（デフォルト `50`）と `VITALLY_PAGE_LIMIT`（デフォルト `100`、Vitally の API 上限）。
+5. **Claude Desktop または Claude Code に登録する。** `README.md` の JSON ブロックを `claude_desktop_config.json`（Desktop）またはプロジェクトの `settings.json`（Code）に追加します。Claude Desktop を再起動します。
+6. **動作確認。** Claude に「アカウント ID `<実際のアカウント ID>` の health score を見せて」と聞き、Vitally の UI と回答を比較します。次に「40 以下のリスクアカウントをリストアップして」と聞き、返されたアカウントが Vitally でその範囲の health score を持つことを確認します。
+
+## 何をするか — そしてなぜツールがこのような形になっているか
+
+3つのツール、すべて読み取り専用です。
+
+**`get_account_health(account_id)`** は Vitally に対して2つの連続した GET リクエストを行います。ベースアカウントレコードのための `GET /resources/accounts/:id` と、コンポーネントの内訳のための `GET /resources/accounts/:id/healthScores` です。これらを1つのレスポンスにマージし、全体の `healthScore` と、名前・スコア・ステータスを持つ health コンポーネントの配列を返します。1つではなく2つのリクエストが必要なのは、Vitally の REST API がベースアカウントレコードと health score の内訳を分離しているためです — 両方を返す単一のエンドポイントは存在しません。
+
+**`list_at_risk_accounts(health_threshold?, limit?)`** アクティブアカウントの1ページを取得し（`GET /resources/accounts?limit=100&status=active`）、`healthScore` が閾値以下のものをフィルタリングし、スコアの昇順（最悪のものを先頭）にソートして、要求された返却上限に切り詰めます。ローカルフィルタアプローチは、公開 REST API が公開していない Vitally のサーバーサイドフィルタを必要とすることを回避します — `healthScore[lte]=50` をクエリパラメータとして渡すことはできません。トレードオフは、1回の呼び出しで最初の 100 アカウントしかスキャンできないことです。README にはこの制限とカーソルページネーションによる修正パスが記載されています。
+
+**`get_account_conversations(account_id, limit?)`** は `GET /resources/accounts/:id/conversations?limit=N` を呼び出します。Vitally はデフォルトで最新のものから順に会話を返します。サーバーは完全なメッセージ配列を返すのではなく、Claude のコンテキストウィンドウで最も役立つフィールド（件名、メッセージ数、最初のメッセージ本文、traits、タイムスタンプ）に各会話を切り詰めます。冗長なアカウントの 10 件の会話レスポンスは数千トークンになる場合があります。切り詰めによりコンテキストウィンドウが予測可能に保たれます。
+
+**設計上の読み取り専用。** すべてのツールは GET リクエストのみを行います。`update_account`、`create_note`、`delete_conversation` はありません。これは意図的な選択です。系統的な記録に書き戻せる CS ツールは、デプロイ前に独立した命名された監査ストーリー（誰が何を変えたか、なぜ、いつ）が必要です。まず読み取り専用の価値を提供することはリスクが低く、承認も早くなります。
+
+**Bearer ではなく Basic による認証。** Vitally の REST API は、API キーをユーザー名に、空のパスワードを使った HTTP Basic Auth で認証します。これは Salesforce や HubSpot が使用する OAuth Bearer パターンとは異なります。サーバーは実行時にこれを正しくエンコードします — `Authorization: Basic base64("apikey:")`。キーを自分で Base64 エンコードする必要はありません。生のキーを `VITALLY_API_KEY` として渡すだけです。
+
+## コストの実態
+
+計画すべき3つのコスト項目。
+
+**Claude のサブスクリプション。** チームがすでに Claude Desktop または Claude Code に支払っている金額（Pro は $20/ユーザー/月、Max ティアは $100〜200/ユーザー/月、または従量制 API）。MCP サーバーはこれを変えません。
+
+**Vitally の API クォータ。** API ドキュメントによると、Vitally の REST API はスライディングウィンドウで1分間に 1,000 リクエストを許可します。コール前の準備をする CSM（1つの `get_account_health` + 1つの `get_account_conversations`）は 3 件の API 呼び出しを消費します（health に2件、会話に1件）。週次のリスクアカウントレビュー（`list_at_risk_accounts`）は 1 件の呼び出しを消費します。週に5回の準備セッションと週次のトリアージを行う CSM が 20 人いる場合、約 (20 × 5 × 3) + (20 × 1) = 320 呼び出し/週 — レート制限の範囲内です。自動化されたバッチジョブを実行したり、数百のアカウントを素早く連続してループしたりする場合にのみ制限が問題になります。
+
+**Claude のトークンコスト。** 典型的なアカウントに対する1つの `get_account_health` レスポンスは、org が設定している health コンポーネントの数と traits ペイロードの冗長さによって、約 800〜1,500 トークンになります。メッセージ本文を切り詰めた 10 件の会話に対する `get_account_conversations` レスポンスは約 2,000〜5,000 トークンです。2回のツール呼び出しによる完全なコール前準備セッションのトークンコストは $0.02 未満です。週に5回の準備セッションを行う CSM が 10 人いると、サブスクリプションに加えて月 $1〜5 のトークンコストになります。より長い会話のために余裕を持って見積もると、合計で月約 $10/ユーザーです。
+
+これらは典型的な Vitally データ構造に基づく見積もりです。org 実際のトークン数は traits ペイロードのサイズと会話量によって異なります。
+
+## 障害モード
+
+**新しいアカウントの health score が `null` の場合。** Vitally は、データが不十分なアカウントの health score を計算しません — 新規顧客、イベントが取り込まれていないアカウント、または health score セグメントの外にあるアカウントです。`get_account_health` は `healthScore: null` と空の `healthScores` 配列を返します。Guard: サーバーはエラーを発生させるのではなく `null` をそのまま返します。Claude は不在を報告します。CSM に対して、null の health score は健全なアカウントではなく、Vitally のデータ取り込みを確認するサインとして扱うよう指示してください。
+
+**`list_at_risk_accounts` が大規模なポートフォリオで不完全なビューを返す場合。** ツールは 100 アカウントの1ページをスキャンします。org に 250 件のアクティブアカウントがあり、最悪のものがページ2や3にある場合、ツールはそれらを見逃します。Guard: レスポンスペイロードには `note` フィールドが含まれており、Vitally が `next` カーソルを返した場合（つまりさらにページがある場合）を明示的に示します。CSM は空でない `note` を、クエリを絞り込むか、カーソルページネーションが実装されるまで（README TODO #2）完全なポートフォリオトリアージのために Vitally のネイティブセグメントフィルターを使用するサインとして扱う必要があります。
+
+**素早い連続呼び出しによる Vitally 429 レート制限。** 多くのアカウントを連続してループする（例えば、リスト内の各アカウントに `get_account_health` を呼び出す）と、ループが十分に速い場合、1,000 req/min の上限に達します。Guard: scaffold にはリトライやバックオフが組み込まれていません。単一のセッションで 50 件を超える `get_account_health` リクエストを呼び出すワークフローには、`vitally_get` の周りにジッター付きの指数バックオフを追加してください。Claude Code ユーザーは `httpx` のリトライトランスポートを使用して `server.py` のフォークに約 15 行でこれを追加できます。
+
+**API キーが期限切れまたは失効した場合。** Vitally の API キーには文書化された TTL がありませんが、後で無効化されたユーザーまたはロールが変更されたユーザーから生成されたキーは機能しなくなります。401 は状態 401 の `httpx.HTTPStatusError` として現れます。Guard: `require_config()` は各ツール呼び出しで実行され、キーが欠如している場合に再度例外を発生させます。失効しているが存在するケースでは、Vitally からの 401 が Claude のレスポンスでエラーメッセージとして伝播します。インテグレーションキーがまだアクティブであることを確認するための月次カレンダーリマインダーを設定してください。
+
+## 代替手段との比較
+
+**Vitally のネイティブ AI 機能（Vitally Copilot / アプリ内 AI）。** Vitally はプラットフォーム内で AI 支援の要約と提案をネイティブに展開してきました。ファーストパーティで、設定不要、ホストする別プロセスも不要です。トレードオフは、AI が Vitally の中に存在するため、CSM が使用するには Vitally にいる必要があるということです。MCP サーバーパターンは Claude をすべてのツールにわたる単一のチャットサーフェスとして維持します — チームがすでにメール作成、コールの要約、成功計画に Claude を使っているなら、そこに Vitally のコンテキストを追加することは、コンテキストの切り替えを増やすのではなく、減らすことを意味します。
+
+**CSV エクスポート + 手動貼り付け。** Vitally のセグメントを CSV にエクスポートして Claude に貼り付けます。無料、設定不要、今日から使えます。トレードオフは、手動ステップ（エクスポート、ファイルを開く、貼り付け）が必要で、データがライブクエリではなくスナップショットであり、同じ Claude 会話内の他のツールとうまく組み合わせられないことです。MCP サーバーはレスポンスタイムでこれを上回り、チームの Claude 使用が増えるほどその差は大きくなります。
+
+**Claude Code スクリプトでの Vitally REST API の直接呼び出し。** Python に慣れた CSM は、数行の `httpx` で Claude Code セッションから直接 Vitally API を呼び出せます。トレードオフは、新しいセッションごとに再認証が必要で、コードが永続的な登録済みツールではなく一時的な会話に存在し、チームの他の CSM が同じ設定なしに再利用できないことです。MCP サーバーはツールを一度登録し、Claude Desktop または Code インテグレーションを持つ誰もが利用できるようにします。
+
+## 参照
+
+バンドルファイル:
+- `apps/web/public/artifacts/mcp-server-vitally-cs/README.md` — インストール、環境変数、登録 JSON、動作確認、セキュリティモデル
+- `apps/web/public/artifacts/mcp-server-vitally-cs/pyproject.toml` — Python パッケージ定義
+- `apps/web/public/artifacts/mcp-server-vitally-cs/src/vitally_cs_mcp/__init__.py` — パッケージ init
+- `apps/web/public/artifacts/mcp-server-vitally-cs/src/vitally_cs_mcp/server.py` — 3つのツールと dispatch を含む完全なサーバー scaffold
+
+関連ツール: [Vitally](/ja/tools/vitally/), [Claude](/ja/tools/claude/)
