@@ -1,0 +1,134 @@
+---
+slug: interview-scheduling-resolver-n8n
+canonical_slug: interview-scheduling-resolver-n8n
+locale: de
+verticals: [recruiting]
+title: Resolve recruiter–panel–candidate scheduling conflicts with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, greenhouse, calendly]
+roles: [recruiter, recruiting-coordinator]
+difficulty: intermediate
+time_to_setup: "1-2 hours"
+human_tested: false
+---
+
+Ein [n8n](/de/tools/n8n/)-Flow, der das Koordinationsproblem zwischen mehreren Beteiligten löst, das zwischen „Kandidat wechselt in die Interview-Stufe" und „Kalendereinladung wird versendet" entsteht. Der Flow empfängt einen [Greenhouse](/de/tools/greenhouse/)-Webhook bei einem Stufenwechsel, fragt die freeBusy-API von Google Calendar für jeden Panelisten und den Recruiter gleichzeitig ab, intersektiert diese belegten Fenster mit der angegebenen Verfügbarkeit des Kandidaten, ordnet die resultierenden freien Zeitfenster anhand von Tiebreaker-Regeln und veröffentlicht die 3 besten vorgeschlagenen Zeiten in einem Slack-Kanal, damit der Recruiter bestätigen und buchen kann. Ein täglicher Backup-Cron durchsucht Bewerbungen, die seit mehr als 48 Stunden im Status `to_be_scheduled` feststecken, und verarbeitet sie erneut durch denselben Pfad.
+
+Das Artefakt-Bundle befindet sich unter `apps/web/public/artifacts/interview-scheduling-resolver-n8n/` und enthält `interview-scheduling-resolver-n8n.json` (den vollständigen n8n-Flow-Export) und `_README.md` (Import-Schritte, Credential-Setup pro Credential, Verifizierungsverfahren für den ersten Lauf).
+
+## Wann verwenden
+
+- Sie verwenden [Greenhouse](/de/tools/greenhouse/) als ATS und Interviews umfassen regelmäßig 3 oder mehr Panelisten, deren Kalender über zwei oder mehr Zeitzonen verteilt sind.
+- Der Recruiting Coordinator verbringt 20–45 Minuten pro Stelle und Loop mit der Scheduling-Koordination — Verfügbarkeits-E-Mails senden, auf Antworten warten, vier Kalender manuell prüfen, einen Slot vorschlagen, einen Konflikt entdecken.
+- Sie möchten ein Entscheidungsprotokoll für jeden vorgeschlagenen Slot: welche Fenster wurden ausgewertet, wie viele belegte Panel-Blöcke wurden zusammengeführt, wie war der Ranking-Score. Die Slack-Nachricht, die der Flow sendet, enthält diese Daten, damit der Recruiter nachvollziehen kann, warum jeder Slot vorgeschlagen wurde.
+- Sie betreiben bereits n8n (self-hosted oder Cloud) und verfügen über eine Google Workspace-Umgebung, in der die Kalender der Panelisten über OAuth2 oder ein Service-Account mit domänenweiter Delegierung zugänglich sind.
+
+## Wann NICHT verwenden
+
+- **Masseneinstellungen oder hochfrequente Hiring-Events.** Bei mehr als 50 Panel-Interviews pro Tag — Recruiting-Events, Hochschulprogramme, Masseneinstellungen — erzeugt das freeBusy-per-Trigger-Modell ein erhebliches API-Aufrufvolumen. GoodTime oder ModernLoop sind für dieses Verkehrsmuster ausgelegt; der n8n-Flow nicht.
+- **Andere ATS-Plattformen als Greenhouse ohne Stage-Change-Webhook.** Der Trigger basiert auf dem Empfang eines signierten Greenhouse-Webhooks. Ihn durch ein Ashby- oder Lever-Äquivalent zu ersetzen ist unkompliziert (der Trigger-Node wird ausgetauscht), aber nur-Polling-ATS-Plattformen führen eine Mindestlatenz von 5 Minuten ein, was den Use-Case „innerhalb einer Stunde planen" bricht.
+- **Automatisches Buchen ohne Bestätigung des Recruiters.** Der Flow stoppt absichtlich bei der Slack-Benachrichtigung. Er ruft `POST /v2/scheduled_interviews` nicht auf, um einen Kalendertermin in Greenhouse zu erstellen, ohne dass ein Mensch den Slot bestätigt. Die Auto-Buchung technisch zu verdrahten ist einfach, überträgt aber die Scheduling-Autorität vom Recruiter auf den Algorithmus.
+- **Teams, bei denen Panelisten nicht Google Calendar verwenden.** Die freeBusy-Abfrage ist Google-Calendar-spezifisch. Outlook/Exchange-Verfügbarkeit erfordert den freeBusy-Endpoint von Microsoft Graph (`/me/calendar/getSchedule`), einen separaten HTTP-Request-Node und Azure-AD-Credentials. Der Flow enthält diesen Pfad nicht.
+- **Weniger als 5 Interviews pro Woche pro Recruiter.** Bei diesem Volumen ist manuelle Koordination schneller als das Einrichten von OAuth-Credentials und einem Greenhouse-Webhook. Der Setup-Aufwand amortisiert sich ab etwa 10 Interviews pro Woche.
+
+## Einrichtung
+
+1. **Flow importieren.** In n8n Workflows → Import from File öffnen und `apps/web/public/artifacts/interview-scheduling-resolver-n8n/interview-scheduling-resolver-n8n.json` auswählen. Jeder Node hat `notesInFlow: true`, sodass die Canvas-Notizen jeden Schritt erklären.
+2. **Webhook-Secret-Umgebungsvariable setzen.** In den Einstellungen der n8n-Instanz (oder in der `.env`-Datei für self-hosted) `GREENHOUSE_WEBHOOK_SECRET` mit dem Signing-Secret aus dem Greenhouse Dev Center hinzufügen. Der Signaturverifizierungs-Node wirft einen Fehler und stoppt die Ausführung, wenn diese Variable fehlt oder die HMAC-SHA256-Prüfung schlägt.
+3. **Google Calendar OAuth2 verbinden.** Eine OAuth-2.0-Credential in n8n unter `PLACEHOLDER_GOOGLE_CAL_CRED_ID` erstellen. Der erforderliche Scope ist `calendar.readonly`. Für Workspace-Umgebungen mit mehreren Panelisten ist ein Service-Account mit domänenweiter Delegierung praktischer als individuelle OAuth-Tokens pro Panelist — das `_README.md` behandelt beide Optionen.
+4. **Greenhouse Harvest API verbinden.** Eine HTTP-Header-Auth-Credential unter `PLACEHOLDER_GREENHOUSE_CRED_ID` erstellen. Greenhouse Harvest verwendet Basic Auth mit dem API-Key als Benutzername und leerem Passwort (base64-Kodierung von `api_key:`). Nur die Scopes Scheduled Interviews (read) und Applications (read) gewähren.
+5. **Slack-Bot-Token verbinden.** Eine HTTP-Header-Auth-Credential unter `PLACEHOLDER_SLACK_CRED_ID` mit `Authorization: Bearer xoxb-...` erstellen. Den Bot zu `#scheduling-queue` einladen.
+6. **Greenhouse-Webhook konfigurieren.** Im Greenhouse Dev Center einen Web Hook erstellen, der auf die n8n-Instanz-URL unter dem Pfad `/webhook/interview-scheduling-resolver` zeigt. Das Ereignis `candidate_stage_change` abonnieren. Das Signing-Secret in `GREENHOUSE_WEBHOOK_SECRET` kopieren.
+7. **Kandidaten-Verfügbarkeit stub oder verdrahten.** Der Node `Candidate Availability Intake` wird als Stub geliefert, der Mo–Fr 9–18 Uhr ET für 14 Tage zurückgibt. Einen [Calendly](/de/tools/calendly/)-Webhook oder eine Typeform/Airtable-Lese-Node verdrahten, um echte Kandidatenbeschränkungen vor dem Produktivbetrieb zu erhalten.
+8. **Erstverifizierung durchführen.** Das `_README.md` listet fünf spezifische Testfälle auf — gültige Signatur, ungültige Signatur, Slots-gefunden-Pfad, Kein-Verfügbarkeits-Pfad, Backup-Cron-Pfad — jeweils mit erwarteten Ausgaben. Alle fünf abschließen, bevor der Trigger aktiviert wird.
+
+## Was der Flow tut
+
+Zwölf Nodes über zwei Trigger-Pfade.
+
+**Webhook-Pfad (Echtzeit):**
+
+1. **Greenhouse Webhook — interview_requested** — empfängt POST-Ereignisse von `candidate_stage_change`. Gibt via einen Geschwister-Node `Respond 202 Accepted` sofort 202 zurück, damit die Greenhouse-Webhook-Zustellung nie durch die Verarbeitungszeit des Flows unterbrochen wird.
+2. **Verify Signature + Extract Participants** — verifiziert HMAC-SHA256 die Greenhouse-Webhook-Signatur mit `crypto.createHmac` gegen `GREENHOUSE_WEBHOOK_SECRET`. Stimmt nicht überein, wird ein Fehler geworfen und die Ausführung gestoppt. Bei Erfolg werden `recruiterEmail`, `interviewerEmails[]`, `candidateEmail`, `jobName`, `stageName` extrahiert und `allCalendarIds` als deduplizierte Vereinigung der Recruiter- und Interviewer-E-Mails aufgebaut.
+3. **Google Calendar — freeBusy Query** — sendet POST an `https://www.googleapis.com/calendar/v3/freeBusy` mit `allCalendarIds` als `items[]`-Array und einem 14-tägigen Fenster ab morgen. Gibt pro-Kalender `busy[]`-Arrays mit RFC3339-Start-/Endzeiten zurück.
+4. **Candidate Availability Intake** — liest die Verfügbarkeitsfenster des Kandidaten. Wird als Stub geliefert; gemäß den Setup-Anweisungen durch echte Verfügbarkeitsdaten ersetzen.
+5. **Resolve Conflicts — Intersect + Rank Slots** — der zentrale Algorithmus-Node (siehe unten).
+6. **Slots Found?** — IF-Node. Leitet zur Benachrichtigung weiter, wenn `resolved: true`, zur Eskalation, wenn `resolved: false`.
+7. **Slack — Notify Recruiter with Proposed Slots** — veröffentlicht die 3 besten Slots in `#scheduling-queue` mit Score, Panel-Liste, Anzahl ausgewerteter Slots und einem Deep-Link zur Greenhouse-Bewerbung.
+8. **Slack — Escalate No-Availability** — veröffentlicht eine manuelle Koordinationswarnung, wenn kein gemeinsames Fenster existiert.
+
+**Täglicher Backup-Cron-Pfad:**
+
+9. **Daily Backstop Cron — 8am ET weekdays** — läuft um 08:00 `America/New_York`, Montag bis Freitag (Cron: `0 8 * * 1-5`).
+10. **Greenhouse — List Stale Unscheduled Interviews** — ruft Greenhouse Harvest `GET /v1/scheduled_interviews?status=to_be_scheduled&created_before=<48h-ago>` auf, um Interviews zu finden, bei denen der Webhook verpasst wurde oder die Zustellung fehlschlug.
+11. **Split Into Items** — teilt das Antwort-Array in einzelne Items für die Verarbeitung pro Bewerbung auf.
+
+## Engineering-Entscheidungen: der Verfügbarkeits-Intersektions-Algorithmus
+
+Der Konfliktlösungs-Code-Node verwendet einen Drei-Phasen-Ansatz: zusammenführen, subtrahieren, quantisieren.
+
+**Phase 1 — Panel-Busy-Intervalle zusammenführen.** Die freeBusy-API gibt unabhängige `busy`-Arrays pro Kalender zurück. Der Node sammelt sie alle in einem einzigen flachen Array und führt eine Standard-Intervallzusammenführung durch (nach Start sortieren, vorwärtslaufen, das Ende des letzten Intervalls erweitern bei Überlappung oder Adjazenzsituation). Das Ergebnis ist die kleinste Menge von Intervallen, die jeden Moment abdeckt, in dem mindestens ein Panelist beschäftigt ist.
+
+**Phase 2 — Von den Kandidaten-Fenstern subtrahieren.** Für jedes Verfügbarkeitsfenster des Kandidaten subtrahiert der Node die zusammengeführte Panel-Busy-Union, indem er beide Listen gleichzeitig durchläuft — eine Intervallsubtraktion, die die Teilintervalle produziert, in denen der Kandidat verfügbar UND das Panel frei ist.
+
+**Phase 3 — Quantisieren und Ranken.** Die verbleibenden freien Teilintervalle werden in 60-Minuten-Blöcke quantisiert, die auf :00- oder :30-Grenzen ausgerichtet sind. Blöcke, die den Mittag überschreiten, werden ausgeschlossen. Die verbleibenden Blöcke werden durch eine Scoring-Funktion gerankt: früher am Tag erhält eine geringere Strafe, ein leichterer Recruiter-Kalender-Tag erhält weniger Abzüge, und die Nähe zu heute erhält einen kleinen Bonus. Die 3 besten werden dem Recruiter präsentiert.
+
+**Zeitzonenbehandlung:** die freeBusy-Abfrage gibt RFC3339-Timestamps mit expliziten Offsets aus. Die Ranking-Funktion wendet denselben statischen Offset für die Berechnung der Lokalzeit an. Dies ist eine bewusste Vereinfachung: Sommerzeitumstellungen betreffen Slots zweimal im Jahr. In der Produktion die Konstante `TZ_OFFSET_MS` im Code-Node durch einen DST-aware-Bibliotheksaufruf ersetzen (z. B. `DateTime.fromISO(iso, { zone: 'America/New_York' }).hour` von Luxon).
+
+## Kostenrealität
+
+Pro 100 gelöste Scheduling-Anfragen:
+
+- **Google Calendar API** — der freeBusy-Endpoint ist im Rahmen der Calendar-API-Kontingente kostenlos (1.000 Abfragen pro 100 Sekunden pro Nutzer; 10.000 pro Tag pro Projekt beim Standard-Kontingent). Ein Interview mit 5 Panelisten verwendet einen einzigen freeBusy-Aufruf mit 6 Kalender-IDs. 100 Interviews = 100 API-Aufrufe.
+- **n8n-Ausführungen** — jede Webhook-Zustellung ist eine Ausführung. n8n Cloud Starter für $20/Monat umfasst 5.000 Ausführungen/Monat; der Backup-Cron fügt 20 Ausführungen/Monat hinzu. Teams mit mehr als 5.000 Scheduling-Ereignissen pro Monat benötigen den Pro-Tier ($50/Monat) oder self-hosted.
+- **Greenhouse API** — der Backup ruft Greenhouse Harvest höchstens einmal pro Cron-Ausführung auf und gibt bis zu 50 Datensätze pro Aufruf zurück.
+- **Zeitersparnis des Recruiters** — die Schätzung für manuelle Multi-Panelist-Scheduling-Koordination beträgt 20–45 Minuten pro Interview-Loop. Der Flow reduziert das auf die 2–3 Minuten, die benötigt werden, um eine Slack-Nachricht zu lesen und zu bestätigen. Bei 20 Interviews pro Recruiter pro Woche entspricht das 6–14 Stunden eliminierter Koordinationsarbeit pro Woche.
+- **Setup-Kosten** — 1–2 Stunden für den Flow selbst. Der Kandidaten-Verfügbarkeits-Schritt (den Stub durch eine echte Calendly- oder Typeform-Integration ersetzen) fügt 30–60 Minuten hinzu.
+
+## Fehlermodi
+
+**Zeitzonen-Bugs an DST-Übergängen.**
+*Guard:* der Code-Node verwendet einen statischen Offset von `-5` Stunden für `America/New_York`. Dies ist für Eastern Standard Time korrekt, aber um eine Stunde verschoben während Eastern Daylight Time. Für ganzjährige Interview-Planung die Konstante `TZ_OFFSET_MS` in `Resolve Conflicts — Intersect + Rank Slots` durch einen DST-aware-Luxon-Aufruf ersetzen, bevor der Flow in Produktion geht.
+
+**Doppelbuchung, wenn der Kalender eines Panelisten nicht zugänglich ist.**
+*Guard:* wenn Google Calendar eines Panelisten in der freeBusy-Antwort einen Fehler zurückgibt, protokolliert der Code-Node den Fehler und behandelt diesen Panelisten als frei — er stoppt nicht. Die Slack-Nachricht enthält die vollständige `allCalendarIds`-Liste; der Recruiter kann erkennen, welche E-Mail einen freeBusy-Fehler ausgelöst hat, indem er das n8n-Ausführungsprotokoll prüft.
+
+**Webhook-Zustellungsfehler (verpasstes Stage-Change-Ereignis).**
+*Guard:* der tägliche Backup-Cron um 08:00 ET durchsucht Greenhouse nach Interviews im Status `to_be_scheduled`, die vor mehr als 48 Stunden erstellt wurden, und verarbeitet sie erneut. Der 48-Stunden-Schwellenwert verhindert die Neuverarbeitung von Interviews, die gerade erst erstellt wurden und deren Webhook noch in Zustellung sein könnte.
+
+**Abgelaufener OAuth2-Token, der den freeBusy-Aufruf ungültig macht.**
+*Guard:* der OAuth2-Credential-Handler von n8n aktualisiert Access-Tokens automatisch vor jeder Anfrage, wenn ein Refresh-Token vorhanden ist. Wenn der Refresh-Token selbst abläuft oder widerrufen wird, wirft der freeBusy-Node einen 401-Fehler. Den Error-Workflow von n8n (Einstellungen → Error-Workflow) konfigurieren, um eine Slack-Warnung zu senden, wenn eine Ausführung fehlschlägt.
+
+**Keine gemeinsame Verfügbarkeit im 14-Tage-Fenster.**
+*Guard:* der IF-Node `Slots Found?` leitet zu `Slack — Escalate No-Availability` weiter, mit der Bewerbungs-ID und der Recruiter-E-Mail. Wenn dieser Pfad häufig ausgelöst wird, das freeBusy-Abfragefenster im Node `Google Calendar — freeBusy Query` von 14 auf 21 Tage erweitern.
+
+## vs Alternativen
+
+**vs GoodTime / ModernLoop**
+
+GoodTime und ModernLoop sind speziell entwickelte Interview-Scheduling-Plattformen mit ATS-nativen Integrationen, Interviewer-Präferenztraining, Lastausgleich über das Panel und kandidatenseitigen Self-Scheduling-Portalen. Die Enterprise-Verträge von GoodTime beginnen typischerweise im Bereich von $15.000–$40.000/Jahr (Schätzung basierend auf G2-Bewertungen und Vendr-Marketplace-Daten). ModernLoop ist ähnlich in Umfang und Preisklasse.
+
+GoodTime oder ModernLoop wählen, wenn: mehr als 100 Panel-Interviews pro Woche stattfinden, Lastausgleich der Interviewer über einen Panel-Pool benötigt wird, oder Kandidaten eine white-labeled Self-Scheduling-Erfahrung erwarten. Der n8n-Flow bietet nichts davon.
+
+Den n8n-Flow wählen, wenn: das Volumen unter 50 Panel-Interviews pro Woche liegt, n8n bereits für andere Workflows betrieben wird, die Scheduling-Logik im eigenen Repository und Audit-Log gewünscht wird, oder die Plattformkosten von $15k+ durch das aktuelle Einstellungstempo noch nicht gerechtfertigt sind.
+
+**vs manuellem Coordinator**
+
+Ein dedizierter Recruiting Coordinator, der Interviews manuell plant, kann die Vorschlagsqualität dieses Flows erreichen — er hat Kontext, den der Algorithmus nicht hat (Kandidatenpräferenzen aus dem Telefon-Screen, Beziehungspräferenzen der Panelisten, bevorstehende Abwesenheiten). Der Preis sind 20–45 Minuten pro Loop und die synchrone Abhängigkeit von den Arbeitszeiten des Coordinators. Der Flow läuft um 3 Uhr morgens; ein Coordinator nicht.
+
+**vs Calendly Teams / Calendly für Recruiting**
+
+[Calendly](/de/tools/calendly/) Teams ermöglicht Kandidaten die Selbstplanung gegen einen Multi-Personen-Verfügbarkeitskalender. Es handhabt die kandidatenseitige UX besser als dieser Flow. Es integriert sich nicht nativ mit dem stufenbasierten Workflow von Greenhouse; ein Zapier- oder n8n-Trigger wäre nötig, um beim Stufenwechsel auszulösen und den Calendly-Link zu versenden.
+
+Calendly Teams wählen, wenn die kandidatenseitige Self-Scheduling-Erfahrung Priorität hat und das Ranking/Scoring-Output oder der Slack-basierte Recruiter-Bestätigungsschritt nicht benötigt werden.
+
+## Stack-Referenzen
+
+Bundle-Dateien:
+
+- `apps/web/public/artifacts/interview-scheduling-resolver-n8n/interview-scheduling-resolver-n8n.json` — der n8n-Flow-Export (12 Nodes, vollständig konfiguriert, Placeholder-Credentials benannt)
+- `apps/web/public/artifacts/interview-scheduling-resolver-n8n/_README.md` — Import-Prozedur, Credential-Setup pro Credential, Kandidaten-Verfügbarkeits-Verdrahtung, Algorithmus-Zusammenfassung, Erstverifizierung (5 Testfälle)
+
+Tools: [n8n](/de/tools/n8n/) (Orchestrierung), [Greenhouse](/de/tools/greenhouse/) (ATS-Webhook + Harvest-API), [Calendly](/de/tools/calendly/) (Kandidaten-Verfügbarkeit — optional, ersetzt den Stub-Node). Die Google Calendar freeBusy-API und Slack werden direkt über HTTP-Request- und Slack-Nodes verwendet.
+
+Verwandte Workflows: [Inbound-Kandidaten-Triage](/de/workflows/inbound-applicant-triage-n8n/) (der vorgelagerte Triage-Schritt, der Kandidaten in die Interview-Stufe leitet), [Interview-Loop-Builder](/de/workflows/interview-loop-builder-skill/) (der Claude Skill, der die Panel-Struktur vor dem Scheduling entwirft), [Kandidaten-Engagement-Sequenz](/de/workflows/candidate-engagement-sequence-n8n/) (Post-Interview-Follow-up-Automatisierung).

@@ -1,0 +1,324 @@
+{
+  "name": "Interview scheduling conflict resolver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "interview-scheduling-resolver",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000001",
+      "name": "Greenhouse Webhook — interview_requested",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "interview-scheduling-resolver-webhook",
+      "notesInFlow": true,
+      "notes": "Receives POST events from the Greenhouse recruiting webhook. Configure the Greenhouse webhook under Settings → Dev Center → Web Hooks to send candidate_stage_change events (status: to_be_scheduled). Greenhouse signs each request with HMAC-SHA256; signature is verified in the next node."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"received\": true, \"applicationId\": \"{{ $json.body.payload.application.id }}\" }",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000002",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 480],
+      "notesInFlow": true,
+      "notes": "Acknowledge Greenhouse immediately with 202 so the webhook call never times out. The rest of the flow runs asynchronously."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verify Greenhouse webhook HMAC-SHA256 signature.\n// Greenhouse sends the signature in the header 'Signature' as:\n//   sha256=<hex-digest>\n// The secret is set on the webhook in the Greenhouse Dev Center.\n\nconst crypto = require('crypto');\n\nconst secret = $env['GREENHOUSE_WEBHOOK_SECRET'] || '';\nconst signatureHeader = ($input.first().json.headers?.['signature'] ||\n                         $input.first().json.headers?.['Signature'] || '').trim();\nconst rawBody = $input.first().json.rawBody || JSON.stringify($input.first().json.body || {});\n\nif (!secret) {\n  throw new Error('GREENHOUSE_WEBHOOK_SECRET env var is not set. Cannot verify signature.');\n}\n\nif (!signatureHeader) {\n  throw new Error('No Signature header found in webhook request. Rejecting.');\n}\n\nconst expected = 'sha256=' + crypto\n  .createHmac('sha256', secret)\n  .update(rawBody)\n  .digest('hex');\n\nif (!crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected))) {\n  throw new Error(`Signature mismatch. Expected ${expected}, got ${signatureHeader}. Dropping webhook.`);\n}\n\n// Verified. Extract the fields we need for the rest of the flow.\nconst payload = $input.first().json.body?.payload || $input.first().json.body || {};\nconst application = payload.application || {};\nconst candidate = application.candidate || payload.candidate || {};\nconst job = application.jobs?.[0] || payload.job || {};\nconst currentStage = payload.current_stage || application.current_stage || {};\n\n// Collect interviewers from the current stage's interviews array.\n// Each interview has an interviewers[] array with email addresses.\nconst interviews = currentStage.interviews || [];\nconst interviewerEmails = [];\nfor (const interview of interviews) {\n  for (const iv of (interview.interviewers || [])) {\n    if (iv.email && !interviewerEmails.includes(iv.email)) {\n      interviewerEmails.push(iv.email);\n    }\n  }\n}\n\n// Recruiter email comes from the organizer field of the application or the\n// assigned recruiter on the job.\nconst recruiterEmail = application.recruiter?.email ||\n                       payload.recruiter?.email ||\n                       job.recruiter?.email || '';\n\nreturn [{\n  json: {\n    applicationId: String(application.id || ''),\n    candidateName: candidate.name || `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim(),\n    candidateEmail: (candidate.email_addresses || []).find(e => e.type === 'work')?.value ||\n                    (candidate.email_addresses || [])[0]?.value || candidate.email || '',\n    jobId: String(job.id || ''),\n    jobName: job.name || '',\n    stageName: currentStage.name || '',\n    recruiterEmail,\n    interviewerEmails,\n    allCalendarIds: [...new Set([recruiterEmail, ...interviewerEmails].filter(Boolean))],\n    greenhouseApplicationId: String(application.id || ''),\n    receivedAt: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000003",
+      "name": "Verify Signature + Extract Participants",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300],
+      "notesInFlow": true,
+      "notes": "Verifies the Greenhouse HMAC-SHA256 webhook signature to reject spoofed requests. Extracts recruiter, interviewers, candidate contact, and job context. If GREENHOUSE_WEBHOOK_SECRET is unset or signature mismatches, this node throws and halts the execution — the error is visible in n8n Executions."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/freeBusy",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "timeMin": "={{ $now.plus({days: 1}).startOf('day').setZone('America/New_York').toISO() }}",
+          "timeMax": "={{ $now.plus({days: 14}).endOf('day').setZone('America/New_York').toISO() }}",
+          "timeZone": "America/New_York",
+          "items": "={{ $json.allCalendarIds.map(id => ({ id })) }}"
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000004",
+      "name": "Google Calendar — freeBusy Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_GOOGLE_CAL_CRED_ID",
+          "name": "Google Calendar — OAuth2"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Calls the Google Calendar freeBusy endpoint for all participants (recruiter + every interviewer). Returns busy[] time windows for the next 14 business days. Requires calendar scope: https://www.googleapis.com/auth/calendar.readonly. If a calendar ID is not found or access is denied, the API returns an error per calendar; the next node handles that gracefully."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Candidate availability intake stub.\n// In a real deployment this node reads from a Typeform / Calendly webhook response\n// or from a candidate-facing availability form whose results were stored in Airtable/Google Sheets.\n// For the initial run, the node returns a wide open window (the full 14-day range)\n// so the conflict-resolution logic can compute panel availability unconditionally.\n// Replace this node with a Typeform, Airtable, or Google Sheets read node once\n// you have a candidate-availability collection step wired.\n\nconst applicationId = $('Verify Signature + Extract Participants').first().json.applicationId;\nconst candidateName = $('Verify Signature + Extract Participants').first().json.candidateName;\n\n// Build a set of wide-open candidate windows:\n// Mon-Fri 9am-6pm ET for each day in the next 14 days.\nconst windows = [];\nconst tz = 'America/New_York';\nconst now = new Date();\nfor (let d = 1; d <= 14; d++) {\n  const date = new Date(now);\n  date.setDate(date.getDate() + d);\n  const dow = date.getDay(); // 0=Sun, 6=Sat\n  if (dow === 0 || dow === 6) continue;\n  const yyyy = date.getFullYear();\n  const mm = String(date.getMonth() + 1).padStart(2, '0');\n  const dd = String(date.getDate()).padStart(2, '0');\n  windows.push({\n    start: `${yyyy}-${mm}-${dd}T09:00:00-05:00`,\n    end:   `${yyyy}-${mm}-${dd}T18:00:00-05:00`,\n  });\n}\n\nreturn [{\n  json: {\n    applicationId,\n    candidateName,\n    candidateWindows: windows,\n    source: 'stub-wide-open',\n  }\n}];"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000005",
+      "name": "Candidate Availability Intake",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 480],
+      "notesInFlow": true,
+      "notes": "Reads candidate availability windows. The stub returns Mon-Fri 9am-6pm ET for the full 14-day window. Replace with a Typeform or Calendly webhook node to ingest real candidate constraints once you have that step in your process."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Conflict-resolution algorithm: free-window intersection + slot ranking.\n//\n// INPUTS:\n//   $('Google Calendar — freeBusy Query').first().json  → freeBusy API response\n//   $('Candidate Availability Intake').first().json      → candidateWindows[]\n//   $('Verify Signature + Extract Participants').first().json → allCalendarIds, recruiterEmail\n//\n// ALGORITHM:\n//   1. For each panel member, collect their busy intervals from the freeBusy response.\n//   2. Build the candidate's free intervals from candidateWindows.\n//   3. Intersect all participant free windows to find slots when *everyone* is free.\n//   4. Quantize to 60-minute blocks (configurable via SLOT_DURATION_MINUTES below).\n//   5. Apply tie-break preference rules to rank the candidate slots:\n//        a. Earlier in the day beats later (candidates respond better to morning slots).\n//        b. Days with fewer total busy intervals for the recruiter are preferred\n//           (lighter-schedule days leave room for immediate debrief).\n//        c. Never propose slots straddling noon (11:30–12:30 ET) — lunch collision.\n//   6. Return the top 3 ranked slots.\n\nconst SLOT_DURATION_MINUTES = 60;\nconst MAX_PROPOSALS = 3;\nconst NOON_BUFFER_MINUTES = 30; // exclude slots starting within 30 min of noon\nconst TZ_OFFSET_MS = -5 * 60 * 60 * 1000; // America/New_York standard; DST not applied here — use a DST-aware library in production\n\n// Parse ISO string to ms timestamp.\nfunction toMs(iso) { return new Date(iso).getTime(); }\nfunction toISO(ms) { return new Date(ms).toISOString(); }\n\n// Merge overlapping/adjacent intervals (sorted by start).\nfunction mergeIntervals(intervals) {\n  if (!intervals.length) return [];\n  const sorted = [...intervals].sort((a, b) => a.start - b.start);\n  const merged = [sorted[0]];\n  for (let i = 1; i < sorted.length; i++) {\n    const last = merged[merged.length - 1];\n    if (sorted[i].start <= last.end) {\n      last.end = Math.max(last.end, sorted[i].end);\n    } else {\n      merged.push({ ...sorted[i] });\n    }\n  }\n  return merged;\n}\n\n// Subtract busy intervals from a free window, returning the remaining free sub-intervals.\nfunction subtractBusy(freeWindow, busyIntervals) {\n  let remaining = [{ ...freeWindow }];\n  for (const busy of busyIntervals) {\n    const next = [];\n    for (const free of remaining) {\n      if (busy.end <= free.start || busy.start >= free.end) {\n        next.push(free); // no overlap\n      } else {\n        if (busy.start > free.start) next.push({ start: free.start, end: busy.start });\n        if (busy.end < free.end)   next.push({ start: busy.end,   end: free.end });\n      }\n    }\n    remaining = next;\n  }\n  return remaining;\n}\n\n// --- Build per-participant busy intervals ---\nconst freeBusyResponse = $('Google Calendar — freeBusy Query').first().json;\nconst { allCalendarIds, recruiterEmail } = $('Verify Signature + Extract Participants').first().json;\n\nconst participantBusy = {};\nfor (const calId of allCalendarIds) {\n  const calData = freeBusyResponse.calendars?.[calId];\n  if (!calData) {\n    participantBusy[calId] = []; // calendar not found or no access — treat as free\n    continue;\n  }\n  if (calData.errors?.length) {\n    // Calendar returned an error (e.g. notFound, restricted).\n    // Log it and treat as free so we don't block on one unavailable calendar.\n    console.warn(`freeBusy error for ${calId}:`, JSON.stringify(calData.errors));\n    participantBusy[calId] = [];\n    continue;\n  }\n  participantBusy[calId] = (calData.busy || []).map(b => ({\n    start: toMs(b.start),\n    end:   toMs(b.end),\n  }));\n}\n\n// Merge all participant busy intervals into a single union (the panel is blocked\n// if ANY member is busy).\nconst allBusy = Object.values(participantBusy).flat();\nconst mergedPanelBusy = mergeIntervals(allBusy);\n\n// Count how many busy intervals the recruiter has per calendar-day (tie-break input).\nconst recruiterBusyByDay = {};\nfor (const interval of (participantBusy[recruiterEmail] || [])) {\n  const dayKey = new Date(interval.start).toISOString().slice(0, 10);\n  recruiterBusyByDay[dayKey] = (recruiterBusyByDay[dayKey] || 0) + 1;\n}\n\n// --- Candidate free windows ---\nconst { candidateWindows } = $('Candidate Availability Intake').first().json;\nconst candidateFreeIntervals = candidateWindows.map(w => ({\n  start: toMs(w.start),\n  end:   toMs(w.end),\n}));\n\n// --- Compute free intersection ---\n// For each candidate window, subtract the merged panel busy intervals.\nconst freeSlots = []; // { start: ms, end: ms }\nfor (const window of candidateFreeIntervals) {\n  const overlappingBusy = mergedPanelBusy.filter(b => b.end > window.start && b.start < window.end);\n  const freeInWindow = subtractBusy(window, overlappingBusy);\n  freeSlots.push(...freeInWindow);\n}\n\n// --- Quantize to SLOT_DURATION_MINUTES blocks ---\nconst slotMs = SLOT_DURATION_MINUTES * 60 * 1000;\nconst candidates = [];\nfor (const free of freeSlots) {\n  let t = free.start;\n  // Round up to next 30-min boundary to align to :00 or :30.\n  const thirtyMin = 30 * 60 * 1000;\n  if (t % thirtyMin !== 0) {\n    t = Math.ceil(t / thirtyMin) * thirtyMin;\n  }\n  while (t + slotMs <= free.end) {\n    const slotStart = new Date(t);\n    const hour = slotStart.getUTCHours() + (TZ_OFFSET_MS / (60 * 60 * 1000));\n    const minute = slotStart.getUTCMinutes();\n    // Exclude slots straddling noon (11:30-12:00 start = ends at 12:30-13:00).\n    const hourFraction = hour + minute / 60;\n    if (!(hourFraction >= 11.5 - SLOT_DURATION_MINUTES / 60 && hourFraction < 12)) {\n      candidates.push({ start: t, end: t + slotMs });\n    }\n    t += slotMs;\n  }\n}\n\n// --- Rank slots ---\n// Score = base 100\n//   - Subtract (localHour - 9) * 5  → earlier is better (9am = 0 penalty, 5pm = 40 penalty)\n//   - Subtract recruiterBusyByDay[day] * 3 → lighter recruiter day preferred\n//   - Add 10 if slot is in the first 5 business days (urgency preference)\nconst ranked = candidates.map(slot => {\n  const d = new Date(slot.start);\n  const dayKey = d.toISOString().slice(0, 10);\n  const localHour = d.getUTCHours() + (TZ_OFFSET_MS / (60 * 60 * 1000));\n  const recruiterLoad = recruiterBusyByDay[dayKey] || 0;\n  const score = 100\n    - (localHour - 9) * 5\n    - recruiterLoad * 3\n    + (candidates.indexOf(slot) < 10 ? 10 : 0); // first 10 candidate slots are in the near-term\n  return { ...slot, score, dayKey, localHour };\n}).sort((a, b) => b.score - a.score);\n\nconst top = ranked.slice(0, MAX_PROPOSALS);\n\nif (top.length === 0) {\n  return [{\n    json: {\n      resolved: false,\n      reason: 'no_common_availability',\n      applicationId: $('Verify Signature + Extract Participants').first().json.applicationId,\n      recruiterEmail,\n      message: 'No overlapping free windows found in the 14-day lookahead. Routing to manual coordinator.',\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    resolved: true,\n    applicationId: $('Verify Signature + Extract Participants').first().json.applicationId,\n    candidateName: $('Candidate Availability Intake').first().json.candidateName,\n    recruiterEmail,\n    allCalendarIds,\n    proposedSlots: top.map(s => ({\n      start: toISO(s.start),\n      end:   toISO(s.end),\n      score: s.score,\n    })),\n    slotsEvaluated: candidates.length,\n    panelBusyIntervalCount: mergedPanelBusy.length,\n  }\n}];"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000006",
+      "name": "Resolve Conflicts — Intersect + Rank Slots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "notesInFlow": true,
+      "notes": "Core algorithm. Merges all panel members' busy intervals into one union, subtracts them from the candidate's available windows, quantizes to 60-min blocks, then ranks by: (1) earlier in the day, (2) lighter recruiter schedule on that day, (3) proximity to today. Returns the top 3 slots. If no overlap exists, sets resolved: false and routes to the no-availability branch."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.resolved }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000007",
+      "name": "Slots Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1080, 300],
+      "notesInFlow": true,
+      "notes": "Routes to the Slack notification if the resolver found at least one common window, or to the manual-escalation path if no overlap was found in the 14-day window."
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "resource": "message",
+        "operation": "post",
+        "channel": "#scheduling-queue",
+        "text": "=:calendar: *Interview slot proposals ready* — {{ $json.candidateName }}\n\n*Job:* {{ $('Verify Signature + Extract Participants').first().json.jobName }}\n*Stage:* {{ $('Verify Signature + Extract Participants').first().json.stageName }}\n*Application ID:* {{ $json.applicationId }}\n\n*Top {{ $json.proposedSlots.length }} proposed slots (ET):*\n{{ $json.proposedSlots.map((s, i) => `${i+1}. ${s.start} → ${s.end}  (score: ${s.score})`).join('\\n') }}\n\n*Panel:* {{ $json.allCalendarIds.join(', ') }}\n*Slots evaluated:* {{ $json.slotsEvaluated }} | *Panel busy blocks merged:* {{ $json.panelBusyIntervalCount }}\n\nPick a slot and book via Greenhouse Scheduled Interviews:\nhttps://app.greenhouse.io/people?application_id={{ $json.applicationId }}"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000008",
+      "name": "Slack — Notify Recruiter with Proposed Slots",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1300, 220],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Posts the top 3 proposed slots to #scheduling-queue with the scoring rationale, panel member list, and a deep link to the Greenhouse application. The recruiter picks a slot and creates the scheduled interview in Greenhouse manually (or via the POST /v2/scheduled_interviews endpoint if you wire an additional node). The flow does NOT auto-book to preserve the recruiter's agency over the final slot choice."
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "resource": "message",
+        "operation": "post",
+        "channel": "#scheduling-queue",
+        "text": "=:warning: *No common availability found* — {{ $('Verify Signature + Extract Participants').first().json.candidateName || $json.candidateName }}\n\n*Application ID:* {{ $json.applicationId }}\n*Reason:* {{ $json.reason }}\n*Message:* {{ $json.message }}\n\nPanel: {{ ($json.recruiterEmail ? [$json.recruiterEmail] : []).concat([]).join(', ') }}\n\nManual scheduling required. Open application in Greenhouse:\nhttps://app.greenhouse.io/people?application_id={{ $json.applicationId }}"
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000009",
+      "name": "Slack — Escalate No-Availability",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1300, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "When the resolver finds no common window in 14 days, posts an escalation to #scheduling-queue so a coordinator can reach out directly. Includes the application ID and recruiter email for context. Consider extending the lookahead window (in the freeBusy query node) if this escalation fires frequently."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        },
+        "options": {
+          "timezone": "America/New_York"
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000010",
+      "name": "Daily Backstop Cron — 8am ET weekdays",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 680],
+      "notesInFlow": true,
+      "notes": "Fires at 08:00 America/New_York on weekdays. Sweeps Greenhouse for applications stuck in a 'to_be_scheduled' interview status for more than 48 hours and replays them through the resolver. This catches webhook delivery failures or cases where the stage-change event was missed. The backstop calls the Greenhouse Harvest API GET /v1/scheduled_interviews filtered by status and created_at range."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://harvest.greenhouse.io/v1/scheduled_interviews?status=to_be_scheduled&created_before={{ $now.minus({hours: 48}).toISO() }}&per_page=50",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000011",
+      "name": "Greenhouse — List Stale Unscheduled Interviews",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 680],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_GREENHOUSE_CRED_ID",
+          "name": "Greenhouse Harvest API — Basic Auth"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Queries Greenhouse Harvest API for interviews in to_be_scheduled status created more than 48 hours ago. Credentials: PLACEHOLDER_GREENHOUSE_CRED_ID — set up a Greenhouse API key (Harvest scope) and store it as HTTP Header Auth (header name: Authorization, value: Basic base64(api_key:))."
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "body",
+        "options": {
+          "destinationFieldName": "interview"
+        }
+      },
+      "id": "3a3a3a3a-0003-0000-0000-000000000012",
+      "name": "Split Into Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [640, 680],
+      "notesInFlow": true,
+      "notes": "Splits the Greenhouse response array into individual items so each stale interview is processed independently through the resolver chain."
+    }
+  ],
+  "connections": {
+    "Greenhouse Webhook — interview_requested": {
+      "main": [
+        [
+          { "node": "Respond 202 Accepted", "type": "main", "index": 0 },
+          { "node": "Verify Signature + Extract Participants", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Verify Signature + Extract Participants": {
+      "main": [
+        [
+          { "node": "Google Calendar — freeBusy Query", "type": "main", "index": 0 },
+          { "node": "Candidate Availability Intake", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Calendar — freeBusy Query": {
+      "main": [
+        [
+          { "node": "Resolve Conflicts — Intersect + Rank Slots", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Candidate Availability Intake": {
+      "main": [
+        [
+          { "node": "Resolve Conflicts — Intersect + Rank Slots", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "Resolve Conflicts — Intersect + Rank Slots": {
+      "main": [
+        [
+          { "node": "Slots Found?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Slots Found?": {
+      "main": [
+        [
+          { "node": "Slack — Notify Recruiter with Proposed Slots", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Slack — Escalate No-Availability", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Daily Backstop Cron — 8am ET weekdays": {
+      "main": [
+        [
+          { "node": "Greenhouse — List Stale Unscheduled Interviews", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Greenhouse — List Stale Unscheduled Interviews": {
+      "main": [
+        [
+          { "node": "Split Into Items", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    { "createdAt": "2026-05-23T00:00:00.000Z", "updatedAt": "2026-05-23T00:00:00.000Z", "id": "recruiting", "name": "recruiting" },
+    { "createdAt": "2026-05-23T00:00:00.000Z", "updatedAt": "2026-05-23T00:00:00.000Z", "id": "scheduling", "name": "scheduling" }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2026-05-23T00:00:00.000Z",
+  "versionId": "1"
+}
