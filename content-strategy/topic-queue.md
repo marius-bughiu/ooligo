@@ -40,6 +40,21 @@ Format per item:
 - [type:tool] [vertical:cross] new entry: recall-ai — meeting bot infrastructure (the API behind many AI-notetakers); developer-facing but discussed in RevOps/Recruiting tool stacks → slug: recall-ai
 - [type:tool] [vertical:cross] new entry: calendly — meeting scheduling; the missing baseline alongside Chili Piper and GoodTime for routing/scheduling comparisons → slug: calendly
 - [type:tool] [vertical:revops] new entry: vidyard — async video for sales; needed to anchor async-video sales comparisons and to support sequence-builder workflows → slug: vidyard
+- [type:tool] [vertical:revops] new entry: unify — signal-driven GTM / warm-outbound platform with AI plays; the "signal-driven not fully-autonomous" pole buyers weigh against 11x/Artisan
+- [type:tool] [vertical:revops] new entry: aisdr — AI SDR doing email + voice outreach with published pricing; the third pole alongside 11x and Artisan in AI-SDR shortlists
+- [type:tool] [vertical:revops] new entry: warmly — website visitor de-anonymization + warm-outbound orchestration; high r/sales mention volume, pairs against RB2B
+- [type:tool] [vertical:revops] new entry: revenuehero — inbound lead-to-meeting routing + scheduling; the lower-cost single-product Chili Piper alternative readers ask about
+- [type:tool] [vertical:revops] new entry: qualified — Salesforce-native pipeline platform with the Piper AI SDR; the SFDC-native inbound-conversion pole
+- [type:tool] [vertical:recruiting] new entry: seekout — agentic AI recruiting (sourcing + screening + SeekOut Spot slate service); major catalog gap vs hireEZ/Gem
+- [type:tool] [vertical:recruiting] new entry: tezi — autonomous AI recruiter (agent "Max") for sourcing + first-touch outreach; the point-solution AI-recruiter readers evaluate
+- [type:tool] [vertical:recruiting] new entry: apriora — AI video interviewer (agent "Alex") for real-time screening with cheat detection; the live/async AI-interview category
+- [type:tool] [vertical:recruiting] new entry: micro1 — AI technical interviewer (agent "Zara") + vetted global talent marketplace; dev-vetting angle vs CodeSignal/Karat
+- [type:tool] [vertical:legal-ops] new entry: legora — legal AI assistant for drafting/review/research; Harvey's chief rival after its 2026 mega-raise, anchors harvey-vs-legora
+- [type:tool] [vertical:legal-ops] new entry: eve-legal — plaintiff-side litigation AI (case workup + demand prep); reached $1B valuation in 2026, the plaintiff-firm counterpart to in-house legal AI
+- [type:tool] [vertical:legal-ops] new entry: evenup — AI demand-package generation for personal-injury firms; category leader after $150M raise, anchors the PI-law cluster
+- [type:tool] [vertical:legal-ops] new entry: definely — Word-native contract drafting/review add-in (defined terms, navigation, redlining) for transactional and in-house lawyers
+- [type:tool] [vertical:cross] new entry: dust — enterprise AI-agent platform to build and govern agents over company tools; deployed across RevOps, Legal, and Recruiting with permissioned data
+- [type:tool] [vertical:cross] new entry: relevance-ai — AI agent workforce / orchestration for back-office ops processes; the no-code multi-agent builder ops teams compare to Dust
 
 ## Comparisons
 
@@ -69,6 +84,15 @@ Format per item:
 - [type:comparison] [vertical:legal-ops] pairwise: spellbook-vs-draftwise — AI drafting assistants in Word; routes on broad drafting/redline coverage vs precedent-grounded clause retrieval → slug: spellbook-vs-draftwise
 - [type:comparison] [vertical:legal-ops] pairwise: reveal-vs-relativity — ediscovery platforms; routes on AI-native review (Reveal-Brainspace) vs Relativity ecosystem and partner depth → slug: reveal-vs-relativity
 - [type:comparison] [vertical:revops] pairwise: 11x-vs-artisan — AI SDR head-to-head; routes on multi-agent suite (Alice/Jordan/Mike) vs single-rep Ava with email focus → slug: 11x-vs-artisan
+- [type:comparison] [vertical:legal-ops] pairwise: harvey-vs-legora — legal AI rivals; routes on workflow-suite breadth + US grounding vs European-origin collaborative drafting/review
+- [type:comparison] [vertical:recruiting] pairwise: seekout-vs-hireez — AI sourcing / talent intelligence; routes on agentic slate delivery (Spot) vs structured boolean search + diversity insights
+- [type:comparison] [vertical:recruiting] pairwise: seekout-vs-gem — sourcing + outreach; routes on agentic sourcing depth vs all-in-one recruiting CRM + sequencing
+- [type:comparison] [vertical:revops] pairwise: default-vs-chili-piper — inbound routing/scheduling; routes on lightweight orchestration + enrichment layer vs four-product demand-conversion suite
+- [type:comparison] [vertical:revops] pairwise: revenuehero-vs-chili-piper — inbound lead-to-meeting; routes on single-product cost efficiency vs incumbent feature breadth
+- [type:comparison] [vertical:recruiting] pairwise: brighthire-vs-metaview — interview intelligence; routes on structured-hiring + ATS depth vs notes + coaching UX
+- [type:comparison] [vertical:legal-ops] pairwise: icertis-vs-sirionlabs — enterprise CLM; routes on contract-intelligence platform breadth vs obligation / SRM management depth
+- [type:comparison] [vertical:revops] pairwise: gainsight-vs-catalyst — CS platforms; routes on enterprise CS-Ops depth vs lean workflow customization and time-to-value
+- [type:comparison] [vertical:revops] pairwise: unify-vs-11x — signal-driven vs autonomous AI SDR; routes on warm signal-led pipeline + control vs fully-autonomous outbound volume
 
 ## Workflows
 
@@ -85,6 +109,10 @@ Format per item:
 - [type:workflow] [vertical:legal-ops] nda-clause-redline-prompt-pack — prompt pack of paired prompts for redlining the 12 most-negotiated NDA clauses; artifact_type: prompt → slug: nda-clause-redline-prompt-pack
 - [type:workflow] [vertical:legal-ops] ediscovery-custodian-questionnaire-skill — claude skill that generates a custodian interview questionnaire from a legal-hold scope; artifact_type: claude-skill → slug: ediscovery-custodian-questionnaire-skill
 - [type:workflow] [vertical:cross] cursor-rules-data-engineer-ops — cursor rules tailored for an ops-adjacent data engineer (dbt + reverse-ETL + warehouse hygiene); artifact_type: cursor-rule → slug: cursor-rules-data-engineer-ops
+- [type:workflow] [vertical:revops] email-deliverability-monitor-n8n — n8n flow watching DMARC failures, spam-complaint rate, and blocklist status across sending domains and alerting before suppression; artifact_type: n8n-flow
+- [type:workflow] [vertical:revops] ai-sdr-draft-qa-skill — claude skill that QAs AI-SDR-generated outreach (claim accuracy, personalization, compliance) before it sends; artifact_type: claude-skill
+- [type:workflow] [vertical:recruiting] candidate-rediscovery-n8n — n8n flow that re-surfaces silver-medalist and past applicants from the ATS against a newly opened req; artifact_type: n8n-flow
+- [type:workflow] [vertical:legal-ops] demand-letter-drafter-claude-skill — claude skill that drafts a personal-injury demand letter from medical records + case facts (attorney review required); artifact_type: claude-skill
 
 ## Learn
 
@@ -103,6 +131,14 @@ Format per item:
 - [type:learn] [vertical:legal-ops] concept: contract-data-extraction — how AI extracts structured clause data from contracts; precision/recall tradeoffs and validation patterns → slug: contract-data-extraction
 - [type:learn] [vertical:legal-ops] concept: legal-hold-process — the end-to-end legal-hold lifecycle (issue → custodian → preservation → release) and where automation helps → slug: legal-hold-process
 - [type:learn] [vertical:legal-ops] concept: data-room-vs-deal-room — distinctions for legal/finance buyers and where AI document analysis applies → slug: data-room-vs-deal-room
+- [type:learn] [vertical:recruiting] regulation: colorado-ai-act-sb205 — what SB 205 requires for high-risk hiring AI, the delayed timeline (enforcement paused 2026, effective Jan 2027), and what deployers should do now → primary target_question: does the Colorado AI Act apply to our hiring tools?
+- [type:learn] [vertical:recruiting] concept: interview-intelligence — what interview-intelligence platforms do vs simple call recording (BrightHire/Metaview/Pillar) → primary target_question: what is interview intelligence?
+- [type:learn] [vertical:revops] definition: signal-driven-vs-autonomous-ai-sdr — the two AI-outbound architectures and how reply-rate and cost-per-meeting differ → primary target_question: signal-driven vs autonomous AI SDR — which is better?
+- [type:learn] [vertical:revops] concept: email-deliverability-for-cold-outreach — SPF/DKIM/DMARC, one-click unsubscribe, the 0.1% complaint threshold, and warmup under 2026 Google/Microsoft sender rules → primary target_question: how do I keep cold email out of spam in 2026?
+- [type:learn] [vertical:revops] definition: cpq-configure-price-quote — what CPQ is, where it sits in quote-to-cash, and when RevOps actually needs it → primary target_question: what is CPQ?
+- [type:learn] [vertical:cross] concept: ai-agent-vs-rpa — how AI agents differ from RPA / workflow automation for ops, and the diagnostic questions to ask vendors → primary target_question: AI agent vs RPA — what's the difference?
+- [type:learn] [vertical:cross] concept: retrieval-augmented-generation-rag — RAG explained for non-engineer ops buyers evaluating vendors that claim "grounded" answers → primary target_question: what is RAG and why does it matter for AI tools?
+- [type:learn] [vertical:legal-ops] concept: legal-ai-grounding-vs-hallucination — why "grounded" legal AI (Westlaw/Lexis-backed) matters and how to evaluate citation fidelity → primary target_question: how do I know a legal AI tool won't hallucinate citations?
 
 ## Stacks
 
@@ -113,3 +149,8 @@ Format per item:
 - [type:stack] [vertical:revops] new entry: gtm-engineering-stack — Clay + n8n + HubSpot + Common Room; use case: small GTM-engineering team automating signal-to-action loops → slug: gtm-engineering-stack
 - [type:stack] [vertical:revops] new entry: pls-product-led-sales-stack — Pocus + Koala + Salesforce + Slack; use case: PLG SaaS layering sales motion onto self-serve usage → slug: pls-product-led-sales-stack
 - [type:stack] [vertical:revops] new entry: partner-ecosystem-stack — Crossbeam + Reveal + Salesforce + Common Room; use case: partner-led growth with ecosystem account-mapping → slug: partner-ecosystem-stack
+- [type:stack] [vertical:revops] new entry: ai-sdr-stack — 11x-or-Artisan + Clay + Salesforce/HubSpot + Smartlead; use case: AI-led outbound pipeline with human QA in the loop
+- [type:stack] [vertical:revops] new entry: cold-email-infrastructure-stack — Smartlead/Instantly + secondary domains + Clay + warmup tooling; use case: deliverability-safe high-volume cold outreach
+- [type:stack] [vertical:revops] new entry: inbound-conversion-stack — Default-or-Chili-Piper + Qualified + Salesforce + Slack; use case: instant inbound lead-to-meeting conversion
+- [type:stack] [vertical:recruiting] new entry: ai-sourcing-stack — SeekOut/hireEZ + Gem + LinkedIn + ATS; use case: AI-assisted passive-candidate sourcing at scale
+- [type:stack] [vertical:recruiting] new entry: technical-hiring-stack — CodeSignal/HackerRank + Karat + Greenhouse; use case: standardized technical screening pipeline
