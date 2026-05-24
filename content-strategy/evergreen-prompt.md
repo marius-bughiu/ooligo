@@ -32,7 +32,7 @@ ooligo_score_breakdown:
   ai_quality: 9
   pricing_value: 8
   integrations: 9
-last_reviewed: "YYYY-MM-DD"   # today
+last_updated: "YYYY-MM-DD"   # today
 affiliate_link: https://...   # optional; triggers inline disclosure obligation
 ```
 
@@ -129,7 +129,7 @@ Run through this against the EN draft. If any unchecked box has no documented ex
 - [ ] Explicit "best for…" line — role + use case
 - [ ] ≥ 2 watch-outs each paired with a specific guard
 - [ ] If `affiliate_link` set: inline disclosure included, independence-test answer in commit message
-- [ ] `last_reviewed` matches sources actually checked today
+- [ ] `last_updated` matches sources actually checked today
 
 ### comparison
 

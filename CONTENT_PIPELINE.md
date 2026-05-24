@@ -72,7 +72,7 @@ The translation rules — glossary, regional register, never-translate list — 
 The authoring LLM is on the hook for:
 
 1. **Factual accuracy** — pricing, integrations, capabilities. If the LLM isn't sure, it says so or omits the claim. Never invent integrations or pricing tiers.
-2. **Currency** — `last_reviewed` date matches when sources were actually checked. Don't backdate.
+2. **Currency** — `last_updated` date matches when sources were actually checked. Don't backdate.
 3. **Cross-linking** — every entity links to related entities per ARCHITECTURE.md's link-budget rules. Validators check structural existence; the LLM checks relevance.
 4. **Voice consistency** — confident, opinionated, structured. We rank, we recommend, we say what's bad. We don't G2-hedge.
 
@@ -177,7 +177,7 @@ A tool page under 400 words is almost always skipping a decision. The exceptions
 - [ ] If `affiliate_link` is set in frontmatter, the body includes an inline disclosure ("ooligo earns a referral fee on signups via this page — the recommendation is unaffected; see `CORRECTIONS.md` if you spot bias") and the recommendation is held to the same bar as a non-affiliated entry. If you can't write the entry honestly with affiliation in mind, drop the affiliate link.
 - [ ] Has an explicit "best for…" line that names the role + use case
 - [ ] Has ≥ 2 watch-outs each paired with a specific guard
-- [ ] `last_reviewed` matches the date sources were actually checked (no backdating)
+- [ ] `last_updated` matches the date sources were actually checked (no backdating)
 - [ ] No vague-superlative evidence (treat "best-in-class," "comprehensive," "robust," "seamless," "powerful," "intuitive" as red flags — strip on review unless backed by a specific claim)
 
 ### Comparisons
@@ -344,7 +344,7 @@ If a claim doesn't fit any bucket, it doesn't go on the page. "Anecdotally," "we
 
 ### Freshness SLAs
 
-Pricing changes, vendors get acquired, tools sunset. `last_reviewed` is the contract — when it goes stale beyond these SLAs, the entry is failing the bar regardless of how well it was written originally.
+Pricing changes, vendors get acquired, tools sunset. `last_updated` is the contract — when it goes stale beyond these SLAs, the entry is failing the bar regardless of how well it was written originally.
 
 | Entry type | Field-level SLA | Whole-body SLA |
 |---|---|---|
@@ -356,7 +356,7 @@ Pricing changes, vendors get acquired, tools sunset. `last_reviewed` is the cont
 | Learn — definition / framework / FAQ / glossary | — | 12 months |
 | Learn — how-to | — | 6 months (UI screenshots and command syntax drift fastest) |
 
-The freshness check is mechanical: for every entry, `today - last_reviewed > SLA` fails the bar. Refresh = re-author the EN body and all five translated variants from current sources in the same session, bump `last_reviewed`.
+The freshness check is mechanical: for every entry, `today - last_updated > SLA` fails the bar. Refresh = re-author the EN body and all five translated variants from current sources in the same session, bump `last_updated`.
 
 The weekly `ooligo-freshness-sweep` scheduled task surfaces SLA-stale entries by prepending `refresh:` items to `content-strategy/topic-queue.md`. The `ooligo-evergreen-refresh` slot consumes one per week, and authoring slots consume them ahead of new-content items. See `content-strategy/freshness-prompt.md` for the routine details.
 
@@ -401,7 +401,7 @@ The correction log is the only mechanism by which the quality bar improves. With
 
 ### Refresh triggers
 
-A refresh is the same operation as authoring (re-write the entry from current sources, bump `last_reviewed`), and is triggered by:
+A refresh is the same operation as authoring (re-write the entry from current sources, bump `last_updated`), and is triggered by:
 
 - A reader opens a GitHub issue with a correction (logged in `CORRECTIONS.md`).
 - A scheduled freshness sweep flags an entry past its SLA.

@@ -16,12 +16,7 @@ Per CONTENT_PIPELINE.md (re-stated here for reference; the source of truth is th
 | Learn — definition / framework / FAQ / glossary | — | 12 months |
 | Learn — how-to | — | 6 months |
 
-Date field per type:
-
-- Tools: `last_reviewed`
-- Comparisons / Learn: `last_updated`
-- Workflows: `last_reviewed` if present, else `last_updated`
-- Stacks: `last_reviewed` if present, else `last_updated`
+Date field: all types use `last_updated` (required frontmatter on every entry). It records when the entry was last re-authored against current sources.
 
 ## Step 1 — Walk EN entries
 
@@ -31,9 +26,9 @@ Today: $(date in YYYY-MM-DD per the system clock).
 
 An entry is **stale** if `today - <date field> > SLA`.
 
-For tools, also check pricing-field freshness: if `pricing_starts_at`, `pricing_model`, or `pricing_url` look like they could have changed (heuristic: check if `last_reviewed` > 60 days ago AND the tool is in a fast-moving category like outbound or AI assistants — these have the most pricing churn). Flag for refresh if any of: SLA exceeded, or vendor changelog (if available from a recent `topic-refill` run via `gsc-candidates.json` notes) mentions pricing.
+For tools, also check pricing-field freshness: if `pricing_starts_at`, `pricing_model`, or `pricing_url` look like they could have changed (heuristic: check if `last_updated` > 60 days ago AND the tool is in a fast-moving category like outbound or AI assistants — these have the most pricing churn). Flag for refresh if any of: SLA exceeded, or vendor changelog (if available from a recent `topic-refill` run via `gsc-candidates.json` notes) mentions pricing.
 
-For stacks: in addition to the stack's own SLA, flag if any constituent tool was refreshed since this stack's `last_reviewed` (cascade rule).
+For stacks: in addition to the stack's own SLA, flag if any constituent tool was refreshed since this stack's `last_updated` (cascade rule).
 
 ## Step 2 — Cross-check against existing queue items
 
@@ -49,9 +44,9 @@ For each stale entry:
 ```markdown
 ## Refresh queue
 
-- refresh: [type:tool] [vertical:revops] apollo — body 130d stale (last_reviewed 2026-01-08, SLA 120d)
+- refresh: [type:tool] [vertical:revops] apollo — body 130d stale (last_updated 2026-01-08, SLA 120d)
 - refresh: [type:comparison] [vertical:legal-ops] ironclad-vs-spellbook — body 195d stale (last_updated 2025-11-03, SLA 180d)
-- refresh: [type:stack] [vertical:recruiting] sourcing-stack-mvp — cascade (gem refreshed 2026-05-12 > stack's last_reviewed 2026-04-30)
+- refresh: [type:stack] [vertical:recruiting] sourcing-stack-mvp — cascade (gem refreshed 2026-05-12 > stack's last_updated 2026-04-30)
 - ...
 
 ## Tools
@@ -92,7 +87,7 @@ If the sweep found nothing (zero new stale entries), log `freshness: no new stal
 ## Guardrails
 
 - Never edit MDX files in this routine — that's the authoring slot's job (via the `refresh:` queue item).
-- Never bump `last_reviewed` / `last_updated` here — those bump when the entry is actually re-authored.
+- Never bump `last_updated` here — it bumps when the entry is actually re-authored.
 - The SLA table is authoritative in CONTENT_PIPELINE.md. If you see a conflict with this file, the contract wins; flag the inconsistency in the commit message.
 
 ## Autonomous mode

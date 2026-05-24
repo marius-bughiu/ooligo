@@ -15,7 +15,7 @@ If you spot a bias issue (e.g. a recommendation that seems skewed by an undisclo
 
 - **All reports get a response within 7 days**. Either a fix lands and the reporter is notified, or the report is closed-with-reason and the reporter is told why.
 - **Factual errors get a same-day fix** when the source is in hand. Pricing, dates, named integrations, regulatory citations.
-- **Stale-data reports** trigger a refresh against current sources, not a one-line patch. Re-author the affected sections; bump `last_reviewed`.
+- **Stale-data reports** trigger a refresh against current sources, not a one-line patch. Re-author the affected sections; bump `last_updated`.
 - **Voice / bias reports** route to a quarterly review, not an immediate fix, unless the language is actionable-libel-adjacent (defamation risk). Then immediate.
 - **Missing-context reports** ("you didn't mention that X breaks Y") trigger an inline addition + entry in this log so the same gap is checked across sibling pages.
 

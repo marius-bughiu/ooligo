@@ -50,8 +50,7 @@ const tools = defineCollection({
         integrations: z.number().min(0).max(10).optional(),
       })
       .optional(),
-    last_reviewed: z.string(),
-    last_refreshed: z.string().optional(),
+    last_updated: z.string(),
     affiliate_link: z.string().url().optional(),
   }),
 });
@@ -110,6 +109,7 @@ const workflows = defineCollection({
     tools_used: z.array(SLUG).min(1),
     roles: z.array(SLUG).min(1),
     difficulty: z.enum(["beginner", "intermediate", "advanced"]),
+    last_updated: z.string(),
     time_to_setup: z.string().optional(),
     download_url: z.string().optional(),
     preview_lang: z.string().optional(),
@@ -148,6 +148,7 @@ const stacks = defineCollection({
     tools: z.array(SLUG).min(2),
     use_case: z.string(),
     difficulty: z.enum(["beginner", "intermediate", "advanced"]),
+    last_updated: z.string(),
     related_workflows: z.array(SLUG).optional(),
   }),
 });

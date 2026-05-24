@@ -94,7 +94,7 @@ If no auto-inserts (everything passed floor, or all candidates were medium-confi
 
 - Never link to the same target twice in one entry's body — dedupe before insert.
 - Never insert ≥3 outbound to the same target across the catalog (anti-spam against any single target).
-- Never insert into the `last_reviewed`/`last_updated` frontmatter dates — those only bump on actual content refresh.
+- Never insert into the `last_updated` frontmatter date — it only bumps on actual content refresh.
 - Auto-insertion is opt-out via a `no_auto_links: true` frontmatter field (rare, e.g. for legal-ops entries where every claim is hedged).
 
 ## Autonomous mode

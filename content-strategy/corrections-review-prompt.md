@@ -35,7 +35,7 @@ Filter `CORRECTIONS.md` entries to those dated within the bracket.
 Standard classes (per CONTENT_PIPELINE.md §Correction loop):
 
 - **factual** — wrong tool capability, wrong price, wrong integration, etc.
-- **stale** — claim was true at `last_reviewed` but is no longer; suggests an SLA issue
+- **stale** — claim was true at `last_updated` but is no longer; suggests an SLA issue
 - **voice** — banned vocab, hedging, padding signal that escaped pre-commit
 - **missing context** — claim is technically true but missing the constraint that makes it actionable
 - **bias** — affiliate or sponsor relationship influenced the recommendation
@@ -55,7 +55,7 @@ For each recurring class:
 
 Examples:
 
-- **factual recurring (price errors)** — amend CONTENT_PIPELINE.md §Tools pre-commit checklist to require: "Pricing band cited matches vendor's pricing page within the last 14 days; if older, refresh `last_reviewed` and re-cite."
+- **factual recurring (price errors)** — amend CONTENT_PIPELINE.md §Tools pre-commit checklist to require: "Pricing band cited matches vendor's pricing page within the last 14 days; if older, refresh `last_updated` and re-cite."
 - **voice recurring (vague-superlatives slipping past `check:vocab`)** — amend CONTENT_VOICE.md banned-vocab list and update `check:vocab` script to catch the new terms.
 - **bias recurring (affiliate entries trending more favorable than non-affiliate equivalents)** — amend CONTENT_PIPELINE.md §Affiliate disclosure with a stricter independence test, possibly requiring side-by-side verdict comparison against the non-affiliate alternative.
 

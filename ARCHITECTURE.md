@@ -82,8 +82,7 @@ ooligo_score_breakdown:
   ai_quality: 9
   pricing_value: 8
   integrations: 10
-last_reviewed: 2026-05-02
-last_refreshed: 2026-05-02              # auto-updated by refresh pipeline
+last_updated: 2026-05-02
 affiliate_link: https://clay.com?ref=ooligo
 ---
 
