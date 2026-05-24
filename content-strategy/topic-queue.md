@@ -40,7 +40,7 @@ Format per item:
 - [type:tool] [vertical:cross] new entry: recall-ai — meeting bot infrastructure (the API behind many AI-notetakers); developer-facing but discussed in RevOps/Recruiting tool stacks → slug: recall-ai
 - [type:tool] [vertical:cross] new entry: calendly — meeting scheduling; the missing baseline alongside Chili Piper and GoodTime for routing/scheduling comparisons → slug: calendly
 - [type:tool] [vertical:revops] new entry: vidyard — async video for sales; needed to anchor async-video sales comparisons and to support sequence-builder workflows → slug: vidyard
-- [type:tool] [vertical:revops] new entry: unify — signal-driven GTM / warm-outbound platform with AI plays; the "signal-driven not fully-autonomous" pole buyers weigh against 11x/Artisan
+- [type:tool] [vertical:revops] new entry: unify — signal-driven GTM / warm-outbound platform with AI plays; the "signal-driven not fully-autonomous" pole buyers weigh against 11x/Artisan → slug: unify
 - [type:tool] [vertical:revops] new entry: aisdr — AI SDR doing email + voice outreach with published pricing; the third pole alongside 11x and Artisan in AI-SDR shortlists
 - [type:tool] [vertical:revops] new entry: warmly — website visitor de-anonymization + warm-outbound orchestration; high r/sales mention volume, pairs against RB2B
 - [type:tool] [vertical:revops] new entry: revenuehero — inbound lead-to-meeting routing + scheduling; the lower-cost single-product Chili Piper alternative readers ask about
