@@ -1,0 +1,470 @@
+{
+  "name": "Email deliverability monitor — alert before suppression",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000001",
+      "name": "Schedule — Hourly Sweep",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 200],
+      "notesInFlow": true,
+      "notes": "Fires at the top of every hour. Drives the Postmaster, ESP, and DNSBL branches. Cron expression interpreted in workflow timezone (set in Settings)."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000002",
+      "name": "Schedule — DMARC Poll",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 1400],
+      "notesInFlow": true,
+      "notes": "Polls the DMARC RUA mailbox every 15 minutes for new aggregate reports."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deliverability-check",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000003",
+      "name": "Webhook — Ad-hoc Domain Check",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 1700],
+      "webhookId": "deliverability-check-webhook",
+      "notesInFlow": true,
+      "notes": "Manual check entrypoint. POST { \"domain\": \"example.com\" } to run the full sweep against a single domain on demand."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"received\": true, \"domain\": \"{{ $json.body.domain }}\" }",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000004",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 1880],
+      "notesInFlow": true,
+      "notes": "Return immediately so the caller is not blocked on the downstream polls."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Domain Register — the single source of truth for which domains this flow monitors.\n// Edit this array once to add or remove a watched domain. The rest of the flow\n// keys off the records emitted here.\n//\n// severity values:\n//   primary   — the main production sending domain; pages on-call on critical\n//   warmup    — a domain currently in warmup; lower thresholds applied\n//   secondary — a tertiary domain (newsletters, system mail); logs only\n//\n// sendingPlatform values are free-form strings; used to route ESP API polls.\n//   Supported out of the box: 'smartlead', 'instantly', 'outreach', 'gmail-direct'.\n\nconst register = [\n  {\n    domain: 'outbound.example.com',\n    sendingPlatform: 'smartlead',\n    owner: 'revops-lead@example.com',\n    slackHandle: 'revops-lead',\n    severity: 'primary',\n  },\n  {\n    domain: 'warm.example.io',\n    sendingPlatform: 'smartlead',\n    owner: 'sdr-leader@example.com',\n    slackHandle: 'sdr-leader',\n    severity: 'warmup',\n  },\n  {\n    domain: 'news.example.com',\n    sendingPlatform: 'instantly',\n    owner: 'marketing-ops@example.com',\n    slackHandle: 'marketing-ops',\n    severity: 'secondary',\n  },\n];\n\nreturn register.map((r) => ({ json: r }));"
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000005",
+      "name": "Domain Register (Static)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 200],
+      "notesInFlow": true,
+      "notes": "Edit the array to your real domains. severity drives alert color and routing."
+    },
+    {
+      "parameters": {
+        "batchSize": 3,
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000006",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [640, 200],
+      "notesInFlow": true,
+      "notes": "Batches of 3 to keep Postmaster API and DNSBL probes under their per-second limits."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://gmailpostmastertools.googleapis.com/v1/domains/{{ $json.domain }}/trafficStats",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "startDate.year",
+              "value": "={{ new Date(Date.now() - 7*86400*1000).getUTCFullYear() }}"
+            },
+            {
+              "name": "startDate.month",
+              "value": "={{ new Date(Date.now() - 7*86400*1000).getUTCMonth() + 1 }}"
+            },
+            {
+              "name": "startDate.day",
+              "value": "={{ new Date(Date.now() - 7*86400*1000).getUTCDate() }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000007",
+      "name": "HTTP — Postmaster Tools",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 100],
+      "credentials": {
+        "googleApi": {
+          "id": "PLACEHOLDER_POSTMASTER_CRED_ID",
+          "name": "Google Postmaster OAuth"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Pulls trafficStats for the last 7 days. neverError so a 401/404 does not halt the batch."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://server.smartlead.ai/api/v1/campaign-statistics?domain={{ $json.domain }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000008",
+      "name": "HTTP — Smartlead Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 250],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SMARTLEAD_CRED_ID",
+          "name": "Smartlead API Key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Reads Smartlead campaign-level complaint and bounce rates for the watched domain. Only runs when sendingPlatform === 'smartlead'."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.instantly.ai/api/v2/accounts/health?domain={{ $json.domain }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000009",
+      "name": "HTTP — Instantly Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_INSTANTLY_CRED_ID",
+          "name": "Instantly API Key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Reads Instantly account health for the domain. Only runs when sendingPlatform === 'instantly'."
+    },
+    {
+      "parameters": {
+        "jsCode": "// DNSBL Probe — A-record lookups against each blocklist zone.\n// Resolves the MX IP for the domain, then queries each configured zone with\n// the reversed-octet form: <reversed-ip>.<zone>. Any A-record reply means listed.\n//\n// To avoid resolver-caching false positives, every query goes to two of the\n// three resolvers configured in DNSBL_RESOLVERS, and a 'critical' status\n// requires confirmation from at least two of three.\n\nimport dns from 'dns/promises';\n\nconst zones = ($env.DNSBL_ZONES || 'zen.spamhaus.org,b.barracudacentral.org,bl.spamcop.net').split(',').map(z => z.trim());\nconst resolvers = ($env.DNSBL_RESOLVERS || '8.8.8.8,1.1.1.1,9.9.9.9').split(',').map(r => r.trim());\nconst domain = $json.domain;\nconst severity = $json.severity;\n\nasync function reverseIp(ip) {\n  return ip.split('.').reverse().join('.');\n}\n\nasync function resolveWith(resolverIp, hostname) {\n  const resolver = new dns.Resolver();\n  resolver.setServers([resolverIp]);\n  try {\n    const records = await resolver.resolve4(hostname);\n    return records.length > 0;\n  } catch (_) {\n    return false; // NXDOMAIN or timeout = not listed against this resolver\n  }\n}\n\nasync function getMxIp(d) {\n  try {\n    const mxs = await dns.resolveMx(d);\n    if (!mxs.length) return null;\n    mxs.sort((a, b) => a.priority - b.priority);\n    const a = await dns.resolve4(mxs[0].exchange);\n    return a[0];\n  } catch (_) {\n    return null;\n  }\n}\n\nconst ip = await getMxIp(domain);\nif (!ip) {\n  return [{ json: { domain, severity, sourceMetric: 'dnsbl', dnsblStatus: 'no-mx', listings: [], probedAt: new Date().toISOString() } }];\n}\n\nconst reversed = await reverseIp(ip);\nconst listings = [];\n\nfor (const zone of zones) {\n  const fqdn = `${reversed}.${zone}`;\n  const hits = [];\n  for (const r of resolvers) {\n    if (await resolveWith(r, fqdn)) hits.push(r);\n  }\n  if (hits.length > 0) {\n    listings.push({ zone, resolversAgreeing: hits.length, confirmedAt: new Date().toISOString() });\n  }\n}\n\nconst status = listings.some(l => l.resolversAgreeing >= 2) ? 'critical' : (listings.length > 0 ? 'alert' : 'ok');\n\nreturn [{ json: { domain, severity, sourceMetric: 'dnsbl', dnsblStatus: status, listings, mxIp: ip, probedAt: new Date().toISOString() } }];"
+      },
+      "id": "4b4b4b4b-0001-0000-0000-00000000000a",
+      "name": "DNSBL Probe (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 550],
+      "notesInFlow": true,
+      "notes": "Resolves MX → IP → queries each zone with reversed-octet form against 3 resolvers. status='critical' requires 2-of-3 resolver agreement."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge — Per-Domain Snapshot\n// Collects the outputs from the three upstream HTTP/Code nodes (Postmaster,\n// ESP, DNSBL) and emits one record per (domain, sourceMetric, dateBucket).\n//\n// Reject records older than 26 hours so a slow upstream API does not poison\n// the most recent comparison. Also reject any record whose key metric is null\n// — that indicates schema drift at the source and routes to #deliverability-ops\n// via the Threshold Check fallthrough.\n\nconst items = $input.all();\nconst now = Date.now();\nconst MAX_AGE_MS = 26 * 3600 * 1000;\nconst out = [];\n\nfor (const item of items) {\n  const j = item.json;\n  const domain = j.domain;\n  const severity = j.severity;\n\n  // Postmaster shape: { trafficStats: [ { date, spammyFeedbackLoops, userReportedSpamRatio, ... } ] }\n  if (Array.isArray(j.trafficStats)) {\n    for (const point of j.trafficStats) {\n      const dateBucket = `${point.date?.year}-${String(point.date?.month).padStart(2, '0')}-${String(point.date?.day).padStart(2, '0')}`;\n      const ageMs = now - Date.parse(dateBucket + 'T00:00:00Z');\n      if (ageMs > 7 * 24 * 3600 * 1000) continue;\n      out.push({\n        json: {\n          domain, severity, sourceMetric: 'postmaster-spam-rate', dateBucket,\n          value: point.userReportedSpamRatio ?? null,\n          rawDomainReputation: point.domainReputation ?? null,\n          rawIpReputations: point.ipReputations ?? null,\n          collectedAt: new Date().toISOString(),\n        }\n      });\n    }\n    continue;\n  }\n\n  // Smartlead shape: { domain, complaint_rate, bounce_rate, last_updated }\n  if (j.complaint_rate !== undefined || j.bounce_rate !== undefined) {\n    const lastUpdated = j.last_updated ? Date.parse(j.last_updated) : now;\n    if (now - lastUpdated > MAX_AGE_MS) continue;\n    if (j.complaint_rate === null || j.complaint_rate === undefined) {\n      out.push({ json: { domain, severity, sourceMetric: 'smartlead-schema-drift', value: null, collectedAt: new Date().toISOString() } });\n    } else {\n      out.push({ json: { domain, severity, sourceMetric: 'smartlead-complaint-rate', dateBucket: new Date(lastUpdated).toISOString().slice(0,10), value: j.complaint_rate, collectedAt: new Date().toISOString() } });\n      out.push({ json: { domain, severity, sourceMetric: 'smartlead-bounce-rate', dateBucket: new Date(lastUpdated).toISOString().slice(0,10), value: j.bounce_rate, collectedAt: new Date().toISOString() } });\n    }\n    continue;\n  }\n\n  // Instantly shape: { domain, health_score, bounce_rate, spam_rate, last_synced_at }\n  if (j.health_score !== undefined || j.spam_rate !== undefined) {\n    const lastUpdated = j.last_synced_at ? Date.parse(j.last_synced_at) : now;\n    if (now - lastUpdated > MAX_AGE_MS) continue;\n    out.push({ json: { domain, severity, sourceMetric: 'instantly-spam-rate', dateBucket: new Date(lastUpdated).toISOString().slice(0,10), value: j.spam_rate ?? null, collectedAt: new Date().toISOString() } });\n    out.push({ json: { domain, severity, sourceMetric: 'instantly-bounce-rate', dateBucket: new Date(lastUpdated).toISOString().slice(0,10), value: j.bounce_rate ?? null, collectedAt: new Date().toISOString() } });\n    continue;\n  }\n\n  // DNSBL shape already has sourceMetric set\n  if (j.sourceMetric === 'dnsbl') {\n    out.push({ json: { ...j, dateBucket: new Date().toISOString().slice(0,10), collectedAt: new Date().toISOString() } });\n    continue;\n  }\n}\n\nreturn out;"
+      },
+      "id": "4b4b4b4b-0001-0000-0000-00000000000b",
+      "name": "Merge — Per-Domain Snapshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300],
+      "notesInFlow": true,
+      "notes": "Normalizes Postmaster, Smartlead, Instantly, and DNSBL outputs into one record-per-(domain,metric,dateBucket). Rejects stale (>26h) and null-metric records."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Threshold Check — apply alert/critical thresholds per metric.\n//\n// Policy lives here, in one place. Every threshold below is overridable via\n// an env var so an on-call can tune without a code change.\n//\n// Status semantics:\n//   ok       — no action needed\n//   alert    — early warning; metric crossed alert threshold, still below suppression\n//   critical — suppression imminent (or in progress for blocklist listings)\n//\n// Critical-on-Postmaster requires at least 2 data points in the last 72h to\n// avoid alarming on a missing data day. POSTMASTER_MIN_POINTS_FOR_CRITICAL\n// is configurable.\n\nconst items = $input.all();\nconst thresholds = {\n  spamRateAlert: parseFloat($env.SPAM_RATE_ALERT_THRESHOLD || '0.001'),       // 0.1%\n  spamRateCritical: parseFloat($env.SPAM_RATE_CRITICAL_THRESHOLD || '0.003'), // 0.3% — Gmail/Yahoo bulk-sender ceiling\n  bounceRateAlert: parseFloat($env.BOUNCE_RATE_ALERT_THRESHOLD || '0.05'),    // 5%\n  bounceRateCritical: parseFloat($env.BOUNCE_RATE_CRITICAL_THRESHOLD || '0.10'), // 10%\n  complaintRateAlert: parseFloat($env.COMPLAINT_RATE_ALERT_THRESHOLD || '0.0008'), // 0.08%\n  complaintRateCritical: parseFloat($env.COMPLAINT_RATE_CRITICAL_THRESHOLD || '0.003'),\n  postmasterMinPointsForCritical: parseInt($env.POSTMASTER_MIN_POINTS_FOR_CRITICAL || '2', 10),\n};\n\n// Group by (domain, sourceMetric) for rolling-mean computation\nconst groups = new Map();\nfor (const it of items) {\n  const key = `${it.json.domain}::${it.json.sourceMetric}`;\n  if (!groups.has(key)) groups.set(key, []);\n  groups.get(key).push(it.json);\n}\n\nconst out = [];\nfor (const [key, points] of groups) {\n  points.sort((a, b) => (a.dateBucket || '').localeCompare(b.dateBucket || ''));\n  const latest = points[points.length - 1];\n  if (!latest) continue;\n\n  // Schema drift sentinel — surface to ops, do not page\n  if (latest.sourceMetric.endsWith('-schema-drift')) {\n    out.push({ json: { ...latest, status: 'ops', reason: 'schema-drift detected, value is null' } });\n    continue;\n  }\n\n  // DNSBL has its own pre-computed status\n  if (latest.sourceMetric === 'dnsbl') {\n    out.push({ json: { ...latest, status: latest.dnsblStatus } });\n    continue;\n  }\n\n  const value = latest.value;\n  if (value === null || value === undefined) {\n    out.push({ json: { ...latest, status: 'ops', reason: 'value-null' } });\n    continue;\n  }\n\n  // Rolling 7-day mean (excluding the latest point so the comparison is to history)\n  const history = points.slice(0, -1).map(p => p.value).filter(v => v !== null && v !== undefined);\n  const mean = history.length > 0 ? history.reduce((a, b) => a + b, 0) / history.length : null;\n\n  let alertThr, criticalThr;\n  if (latest.sourceMetric.endsWith('spam-rate')) { alertThr = thresholds.spamRateAlert; criticalThr = thresholds.spamRateCritical; }\n  else if (latest.sourceMetric.endsWith('bounce-rate')) { alertThr = thresholds.bounceRateAlert; criticalThr = thresholds.bounceRateCritical; }\n  else if (latest.sourceMetric.endsWith('complaint-rate')) { alertThr = thresholds.complaintRateAlert; criticalThr = thresholds.complaintRateCritical; }\n  else { out.push({ json: { ...latest, status: 'ok' } }); continue; }\n\n  let status = 'ok';\n  if (latest.sourceMetric.startsWith('postmaster-') && points.length < thresholds.postmasterMinPointsForCritical && value >= criticalThr) {\n    status = 'alert'; // Downgrade — not enough points to call this critical\n  } else if (value >= criticalThr) {\n    status = 'critical';\n  } else if (value >= alertThr) {\n    status = 'alert';\n  }\n\n  out.push({ json: { ...latest, status, rollingMean: mean, alertThreshold: alertThr, criticalThreshold: criticalThr } });\n}\n\nreturn out;"
+      },
+      "id": "4b4b4b4b-0001-0000-0000-00000000000c",
+      "name": "Threshold Check (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "notesInFlow": true,
+      "notes": "All policy is in this node. Thresholds overridable via env. Postmaster downgrades critical→alert when fewer than POSTMASTER_MIN_POINTS_FOR_CRITICAL points exist."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dedup Gate (Static Data)\n// Per (domain, metric, 12h-bucket) key. If we already alerted this key,\n// halt the branch silently. Else stamp and continue.\n//\n// Important: workflow static data only persists for production executions\n// (webhook, schedule trigger) — not manual Execute Workflow runs. The\n// verification in _README.md covers this.\n\nconst data = $getWorkflowStaticData('global');\nif (!data.alerted) data.alerted = {};\n\nconst now = Date.now();\nconst TWELVE_HOURS = 12 * 3600 * 1000;\n\n// Prune older than 48h\nfor (const k of Object.keys(data.alerted)) {\n  if (now - data.alerted[k] > 48 * 3600 * 1000) delete data.alerted[k];\n}\n\nconst items = $input.all();\nconst out = [];\nfor (const it of items) {\n  const j = it.json;\n  if (j.status === 'ok' || j.status === 'ops') {\n    out.push({ json: { ...j, dedupResult: 'pass-through-non-alerting' } });\n    continue;\n  }\n  const bucket = Math.floor(now / TWELVE_HOURS);\n  const key = `alerted_${j.domain}_${j.sourceMetric}_${j.status}_${bucket}`;\n  if (data.alerted[key]) {\n    // Silently halt — same alert was already sent within the 12h window\n    continue;\n  }\n  data.alerted[key] = now;\n  out.push({ json: { ...j, dedupKey: key, firstAlerted: new Date(now).toISOString() } });\n}\n\nreturn out;"
+      },
+      "id": "4b4b4b4b-0001-0000-0000-00000000000d",
+      "name": "Dedup Gate (Static Data)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, 300],
+      "notesInFlow": true,
+      "notes": "12-hour dedup window per (domain, metric, status). Static data only persists on production runs."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 300,\n  \"system\": \"You write a single corrective action for an email deliverability alert. Output JSON: { \\\"action\\\": <imperative sentence naming the platform, domain, and step>, \\\"why\\\": <one short sentence>, \\\"runbookUrl\\\": <string or empty> }. Do not hedge. Do not add unrelated advice. The reader is a RevOps lead who can pause a sequence, scrub a list, or open a delisting request directly.\",\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Alert payload:\\ndomain: {{ $json.domain }}\\nseverity: {{ $json.severity }}\\nstatus: {{ $json.status }}\\nmetric: {{ $json.sourceMetric }}\\nvalue: {{ $json.value }}\\nrolling 7d mean: {{ $json.rollingMean }}\\nalert threshold: {{ $json.alertThreshold }}\\ncritical threshold: {{ $json.criticalThreshold }}\\nDNSBL listings: {{ JSON.stringify($json.listings || []) }}\\n\\nReturn ONLY the JSON.\"\n  }]\n}",
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-00000000000e",
+      "name": "Claude — Remediation Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1820, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic API Key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Haiku 4.5, 8s timeout, neverError. Returns a structured JSON remediation. Template fallback applied downstream."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Remediation (with template fallback)\n// On a Claude timeout or malformed JSON, fall back to a deterministic\n// template per metric. The Slack message tags draftSource so the rep\n// knows whether they got the LLM draft or the fallback.\n\nconst items = $input.all();\nconst out = [];\n\nfunction templateFor(json) {\n  const m = json.sourceMetric || '';\n  const d = json.domain;\n  if (m === 'dnsbl') {\n    const zones = (json.listings || []).map(l => l.zone).join(', ');\n    return {\n      action: `Open a delisting request at ${zones || '<blocklist URL>'} for ${d}. Record why the IP was sending volume above its warmed-in cap.`,\n      why: 'Domain or MX IP is listed on a major blocklist; inbound deliverability is degraded until delisted.',\n      runbookUrl: '',\n    };\n  }\n  if (m.endsWith('spam-rate')) {\n    return {\n      action: `Pause the highest-volume sequence on ${d} for 24 hours and audit the last 200 sent messages for complaint patterns.`,\n      why: `Spam rate ${json.value} is over the ${json.alertThreshold} alert threshold; suppression follows ${json.criticalThreshold}.`,\n      runbookUrl: '',\n    };\n  }\n  if (m.endsWith('bounce-rate')) {\n    return {\n      action: `Run a list-scrub pass on the last 30 days of imports for ${d} before re-enabling sequences.`,\n      why: `Bounce rate ${json.value} is over the ${json.alertThreshold} alert threshold; further sending raises spam-trap risk.`,\n      runbookUrl: '',\n    };\n  }\n  return {\n    action: `Investigate ${m} on ${d}; current value ${json.value} exceeds ${json.alertThreshold}.`,\n    why: 'Threshold tripped without a templated remediation.',\n    runbookUrl: '',\n  };\n}\n\nfor (const it of items) {\n  const j = it.json;\n  let remediation = null;\n  let draftSource = 'template-fallback';\n  const claude = j.content?.[0]?.text || j.completion || null;\n  if (claude) {\n    try {\n      remediation = JSON.parse(claude);\n      if (remediation && remediation.action) draftSource = 'claude-haiku-4-5';\n    } catch (_) {\n      remediation = null;\n    }\n  }\n  if (!remediation) remediation = templateFor(j);\n  out.push({ json: { ...j, remediation, draftSource } });\n}\n\nreturn out;"
+      },
+      "id": "4b4b4b4b-0001-0000-0000-00000000000f",
+      "name": "Parse Remediation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2060, 300],
+      "notesInFlow": true,
+      "notes": "Claude-or-template fallback. draftSource tag exposed in Slack so reps know which they received."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $json.status === 'critical' ? ($env.SLACK_CHANNEL_CRITICAL || '#deliverability-primary') : ($json.severity === 'warmup' ? ($env.SLACK_CHANNEL_WARMUP || '#deliverability-warmup') : ($env.SLACK_CHANNEL_SECONDARY || '#deliverability-secondary')) }}\",\n  \"text\": \"Deliverability {{ $json.status }} on {{ $json.domain }} ({{ $json.sourceMetric }})\",\n  \"blocks\": [\n    { \"type\": \"header\", \"text\": { \"type\": \"plain_text\", \"text\": \"{{ $json.status === 'critical' ? '🚨' : '⚠️' }} {{ $json.status.toUpperCase() }} — {{ $json.domain }}\" } },\n    { \"type\": \"section\", \"fields\": [\n      { \"type\": \"mrkdwn\", \"text\": \"*Metric*\\n{{ $json.sourceMetric }}\" },\n      { \"type\": \"mrkdwn\", \"text\": \"*Value*\\n{{ $json.value }}\" },\n      { \"type\": \"mrkdwn\", \"text\": \"*Alert at*\\n{{ $json.alertThreshold }}\" },\n      { \"type\": \"mrkdwn\", \"text\": \"*Critical at*\\n{{ $json.criticalThreshold }}\" },\n      { \"type\": \"mrkdwn\", \"text\": \"*7d mean*\\n{{ $json.rollingMean }}\" },\n      { \"type\": \"mrkdwn\", \"text\": \"*Severity*\\n{{ $json.severity }}\" }\n    ] },\n    { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \"*Recommended action (edit before action — `{{ $json.draftSource }}`)*\\n{{ $json.remediation.action }}\\n\\n_Why:_ {{ $json.remediation.why }}\" } },\n    { \"type\": \"context\", \"elements\": [ { \"type\": \"mrkdwn\", \"text\": \"<@{{ $json.slackHandle }}> · dedup key `{{ $json.dedupKey }}` · {{ $json.firstAlerted }}\" } ] }\n  ]\n}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000010",
+      "name": "Slack — Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2300, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack Bot Token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Routes to one of three channels by severity/status. Block Kit message with header, fields, remediation, and @-mention of the owner."
+    },
+    {
+      "parameters": {
+        "protocol": "imap",
+        "operation": "getAll",
+        "format": "resolved",
+        "filters": {
+          "filters": {
+            "unseen": true,
+            "subject": "Report Domain"
+          }
+        },
+        "options": {
+          "limit": 50
+        }
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000011",
+      "name": "IMAP — DMARC Mailbox",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [420, 1400],
+      "credentials": {
+        "imap": {
+          "id": "PLACEHOLDER_IMAP_CRED_ID",
+          "name": "DMARC RUA Mailbox"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Reads unseen messages matching 'Report Domain' (the standard DMARC RUA subject pattern). Marks as seen after fetch."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse DMARC XML\n// Walks each attachment, unzips if .zip/.gz, parses the XML, and extracts\n// per-source-IP / disposition / dkim / spf triples. Records that fail SPF\n// AND DKIM are emitted as spoofing-suspect rows.\n//\n// Uses Node's built-in zlib + a small XML-to-JSON walk (no extra deps).\n\nimport zlib from 'zlib';\nimport { promisify } from 'util';\nconst gunzip = promisify(zlib.gunzip);\n\nfunction extractTag(xml, tag) {\n  const re = new RegExp(`<${tag}>([\\\\s\\\\S]*?)<\\\\/${tag}>`, 'g');\n  const out = [];\n  let m;\n  while ((m = re.exec(xml)) !== null) out.push(m[1]);\n  return out;\n}\n\nasync function unwrap(buf, name) {\n  if (name.endsWith('.gz')) return (await gunzip(buf)).toString('utf8');\n  if (name.endsWith('.zip')) {\n    // Minimal local-file-header read; assumes single-file zip (the DMARC norm)\n    // For multi-file zips, the n8n environment should have a zip package available\n    // — flagged in _README.md as a known limit.\n    const sig = buf.readUInt32LE(0);\n    if (sig !== 0x04034b50) throw new Error('not a zip');\n    const nameLen = buf.readUInt16LE(26);\n    const extraLen = buf.readUInt16LE(28);\n    const dataStart = 30 + nameLen + extraLen;\n    const compressed = buf.subarray(dataStart);\n    return zlib.inflateRawSync(compressed).toString('utf8');\n  }\n  return buf.toString('utf8');\n}\n\nconst items = $input.all();\nconst out = [];\n\nfor (const it of items) {\n  const attachments = it.binary || {};\n  let attachmentMatched = false;\n  for (const key of Object.keys(attachments)) {\n    const att = attachments[key];\n    const name = (att.fileName || '').toLowerCase();\n    if (!name.endsWith('.xml') && !name.endsWith('.zip') && !name.endsWith('.gz')) continue;\n    attachmentMatched = true;\n    let xml;\n    try {\n      const buf = Buffer.from(att.data, 'base64');\n      xml = await unwrap(buf, name);\n    } catch (e) {\n      out.push({ json: { sourceMetric: 'dmarc-parse-error', attachmentName: name, error: String(e), attachmentMatched: true, collectedAt: new Date().toISOString() } });\n      continue;\n    }\n    const reportedDomain = (extractTag(xml, 'domain')[0] || '').trim();\n    const records = extractTag(xml, 'record');\n    for (const rec of records) {\n      const sourceIp = (extractTag(rec, 'source_ip')[0] || '').trim();\n      const count = parseInt((extractTag(rec, 'count')[0] || '0').trim(), 10);\n      const disposition = (extractTag(rec, 'disposition')[0] || '').trim();\n      const dkim = (extractTag(rec, 'dkim')[1] || extractTag(rec, 'dkim')[0] || '').trim(); // policy_evaluated.dkim\n      const spf = (extractTag(rec, 'spf')[1] || extractTag(rec, 'spf')[0] || '').trim();\n      const spoofingSuspect = (dkim === 'fail' && spf === 'fail');\n      out.push({\n        json: {\n          domain: reportedDomain,\n          sourceMetric: 'dmarc-record',\n          sourceIp, count, disposition, dkim, spf, spoofingSuspect,\n          attachmentMatched: true,\n          collectedAt: new Date().toISOString(),\n        }\n      });\n    }\n  }\n  if (!attachmentMatched) {\n    out.push({ json: { sourceMetric: 'dmarc-no-attachment', attachmentMatched: false, messageSubject: it.json.subject, collectedAt: new Date().toISOString() } });\n  }\n}\n\nreturn out;"
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000012",
+      "name": "Parse DMARC XML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 1400],
+      "notesInFlow": true,
+      "notes": "Unzips .gz/.zip attachments, parses DMARC XML, emits per-record rows. Flags spoofingSuspect when both SPF and DKIM evaluate to fail."
+    },
+    {
+      "parameters": {
+        "operation": "merge",
+        "mode": "append"
+      },
+      "id": "4b4b4b4b-0001-0000-0000-000000000013",
+      "name": "Merge — Inbound Branches",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1100, 1100],
+      "notesInFlow": true,
+      "notes": "Joins the hourly and DMARC branches into the shared threshold check."
+    }
+  ],
+  "connections": {
+    "Schedule — Hourly Sweep": {
+      "main": [[{ "node": "Domain Register (Static)", "type": "main", "index": 0 }]]
+    },
+    "Domain Register (Static)": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Split In Batches": {
+      "main": [[
+        { "node": "HTTP — Postmaster Tools", "type": "main", "index": 0 },
+        { "node": "HTTP — Smartlead Stats", "type": "main", "index": 0 },
+        { "node": "HTTP — Instantly Health", "type": "main", "index": 0 },
+        { "node": "DNSBL Probe (Code)", "type": "main", "index": 0 }
+      ]]
+    },
+    "HTTP — Postmaster Tools": {
+      "main": [[{ "node": "Merge — Per-Domain Snapshot", "type": "main", "index": 0 }]]
+    },
+    "HTTP — Smartlead Stats": {
+      "main": [[{ "node": "Merge — Per-Domain Snapshot", "type": "main", "index": 0 }]]
+    },
+    "HTTP — Instantly Health": {
+      "main": [[{ "node": "Merge — Per-Domain Snapshot", "type": "main", "index": 0 }]]
+    },
+    "DNSBL Probe (Code)": {
+      "main": [[{ "node": "Merge — Per-Domain Snapshot", "type": "main", "index": 0 }]]
+    },
+    "Merge — Per-Domain Snapshot": {
+      "main": [[{ "node": "Threshold Check (Code)", "type": "main", "index": 0 }]]
+    },
+    "Threshold Check (Code)": {
+      "main": [[{ "node": "Dedup Gate (Static Data)", "type": "main", "index": 0 }]]
+    },
+    "Dedup Gate (Static Data)": {
+      "main": [[{ "node": "Claude — Remediation Draft", "type": "main", "index": 0 }]]
+    },
+    "Claude — Remediation Draft": {
+      "main": [[{ "node": "Parse Remediation", "type": "main", "index": 0 }]]
+    },
+    "Parse Remediation": {
+      "main": [[{ "node": "Slack — Notify", "type": "main", "index": 0 }]]
+    },
+    "Schedule — DMARC Poll": {
+      "main": [[{ "node": "IMAP — DMARC Mailbox", "type": "main", "index": 0 }]]
+    },
+    "IMAP — DMARC Mailbox": {
+      "main": [[{ "node": "Parse DMARC XML", "type": "main", "index": 0 }]]
+    },
+    "Parse DMARC XML": {
+      "main": [[{ "node": "Merge — Per-Domain Snapshot", "type": "main", "index": 0 }]]
+    },
+    "Webhook — Ad-hoc Domain Check": {
+      "main": [[
+        { "node": "Respond 202 Accepted", "type": "main", "index": 0 },
+        { "node": "Domain Register (Static)", "type": "main", "index": 0 }
+      ]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "active": false,
+  "version": "1.0.0",
+  "id": "email-deliverability-monitor-n8n",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

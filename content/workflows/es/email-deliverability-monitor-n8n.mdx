@@ -1,0 +1,93 @@
+---
+slug: email-deliverability-monitor-n8n
+canonical_slug: email-deliverability-monitor-n8n
+locale: es
+verticals: [revops]
+title: Watch DMARC, spam-complaint rate, and blocklist status before a sending domain gets suppressed
+artifact_type: n8n-flow
+tools_used: [n8n, slack, smartlead, instantly]
+roles: [revops, sdr-leader, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 2-3 hours
+human_tested: false
+last_updated: "2026-05-26"
+---
+
+Un flow de [n8n](/es/tools/n8n/) que consulta Google Postmaster Tools, parsea reportes agregados de DMARC desde un buzón compartido, ejecuta búsquedas en DNSBL contra las principales blocklists, y obtiene tasas de bounce y de quejas desde [Smartlead](/es/tools/smartlead/) e [Instantly](/es/tools/instantly/) — y alerta al owner de RevOps asignado en [Slack](/es/tools/slack/) en el momento en que cualquier dominio cruza un umbral documentado, con un paso de remediación redactado por Claude adjunto. El bundle en `apps/web/public/artifacts/email-deliverability-monitor-n8n/` incluye el export completo de n8n más un `_README.md` que cubre importación, variables de entorno, configuración de credenciales, ajuste de umbrales y verificación por rama.
+
+## Cuándo usarlo
+
+Úsalo cuando el volumen de outbound sea lo suficientemente alto como para que enterarte de que un dominio de envío fue suprimido *después del hecho* sea un evento de pérdida de ingresos de varias semanas — típicamente cuando al menos un equipo envía más de 10.000 mensajes por semana a través de dos o más dominios dedicados. Para cuando Gmail activa la suppression y comienza a rutear a spam, Postmaster Tools ya está mostrando la tasa de spam por encima del 0,3% — el umbral de bulk-sender de Gmail y Yahoo vigente desde febrero de 2024 — y ya perdiste un ciclo de entregabilidad en cada cuenta que actualmente está en secuencia. El propósito de este flow es disparar la alerta cuando la tasa cruza el 0,1% — días antes de la suppression, no días después.
+
+También es el patrón correcto cuando operas múltiples plataformas de envío ([Smartlead](/es/tools/smartlead/) para outbound frío, [Outreach](/es/tools/outreach/) para follow-up caliente, un ESP aparte para marketing) y necesitas una vista única que compare tasas de quejas y bounce entre todas, en la misma escala. El flow normaliza el reporte de cada vendor en un registro por dominio por día, así que el líder de RevOps puede ver en un solo mensaje de Slack si el problema es transversal a la plataforma o aislado a un único sender.
+
+El paso de remediación redactado por Claude es la parte que convierte la alerta de notificación en respuesta accionable. Cada alerta lleva la acción correctiva específica — pausar la secuencia en un dominio nombrado, bajar el volumen un 30% en warmup, solicitar la reinclusión desde una blocklist nombrada — según qué umbral se disparó, no un genérico "investigar entregabilidad".
+
+## Cuándo NO usarlo
+
+Sáltatelo si tu volumen de outbound está por debajo de los 1.000 mensajes por semana desde un único dominio. A ese volumen, Postmaster Tools no mostrará una señal de tasa de spam utilizable — el dashboard requiere aproximadamente 100+ entregas diarias a una dirección de Gmail antes de empezar a reportar — y los reportes agregados de DMARC llegan de forma demasiado dispersa como para alimentar un chequeo diario. Vigilar la entregabilidad manualmente desde la UI de la plataforma de envío es el nivel correcto de monitoreo a esa escala.
+
+Sáltatelo si no controlas tus propios dominios de envío. El flow asume que configuraste SPF, DKIM con al menos un selector por dominio, y DMARC con reportes `rua=mailto:` enviados a un buzón que puedes leer. Si envías a través de un subdominio compartido en la infraestructura de un vendor (lo predeterminado en los planes gratuitos de la mayoría de ESPs), los reportes RUA de DMARC se agregan en el vendor, no en ti, y la mayoría de las rutas de polling de este flow devuelven nada útil.
+
+No uses la alerta como única disciplina de entregabilidad. El flow vigila el síntoma — tasa de spam subiendo, tasa de bounce subiendo, listado de blocklist apareciendo — pero la causa upstream (higiene de listas, copy que dispara filtros, patrón de envío que parece un burst) es un problema de comportamiento. La revisión semanal en la que el líder de RevOps y el SDR manager miran el desglose por sender y por tema sigue siendo necesaria.
+
+## Setup
+
+1. **Importa el bundle.** Suelta `apps/web/public/artifacts/email-deliverability-monitor-n8n/email-deliverability-monitor-n8n.json` en n8n vía **Workflows → Import from File**. Tres rutas de trigger: un Schedule Trigger que corre cada hora (polls a Postmaster + DNSBL + métricas de ESP), un Schedule Trigger separado que corre cada 15 minutos (poll IMAP para reportes DMARC), y un webhook manual para checks ad-hoc sobre un dominio.
+
+2. **Configura tu registro de dominios.** La lista de dominios a vigilar vive en el nodo Code `Domain Register (Static)` — un array de objetos con la forma `{ domain, sendingPlatform, owner, slackHandle, severity }`. Edita el array una sola vez con tus dominios reales; el resto del flow se apoya en eso. La severity (`primary` / `warmup` / `secondary`) determina el color de la alerta y el routing al on-call.
+
+3. **Define las variables de entorno.** Doce variables en total — token de la API de Postmaster, credenciales IMAP para el buzón DMARC, API keys de Smartlead e Instantly, lista de zonas DNSBL, nombres de canales de Slack por nivel de severity, y los valores de los umbrales. La tabla completa está en `_README.md`. Los umbrales por defecto son: alerta de tasa de spam al 0,1%, umbral de suppression al 0,3%, alerta de tasa de bounce al 5%, alerta de tasa de quejas al 0,08%.
+
+4. **Cablea las credenciales.** Se requieren cinco credenciales:
+   - `PLACEHOLDER_POSTMASTER_CRED_ID` — Google OAuth2 con scope `gmail.postmaster.readonly`
+   - `PLACEHOLDER_IMAP_CRED_ID` — login IMAP para el buzón que recibe los reportes RUA de DMARC
+   - `PLACEHOLDER_SMARTLEAD_CRED_ID` — HTTP Header Auth con la API key de Smartlead
+   - `PLACEHOLDER_INSTANTLY_CRED_ID` — HTTP Header Auth con la API key de Instantly
+   - `PLACEHOLDER_SLACK_CRED_ID` — Slack bot token con `chat:write`
+
+5. **Apunta RUA de DMARC a un buzón real.** En tu DNS, el registro DMARC de cada dominio vigilado debería incluir `rua=mailto:dmarc-reports@yourcompany.com`. Crea el buzón si no existe. La mayoría de los proveedores de buzones grandes (Google Workspace, Microsoft 365, Fastmail) entregan los adjuntos XML de DMARC sin problemas; el parser IMAP del flow descomprime los adjuntos `.zip` y `.gz` y lee el XML directamente.
+
+6. **Haz la verificación.** `_README.md` lista una verificación de cinco pasos que ejercita cada rama — un hit manual del webhook, una activación forzada de umbral, una prueba de reporte stale, una prueba de falso positivo en DNSBL, y una prueba de burst multi-dominio. Corre los cinco antes de activar los Schedule Triggers.
+
+## Qué hace el flow
+
+`Schedule — Hourly Sweep` se dispara cada hora en punto y corre tres ramas en paralelo dentro de un SplitInBatches: la API de Postmaster Tools (`https://gmailpostmastertools.googleapis.com/v1/domains/<domain>/trafficStats`) por cada dominio del registro, Smartlead `/api/v1/campaign-statistics` e Instantly `/api/v2/accounts/health` para los números del lado del ESP, y una sonda DNSBL que ejecuta lookups de registro A contra la zona de cada blocklist (`<reversed-ip>.<zone>`) sobre la IP resuelta del registro MX de cada dominio. Las ramas convergen en `Merge — Per-Domain Snapshot`, que colapsa un registro por `(domain, sourceMetric, dateBucket)` y rechaza los registros de más de 26 horas para que una API lenta no envenene la comparación más reciente.
+
+`Threshold Check (Code)` lee el snapshot fusionado contra las envs de umbrales y emite uno de tres estados por métrica: `ok`, `alert` (tasa por encima del umbral de alerta pero por debajo del de suppression), o `critical` (tasa por encima del umbral de suppression O el dominio aparece en una blocklist). El nodo Code concentra la política en un solo lugar — cada umbral y su justificación están comentados inline así que el líder de RevOps puede leerlos y ajustarlos sin abrir un ticket. El estado se calcula contra la media móvil de los 7 días previos *además* del punto más reciente, así que un único día ruidoso no paga a nadie, pero un drift sostenido de 4 días sí.
+
+`Dedup Gate (Static Data)` lee `$getWorkflowStaticData('global')` buscando una clave `alerted_<domain>_<metric>_<bucket>`. Si el mismo dominio cruzó el mismo umbral en las últimas 12 horas, el gate detiene la rama en silencio — exactamente el comportamiento que necesita un flow de alertas que poll cada hora pero donde la señal subyacente no cambia tan rápido. Los static data persisten solo en ejecuciones de producción, nunca en runs manuales con Execute Workflow, razón por la que la verificación en `_README.md` usa el Schedule Trigger en vivo en lugar del botón de ejecución manual.
+
+`Claude — Remediation Draft` postea a la API de Anthropic con `claude-haiku-4-5`, timeout de 8 segundos, y un system prompt que mapea la métrica disparada a una acción correctiva específica: tasa de spam por encima del 0,1% en un dominio primario devuelve "pausa la secuencia de mayor volumen en `<domain>` por 24 horas y audita los últimos 200 mensajes enviados buscando patrones de queja"; un listado en blocklist devuelve "abre una solicitud de delisting en `<blocklist URL>` y registra por qué esta IP estaba enviando volumen por encima de su cap de warmup"; tasa de bounce por encima del 5% devuelve "ejecuta una pasada de scrub de lista con `<provider>` sobre los últimos 30 días de imports antes de reactivar secuencias." El borrador queda etiquetado "edit before action" en el mensaje de Slack — el rep confirma que la acción se ajusta a la situación; el flow no auto-ejecuta.
+
+`Slack — Notify` postea al canal correspondiente a la severity de la alerta (`#deliverability-primary`, `#deliverability-warmup`, `#deliverability-secondary`) con un mensaje Block Kit: header con color de severity, la métrica ofensora y su valor versus el umbral, la comparación con la media móvil, y el borrador de remediación de Claude. Las alertas de severity crítica también @-mencionan el handle de on-call desde el registro de dominios para que la persona correcta sea contactada sin tener que vigilar el canal.
+
+`Schedule — DMARC Poll` corre cada 15 minutos y consulta el buzón IMAP buscando mensajes nuevos con adjuntos que coincidan con `*.xml`, `*.zip`, o `*.gz`. `Parse DMARC XML` descomprime y recorre cada reporte, extrae triples por dominio de `<source_ip>` / `<count>` / `<disposition>` / `<dkim>` / `<spf>`, y empuja un registro estructurado hacia el mismo path de threshold check. El poll de DMARC es la única rama que puede detectar un problema de sender falsificado desde fuera de tus plataformas de envío — captura intentos de spoofing que no aparecen en ningún otro punto del stack de métricas.
+
+## Cost reality
+
+Por chequeo, `claude-haiku-4-5` corre solo en disparos de umbral — el día mediano produce cero llamadas al LLM. En una mala semana, el flow podría disparar entre 5 y 10 alertas con aproximadamente 500 tokens de input y 120 de output cada una, costando menos de $0,005 por alerta al pricing de Haiku 4.5 (~$0,80/M input, ~$4/M output). El costo mensual de Claude se mantiene por debajo de $1 para un registro típico de 5 dominios.
+
+La API de Postmaster Tools es gratuita con una cuenta de Google Workspace; la quota está muy por encima del polling horario para varias decenas de dominios. La API de Smartlead viene incluida con su plan base de $94/mes a fecha de 2026-05; la API de Instantly viene incluida con el plan Growth a $97/mes. Las consultas DNSBL a listas públicas (Spamhaus, Barracuda, SORBS, SpamCop) son gratuitas para volumen de consulta no comercial; el uso de alto volumen requiere un feed de datos pagado a $1.500–$3.000 al año por zona, lo cual está fuera del alcance al volumen que genera este flow.
+
+n8n self-hosted es gratuito; n8n Cloud Starter a $20/mes maneja las 700–1.500 ejecuciones mensuales que produce un registro de 5 dominios. El bot de Slack, el buzón IMAP y las consultas DNS no agregan costo incremental. Gasto total de monitoreo de entregabilidad por encima del costo baseline del ESP: menos de $25/mes.
+
+## Failure modes
+
+- **Lag de datos en Postmaster Tools.** La API de Postmaster de Google publica los datos del día anterior en lotes a lo largo del día siguiente — el punto de datos para 2026-05-25 podría no aparecer hasta tarde el 2026-05-26 (UTC). Una comparación ingenua del "último punto" disparará alarma en un dominio que simplemente todavía no tiene datos recientes. Guard: `Threshold Check (Code)` requiere al menos dos puntos de datos en las últimas 72 horas antes de marcar `critical`, y degrada a `alert` (no `critical`) cuando solo hay un punto presente. La lógica de umbral está comentada inline y expuesta como `POSTMASTER_MIN_POINTS_FOR_CRITICAL` para que el on-call la ajuste sin cambio de código.
+
+- **Los reportes DMARC llegan en formatos que no todos los parsers manejan.** Algunos proveedores de buzones (especialmente Microsoft 365 con ciertas reglas de anti-malware) eliminan los adjuntos `.zip` o reescriben `.gz` como `.gz_renamed`. El poll IMAP verá el mensaje pero `Parse DMARC XML` lo saltará y la falla será silenciosa. Guard: cada mensaje IMAP se loggea con `attachmentMatched: true/false`, y el conteo diario se reporta en un digest en `#deliverability-ops`. Si `false` supera el 10% durante una semana, dispara una alerta de escalación y el sospechoso es la configuración del proveedor de buzón. `_README.md` documenta el setting de Microsoft 365 (`Anti-Malware → Common Attachment Filter`) que más comúnmente causa esto.
+
+- **Falsos positivos en DNSBL durante un ciclo de delisting.** Algunas blocklists (especialmente Spamhaus DROP) cachean agresivamente en resolvers recursivos. Un dominio que fue eliminado del listado hace horas puede seguir resolviéndose como listado contra un resolver lento con cache. Guard: la sonda DNSBL consulta resolvers autoritativos (`8.8.8.8`, `1.1.1.1`) explícitamente en lugar del resolver default del host de n8n, y una alerta `critical` requiere que el mismo listado sea confirmado contra al menos dos de los tres resolvers definidos en `DNSBL_RESOLVERS`. Un hit en un único resolver degrada la severity a `alert` para que el on-call investigue sin recibir el page.
+
+- **Cambios en el campo de tasa de quejas de Smartlead.** La forma de respuesta de `/api/v1/campaign-statistics` de Smartlead ha cambiado dos veces en los últimos 18 meses — el campo `complaint_rate` fue renombrado desde `spam_complaints` en el 2025-Q2. Si Smartlead lo cambia otra vez, el threshold check leerá `null` y dejará pasar silenciosamente cada dominio por `ok`. Guard: `Merge — Per-Domain Snapshot` rechaza cualquier registro cuyo campo de métrica clave sea `null` y rutea el rechazo al canal de log `#deliverability-ops`, así que un drift de schema se vuelve visible el mismo día, no el día después de la suppression.
+
+## vs alternativas
+
+**vs la UI de Google Postmaster Tools directamente.** La UI web de Postmaster es la fuente de verdad para las métricas del lado de Gmail, y para una operación de un solo dominio es suficiente — la UI muestra tasa de spam, reputación de IP, reputación de dominio y errores de entrega en una sola vista. Sin embargo, no correlaciona con datos de quejas de Microsoft, Yahoo o tu ESP, y no paga a nadie — un humano tiene que acordarse de mirarla. Este flow usa la misma API de Postmaster que usa la UI y agrega la correlación multi-fuente más el canal de alerta. Si tu única plataforma de envío es un dominio anclado a Gmail, la UI de Postmaster más un recordatorio semanal en el calendario es la respuesta de menor costo.
+
+**vs los dashboards nativos de entregabilidad de Mailgun, SendGrid o Smartlead.** Cada plataforma grande de envío publica su propia vista de entregabilidad — el Deliverability Dashboard de Mailgun, el panel Reputation de SendGrid, las métricas de salud del Master Inbox de Smartlead. Esas son la fuente más precisa para el envío propio de esa plataforma, pero están limitadas a esa plataforma. Si envías a través de dos o tres plataformas, los dashboards nativos obligan al líder de RevOps a loggearse en cada uno por separado y comparar escalas que no son equivalentes. El trabajo central de este flow es la normalización entre plataformas. Usa los dashboards nativos para el deep dive una vez que la alerta haya nombrado la plataforma afectada.
+
+**vs monitores pagos de terceros como 250ok / Validity / GlockApps.** Estos servicios ejecutan pruebas de seed-list contra los principales proveedores de buzón y pueden detectar el drift de placement antes y con mayor fidelidad que Postmaster Tools por sí solo, a $400–$2.500 al mes por dominio según la cobertura. Son el nivel correcto para un programa de entregabilidad a escala de $50M+ ARR donde un cambio de carpeta en Gmail es un hit medible de ingresos. Son sobrados para los equipos por debajo de $10M ARR a los que apunta este flow — la señal de seed-list llega a la misma resolución diaria que Postmaster Tools, y la capa de umbral-y-alerta que ofrece este flow es lo que realmente falta en el extremo más pequeño. Si tu entregabilidad por seed-list ya está pagada y monitoreada, manténla y sáltate este flow.
+
+Combina naturalmente con [intent-spike-handler-n8n](/es/workflows/intent-spike-handler-n8n/) para el lado inbound del mismo stack RevOps de n8n.

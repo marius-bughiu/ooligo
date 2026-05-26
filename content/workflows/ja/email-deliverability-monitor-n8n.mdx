@@ -1,0 +1,93 @@
+---
+slug: email-deliverability-monitor-n8n
+canonical_slug: email-deliverability-monitor-n8n
+locale: ja
+verticals: [revops]
+title: Watch DMARC, spam-complaint rate, and blocklist status before a sending domain gets suppressed
+artifact_type: n8n-flow
+tools_used: [n8n, slack, smartlead, instantly]
+roles: [revops, sdr-leader, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 2-3 hours
+human_tested: false
+last_updated: "2026-05-26"
+---
+
+[n8n](/ja/tools/n8n/) のワークフローで、Google Postmaster Tools をポーリングし、共有メールボックスから DMARC 集約レポートをパースし、主要なブロックリストに対して DNSBL ルックアップを実行し、[Smartlead](/ja/tools/smartlead/) と [Instantly](/ja/tools/instantly/) からバウンス率と苦情率を取得します。そして、いずれかのドメインが文書化されたしきい値を超えた瞬間に、担当 RevOps オーナーへ [Slack](/ja/tools/slack/) で通知します。Claude が下書きした修正アクションも添付されます。バンドル `apps/web/public/artifacts/email-deliverability-monitor-n8n/` には、完全な n8n エクスポートに加え、インポート手順、環境変数、認証情報のセットアップ、しきい値の調整、ブランチごとの検証手順をまとめた `_README.md` が含まれています。
+
+## いつ使うか
+
+アウトバウンドの送信量が、送信ドメインが抑制された *事後* に気付くことが数週間にわたる売上イベントになる規模に達したときに使います。典型的には、少なくとも 1 つのチームが 2 つ以上の専用ドメインを通じて週に 10,000 通超を送信している場合です。Gmail がスイッチを切り替えてスパム配信に回し始めた頃には、Postmaster Tools のスパム率は既に 0.3% を超えています。これは 2024 年 2 月以降に施行されている Gmail と Yahoo のバルクセンダーしきい値です。この時点で、シーケンスに入っているすべてのアカウントで配信到達性のサイクルを 1 つ失っています。このワークフローの目的は、レートが 0.1% を超えた時点でアラートを発火させることです。抑制の数日後ではなく、数日前にです。
+
+複数の送信プラットフォームを運用していて (コールド アウトバウンドに [Smartlead](/ja/tools/smartlead/)、ウォーム フォローアップに [Outreach](/ja/tools/outreach/)、マーケティング用に別の ESP)、それら全体の苦情率とバウンス率を同じ尺度で比較する単一のビューが必要な場合にも、これは正しいパターンです。フローは各ベンダーのレポートをドメイン単位・日単位で 1 レコードに正規化するため、RevOps リードは 1 件の Slack メッセージで、問題がプラットフォーム横断的なのか、それとも 1 つの送信元に限定されているのかを判断できます。
+
+Claude が下書きする修正アクションは、アラートを通知から実行可能な対応へと変える部分です。各アラートには、どのしきい値が発火したかに応じた具体的な是正アクションが添えられます。名前付きドメインのシーケンスを停止する、ウォームアップ中に送信量を 30% 下げる、名前付きブロックリストへ復活申請を提出する、といった具合です。汎用的な「配信到達性を調査せよ」ではありません。
+
+## いつ使わないか
+
+単一ドメインから週 1,000 通未満しか送らない場合はスキップしてください。その送信量では、Postmaster Tools は使えるスパム率シグナルを表示しません。ダッシュボードはレポート開始までに Gmail 宛で 1 日あたり 100 通超の配信を必要とします。DMARC 集約レポートも日次チェックを駆動するには間隔が空きすぎます。その規模では、送信プラットフォームの UI で配信到達性を手動で見るのが適切なモニタリング層です。
+
+送信ドメインを自社管理していない場合もスキップです。このフローは、SPF、ドメインごとに少なくとも 1 つのセレクタを持つ DKIM、そして `rua=mailto:` レポートが自分で読めるメールボックスに届くように設定された DMARC を前提とします。ベンダーのインフラ上の共有サブドメインから送信している場合 (ほとんどの ESP の無料枠のデフォルト)、DMARC RUA レポートはベンダー側で集約され、自社には届きません。このフローのポーリング経路の多くは何も得られなくなります。
+
+このアラートを唯一の配信到達性の規律として使ってはいけません。フローは症状を見張ります。スパム率の上昇、バウンス率の上昇、ブロックリストへの掲載などです。しかし、その上流の原因 (リストの衛生、フィルタを引くコピー、バーストに見える送信パターン) は行動の問題です。RevOps リードと SDR マネージャが送信元別・トピック別の内訳を見る週次レビューは、引き続き必要です。
+
+## セットアップ
+
+1. **バンドルをインポートします。** `apps/web/public/artifacts/email-deliverability-monitor-n8n/email-deliverability-monitor-n8n.json` を n8n の **Workflows → Import from File** から取り込みます。トリガー経路は 3 つあります。毎時実行される Schedule Trigger (Postmaster + DNSBL + ESP メトリクスのポーリング)、15 分ごとに走るもう 1 つの Schedule Trigger (DMARC レポートの IMAP ポーリング)、そして単一ドメインのアドホック チェック用の手動 Webhook です。
+
+2. **ドメイン レジスタを構成します。** 監視対象ドメインのリストは Code ノード `Domain Register (Static)` に置かれています。`{ domain, sendingPlatform, owner, slackHandle, severity }` の形のオブジェクトの配列です。実際のドメインで一度だけ書き換えてください。残りのフローはこの配列に依存します。severity (`primary` / `warmup` / `secondary`) はアラートの色と on-call ルーティングを決めます。
+
+3. **環境変数を設定します。** 合計 12 個です。Postmaster API トークン、DMARC メールボックスの IMAP 認証情報、Smartlead と Instantly の API キー、DNSBL ゾーン リスト、severity ごとの Slack チャンネル名、そしてしきい値そのものです。完全なテーブルは `_README.md` にあります。デフォルトのしきい値は、スパム率アラート 0.1%、抑制しきい値 0.3%、バウンス率アラート 5%、苦情率アラート 0.08% です。
+
+4. **認証情報を配線します。** 必要な認証情報は 5 つです。
+   - `PLACEHOLDER_POSTMASTER_CRED_ID` — `gmail.postmaster.readonly` スコープ付きの Google OAuth2
+   - `PLACEHOLDER_IMAP_CRED_ID` — DMARC RUA レポートを受信するメールボックスの IMAP ログイン
+   - `PLACEHOLDER_SMARTLEAD_CRED_ID` — Smartlead API キーの HTTP Header Auth
+   - `PLACEHOLDER_INSTANTLY_CRED_ID` — Instantly API キーの HTTP Header Auth
+   - `PLACEHOLDER_SLACK_CRED_ID` — `chat:write` 権限の Slack bot token
+
+5. **DMARC RUA を実在のメールボックスに向けます。** DNS 上で、監視対象ドメインの DMARC レコードに `rua=mailto:dmarc-reports@yourcompany.com` を含めてください。メールボックスが存在しない場合は作成します。主要なメールボックス プロバイダ (Google Workspace、Microsoft 365、Fastmail) は DMARC XML 添付ファイルを問題なく配信します。フローの IMAP パーサは `.zip` と `.gz` の添付を展開し、XML を直接読み取ります。
+
+6. **検証を実行します。** `_README.md` には各ブランチを動かす 5 段階の検証が記載されています。手動 Webhook のヒット、しきい値の強制発火、Stale レポート テスト、DNSBL の偽陽性テスト、複数ドメインのバースト テストです。Schedule Trigger を有効化する前に、5 つすべてを実施してください。
+
+## ワークフローの挙動
+
+`Schedule — Hourly Sweep` は毎時 0 分に発火し、SplitInBatches 内で 3 つのブランチを並列に走らせます。レジスタの各ドメインに対して Postmaster Tools API (`https://gmailpostmastertools.googleapis.com/v1/domains/<domain>/trafficStats`)、ESP 側の数値を取る Smartlead `/api/v1/campaign-statistics` と Instantly `/api/v2/accounts/health`、そして各ドメインの MX レコードを解決した IP に対して各ブロックリストのゾーン (`<reversed-ip>.<zone>`) に A レコード ルックアップをかける DNSBL プローブです。各ブランチは `Merge — Per-Domain Snapshot` で合流し、`(domain, sourceMetric, dateBucket)` ごとに 1 レコードへ畳み込みます。26 時間より古いレコードは拒否され、遅い API が直近の比較を汚染しないようにします。
+
+`Threshold Check (Code)` は、マージ後のスナップショットをしきい値環境変数と突き合わせ、メトリクスごとに 3 つのうち 1 つのステータスを出力します。`ok`、`alert` (レートがアラートしきい値を超えているが抑制には届いていない)、`critical` (レートが抑制しきい値を超えている、またはドメインがブロックリストに載っている) です。Code ノードはポリシーを一箇所に集約します。各しきい値とその根拠はインラインでコメントされているので、RevOps リードはチケットを開かずに読み、調整できます。ステータスは最新ポイントに加えて、直近 7 日間の移動平均に対しても計算されます。これにより、1 日だけのノイズで誰かを呼び出すことは起きませんが、4 日続くドリフトは確実に呼び出します。
+
+`Dedup Gate (Static Data)` は `$getWorkflowStaticData('global')` を読み、`alerted_<domain>_<metric>_<bucket>` キーを探します。同じドメインが同じしきい値を直近 12 時間以内に超えていれば、ゲートはブランチを沈黙のうちに停止します。これは、毎時ポーリングする一方で、基となるシグナルがそれほど速くは動かないアラート ワークフローに必要な挙動そのものです。static data は本番実行でのみ永続化され、手動の Execute Workflow では決して残らないため、`_README.md` の検証は手動実行ボタンではなく、本番の Schedule Trigger を使います。
+
+`Claude — Remediation Draft` は Anthropic API に `claude-haiku-4-5` で POST します。タイムアウトは 8 秒、システム プロンプトは発火したメトリクスを具体的な是正アクションに対応付けます。primary ドメインでスパム率が 0.1% を超えた場合は「`<domain>` の最大送信量シーケンスを 24 時間停止し、直近 200 通の送信メッセージを苦情パターンで監査せよ」を返します。ブロックリストへの掲載は「`<blocklist URL>` で復活申請を開き、なぜこの IP がウォームアップ上限を超えて送っていたかを記録せよ」を返します。バウンス率が 5% を超えた場合は「シーケンスを再開する前に、直近 30 日分のインポートに対して `<provider>` でリスト スクラブを実施せよ」を返します。Slack メッセージ上ではドラフトに「edit before action」のラベルが付きます。担当者がアクションが状況に合っているかを確認します。フローは自動実行しません。
+
+`Slack — Notify` はアラートの severity (`#deliverability-primary`、`#deliverability-warmup`、`#deliverability-secondary`) に対応するチャンネルへ Block Kit メッセージを投稿します。severity の色のついたヘッダ、しきい値と対比した違反メトリクスと値、移動平均との比較、そして Claude の修正ドラフトが並びます。critical severity のアラートは、ドメイン レジスタにある on-call ハンドルにも @-メンションを飛ばし、チャンネルを張り込まなくても適切な担当者にページが届くようにします。
+
+`Schedule — DMARC Poll` は 15 分ごとに走り、IMAP メールボックスから `*.xml`、`*.zip`、`*.gz` のいずれかにマッチする添付付きの新着メッセージを取得します。`Parse DMARC XML` は各レポートを展開して走査し、ドメインごとに `<source_ip>` / `<count>` / `<disposition>` / `<dkim>` / `<spf>` の三つ組を抽出して、同じ threshold check 経路に構造化レコードを流し込みます。DMARC ポーリングは、自社の送信プラットフォームの外側から発生する送信元偽装の問題を捕捉できる唯一のブランチです。メトリクス スタックの他のどこにも現れないなりすまし試行を拾います。
+
+## Cost reality
+
+各チェックでは `claude-haiku-4-5` はしきい値発火時のみ動きます。中央値の日の LLM 呼び出しはゼロです。荒れた週でも、フローが発火するアラートは 5–10 件、各々入力 500 トークン・出力 120 トークン程度で、Haiku 4.5 の料金 (~$0.80/M 入力、~$4/M 出力) でアラート 1 件あたり $0.005 未満です。5 ドメイン構成の典型的なレジスタなら、月次の Claude コストは $1 未満に収まります。
+
+Postmaster Tools API は Google Workspace アカウントで無料です。クォータは数十ドメインを毎時ポーリングしても余裕があります。Smartlead の API は 2026-05 時点で月額 $94 のベース プランに含まれます。Instantly の API は月額 $97 の Growth プランに含まれます。公開リスト (Spamhaus、Barracuda、SORBS、SpamCop) への DNSBL クエリは非商用クエリ量なら無料です。大量クエリには年額 $1,500–$3,000 のゾーン単位有償データ フィードが必要ですが、このフローの送信量ではスコープ外です。
+
+n8n セルフホストは無料です。月額 $20 の n8n Cloud Starter は、5 ドメイン構成のレジスタが生成する月 700–1,500 実行に十分対応します。Slack bot、IMAP メールボックス、DNS ルックアップは追加コストになりません。ESP の基本コストに上乗せされる配信到達性モニタリングの総支出は月額 $25 未満です。
+
+## Failure modes
+
+- **Postmaster Tools のデータ遅延。** Google の Postmaster API は、前日のデータをその翌日に複数バッチで公開します。2026-05-25 のデータ ポイントが 2026-05-26 (UTC) の深夜に届くこともあります。「最新ポイント」だけを見る素朴な比較は、単に最近のデータがまだ届いていないだけのドメインでアラームを鳴らします。Guard: `Threshold Check (Code)` は `critical` を立てる前に直近 72 時間で少なくとも 2 つのデータ ポイントを要求し、ポイントが 1 つしかない場合は `critical` ではなく `alert` にフォールバックします。しきい値ロジックはインライン コメント付きで、`POSTMASTER_MIN_POINTS_FOR_CRITICAL` として環境変数に露出されているため、on-call はコード変更なしで調整できます。
+
+- **DMARC レポートはすべてのパーサが扱える形式で届くわけではない。** 一部のメールボックス プロバイダ (特に特定のアンチマルウェア ルールを有効化した Microsoft 365) は `.zip` 添付を剥がしたり、`.gz` を `.gz_renamed` にリネームしたりします。IMAP ポーリングはメッセージを見ますが、`Parse DMARC XML` はスキップし、失敗は沈黙のままです。Guard: すべての IMAP メッセージは `attachmentMatched: true/false` でログされ、日次集計は `#deliverability-ops` のダイジェストに送られます。`false` の比率が 1 週間で 10% を超えるとエスカレーション アラートが発火し、メールボックス プロバイダの設定が容疑者になります。`_README.md` には、これを最もよく引き起こす Microsoft 365 の設定 (`Anti-Malware → Common Attachment Filter`) が記載されています。
+
+- **delisting サイクル中の DNSBL 偽陽性。** 一部のブロックリスト (特に Spamhaus DROP) は再帰リゾルバ層で強くキャッシュされます。数時間前に delisting されたドメインも、遅いキャッシュ リゾルバに対しては掲載中として解決され得ます。Guard: DNSBL プローブは n8n ホストのデフォルト リゾルバではなく、権威リゾルバ (`8.8.8.8`、`1.1.1.1`) を明示的に問い合わせます。`critical` アラートは、`DNSBL_RESOLVERS` で構成された 3 つのうち少なくとも 2 つのリゾルバで同じ掲載が確認されることを要求します。単一リゾルバのヒットは severity を `alert` に格下げするので、on-call はページされずに調査できます。
+
+- **Smartlead の苦情率フィールドの変更。** Smartlead の `/api/v1/campaign-statistics` のレスポンス形状はここ 18 か月で 2 度変わりました。`complaint_rate` フィールドは 2025-Q2 に `spam_complaints` から改名されました。Smartlead が再び変えれば、threshold check は `null` を読み、すべてのドメインを静かに `ok` 扱いで通します。Guard: `Merge — Per-Domain Snapshot` はキー メトリクス フィールドが `null` のレコードを拒否し、ログ チャンネル `#deliverability-ops` に却下を流します。スキーマ ドリフトは抑制の翌日ではなく、当日のうちに顕在化します。
+
+## vs alternatives
+
+**vs Google Postmaster Tools UI を直接使う場合。** Postmaster Web UI は Gmail 側メトリクスの真実の情報源であり、単一ドメインの運用ならそれで十分です。UI はスパム率、IP レピュテーション、ドメイン レピュテーション、配信エラーを 1 つのビューで見せます。ただし、Microsoft、Yahoo、自社 ESP の苦情データとの相関は取れず、誰にもページを飛ばしません。人間が思い出して見にいく必要があります。このフローは UI が使うのと同じ Postmaster API を使い、マルチソース相関とアラート チャンネルを上乗せします。送信プラットフォームが Gmail 寄りの 1 ドメインだけなら、Postmaster UI と週次のカレンダー リマインダーが最も低コストな答えです。
+
+**vs Mailgun、SendGrid、Smartlead のネイティブ配信到達性ダッシュボード。** 主要な送信プラットフォームはそれぞれ独自の配信到達性ビューを提供します。Mailgun の Deliverability Dashboard、SendGrid の Reputation パネル、Smartlead の Master Inbox ヘルス メトリクスなどです。これらは当該プラットフォーム自身の送信に対する最も精度の高いソースですが、そのプラットフォームに限定されています。2–3 のプラットフォームから送っているなら、ネイティブ ダッシュボードは RevOps リードに別々にログインして、揃わない尺度で見比べさせます。このフローの中心的な仕事はクロス プラットフォームの正規化です。アラートが影響を受けたプラットフォームを名指したあとの深掘りに、ネイティブ ダッシュボードを使ってください。
+
+**vs 250ok / Validity / GlockApps などの有料サードパーティ モニター。** これらのサービスは主要メールボックス プロバイダに対してシード リスト テストを走らせ、placement のドリフトを Postmaster Tools 単体より早く高い精度で検知できます。カバレッジ次第でドメインあたり月 $400–$2,500 です。これは ARR $50M 以上の規模で、Gmail のフォルダ切り替え 1 件が可視の売上ヒットになる配信到達性プログラムにとって正しい層です。このフローが狙う ARR $10M 未満のチームには過剰です。シード リスト シグナルは Postmaster Tools と同じ日次解像度で届きますし、このフローが提供するしきい値とアラート層こそが、実際には小規模側で抜けているものです。シード リストでの配信到達性が既に課金され監視されているなら、それを維持して、このフローはスキップしてください。
+
+[intent-spike-handler-n8n](/ja/workflows/intent-spike-handler-n8n/) と組み合わせると、同じ RevOps の n8n スタックのインバウンド側と自然に対になります。
