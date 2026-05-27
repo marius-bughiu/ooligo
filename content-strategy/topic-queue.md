@@ -84,7 +84,7 @@ Format per item:
 - [type:comparison] [vertical:legal-ops] pairwise: spellbook-vs-draftwise — AI drafting assistants in Word; routes on broad drafting/redline coverage vs precedent-grounded clause retrieval → slug: spellbook-vs-draftwise
 - [type:comparison] [vertical:legal-ops] pairwise: reveal-vs-relativity — ediscovery platforms; routes on AI-native review (Reveal-Brainspace) vs Relativity ecosystem and partner depth → slug: reveal-vs-relativity
 - [type:comparison] [vertical:revops] pairwise: 11x-vs-artisan — AI SDR head-to-head; routes on multi-agent suite (Alice/Jordan/Mike) vs single-rep Ava with email focus → slug: 11x-vs-artisan
-- [type:comparison] [vertical:legal-ops] pairwise: harvey-vs-legora — legal AI rivals; routes on workflow-suite breadth + US grounding vs European-origin collaborative drafting/review
+- [type:comparison] [vertical:legal-ops] pairwise: harvey-vs-legora — legal AI rivals; routes on workflow-suite breadth + US grounding vs European-origin collaborative drafting/review → slug: harvey-vs-legora
 - [type:comparison] [vertical:recruiting] pairwise: seekout-vs-hireez — AI sourcing / talent intelligence; routes on agentic slate delivery (Spot) vs structured boolean search + diversity insights
 - [type:comparison] [vertical:recruiting] pairwise: seekout-vs-gem — sourcing + outreach; routes on agentic sourcing depth vs all-in-one recruiting CRM + sequencing
 - [type:comparison] [vertical:revops] pairwise: default-vs-chili-piper — inbound routing/scheduling; routes on lightweight orchestration + enrichment layer vs four-product demand-conversion suite → slug: default-vs-chili-piper
