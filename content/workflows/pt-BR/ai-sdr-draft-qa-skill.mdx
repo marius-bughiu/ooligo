@@ -1,0 +1,98 @@
+---
+slug: ai-sdr-draft-qa-skill
+canonical_slug: ai-sdr-draft-qa-skill
+locale: pt-BR
+verticals: [revops]
+title: Catch hallucinated claims, generic personalization, and compliance breaks in AI SDR drafts before they send
+artifact_type: claude-skill
+tools_used: [claude, 11x, artisan, salesforce, smartlead]
+roles: [revops, sdr-leader, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 60-90 min
+human_tested: false
+last_updated: "2026-05-27"
+---
+
+Um Claude Skill que fica entre um AI SDR (Alice no [11x](/pt-BR/tools/11x/), Ava no [Artisan](/pt-BR/tools/artisan/), o agente dentro do [aisdr](/pt-BR/tools/aisdr/) ou do [Unify](/pt-BR/tools/unify/)) e a ação de envio, pontuando cada draft contra quatro rubricas — acurácia de claims, ancoragem de personalização, compliance jurisdicional e higiene de deliverability — e retornando um veredito `block` / `edit` / `send` com o eixo específico que falhou citado. O bundle em `apps/web/public/artifacts/ai-sdr-draft-qa-skill/` traz `SKILL.md`, quatro arquivos de rubrica em `references/`, e um arquivo literal de sample output para wiring de parser.
+
+## Quando usar
+
+Rode este skill como gate pré-envio em qualquer deployment de [AI SDR](/pt-BR/learn/ai-sdr/) que envia sem review humano mensagem a mensagem. Os dois padrões em produção: um webhook na frente da action de send do AI SDR que posta o draft mais o pacote de evidência do prospect ao skill e só libera o envio quando a resposta é `verdict: send`, ou um pass batch pré-envio sobre as próximas 24 horas de drafts em fila que pausa qualquer step de sequência com `verdict: block`.
+
+O skill também serve como ferramenta de calibragem durante o piloto. Passe uma amostra de 500 drafts do seu primeiro mês com 11x, Artisan ou aisdr pelo skill, e em seguida tenha um analista de RevOps etiquetando os mesmos 500 manualmente. O conjunto de discordâncias te diz se o AI SDR está sobre ou sub-personalizando para o seu ICP, onde a taxa de claims alucinados está concentrada, e se o seu perfil jurisdicional precisa de ajuste antes de escalar o volume de envio acima de 5.000 por semana.
+
+O skill exige o draft mais um pacote `prospect_evidence` — o mesmo payload de enrichment que o AI SDR usou para escrever o draft. Se o AI SDR upstream não expõe o pacote de evidência (algumas suítes fechadas escondem), o skill não consegue verificar claims e retorna `insufficient_evidence` em vez de chutar. Isso é uma feature, não um bug: um gate de QA que pontua drafts contra o conhecimento geral do modelo vai alucinar as próprias validações.
+
+## Quando NÃO usar
+
+Não use este skill quando um SDR ou AE humano revisa cada draft antes do envio. O revisor é um gate mais forte do que o skill — tem contexto de negócio que o skill não tem — e colocar um modelo na frente de um revisor humano gasta tokens e adiciona latência sem subir a precisão. Use para fluxos totalmente autônomos ou parcialmente autônomos.
+
+Não use como único controle de deliverability. O skill escaneia gatilhos de spam, subjects em caixa alta, bodies só de imagem e padrões de cloaking de link dentro do draft. Ele não monitora DMARC, complaint rate ou status de blocklist nos seus domínios — esse é o trabalho do flow [email-deliverability-monitor-n8n](/pt-BR/workflows/email-deliverability-monitor-n8n/). Rode os dois.
+
+Não rode em drafts de resposta morna ou em threads já engajadas. As rubricas foram construídas para outbound frio; um draft de resposta a um prospect que já agendou uma reunião vai falhar a rubrica de personalização por design (a personalização aqui precisa ser context-aware, não puxada de evidência fria). Roteie drafts de tier morno para outro prompt.
+
+## Setup
+
+O setup leva 60-90 minutos para o skill em si, mais o tempo de wiring upstream, que depende se o seu AI SDR expõe um webhook pré-envio.
+
+1. **Instale o Skill.** Coloque `apps/web/public/artifacts/ai-sdr-draft-qa-skill/SKILL.md` e a pasta `references/` no diretório `.claude/skills/ai-sdr-draft-qa/`, ou faça upload como Skill no claude.ai. Os campos `name` e `description` do frontmatter são o que dispara o Skill a partir de um agente que chama.
+2. **Calibre a rubrica de claims.** Abra `references/1-claim-rubric.md` e configure `claim_block_threshold` — o número de claims não verificados que dispara um veredito `block` (default: 1). A maioria dos AI SDRs sobre-confabula rounds de funding e headcount; o default de 1 faz aflorar cada claim alucinado. Suba para 2 só se você aceita algum risco de alucinação em troca de menos bloqueios.
+3. **Calibre a rubrica de personalização.** Abra `references/2-personalization-rubric.md`. O scoring default usa uma escala 0-5; o `personalization_block_below` default é 2. Um score de 2 significa pelo menos uma específica ancorada amarrada ao pacote de evidência. Drafts que pontuam 0 ou 1 são templates do tipo "Olá [first_name], notei que a [Company] está no espaço [industry]" — bloqueia.
+4. **Escolha perfis jurisdicionais.** Abra `references/3-compliance-rubric.md` e habilite os perfis que batem com o seu envio. US CAN-SPAM + RFC 8058 one-click unsubscribe é o piso; documentação de legitimate interest sob o GDPR da UE é a camada para qualquer recipient da UE; a França adiciona Loi Hamon para B2B; a Califórnia adiciona opt-out alinhado ao CCPA. A rubrica de compliance lê o país do prospect a partir do pacote de evidência e aplica o perfil correspondente ou retorna `insufficient_compliance_context`.
+5. **Faça o wiring do webhook pré-envio.** Para o 11x e o Artisan, configure o webhook pré-envio nos settings da plataforma com a URL do seu endpoint (ou use o modo "approval queue" da plataforma e tenha o skill comandando as aprovações). Para o Unify e o aisdr, use a API aberta da plataforma para buscar o próximo draft na fila, chame o skill e grave o veredito de volta. Para um agente caseiro, coloque o skill na frente da chamada SMTP de envio diretamente.
+6. **Decida a política de bloqueio.** Um veredito `block` pode rotear o draft para um revisor humano, segurar para o AI SDR regerar, ou hard-fail no envio. O default é "segurar para regeração com o eixo que falhou como feedback" — a maioria dos AI SDRs melhora o draft na segunda passada quando recebe o motivo específico da falha.
+
+## O que o skill faz de fato
+
+**Passo 1 — validação de input.** O skill rejeita chamadas sem body do draft, subject, sender domain, país do recipient ou pacote `prospect_evidence`. A falta de qualquer um devolve `insufficient_input` com o campo específico. Nenhum scoring roda sobre registro incompleto.
+
+**Passo 2 — extração e verificação de claims.** Cada claim factual sobre o prospect, a empresa do prospect ou um evento público ("vi o anúncio da Série B na semana passada", "o spike de contratação no time de dados") é extraído e depois confrontado com o pacote de evidência. Um claim está *ancorado* se uma citação no pacote o sustenta. Claims não ancorados são marcados. Default `claim_block_threshold: 1` — um claim não ancorado dispara um bloqueio.
+
+**Passo 3 — scoring de personalização.** O skill pontua de 0-5 em específicas ancoradas. Uma *específica ancorada* é um detalhe amarrado a uma citação no pacote de evidência — um tool nomeado que o prospect usa, um job posting específico que ele publicou, um podcast em que ele apareceu. Uma *específica não ancorada* — "sua indústria", "seu role", "seu time" — não conta. Drafts que pontuam abaixo de `personalization_block_below: 2` são bloqueados. A separação de dois polos (ancorada vs não ancorada) é o que impede o AI SDR de gameficar o score enfiando tokens.
+
+**Passo 4 — varredura de compliance.** O skill checa: um padrão de header `List-Unsubscribe` e uma linha `List-Unsubscribe-Post: List-Unsubscribe=One-Click` conforme RFC 8058 (a exigência de bulk sender do Google e do Yahoo desde fevereiro de 2024), um endereço físico do sender no footer conforme CAN-SPAM, um link de unsubscribe no body visível, identidade do sender batendo com a linha From, e os adicionais por jurisdição dos perfis habilitados. A falta de qualquer elemento exigido é bloqueio.
+
+**Passo 5 — varredura de deliverability e voz.** O skill marca linguagem-gatilho de spam ("guaranteed", "free money", "act now"), subjects acima de 70 caracteres ou em caixa alta, bodies abaixo de 40 palavras ou acima de 250 palavras, bodies só de imagem, mais de 3 links, e marcas estilo AI ("I hope this email finds you well", "I wanted to reach out"). Uma marca dispara veredito `edit`, não bloqueio, a menos que se empilhe com outra marca.
+
+**Passo 6 — montagem do veredito.** O skill devolve um de três veredictos: `send` (sem bloqueios, sem edits), `edit` (uma ou mais marcas tier-edição com os rewrites sugeridos inline), ou `block` (uma ou mais questões bloqueantes com o eixo que falhou nomeado). O formato de output está em `references/4-sample-output.md`.
+
+## Realidade de custo
+
+Cada passada de QA consome 1.500-3.500 tokens de input (o draft, o pacote de evidência e os quatro arquivos de rubrica quando não estão em cache) e 400-800 tokens de output. No pricing do Claude Sonnet 4.x (aproximadamente $3 por milhão de input e $15 por milhão de output, list de mid-2026), cada passada custa $0,01-0,03.
+
+A volume de AI SDR — um único agente autônomo fazendo 5.000-15.000 envios por mês — a camada de QA custa $50-450 por mês em tokens do Claude. Em um deployment de 50.000-envios-por-mês (múltiplos agentes, envio multi-domínio), $500-1.500. Compare com a alternativa: um domínio de envio suprimido por causa de um spike de 0,3% no complaint rate custa em torno de 5-10 dias úteis de pipeline. O custo de QA é um erro de arredondamento contra uma semana ruim.
+
+Prompt caching dos arquivos de rubrica corta o custo de tokens de input em 30-50% no volume de produção. O SKILL.md do bundle documenta a convenção de cache-key; os quatro arquivos de rubrica são estáveis entre chamadas dentro de um deployment.
+
+## Métrica de sucesso
+
+A métrica para acompanhar é **taxa de captura de claims alucinados**: amostre 100 drafts por semana, tenha um analista de RevOps etiquetando cada um por claims não ancorados, e meça o recall do skill contra os labels do analista. Um recall acima de 95% significa que a rubrica está funcionando; abaixo de 90% significa que a rubrica de claims precisa apertar (baixe o threshold, ou expanda o que conta como "claim").
+
+Métrica secundária: **taxa de falso bloqueio**. Entre os drafts que o skill bloqueou, conte a fração que um analista teria aprovado. Uma taxa de falso bloqueio acima de 8% é o sinal para afrouxar o threshold de personalização de 2 para 1 ou expandir a definição de específica ancorada. Abaixo de 3% significa que o skill está sub-bloqueando — empurre o threshold no outro sentido.
+
+As duas métricas se movem em direções opostas; escolha o ponto de operação que casa com a sua tolerância. Um time enterprise B2B vendendo para Fortune 500 deveria rodar apertado — alto recall, aceitando mais falso bloqueio. Um time SMB de alto volume vendendo a 10.000+ por semana deveria rodar frouxo — menos falso bloqueio, aceitando alguns claims alucinados se a matemática de volume fechar.
+
+## vs alternativas
+
+**vs sem QA.** O status quo de deployments de AI SDR totalmente autônomos até 2026 é não ter gate pré-envio além dos guardrails leves do próprio vendor. As taxas de resposta em envios autônomos ficam em 1-3% versus 8-15% em pods híbridos AI-com-humano (estimativas de deployments reportados por buyers até mid-2026, não um benchmark publicado único). Os padrões de claim alucinado e personalização genérica são fatia material do gap. Adicionar um gate de QA sobe a taxa, mas o movimento é limitado — drafts melhores não transformam listas frias em listas quentes.
+
+**vs os guardrails internos do próprio AI SDR.** 11x e Artisan embarcam checagens internas de qualidade que sinalizam falhas óbvias, mas a superfície de falha não é transparente — não dá para inspecionar o que a checagem pegou ou não pegou, e não dá para ajustar o threshold. Este skill torna a rubrica inspecionável. O trade-off: é uma chamada ao modelo separada com o próprio custo de latência.
+
+**vs um revisor SDR humano.** Um revisor humano pega falhas de contexto de negócio que o skill perde ("este prospect acabou de ter um outage grande, não manda um email animado hoje"). O skill pega falhas de consistência que o revisor humano perde no draft 200 do dia. Rode os dois com alto deal value; rode só o skill em alto volume.
+
+**vs um prompt estruturado limitando o AI SDR upstream.** Prompts upstream mais apertados reduzem a alucinação na fonte. Não pegam a taxa residual e não sinalizam falhas de compliance jurisdicional (a jurisdição depende do recipient, que o prompt de escrita não conhece). Use os dois: um prompt upstream estruturado para o AI SDR, mais este skill como o gate.
+
+## Watch-outs
+
+- **Falso bloqueio em específicas legítimas puxadas pela IA.** Se o AI SDR upstream recuperou um press release recente que o pacote de evidência não inclui, o skill marca o claim como não ancorado e bloqueia. **Guard:** o skill verifica só contra o pacote de evidência fornecido, nunca contra conhecimento do modelo. O contrato é que o AI SDR inclua tudo que usou para escrever o draft no pacote; se ele não conseguir, o skill não consegue verificar. O fix é upstream — fazer o vendor do AI SDR expor o contexto de retrieval — não afrouxar a rubrica.
+- **Gaming do score de personalização.** Um skill que recompensa especificidade ensina o modelo upstream a enfiar tokens que parecem específicos. "Vi o seu trabalho na Snowflake na plataforma de dados" se lê como personalizado mesmo se o prospect saiu de lá há 18 meses. **Guard:** a rubrica pontua específicas ancoradas e não ancoradas separadamente. Uma entidade nomeada conta só se uma citação no pacote de evidência a sustenta; uma específica defasada sem citação de emprego atual se lê como não ancorada.
+- **Compliance creep entre jurisdições.** CAN-SPAM, RFC 8058, GDPR, Loi Hamon francesa, opt-out alinhado a CCPA na Califórnia, awareness de NYC LL144 para qualquer outreach adjacente a hiring — regras diferentes por recipient. **Guard:** a rubrica de compliance é por jurisdição; o pacote prospect_evidence precisa incluir o país do recipient (e o estado dos EUA quando aplicável), e o skill aplica o perfil que bate ou retorna `insufficient_compliance_context`. Cair silenciosamente em um perfil "global" genérico está banido na rubrica.
+- **O skill vira gargalo.** A 50.000 envios por mês e um p95 de 3 segundos por draft, o gate de QA adiciona em torno de 42 horas de wall-clock por mês de processamento serial — ok em paralelo, ruim em thread única. **Guard:** o bundle documenta o padrão de paralelização (uma chamada ao Claude por draft, batches de 20-50 em voo) e a convenção de cache-key para os quatro arquivos de rubrica. Mire em p95 abaixo de 3 segundos por draft; alerte quando o p95 passar de 5 segundos.
+
+## Bundle de referência
+
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/SKILL.md` — definição completa do skill, inputs, método, formato de output e watch-outs.
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/references/1-claim-rubric.md` — o que conta como claim, contrato do pacote de evidência, thresholds pass/block por eixo.
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/references/2-personalization-rubric.md` — específicas ancoradas vs não ancoradas, scoring 0-5 com outputs de exemplo em cada score.
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/references/3-compliance-rubric.md` — perfis por jurisdição (US CAN-SPAM, RFC 8058 one-click unsubscribe, GDPR da UE legitimate interest, awareness de NYC LL144, Loi Hamon francesa, opt-out alinhado a CCPA na Califórnia).
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/references/4-sample-output.md` — outputs literais `send`, `edit` e `block` mais o contrato de campo estruturado para parsers.

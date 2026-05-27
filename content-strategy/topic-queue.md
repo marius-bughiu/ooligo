@@ -110,7 +110,7 @@ Format per item:
 - [type:workflow] [vertical:legal-ops] ediscovery-custodian-questionnaire-skill — claude skill that generates a custodian interview questionnaire from a legal-hold scope; artifact_type: claude-skill → slug: ediscovery-custodian-questionnaire-skill
 - [type:workflow] [vertical:cross] cursor-rules-data-engineer-ops — cursor rules tailored for an ops-adjacent data engineer (dbt + reverse-ETL + warehouse hygiene); artifact_type: cursor-rule → slug: cursor-rules-data-engineer-ops
 - [type:workflow] [vertical:revops] email-deliverability-monitor-n8n — n8n flow watching DMARC failures, spam-complaint rate, and blocklist status across sending domains and alerting before suppression; artifact_type: n8n-flow → slug: email-deliverability-monitor-n8n
-- [type:workflow] [vertical:revops] ai-sdr-draft-qa-skill — claude skill that QAs AI-SDR-generated outreach (claim accuracy, personalization, compliance) before it sends; artifact_type: claude-skill
+- [type:workflow] [vertical:revops] ai-sdr-draft-qa-skill — claude skill that QAs AI-SDR-generated outreach (claim accuracy, personalization, compliance) before it sends; artifact_type: claude-skill → slug: ai-sdr-draft-qa-skill
 - [type:workflow] [vertical:recruiting] candidate-rediscovery-n8n — n8n flow that re-surfaces silver-medalist and past applicants from the ATS against a newly opened req; artifact_type: n8n-flow
 - [type:workflow] [vertical:legal-ops] demand-letter-drafter-claude-skill — claude skill that drafts a personal-injury demand letter from medical records + case facts (attorney review required); artifact_type: claude-skill
 

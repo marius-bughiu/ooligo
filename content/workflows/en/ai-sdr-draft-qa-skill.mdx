@@ -1,0 +1,98 @@
+---
+slug: ai-sdr-draft-qa-skill
+canonical_slug: ai-sdr-draft-qa-skill
+locale: en
+verticals: [revops]
+title: Catch hallucinated claims, generic personalization, and compliance breaks in AI SDR drafts before they send
+artifact_type: claude-skill
+tools_used: [claude, 11x, artisan, salesforce, smartlead]
+roles: [revops, sdr-leader, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 60-90 min
+human_tested: false
+last_updated: "2026-05-27"
+---
+
+A Claude Skill that sits between an AI SDR (Alice at [11x](/en/tools/11x/), Ava at [Artisan](/en/tools/artisan/), the agent inside [aisdr](/en/tools/aisdr/) or [Unify](/en/tools/unify/)) and the send action, scoring each draft against four rubrics — claim accuracy, personalization grounding, jurisdictional compliance, and deliverability hygiene — and returning a `block` / `edit` / `send` verdict with the specific failing axis cited. The bundle at `apps/web/public/artifacts/ai-sdr-draft-qa-skill/` ships `SKILL.md`, four rubric files in `references/`, and a literal sample-output file for parser wiring.
+
+## When to use
+
+Run this skill as a pre-send gate on any [AI SDR](/en/learn/ai-sdr/) deployment that sends without per-message human review. The two production patterns: a webhook in front of the AI SDR's send action that posts the draft plus the prospect evidence pack to the skill and only releases the send on a `verdict: send` response, or a batch pre-send pass over the next 24 hours of queued drafts that pauses any sequence step with a `verdict: block`.
+
+The skill is also useful as a calibration tool during pilot. Pipe a sample of 500 drafts from your first month with 11x, Artisan, or aisdr through it, then have a RevOps analyst label the same 500 by hand. The disagreement set tells you whether the AI SDR is over- or under-personalizing on your ICP, where the claim-hallucination rate is concentrated, and whether your jurisdictional profile needs adjustment before you scale send volume past 5,000 per week.
+
+The skill requires the draft plus a `prospect_evidence` pack — the same enrichment payload the AI SDR used to write the draft. If the upstream AI SDR will not surface the evidence pack (some closed-suite tools hide it), the skill cannot verify claims and returns `insufficient_evidence` rather than guessing. That is a feature, not a bug: a QA gate that scores drafts against the model's general knowledge will hallucinate its own validations.
+
+## When NOT to use
+
+Do not use this skill when a human SDR or AE reviews every draft before send. The reviewer is a stronger gate than the skill — they have business context the skill does not — and adding a model in front of a human reviewer wastes tokens and adds latency without raising precision. Use it for fully-autonomous or partially-autonomous flows.
+
+Do not use it as the only deliverability control. The skill scans for spam-trigger phrasings, all-caps subjects, image-only bodies, and link-cloaking patterns inside the draft. It does not watch DMARC, complaint rate, or blocklist status across your domains — that is the [email-deliverability-monitor-n8n](/en/workflows/email-deliverability-monitor-n8n/) flow's job. Run both.
+
+Do not run it on warm-reply drafts or already-engaged threads. The rubrics are built for cold outbound; a reply draft to a prospect who already booked a meeting will fail the personalization rubric by design (the personalization should now be context-aware, not pulled from cold evidence). Route warmth-tier drafts to a different prompt.
+
+## Setup
+
+Setup is 60-90 minutes for the skill itself plus the upstream wiring time, which depends on whether your AI SDR exposes a pre-send webhook.
+
+1. **Install the Skill.** Drop `apps/web/public/artifacts/ai-sdr-draft-qa-skill/SKILL.md` and the `references/` folder into your `.claude/skills/ai-sdr-draft-qa/` directory, or upload as a Skill in claude.ai. The frontmatter `name` and `description` fields are what triggers the Skill from a calling agent.
+2. **Calibrate the claim rubric.** Open `references/1-claim-rubric.md` and set `claim_block_threshold` — the number of unverified claims that trips a `block` verdict (default: 1). Most AI SDRs over-confabulate funding rounds and headcount; the default of 1 surfaces every hallucinated claim. Raise to 2 only if you accept some hallucination risk in exchange for fewer blocks.
+3. **Calibrate the personalization rubric.** Open `references/2-personalization-rubric.md`. The default scoring uses a 0-5 scale; the default `personalization_block_below` is 2. A score of 2 means at least one grounded specific tied to the evidence pack. Drafts that score 0 or 1 are "Hi [first_name], I noticed [Company] is in the [industry] space" templates — block.
+4. **Pick jurisdictional profiles.** Open `references/3-compliance-rubric.md` and enable the profiles that match your sending. US CAN-SPAM + RFC 8058 one-click unsubscribe is the floor; EU GDPR legitimate interest documentation is the layer for any EU recipient; France adds Loi Hamon for B2B; California adds CCPA-aligned opt-out. The compliance rubric reads the prospect's country from the evidence pack and applies the matching profile or returns `insufficient_compliance_context`.
+5. **Wire the pre-send webhook.** For 11x and Artisan, set the pre-send webhook in the platform's settings to your endpoint URL (or use the platform's "approval queue" mode and have the skill drive approvals). For Unify and aisdr, use the platform's open API to fetch the next queued draft, call the skill, and write the verdict back. For a homegrown agent, sit the skill in front of the SMTP send call directly.
+6. **Decide the block policy.** A `block` verdict can route the draft to a human reviewer, hold it for the AI SDR to regenerate, or hard-fail the send. Default is "hold for regeneration with the failing axis as feedback" — most AI SDRs improve the draft on the second pass when given the specific failure.
+
+## What the skill actually does
+
+**Step 1 — input validation.** The skill rejects calls missing the draft body, subject line, sender domain, recipient country, or `prospect_evidence` pack. Missing any one of these returns `insufficient_input` with the specific field. No scoring runs on an incomplete record.
+
+**Step 2 — claim extraction and verification.** Every factual claim about the prospect, the prospect's company, or a public event ("I saw your Series B announcement last Tuesday", "your hiring spike on the data team") is extracted, then matched against the evidence pack. A claim is *grounded* if a citation in the evidence pack supports it. Ungrounded claims are flagged. Default `claim_block_threshold: 1` — one ungrounded claim trips a block.
+
+**Step 3 — personalization scoring.** The skill scores 0-5 on grounded specifics. A *grounded specific* is a detail tied to a citation in the evidence pack — a named tool the prospect uses, a specific job posting they published, a podcast they appeared on. An *ungrounded specific* — "your industry," "your role," "your team" — does not count. Drafts that score below `personalization_block_below: 2` are blocked. The two-pole separation (grounded vs ungrounded) is what stops the AI SDR from gaming the score by stuffing tokens.
+
+**Step 4 — compliance scan.** The skill checks for: a `List-Unsubscribe` header pattern and a `List-Unsubscribe-Post: List-Unsubscribe=One-Click` line per RFC 8058 (the Google and Yahoo bulk-sender requirement since February 2024), a physical sender address in the footer per CAN-SPAM, an unsubscribe link in the visible body, sender identity that matches the From line, and the per-jurisdiction additions from the enabled profiles. Missing any required element is a block.
+
+**Step 5 — deliverability and voice scan.** The skill flags spam-trigger language ("guaranteed", "free money", "act now"), subject lines over 70 characters or in all caps, bodies under 40 words or over 250 words, image-only bodies, more than 3 links, and stock AI tells ("I hope this email finds you well", "I wanted to reach out"). A flag triggers an `edit` verdict, not a block, unless it stacks with another flag.
+
+**Step 6 — verdict assembly.** The skill returns one of three verdicts: `send` (no blocks, no edits), `edit` (one or more edit-tier flags with the suggested rewrites inline), or `block` (one or more blocking issues with the failing axis named). The output format is in `references/4-sample-output.md`.
+
+## Cost reality
+
+Each QA pass consumes 1,500-3,500 input tokens (the draft, the evidence pack, and the four rubric files when not cached) and 400-800 output tokens. At Claude Sonnet 4.x pricing (approximately $3 per million input and $15 per million output, mid-2026 list), each pass costs $0.01-0.03.
+
+At AI SDR volume — a single autonomous agent doing 5,000-15,000 sends per month — the QA layer costs $50-450 per month in Claude tokens. At a 50,000-sends-per-month deployment (multiple agents, multi-domain sending), $500-1,500. Compare to the alternative: one suppressed sending domain from a 0.3% complaint-rate spike costs roughly 5-10 business days of pipeline. The QA cost is a rounding error against one bad week.
+
+Prompt caching of the rubric files cuts input-token cost by 30-50% at production volume. The bundle's SKILL.md documents the cache-key convention; the four rubric files are stable across calls within a deployment.
+
+## Success metric
+
+The metric to track is **hallucinated-claim catch rate**: sample 100 drafts per week, have a RevOps analyst label each for ungrounded claims, and measure the skill's recall against the analyst's labels. A recall above 95% means the rubric is working; below 90% means the claim rubric needs tightening (lower the threshold, or expand what counts as a "claim").
+
+Secondary metric: **false-block rate**. Among drafts the skill blocked, count the share an analyst would have approved. A false-block rate above 8% is the signal to loosen the personalization threshold from 2 to 1 or to expand the grounded-specific definition. Below 3% means the skill is under-blocking — push the threshold the other way.
+
+The two metrics move against each other; pick the operating point that matches your tolerance. A B2B enterprise team selling to Fortune 500 should run tight — high recall, accept higher false-block. A high-volume SMB team selling at 10,000+ per week should run loose — lower false-block, accept some hallucinated claims if the volume math works.
+
+## vs alternatives
+
+**vs no QA.** The status quo for fully-autonomous AI SDR deployments through 2026 is no pre-send gate beyond the vendor's own light guardrails. Reply rates on autonomous sends sit at 1-3% versus 8-15% on hybrid AI-plus-human pods (estimates from buyer-reported deployments through mid-2026, not a single published benchmark). The hallucinated-claim and generic-personalization patterns are a material share of the gap. Adding a QA gate moves the rate up, but the move is bounded — better drafts do not turn cold lists into warm ones.
+
+**vs the AI SDR's built-in guardrails.** 11x and Artisan ship internal quality checks that flag obvious failures, but the failure surface is not transparent — you cannot inspect what the check did or did not catch, and you cannot tune the threshold. This skill makes the rubric inspectable. The trade-off: it is a separate model call with its own latency cost.
+
+**vs a human SDR reviewer.** A human reviewer catches business-context failures the skill misses ("this prospect just had a major outage, do not send a perky email today"). The skill catches consistency failures the human reviewer misses on draft 200 of the day. Run both at high deal value; run skill-only at high volume.
+
+**vs a structured prompt that constrains the AI SDR upstream.** Tighter upstream prompts reduce hallucination at the source. They do not catch the residual rate, and they do not flag jurisdictional compliance breaks (jurisdiction depends on the recipient, which the writing prompt does not know). Use both: a structured upstream prompt for the AI SDR, plus this skill as the gate.
+
+## Watch-outs
+
+- **False blocks on legitimate AI-pulled specifics.** If the upstream AI SDR retrieved a recent press release the evidence pack does not include, the skill flags the claim as ungrounded and blocks. **Guard:** the skill verifies against the supplied evidence pack only, never against model knowledge. The contract is that the AI SDR includes everything it used to write the draft in the pack; if it cannot, the skill cannot verify. The fix is upstream — get the AI SDR vendor to expose the retrieval context — not loosening the rubric.
+- **Personalization-score gaming.** A skill that rewards specificity teaches the upstream model to stuff specific-looking tokens. "I saw your work at Snowflake on the data platform" reads as personalized even if the prospect has not been at Snowflake for 18 months. **Guard:** the rubric scores grounded and ungrounded specifics separately. A named entity counts only if a citation in the evidence pack supports it; a stale specific without a current-employment citation reads as ungrounded.
+- **Compliance creep across jurisdictions.** CAN-SPAM, RFC 8058, GDPR, French Loi Hamon, California CCPA-aligned opt-out, NYC LL144 for any hiring-adjacent outreach — different rules per recipient. **Guard:** the compliance rubric is per-jurisdiction; the prospect_evidence pack must include the recipient's country (and US state when relevant), and the skill applies the matching profile or returns `insufficient_compliance_context`. Falling back to a generic "global" profile silently is banned in the rubric.
+- **The skill becomes the bottleneck.** At 50,000 sends per month and a 3-second p95 per draft, the QA gate adds roughly 42 hours of wall-clock per month of serial processing — fine in parallel, bad on a single thread. **Guard:** the bundle documents the parallelization pattern (one Claude call per draft, batches of 20-50 in flight) and the cache-key convention for the four rubric files. Target sub-3-second p95 per draft; alert when p95 climbs above 5 seconds.
+
+## Reference bundle
+
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/SKILL.md` — full skill definition, inputs, method, output format, and watch-outs.
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/references/1-claim-rubric.md` — what counts as a claim, the evidence-pack contract, per-axis pass/block thresholds.
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/references/2-personalization-rubric.md` — grounded vs ungrounded specifics, 0-5 scoring with example outputs at each score.
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/references/3-compliance-rubric.md` — per-jurisdiction profiles (US CAN-SPAM, RFC 8058 one-click unsubscribe, EU GDPR legitimate interest, NYC LL144 awareness, French Loi Hamon, California CCPA-aligned opt-out).
+- `apps/web/public/artifacts/ai-sdr-draft-qa-skill/references/4-sample-output.md` — literal `send`, `edit`, and `block` outputs plus the structured-field contract for parsers.
