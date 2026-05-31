@@ -45,7 +45,7 @@ Format per item:
 - [type:tool] [vertical:revops] new entry: warmly — website visitor de-anonymization + warm-outbound orchestration; high r/sales mention volume, pairs against RB2B → slug: warmly
 - [type:tool] [vertical:revops] new entry: revenuehero — inbound lead-to-meeting routing + scheduling; the lower-cost single-product Chili Piper alternative readers ask about → slug: revenuehero
 - [type:tool] [vertical:revops] new entry: qualified — Salesforce-native pipeline platform with the Piper AI SDR; the SFDC-native inbound-conversion pole → slug: qualified
-- [type:tool] [vertical:recruiting] new entry: seekout — agentic AI recruiting (sourcing + screening + SeekOut Spot slate service); major catalog gap vs hireEZ/Gem
+- [type:tool] [vertical:recruiting] new entry: seekout — agentic AI recruiting (sourcing + screening + SeekOut Spot slate service); major catalog gap vs hireEZ/Gem → slug: seekout
 - [type:tool] [vertical:recruiting] new entry: tezi — autonomous AI recruiter (agent "Max") for sourcing + first-touch outreach; the point-solution AI-recruiter readers evaluate
 - [type:tool] [vertical:recruiting] new entry: apriora — AI video interviewer (agent "Alex") for real-time screening with cheat detection; the live/async AI-interview category
 - [type:tool] [vertical:recruiting] new entry: micro1 — AI technical interviewer (agent "Zara") + vetted global talent marketplace; dev-vetting angle vs CodeSignal/Karat
