@@ -99,28 +99,28 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 | Locale | Status | Tools | Notes |
 |---|---|---|---|
-| English (en) | Launched | 120 | Canonical |
-| Spanish (es) | Launched | 52 | LATAM neutral; translation queue rebuilt for the new EN entries |
-| Portuguese, Brazil (pt-BR) | Launched | 52 | Translation queue rebuilt for the new EN entries |
-| Japanese (ja) | Seeded | 3 | Translation queue active |
-| French (fr) | Seeded | 3 | Translation queue active |
-| German (de) | Seeded | 3 | Translation queue active |
+| English (en) | Launched | 150 | Canonical |
+| Spanish (es) | Launched | 150 | LATAM neutral; full parity with EN canonical |
+| Portuguese, Brazil (pt-BR) | Launched | 150 | Full parity with EN canonical |
+| Japanese (ja) | Launched | 150 | Full parity with EN canonical |
+| French (fr) | Launched | 150 | Full parity with EN canonical |
+| German (de) | Launched | 150 | Full parity with EN canonical |
 
-"Launched" = full content parity with the active verticals. "Seeded" = locale is configured, translation queue is running, and a small set of entries has shipped.
+"Launched" = full content parity with the active verticals. All six locales are now at full parity across every content type (tools, comparisons, workflows, learn, stacks).
 
 ## Public metrics (published once non-zero)
 
 | Metric | Status |
 |---|---|
-| Content pages live | ~947 (EN: 467 / ES: 232 / pt-BR: 232 / 3 seeded locales: ~9; ES + pt-BR translation queue rebuilt — drain pending) |
+| Content pages live | 506 EN canonical (tools 150 / comparisons 129 / workflows 85 / learn 127 / stacks 15); 3,036 files across all 6 locales at full parity |
 | Verticals live | 3 (RevOps, Legal Ops, Recruiting — all clearing per-phase floor) |
-| Locales live | 3 launched + 3 seeded |
+| Locales live | 6 launched (en, es, pt-BR, de, fr, ja — all at full parity) |
 | Newsletter subscribers | 0 (beehiiv live; signup wired) |
 | Discord members | 0 |
 | Paid library subscribers | 0 |
 | MRR | $0 |
 
-*as of 2026-05-03*
+*as of 2026-06-02*
 
 ## How to follow
 
