@@ -48,7 +48,7 @@ Format per item:
 - [type:tool] [vertical:recruiting] new entry: seekout — agentic AI recruiting (sourcing + screening + SeekOut Spot slate service); major catalog gap vs hireEZ/Gem → slug: seekout
 - [type:tool] [vertical:recruiting] new entry: tezi — autonomous AI recruiter (agent "Max") for sourcing + first-touch outreach; the point-solution AI-recruiter readers evaluate
 - [type:tool] [vertical:recruiting] new entry: apriora — AI video interviewer (agent "Alex") for real-time screening with cheat detection; the live/async AI-interview category → slug: apriora
-- [type:tool] [vertical:recruiting] new entry: micro1 — AI technical interviewer (agent "Zara") + vetted global talent marketplace; dev-vetting angle vs CodeSignal/Karat
+- [type:tool] [vertical:recruiting] new entry: micro1 — AI technical interviewer (agent "Zara") + vetted global talent marketplace; dev-vetting angle vs CodeSignal/Karat → slug: micro1
 - [type:tool] [vertical:legal-ops] new entry: legora — legal AI assistant for drafting/review/research; Harvey's chief rival after its 2026 mega-raise, anchors harvey-vs-legora
 - [type:tool] [vertical:legal-ops] new entry: eve-legal — plaintiff-side litigation AI (case workup + demand prep); reached $1B valuation in 2026, the plaintiff-firm counterpart to in-house legal AI
 - [type:tool] [vertical:legal-ops] new entry: evenup — AI demand-package generation for personal-injury firms; category leader after $150M raise, anchors the PI-law cluster
