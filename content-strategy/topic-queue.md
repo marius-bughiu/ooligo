@@ -86,7 +86,7 @@ Format per item:
 - [type:comparison] [vertical:revops] pairwise: 11x-vs-artisan — AI SDR head-to-head; routes on multi-agent suite (Alice/Jordan/Mike) vs single-rep Ava with email focus → slug: 11x-vs-artisan
 - [type:comparison] [vertical:legal-ops] pairwise: harvey-vs-legora — legal AI rivals; routes on workflow-suite breadth + US grounding vs European-origin collaborative drafting/review → slug: harvey-vs-legora
 - [type:comparison] [vertical:recruiting] pairwise: seekout-vs-hireez — AI sourcing / talent intelligence; routes on agentic slate delivery (Spot) vs structured boolean search + diversity insights → slug: seekout-vs-hireez
-- [type:comparison] [vertical:recruiting] pairwise: seekout-vs-gem — sourcing + outreach; routes on agentic sourcing depth vs all-in-one recruiting CRM + sequencing
+- [type:comparison] [vertical:recruiting] pairwise: seekout-vs-gem — sourcing + outreach; routes on agentic sourcing depth vs all-in-one recruiting CRM + sequencing → slug: seekout-vs-gem
 - [type:comparison] [vertical:revops] pairwise: default-vs-chili-piper — inbound routing/scheduling; routes on lightweight orchestration + enrichment layer vs four-product demand-conversion suite → slug: default-vs-chili-piper
 - [type:comparison] [vertical:revops] pairwise: revenuehero-vs-chili-piper — inbound lead-to-meeting; routes on single-product cost efficiency vs incumbent feature breadth
 - [type:comparison] [vertical:recruiting] pairwise: brighthire-vs-metaview — interview intelligence; routes on structured-hiring + ATS depth vs notes + coaching UX
