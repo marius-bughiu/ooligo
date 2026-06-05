@@ -54,7 +54,7 @@ Format per item:
 - [type:tool] [vertical:legal-ops] new entry: evenup — AI demand-package generation for personal-injury firms; category leader after $150M raise, anchors the PI-law cluster → slug: evenup
 - [type:tool] [vertical:legal-ops] new entry: definely — Word-native contract drafting/review add-in (defined terms, navigation, redlining) for transactional and in-house lawyers → slug: definely
 - [type:tool] [vertical:cross] new entry: dust — enterprise AI-agent platform to build and govern agents over company tools; deployed across RevOps, Legal, and Recruiting with permissioned data → slug: dust
-- [type:tool] [vertical:cross] new entry: relevance-ai — AI agent workforce / orchestration for back-office ops processes; the no-code multi-agent builder ops teams compare to Dust
+- [type:tool] [vertical:cross] new entry: relevance-ai — AI agent workforce / orchestration for back-office ops processes; the no-code multi-agent builder ops teams compare to Dust → slug: relevance-ai
 
 ## Comparisons
 
