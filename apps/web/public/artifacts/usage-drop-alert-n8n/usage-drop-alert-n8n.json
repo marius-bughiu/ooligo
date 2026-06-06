@@ -1,0 +1,329 @@
+{
+  "name": "Usage-drop alert for CSMs",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 13 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000001",
+      "name": "Weekly Cron — Mon 9am ET",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 400],
+      "notesInFlow": true,
+      "notes": "Cron is 13:00 UTC = 09:00 America/New_York. Confirm the workflow timezone in Settings is America/New_York. Monday morning chosen so the prior week is fully closed before comparison."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  account_id,\n  account_name,\n  amplitude_project_id,\n  segment,\n  drop_threshold_pct,\n  min_baseline_events,\n  csm_slack_user_id,\n  last_alerted_at\nFROM accounts_in_scope\nWHERE active = true\n  AND csm_slack_user_id IS NOT NULL\nORDER BY account_id\nLIMIT 500;",
+        "options": {}
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000002",
+      "name": "Pull Accounts In Scope",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 400],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — usage-alert-state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "accounts_in_scope holds per-account threshold, min baseline floor, and the owning CSM's Slack user id. Per-account threshold lets enterprise run tighter than self-serve."
+    },
+    {
+      "parameters": {
+        "batchSize": 20,
+        "options": {}
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000003",
+      "name": "Batch Accounts (20/group)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 400],
+      "notesInFlow": true,
+      "notes": "Batches keep parallel Amplitude calls under the rate cap and bound retry blast radius. Amplitude's Dashboard REST API caps concurrency low — 20/group with the downstream Wait keeps us safe."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://amplitude.com/api/2/events/segmentation?e={\"event_type\":\"_active\"}&start={{ $now.minus({days: 14}).toFormat('yyyyMMdd') }}&end={{ $now.minus({days: 1}).toFormat('yyyyMMdd') }}&i=7&m=uniques&s=[{\"prop\":\"gp:account_id\",\"op\":\"is\",\"values\":[\"{{ $json.account_id }}\"]}]",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendQuery": false,
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          },
+          "timeout": 20000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000004",
+      "name": "Amplitude — Weekly Actives (14d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "PLACEHOLDER_AMPLITUDE_CRED_ID",
+          "name": "Amplitude — API key:secret (Basic)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Pulls 14 days of weekly-unique actives segmented by account_id user-property. i=7 buckets by week so the response carries two weekly points: last week and the week before. Adjust the event_type and the gp:account_id property name to match your Amplitude taxonomy."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute week-over-week drop from Amplitude's two weekly buckets and decide if it crosses the per-account threshold.\n// Amplitude segmentation with i=7 returns series values: [week_before, last_week] (oldest first).\nconst account = $('Batch Accounts (20/group)').item.json;\nconst payload = $json;\n\n// Defensive extraction — Amplitude nests the series under data.series[0].\nconst series = payload?.data?.series?.[0] || [];\nconst weekBefore = Number(series[series.length - 2] ?? 0);\nconst lastWeek = Number(series[series.length - 1] ?? 0);\n\nconst threshold = Number(account.drop_threshold_pct ?? 40); // percent drop that triggers an alert\nconst minBaseline = Number(account.min_baseline_events ?? 10); // floor below which the account is too small to judge\n\nlet dropPct = 0;\nlet status = 'ok';\nlet reason = '';\n\nif (weekBefore < minBaseline) {\n  // Baseline too small — a swing from 2 to 1 active user is not a signal, it is noise.\n  status = 'skipped_low_baseline';\n  reason = `baseline ${weekBefore} actives below floor ${minBaseline}`;\n} else {\n  dropPct = Math.round(((weekBefore - lastWeek) / weekBefore) * 100);\n  if (dropPct >= threshold) {\n    status = 'alert';\n    reason = `weekly actives fell ${dropPct}% (from ${weekBefore} to ${lastWeek}) vs the prior week`;\n  } else if (dropPct > 0) {\n    status = 'ok';\n    reason = `down ${dropPct}% — under the ${threshold}% threshold`;\n  } else {\n    status = 'ok';\n    reason = `flat or up (${weekBefore} -> ${lastWeek})`;\n  }\n}\n\nreturn [{\n  json: {\n    account_id: account.account_id,\n    account_name: account.account_name,\n    csm_slack_user_id: account.csm_slack_user_id,\n    segment: account.segment,\n    last_alerted_at: account.last_alerted_at,\n    week_before: weekBefore,\n    last_week: lastWeek,\n    drop_pct: dropPct,\n    threshold,\n    status,\n    reason,\n    checked_at: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000005",
+      "name": "Compute WoW Drop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400],
+      "notesInFlow": true,
+      "notes": "min_baseline_events is the noise guard: an account with 4 actives last week dropping to 2 is a 50% drop but not a signal. Below the floor we mark skipped_low_baseline and never alert."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-alert",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "alert",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000006",
+      "name": "Crosses Threshold?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT alerted_at\nFROM usage_alert_history\nWHERE account_id = $1\n  AND alerted_at > now() - interval '14 days'\nORDER BY alerted_at DESC\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.account_id }}"
+        }
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000007",
+      "name": "Lookup Recent Alert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 300],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — usage-alert-state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Cooldown lookup: if this account was already alerted in the last 14 days, suppress the repeat so a sustained dip does not ping the CSM every Monday."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "no-recent-alert",
+              "leftValue": "={{ $json.alerted_at }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000008",
+      "name": "Outside Cooldown?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"{{ $('Compute WoW Drop').item.json.csm_slack_user_id }}\",\n  \"text\": \"Usage drop on {{ $('Compute WoW Drop').item.json.account_name }}\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \":chart_with_downwards_trend: *Usage drop — {{ $('Compute WoW Drop').item.json.account_name }}* ({{ $('Compute WoW Drop').item.json.segment }})\\n{{ $('Compute WoW Drop').item.json.reason }}.\"\n      }\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [\n        { \"type\": \"mrkdwn\", \"text\": \"Weekly actives: {{ $('Compute WoW Drop').item.json.week_before }} -> {{ $('Compute WoW Drop').item.json.last_week }} | threshold {{ $('Compute WoW Drop').item.json.threshold }}% | account {{ $('Compute WoW Drop').item.json.account_id }}\" }\n      ]\n    }\n  ]\n}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      },
+      "id": "3e3e3e3e-0001-0000-0000-000000000009",
+      "name": "Slack — DM Owning CSM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "channel set to the CSM's Slack user id sends a DM. The bot must have im:write and chat:write scopes and the user must allow DMs from apps. Swap the channel for a shared #cs-usage-alerts channel if you prefer a team feed."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO usage_alert_history (\n  account_id, alerted_at, week_before, last_week, drop_pct, threshold, reason\n) VALUES ($1, now(), $2, $3, $4, $5, $6)\nON CONFLICT (account_id, date_trunc('week', alerted_at)) DO UPDATE SET\n  week_before = EXCLUDED.week_before,\n  last_week = EXCLUDED.last_week,\n  drop_pct = EXCLUDED.drop_pct,\n  threshold = EXCLUDED.threshold,\n  reason = EXCLUDED.reason;\n\nUPDATE accounts_in_scope SET last_alerted_at = now() WHERE account_id = $1;",
+        "options": {
+          "queryReplacement": "={{ $('Compute WoW Drop').item.json.account_id }},{{ $('Compute WoW Drop').item.json.week_before }},{{ $('Compute WoW Drop').item.json.last_week }},{{ $('Compute WoW Drop').item.json.drop_pct }},{{ $('Compute WoW Drop').item.json.threshold }},{{ JSON.stringify($('Compute WoW Drop').item.json.reason) }}"
+        }
+      },
+      "id": "3e3e3e3e-0001-0000-0000-00000000000a",
+      "name": "Persist Alert (idempotent per week)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2220, 300],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — usage-alert-state"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "ON CONFLICT key (account_id, week) keeps a retried run from double-DMing the CSM and double-logging. last_alerted_at on accounts_in_scope is the fast-path cooldown read."
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "id": "3e3e3e3e-0001-0000-0000-00000000000b",
+      "name": "Throttle Between Batches",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1780, 500]
+    }
+  ],
+  "connections": {
+    "Weekly Cron — Mon 9am ET": {
+      "main": [
+        [{ "node": "Pull Accounts In Scope", "type": "main", "index": 0 }]
+      ]
+    },
+    "Pull Accounts In Scope": {
+      "main": [
+        [{ "node": "Batch Accounts (20/group)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Batch Accounts (20/group)": {
+      "main": [
+        [{ "node": "Amplitude — Weekly Actives (14d)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Amplitude — Weekly Actives (14d)": {
+      "main": [
+        [{ "node": "Compute WoW Drop", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compute WoW Drop": {
+      "main": [
+        [{ "node": "Crosses Threshold?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Crosses Threshold?": {
+      "main": [
+        [{ "node": "Lookup Recent Alert", "type": "main", "index": 0 }],
+        [{ "node": "Throttle Between Batches", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lookup Recent Alert": {
+      "main": [
+        [{ "node": "Outside Cooldown?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Outside Cooldown?": {
+      "main": [
+        [{ "node": "Slack — DM Owning CSM", "type": "main", "index": 0 }],
+        [{ "node": "Throttle Between Batches", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack — DM Owning CSM": {
+      "main": [
+        [{ "node": "Persist Alert (idempotent per week)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Persist Alert (idempotent per week)": {
+      "main": [
+        [{ "node": "Throttle Between Batches", "type": "main", "index": 0 }]
+      ]
+    },
+    "Throttle Between Batches": {
+      "main": [
+        [{ "node": "Batch Accounts (20/group)", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "3e3e3e3e-0001-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "usage-drop-alert-n8n",
+  "tags": [
+    { "name": "customer-success" },
+    { "name": "cs-ops" },
+    { "name": "alerting" }
+  ]
+}
