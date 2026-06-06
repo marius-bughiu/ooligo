@@ -55,6 +55,10 @@ Format per item:
 - [type:tool] [vertical:legal-ops] new entry: definely — Word-native contract drafting/review add-in (defined terms, navigation, redlining) for transactional and in-house lawyers → slug: definely
 - [type:tool] [vertical:cross] new entry: dust — enterprise AI-agent platform to build and govern agents over company tools; deployed across RevOps, Legal, and Recruiting with permissioned data → slug: dust
 - [type:tool] [vertical:cross] new entry: relevance-ai — AI agent workforce / orchestration for back-office ops processes; the no-code multi-agent builder ops teams compare to Dust → slug: relevance-ai
+- [type:tool] [vertical:revops] new entry: 1mind — AI "superhuman" GTM agent (face + voice + product brain) that qualifies, runs live demos, handles objections across site/deal-room; $40M raise led by Battery, founded by 6sense's Amanda Kahlow; the AI-video-selling pole buyers ask about
+- [type:tool] [vertical:legal-ops] new entry: gc-ai — AI platform purpose-built for in-house legal teams (contract review, research, drafting); $60M Series B Nov-2025 at ~$555M, $500/seat published pricing; anchors the in-house GC-copilot cluster vs Spellbook/Harvey
+- [type:tool] [vertical:legal-ops] new entry: ivo — AI contract review/redlining for in-house counsel ($77M+ raised); the review-first in-house alternative readers weigh against GC AI and Spellbook
+- [type:tool] [vertical:recruiting] new entry: goperfect — autonomous AI sourcing agent (semantic search over 800M+ profiles, multi-channel autopilot outreach, 60+ ATS integrations); the Juicebox/SeekOut alternative for continuous sourcing
 
 ## Comparisons
 
@@ -93,6 +97,21 @@ Format per item:
 - [type:comparison] [vertical:legal-ops] pairwise: icertis-vs-sirionlabs — enterprise CLM; routes on contract-intelligence platform breadth vs obligation / SRM management depth
 - [type:comparison] [vertical:revops] pairwise: gainsight-vs-catalyst — CS platforms; routes on enterprise CS-Ops depth vs lean workflow customization and time-to-value
 - [type:comparison] [vertical:revops] pairwise: unify-vs-11x — signal-driven vs autonomous AI SDR; routes on warm signal-led pipeline + control vs fully-autonomous outbound volume
+- [type:comparison] [vertical:revops] pairwise: nooks-vs-orum — parallel dialers / live conversation platforms; routes on AI-coaching + on-call assistant depth vs established connect-rate reliability at SDR scale
+- [type:comparison] [vertical:revops] pairwise: smartlead-vs-instantly — cold email infrastructure; routes on deliverability/unified-inbox control + agency scale vs built-in lead database and simpler onboarding
+- [type:comparison] [vertical:revops] pairwise: pocus-vs-koala — product-led sales signal platforms; routes on full PLS workflow + account scoring vs lightweight product-signal-to-SDR alerting
+- [type:comparison] [vertical:revops] pairwise: warmly-vs-rb2b — website visitor de-anonymization; routes on warm-outbound orchestration + intent layer vs free/low-cost person-level reveal pushed to Slack
+- [type:comparison] [vertical:revops] pairwise: pipedrive-vs-hubspot — SMB CRM; routes on lightweight pipeline-first simplicity + price vs all-in-one marketing/sales/service platform breadth
+- [type:comparison] [vertical:revops] pairwise: aisdr-vs-artisan — AI SDR head-to-head; routes on email+voice with published pricing vs single-rep Ava with multichannel suite and human-in-loop QA
+- [type:comparison] [vertical:revops] pairwise: calendly-vs-chili-piper — scheduling vs inbound routing; routes on universal individual scheduling baseline vs instant lead qualification + round-robin routing
+- [type:comparison] [vertical:revops] pairwise: qualified-vs-drift — conversational inbound conversion; routes on Salesforce-native pipeline + Piper AI SDR vs chat/conversational-marketing heritage
+- [type:comparison] [vertical:recruiting] pairwise: karat-vs-codesignal — technical interviewing; routes on interview-as-a-service human interviewers vs standardized proctored assessment platform
+- [type:comparison] [vertical:recruiting] pairwise: pillar-vs-brighthire — interview intelligence; routes on bias/quality scoring + lighter footprint vs structured-hiring depth and ATS integration
+- [type:comparison] [vertical:recruiting] pairwise: apriora-vs-hirevue — AI video interviewing; routes on real-time conversational AI interviewer (Alex) + cheat detection vs enterprise async assessment incumbent
+- [type:comparison] [vertical:legal-ops] pairwise: evenup-vs-eve-legal — plaintiff-side personal-injury AI; routes on demand-package generation at volume vs full case-workup + litigation prep
+- [type:comparison] [vertical:legal-ops] pairwise: definely-vs-spellbook — Word-native legal drafting add-ins; routes on defined-terms/navigation + redlining productivity vs generative drafting and clause generation
+- [type:comparison] [vertical:legal-ops] pairwise: ivo-vs-spellbook — AI contract review in Word; routes on review/redline-first in-house workflow vs broad drafting + negotiation coverage
+- [type:comparison] [vertical:cross] pairwise: dust-vs-relevance-ai — enterprise AI-agent platforms; routes on governed agents over permissioned company data vs no-code multi-agent "AI workforce" for back-office processes
 
 ## Workflows
 
@@ -113,6 +132,9 @@ Format per item:
 - [type:workflow] [vertical:revops] ai-sdr-draft-qa-skill — claude skill that QAs AI-SDR-generated outreach (claim accuracy, personalization, compliance) before it sends; artifact_type: claude-skill → slug: ai-sdr-draft-qa-skill
 - [type:workflow] [vertical:recruiting] candidate-rediscovery-n8n — n8n flow that re-surfaces silver-medalist and past applicants from the ATS against a newly opened req; artifact_type: n8n-flow
 - [type:workflow] [vertical:legal-ops] demand-letter-drafter-claude-skill — claude skill that drafts a personal-injury demand letter from medical records + case facts (attorney review required); artifact_type: claude-skill
+- [type:workflow] [vertical:revops] mcp-server-apollo-revops — MCP server exposing Apollo contacts, sequences, and engagement to Claude for natural-language prospecting and sequence Q&A; artifact_type: mcp-server
+- [type:workflow] [vertical:recruiting] mcp-server-lever-recruiting — MCP server exposing Lever candidates, postings, and pipeline stages to Claude for recruiter queries; artifact_type: mcp-server
+- [type:workflow] [vertical:revops] visitor-deanon-to-outreach-n8n — n8n flow that turns Warmly/RB2B website de-anonymization signals into ICP-filtered routing + drafted warm first-touch; artifact_type: n8n-flow
 
 ## Learn
 
@@ -139,6 +161,10 @@ Format per item:
 - [type:learn] [vertical:cross] concept: ai-agent-vs-rpa — how AI agents differ from RPA / workflow automation for ops, and the diagnostic questions to ask vendors → primary target_question: AI agent vs RPA — what's the difference?
 - [type:learn] [vertical:cross] concept: retrieval-augmented-generation-rag — RAG explained for non-engineer ops buyers evaluating vendors that claim "grounded" answers → primary target_question: what is RAG and why does it matter for AI tools?
 - [type:learn] [vertical:legal-ops] concept: legal-ai-grounding-vs-hallucination — why "grounded" legal AI (Westlaw/Lexis-backed) matters and how to evaluate citation fidelity → primary target_question: how do I know a legal AI tool won't hallucinate citations?
+- [type:learn] [vertical:legal-ops] definition: in-house-legal-ai-copilot — what an in-house GC copilot does (review/research/drafting), how it differs from outside-counsel and CLM tools, and the buying criteria → primary target_question: what is an in-house legal AI copilot and do we need one?
+- [type:learn] [vertical:recruiting] concept: autonomous-ai-recruiter — what an "autonomous" AI recruiter automates end-to-end (source → outreach → schedule → shortlist) vs a sourcing tool, and where humans must stay in the loop → primary target_question: what is an autonomous AI recruiter?
+- [type:learn] [vertical:revops] concept: parallel-dialing — how parallel dialers work (connect rates, simultaneous lines), TCPA/compliance considerations, and where Nooks/Orum fit → primary target_question: what is parallel dialing and is it compliant?
+- [type:learn] [vertical:legal-ops] concept: ai-contract-review-accuracy — how to evaluate vendor "95% accuracy" claims for AI contract review (precision/recall, benchmark sets, playbook fidelity) → primary target_question: how accurate is AI contract review, really?
 
 ## Stacks
 
@@ -154,3 +180,5 @@ Format per item:
 - [type:stack] [vertical:revops] new entry: inbound-conversion-stack — Default-or-Chili-Piper + Qualified + Salesforce + Slack; use case: instant inbound lead-to-meeting conversion
 - [type:stack] [vertical:recruiting] new entry: ai-sourcing-stack — SeekOut/hireEZ + Gem + LinkedIn + ATS; use case: AI-assisted passive-candidate sourcing at scale
 - [type:stack] [vertical:recruiting] new entry: technical-hiring-stack — CodeSignal/HackerRank + Karat + Greenhouse; use case: standardized technical screening pipeline
+- [type:stack] [vertical:recruiting] new entry: interview-intelligence-stack — BrightHire/Pillar + Greenhouse + Zoom; use case: structured-interview recording, scoring, and debrief pipeline
+- [type:stack] [vertical:legal-ops] new entry: in-house-legal-ai-stack — GC AI-or-Ivo + Ironclad + DocuSign IAM + Notion; use case: lean in-house team layering an AI copilot + review onto a CLM
