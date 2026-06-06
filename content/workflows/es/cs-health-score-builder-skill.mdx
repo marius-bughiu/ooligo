@@ -1,0 +1,87 @@
+---
+slug: cs-health-score-builder-skill
+canonical_slug: cs-health-score-builder-skill
+locale: es
+verticals: [customer-success]
+title: Construye un modelo de health score de clientes con Claude
+artifact_type: claude-skill
+tools_used: [claude, vitally, planhat]
+roles: [csm, cs-ops]
+difficulty: intermediate
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+Una Claude Skill que convierte cuatro streams de input crudos —uso de producto, engagement de relación, carga de soporte y sentimiento de encuestas— en un solo health score ponderado por cuenta, un tier verde/amarillo/rojo y una cola de remediación priorizada que el equipo de CSM trabaja de arriba hacia abajo. El punto no es el número; la mayoría de los CSPs ya te dan un número. El punto es que la Skill hace explícito cada peso, umbral y corte de tier en un archivo de config que editas, y luego explica el score de cada cuenta en una oración que nombra el driver negativo más grande con su valor real. Un CSM abriendo la cola ve "Acme — 48, rojo — carga de soporte: 11 tickets P1 en 30 días contra un baseline de 2" en vez de una píldora de color en la que nadie confía. El bundle del artifact incluye `SKILL.md` más tres archivos de referencia: un schema de config de scoring rellenable, una plantilla de playbook de tier-y-acción y un output de muestra trabajado.
+
+El bundle del artifact vive en `apps/web/public/artifacts/cs-health-score-builder-skill/`. Lee `SKILL.md` y adapta los tres archivos en `references/` antes de la primera corrida.
+
+## Cuándo usarla
+
+Eres un CSM o lead de CS Ops que necesita un modelo de health score que puedas defender en un QBR, y tu score actual —ya sea el default de [Vitally](/en/tools/vitally/), [Planhat](/en/tools/planhat/) o una hoja de cálculo— es una caja negra en la que el equipo dejó de confiar. La Skill es para la fase de diseñar-e-iterar: le pasas los cuatro streams de input para un lote de cuentas, computa scores contra un config explícito y te devuelve una cola más una explicación por cuenta. Lees las explicaciones, decides si los pesos coinciden con la realidad, editas el config y vuelves a correr. Después de tres o cuatro iteraciones contra cuentas que ya entiendes, tienes un modelo cuyo cada corte puedes justificar.
+
+Funciona mejor cuando tienes al menos 50 cuentas para puntuar (books más pequeños un CSM los lee a mano), una señal de uso limpia que puedas jalar como CSV o vía la API de tu CSP e, idealmente, 12 meses de historia de churn etiquetada contra la cual hacer backtest de los pesos. La cola de remediación es más útil cuando el equipo se compromete a trabajarla de arriba hacia abajo —el score gana confianza solo cuando las cuentas rojas en la cima son las que de verdad hacen churn.
+
+## Cuándo NO usarla
+
+No uses la Skill como un motor de scoring nocturno en vivo cableado a [Vitally](/en/tools/vitally/) o [Planhat](/en/tools/planhat/). Es una herramienta de diseño de modelo, no infraestructura de producción. Una vez que tengas un config en el que confíes, porta los pesos y umbrales al scorecard nativo de tu CSP o a un flujo de n8n que corra en un schedule —el trabajo de la Skill es acertar el config, no correr para siempre.
+
+No la uses si tu telemetría de uso no es confiable. Un score construido sobre eventos etiquetados de forma inconsistente saca a la superficie caídas que reflejan un cambio de etiquetado, no un cambio de comportamiento, y la oración de explicación nombrará un driver equivocado con confianza. Arregla los datos primero.
+
+No la uses si no tienes definición de churn ni historia etiquetada. Sin un backtest estás adivinando los pesos, y un modelo adivinado es peor que ningún modelo porque carga la autoridad de un número. La Skill devuelve una advertencia `UNBACKTESTED` en el encabezado de la cola cuando saltas el input del backtest, pero no puede impedir que envíes la adivinanza.
+
+No la uses para menos de ~50 cuentas, para forecasting de ingresos o para scoring de usuarios individuales (puntúa cuentas, no asientos).
+
+## Setup
+
+Aproximadamente 45 a 90 minutos la primera vez, casi todo gastado en llenar el config de scoring para que coincida con tus datos, no en cablear nada.
+
+1. **Instala la Skill.** Coloca el bundle de `apps/web/public/artifacts/cs-health-score-builder-skill/` en `~/.claude/skills/cs-health-score/`. No se requieren credenciales —la Skill lee archivos que tú proporcionas, no llama a [Vitally](/en/tools/vitally/) ni [Planhat](/en/tools/planhat/) directamente. Tú exportas los datos; la Skill los puntúa.
+2. **Llena el config de scoring.** Abre `references/1-scoring-config.md` y establece, por segmento de cuenta, los cuatro pesos de input (deben sumar 1.0), la ventana de baseline para uso y los cortes verde/amarillo/rojo. La plantilla viene con valores de arranque —Enterprise pondera engagement 0.35 y uso 0.30 porque la salud de la relación maneja el renewal; PLG pondera uso 0.55 porque el producto es el deal. Estos son puntos de partida para editar contra tu propio backtest, no recomendaciones.
+3. **Adapta el playbook de acción.** Abre `references/2-tier-playbook.md` y reemplaza los plays placeholder con las motions reales de tu equipo —lo que un CSM hace cuando una cuenta aterriza roja por carga de soporte versus roja por uso son motions distintas, y la cola solo es útil si cada fila roja apunta a una.
+4. **Proporciona los datos.** Exporta por cuenta: un CSV de uso (account_id, conteo de eventos de los últimos 28 días, conteo de eventos baseline, usuarios activos distintos), un CSV de engagement (días desde el último toque significativo, conteo de reuniones de los últimos 90 días), un CSV de soporte (conteo de P1 abiertos, conteo de tickets vs período previo, tiempo mediano de resolución) y un input de sentimiento (último score NPS/CSAT/CES, o verbatims de encuesta recientes para que la Skill clasifique). Opcionalmente proporciona un CSV de churn etiquetado para el backtest.
+5. **Corre.** Invoca la Skill con el path del config y el directorio de datos. Escribe un archivo de cola (cuentas priorizadas peor-primero, con score, tier y el driver de una oración) más un reporte de calibración por segmento. Lee las explicaciones, edita `1-scoring-config.md`, vuelve a correr. Repite hasta que las cuentas rojas coincidan con tu instinto en las cuentas que conoces.
+
+## Qué hace la Skill en realidad
+
+La Skill corre en cuatro etapas. **Etapa uno — normalizar.** Cada uno de los cuatro streams de input se mapea a un sub-score de 0-100 contra el config. El uso es el ratio de los eventos actuales de 28 días contra el propio baseline de la cuenta, lineal de 0 (ratio ≤ 0.5) a 100 (ratio ≥ 1.0), con un tope duro en 40 si los usuarios activos distintos caen bajo tres —la dependencia de un solo usuario es un riesgo de churn que el volumen crudo de eventos no puede ver. El engagement aplica un decaimiento con vida media de 21 días a la recencia del último toque. El soporte invierte la carga de tickets (más P1 abiertos, menor score) normalizado contra el propio baseline del período previo de la cuenta, no un promedio global, porque una cuenta de 10 tickets y una de 200 tienen normales distintas. El sentimiento mapea el último score de encuesta o —cuando pasas verbatims en vez de un número— Claude clasifica el texto con una rúbrica estricta que devuelve un neutral 50 con confianza bajo 0.4 en vez de adivinar.
+
+**Etapa dos — composite.** Los cuatro sub-scores se combinan usando los pesos por segmento del config. El tier se asigna por los cortes del config (verde ≥ 75, amarillo ≥ 50, rojo bajo 50 por default). Computar los sub-scores antes de ponderar, en vez de mezclar inputs crudos, es lo que permite que la oración de explicación nombre un solo driver: la Skill elige el sub-score más alejado por debajo del composite de la cuenta y lo reporta con su número real.
+
+**Etapa tres — explicar y poner en cola.** Las cuentas se ordenan peor-primero en la cola de remediación. Cada fila recibe un driver de una oración ("uso 22% bajo baseline a pesar de cuatro reuniones este trimestre") generado solo a partir de los inputs de sub-score —el prompt prohíbe especulación más allá de los números que recibió, así que la oración no puede inventar una causa que los datos no respaldan. Un fallback numérico determinista corre si Claude devuelve vacío, así que la cola nunca se bloquea.
+
+**Etapa cuatro — backtest (opcional).** Si proporcionaste historia de churn etiquetada, la Skill puntúa las cuentas históricas a la fecha de 90 días antes de su fecha de churn y reporta cuántas aterrizaron rojas —los números de lead-time y recall que te dicen si los pesos son reales o ilusorios.
+
+## Realidad de costos
+
+La llamada cara es la clasificación de sentimiento, y solo cuando pasas verbatims en vez de un NPS/CSAT numérico. Clasificar texto de encuesta corre aproximadamente 600 tokens de input y 80 de output por cuenta con Claude Sonnet; la oración de driver por cuenta agrega cerca de 300 de input y 40 de output. Para un lote de 200 cuentas con sentimiento verbatim eso es menos de $1.50 por corrida completa a precios actuales de Sonnet. Pasa scores de sentimiento numéricos en su lugar y las únicas llamadas a Claude son las oraciones de driver —menos de 40 centavos para el mismo lote. Una corrida de más de 200 cuentas se completa en dos a cuatro minutos; la Skill procesa cuentas en lotes de 25 para mantenerse dentro de los límites de rate.
+
+El costo real es tu tiempo en iteración, no los tokens. Presupuesta dos a tres rondas de edición de config —llámalo dos a tres horas en total a lo largo de una semana— antes de que la cola coincida con la lectura del equipo. Eso es más barato que la alternativa: un CSM triando manualmente un book de 200 cuentas tarda un día por pasada y no puede hacerlo cada semana.
+
+## Cómo se ve el éxito
+
+Rastrea tres números. Primero, **acuerdo de la cola** —para las 20 cuentas rojas de arriba, encuesta a los CSMs dueños sobre si el ranking coincide con su lectura. Apunta a más de 70% de acuerdo para la tercera iteración del config; menos de 50% significa que los pesos están mal, no el modelo. Segundo, **lead time de churn** del backtest y del uso en vivo —días medianos que el score estuvo rojo antes del aviso de churn. Apunta a una mediana de más de 30 días. Tercero, **precisión de la oración de driver** —muestrea 20 oraciones y califícalas como accionables, precisas-pero-vagas o equivocadas. Apunta a más de 80% accionables; una tasa alta de "equivocadas" apunta a datos de input sucios, no al prompt.
+
+## Versus las alternativas
+
+**Versus el scorecard nativo de tu CSP ([Vitally](/en/tools/vitally/), [Planhat](/en/tools/planhat/), [Gainsight](/en/tools/gainsight/), [Catalyst](/en/tools/catalyst/), [ChurnZero](/en/tools/churnzero/)).** Cada CSP viene con un health score y deberías correr el tuyo ahí en producción. Lo que no hacen bien es la fase de diseño: los scorecards nativos te hacen establecer pesos a ciegas, sin loop de backtest ni explicación por cuenta de por qué un número se movió. La Skill es el banco de trabajo donde resuelves el config; el CSP es donde lo despliegas. Son secuenciales, no competidores —usa la Skill para diseñar, luego transcribe los pesos al scorecard de tu CSP.
+
+**Versus un modelo en hoja de cálculo.** Una hoja de cálculo es donde la mayoría de los equipos empieza y está bien para la matemática. Donde se rompe es en la explicación: una hoja de cálculo te da una celda composite, no una oración sobre la que un CSM pueda actuar, y hacer backtest en una hoja de cálculo significa VLOOKUPs manuales contra fechas de churn que nadie mantiene. La Skill automatiza la explicación y el backtest. Si tu modelo es estable y el equipo ya confía en la hoja de cálculo, no cambies —la Skill gana su lugar durante el diseño y la iteración, no después.
+
+**Versus comprar un producto dedicado de churn predictivo.** Los productos predictivos prometen un modelo que no tienes que diseñar. El trade-off es que no puedes defender una caja negra en un QBR, y un modelo que no puedes explicar es un modelo que los CSMs rodean. Construye primero la versión explícita; si se estanca y tienes el volumen para justificar ML, compra la capa predictiva encima de un config que ya entiendes.
+
+## A vigilar
+
+- **Pesos que suman cualquier cosa menos 1.0.** Un config donde los cuatro pesos totalizan 0.9 o 1.1 reescala silenciosamente cada score y hace que la comparación entre segmentos no tenga sentido. Guarda: la Skill valida la suma de pesos por segmento al cargar y rehúsa puntuar, imprimiendo el segmento ofensor y su total, en vez de producir una cola equivocada de apariencia plausible.
+- **Alucinación de sentimiento sobre verbatims delgados.** Claude producirá un número de sentimiento confiado sobre un comentario de encuesta de dos palabras si no se le restringe. Guarda: el prompt de clasificación requiere confianza 0 en inputs de menos de 15 palabras o fragmentos de una sola cláusula, y la Skill colapsa cualquier cosa bajo 0.4 de confianza a un neutral 50, así que el sentimiento delgado contribuye su peso como "desconocido" en vez de como señal fabricada.
+- **Oración de driver inventando causalidad.** Un composite ponderado tiene un mayor movedor, no una causa. Guarda: el prompt de explicación recibe solo los cuatro valores de sub-score y tiene prohibido referirse a algo fuera de ellos; debe citar el número real. Un CSM que lee "uso cayó 22%" puede verificarlo; una oración que adivinó "el champion se fue" no podría verificarse y nunca se produce.
+- **Enviar un modelo sin backtest.** Saltar el input del backtest produce un modelo que parece autoritativo y puede ser aleatorio. Guarda: el encabezado de la cola lleva un banner `UNBACKTESTED` hasta que se proporciona un CSV de churn etiquetado y la etapa de backtest corre, así que cualquiera con quien se comparta la cola ve que el modelo no está validado.
+- **Baseline computado contra eventos que derivan.** Si el baseline de uso se recomputa en cada corrida contra definiciones de eventos que cambiaron upstream, cada cuenta parece haber caído. Guarda: el config toma el baseline como una columna de input congelada que tú computas y auditas una vez, no un valor que la Skill recalcula, así que un cambio de etiquetado aparece como un flag de calidad de datos en vez de un rojo en toda la flota.
+
+## Stack
+
+- **Claude** —clasificación de sentimiento (Sonnet, con una rúbrica estricta de piso de confianza) y la oración de driver por cuenta; la matemática del scoring en sí es determinista
+- **Vitally** —fuente de datos de uso, engagement y soporte; el hogar de producción para el score terminado
+- **Planhat** —fuente de CSP alternativa y target de producción; la Skill es agnóstica de CSP y lee CSVs exportados de cualquiera
+- **Un archivo de config de scoring** —los cuatro pesos por segmento, la ventana de baseline y los cortes de tier, editados a lo largo de las iteraciones; este archivo es el entregable real

@@ -1,0 +1,81 @@
+---
+slug: usage-drop-alert-n8n
+canonical_slug: usage-drop-alert-n8n
+locale: en
+verticals: [customer-success]
+title: Alert CSMs on usage drops with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, amplitude, slack]
+roles: [cs-ops]
+difficulty: intermediate
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+The most reliable churn signal a CS team has is product usage falling off a cliff, and the most common way that signal gets missed is that nobody is watching the right week. By the time a quarterly business review surfaces the dip, the account has been quiet for two months. This workflow closes that gap with the smallest possible mechanism: a weekly n8n flow that reads each account's active-user count from Amplitude, compares last week to the week before, and sends a Slack direct message to the owning CSM when the drop crosses a threshold the CS Ops lead controls per account. It does one thing — surface a week-over-week usage drop while it is still this week's problem — and it does it without a dashboard nobody opens.
+
+The artifact bundle lives at `apps/web/public/artifacts/usage-drop-alert-n8n/`. The n8n export is `usage-drop-alert-n8n.json` and the credential, schema, and verification guide is `_README.md`. Both are required reading before the schedule is activated, because the bundle ships with placeholder credentials and two Postgres tables that have to exist before the first run.
+
+## When to use this
+
+Use this when you are a CS Ops lead running a book of accounts that has outgrown eyeballing a usage dashboard — somewhere north of 50 accounts per CSM, where no one can keep the whole portfolio in their head. You need Amplitude (or a product-analytics tool the HTTP node can be repointed at) tracking a per-account active-user signal, a Slack workspace, and a place to store per-account thresholds. The flow is the right pick when the CS org already trusts product usage as a leading indicator but has no mechanism that pushes the signal to a human before the next QBR.
+
+It fits especially well as the cheap first layer under a heavier health model. If you are already running the composite [customer health score in n8n](/en/workflows/customer-health-score-n8n/), this flow is the fast-twitch complement: the composite score recomputes nightly and tells you where an account stands, while this alert fires weekly and tells you what just moved. Many teams stand up the alert first because it is an afternoon of work and earns trust in days, then graduate to the composite once the CSMs are acting on the pings.
+
+## When NOT to use this
+
+Skip this if a CSM can read the whole portfolio by hand. Under roughly 30 accounts per CSM, a human scanning the usage dashboard on Monday morning catches the same drops with more context, and the false-positive cost of an automated threshold is not worth it. The flow earns its keep on volume, not on cleverness.
+
+Skip it if your Amplitude account-level tagging is unreliable. The whole flow rests on `gp:account_id` (or your equivalent user property) being set consistently on every event. If accounts are tagged inconsistently — some events carry the property, some do not — the weekly active count is meaningless and the alert fires on a tagging artifact, not a behavior change. Fix the taxonomy first; an alert on dirty data is worse than no alert, because it carries the authority of a number.
+
+Skip it if the drop you care about is seat-level or feature-level rather than account-level. This flow watches one signal — weekly unique actives per account — and a 40% drop in total actives can hide a healthy account that simply lost one power user during a holiday week. If your churn risk lives in specific-feature abandonment or in a single named champion going dark, you need a per-feature or per-user cohort, which is a different (heavier) flow. And skip it if the team has no playbook for what to do when a drop alert fires; a notification with no defined next action trains people to dismiss it.
+
+## Setup
+
+Setup is documented end-to-end in `apps/web/public/artifacts/usage-drop-alert-n8n/_README.md`. The short version: import the JSON in n8n under **Settings → Import From File**, create the three placeholder credentials (Postgres, Amplitude Basic auth, Slack bot token), create the two Postgres tables from the DDL in the README (`accounts_in_scope` and `usage_alert_history`), seed one canary account, and run the eight-step verification sequence before activating the schedule. From a clean n8n install, budget 45 to 90 minutes — most of it spent confirming the Amplitude segmentation query matches your event taxonomy and that the Slack app can DM users in your workspace.
+
+The `accounts_in_scope` table is where the per-account policy lives, and getting it right is the difference between a useful alert and a muted bot. Each row carries `drop_threshold_pct` (the percentage drop that fires an alert) and `min_baseline_events` (the active-user floor below which the account is too small to judge). Enterprise accounts often run a tighter threshold — a 25% drop on a 200-seat account is worth a look — while self-serve accounts tolerate more noise and run at 50%. Keeping these as table columns rather than hard-coded constants means re-tuning is one `UPDATE`, not a redeploy.
+
+## What the flow actually does
+
+The cron fires Monday at 09:00 in `America/New_York` (the expression is `0 13 * * 1` — 13:00 UTC — so confirm the workflow timezone is set). Monday morning is deliberate: the prior week is fully closed, so there is no partial-week comparison that would read every Monday as a drop. `Pull Accounts In Scope` reads up to 500 active accounts that have a CSM Slack id set; accounts without an owner are filtered out in SQL because there is nobody to notify. `Batch Accounts (20/group)` chunks them so the parallel Amplitude calls stay under the Dashboard REST API's concurrency cap, with a one-second wait between batches.
+
+`Amplitude — Weekly Actives (14d)` calls the `/api/2/events/segmentation` endpoint with `i=7` (weekly buckets) over a 14-day window, segmented on the account's `gp:account_id` property. That returns two weekly points: last week and the week before. `Compute WoW Drop` is the only real logic in the flow and it makes two decisions. First, the noise guard: if the prior week's active count is below `min_baseline_events`, the account is marked `skipped_low_baseline` and never alerts — a swing from four actives to two is a 50% drop and pure noise. Second, the threshold: it computes `(week_before - last_week) / week_before` as a percentage and, only if that meets or exceeds the account's `drop_threshold_pct`, marks the row `alert` with a human-readable reason like "weekly actives fell 47% (from 120 to 64) vs the prior week."
+
+`Crosses Threshold?` routes alert rows onward; everything else goes straight to the throttle. `Lookup Recent Alert` then checks `usage_alert_history` for any alert on this account in the last 14 days, and `Outside Cooldown?` suppresses the repeat if one exists. This is the second guard against fatigue: a sustained dip would otherwise ping the CSM every single Monday until usage recovers, which trains them to ignore the bot. With the cooldown, a real drop pings once, and the CSM owns the follow-up from there.
+
+Surviving rows hit `Slack — DM Owning CSM`, which posts a Block Kit message directly to the CSM's Slack user id with the account name, segment, before/after active counts, the percentage drop, and the threshold that fired. `Persist Alert (idempotent per week)` writes the alert to `usage_alert_history` with an `ON CONFLICT` clause keyed on `(account_id, date_trunc('week', alerted_at))`, so a retried run updates the existing row rather than DMing the CSM twice, and stamps `last_alerted_at` on the account for the fast-path cooldown read.
+
+## Cost reality
+
+This flow is nearly free to run. There is no LLM call — the comparison is arithmetic in a Code node, so the only cost is API quota and n8n execution time. Per account per week the flow makes one Amplitude segmentation read, at most one Slack write, and two or three Postgres queries. Amplitude's Dashboard REST API does not bill per call on paid plans; the constraint is its low concurrency limit, which is exactly why the batch size is 20 with a one-second throttle. For 500 accounts the whole run completes in roughly three to six minutes on n8n Cloud's small executor, dominated by the serialized Amplitude reads. Slack's `chat.postMessage` is rate-limited to roughly one message per second per channel context, comfortably under what a weekly alert volume needs.
+
+The real cost is human, and it is the cost you are trying to reduce: a CS Ops lead spends maybe an hour a quarter re-tuning thresholds as segments shift, against the alternative of CSMs each spending 20 to 30 minutes a week eyeballing dashboards (or, more often, not doing it at all and finding out at the QBR). On a 10-CSM team that is roughly 40 to 50 hours a quarter of manual scanning replaced by an hour of threshold maintenance — and the scanning was catching drops a month later anyway.
+
+## What success looks like
+
+Watch three numbers in the first quarter. First, **the action rate on alerts** — the share of DMs that result in a logged CSM touch (an email, a call booked, a note) within five business days. Survey or instrument this; target above 60% by the end of the first month. An action rate under 40% means the threshold is too loose and the bot is crying wolf — raise `drop_threshold_pct` for the noisy segments. Second, **lead time to intervention** — for accounts that later churned or contracted, measure how many days the usage-drop alert preceded the first CSM outreach versus the historical baseline of "found out at the QBR." The whole point is to move that number from roughly 60 days to under 14. Third, **the suppression rate** — the share of threshold-crossing accounts that were held back by the cooldown. A healthy number is low and stable; a rising suppression rate means a cohort is in sustained decline and the weekly alert is no longer the right tool — those accounts need the composite health score and a save play, not another ping.
+
+## Versus the alternatives
+
+The default alternative is **Amplitude's own alerting** — its Anomaly and Threshold monitors can watch a chart and fire to Slack or email. If you need exactly one global alert ("total weekly actives dropped"), use Amplitude's native monitor; it is less work than standing up n8n. The reason this flow exists is per-account routing: Amplitude's monitors alert on a chart, not on an account-to-CSM mapping, so a portfolio-level monitor cannot tell the owning CSM that *their* account dropped. To get per-account, per-owner routing out of Amplitude alone you end up building one monitor per account, which does not scale past a handful. This flow keeps the account-to-CSM map and the per-account thresholds in a table you own and routes accordingly.
+
+A second alternative is your **CSP's built-in usage alerts** — Gainsight, Catalyst, ChurnZero, [Vitally](/en/tools/vitally/), [Planhat](/en/tools/planhat/), and [Totango](/en/tools/totango/) all ship some form of usage-drop trigger. If you already run a CSP and pipe product usage into it, use the native trigger — the data is already there and the routing to the CSM is already wired. This flow is for the team that has product analytics in Amplitude but has not centralized usage in a CSP yet, or whose CSP's usage data lags Amplitude by a sync cycle. It is the bridge that delivers the leading indicator before the CSP rollup catches up.
+
+A third alternative is a **DIY script on a cron** — a Python job hitting the Amplitude API and the Slack API. It is faster to write the first version than to wire the n8n flow, but it carries the credential-rotation burden in code, has no retry semantics out of the box, and is invisible to the CS Ops lead who is not an engineer. The n8n version trades raw flexibility for a credential UI, built-in retries, and a visual flow a non-engineer can read and re-tune. Pick DIY if CS Ops owns a permanent engineer; pick the n8n flow if the person tuning thresholds is the same person reading the alerts.
+
+## Watch-outs
+
+- **A tagging artifact reads as a usage cliff.** If product instrumentation changes — an event gets renamed, the `account_id` property stops being set on a surface — every account on that surface shows a drop to zero and the bot DMs every CSM at once. Guard: before activating, query the distinct count of accounts with non-null `gp:account_id` for the last two weeks and confirm it is stable; and treat a same-week spike in alert volume across many accounts as an instrumentation incident, not a churn wave — the `usage_alert_history` table makes that spike visible at a glance.
+- **Small accounts generate phantom drops.** An account with four weekly actives dropping to two is a 50% drop and means nothing. Guard: the `min_baseline_events` floor in `accounts_in_scope` marks any account below the prior-week threshold as `skipped_low_baseline` and never alerts on it. Set the floor per segment — self-serve can run a floor of 5, enterprise rarely needs one.
+- **Sustained dips spam the CSM.** Without suppression, an account that drops and stays down would fire every Monday until it recovers. Guard: `Lookup Recent Alert` plus the 14-day cooldown in `Outside Cooldown?` ensures one alert per drop event; the CSM owns the follow-up after the first ping, and a still-declining account surfaces in the composite health score, not in a repeated alert.
+- **Retries double-DM.** A node failure mid-batch that triggers an n8n retry could send the Slack DM twice. Guard: `usage_alert_history` has a unique index on `(account_id, date_trunc('week', alerted_at))` and `Persist Alert` uses `ON CONFLICT ... DO UPDATE`, so the second attempt updates the existing weekly row instead of inserting a new one — and because the Slack send precedes the persist, the cooldown read on the retry catches it.
+- **The DM lands and nothing happens.** An alert with no defined next step is noise with a timestamp. Guard: this is a process guard, not a code one — pair the rollout with a one-line playbook ("usage-drop DM → check the account in your CSP → log a touch within five business days") and track the action rate above. If the action rate is low, the fix is the playbook or the threshold, not more alerts.
+
+## Stack
+
+- **n8n** — orchestration, the weekly schedule, retries, credential management, and a visual flow a CS Ops lead can re-tune without an engineer
+- **Amplitude** — the product-usage source; weekly unique actives per account via the Dashboard REST `events/segmentation` endpoint
+- **Slack** — the delivery channel; a Block Kit DM to the owning CSM's user id (repointable at a shared channel)
+- **Postgres** — `accounts_in_scope` for per-account thresholds and CSM routing, `usage_alert_history` for the cooldown and the idempotence key

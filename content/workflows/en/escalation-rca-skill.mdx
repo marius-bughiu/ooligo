@@ -1,0 +1,90 @@
+---
+slug: escalation-rca-skill
+canonical_slug: escalation-rca-skill
+locale: en
+verticals: [customer-success]
+title: Draft an escalation root-cause analysis with Claude
+artifact_type: claude-skill
+tools_used: [claude, zendesk, gong]
+roles: [csm, support-lead]
+difficulty: intermediate
+time_to_setup: "45-60 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+A Claude Skill that turns a customer escalation into a defensible root-cause analysis: a reconstructed timeline of every ticket touch and call, a named root cause separated from its contributing factors, and a corrective-action plan with owners and dates. It reads the Zendesk ticket thread plus any linked sibling tickets and the Gong calls tied to the account over the escalation window, then produces a single Markdown RCA the CSM edits and the support lead signs off on before it goes to the customer or an internal post-incident review. The artifact bundle ships the SKILL.md plus three reference files the team adapts once and reuses for every escalation.
+
+The artifact bundle lives at `apps/web/public/artifacts/escalation-rca-skill/`. It contains `SKILL.md`, `references/1-rca-template.md` (the output skeleton with named sections), `references/2-cause-taxonomy.md` (the fixed list of root-cause categories the Skill must classify into), and `references/3-sample-rca.md` (a worked anonymized example the tone-match pass mimics). Read all three before the first run.
+
+## When to use
+
+You are a CSM or a support lead who has just had an account escalate — a sev-1 outage the customer is angry about, a string of mishandled tickets, a renewal-threatening complaint — and you need a written RCA fast, before the postmortem meeting or the customer apology call. The Skill is built for the case where the evidence is scattered across a Zendesk thread, three or four sibling tickets opened by different people on the customer side, and two or three Gong calls where the frustration actually surfaced. Assembling that timeline by hand is 60 to 120 minutes of tab-switching; the Skill does the assembly and hands you a draft to reason over.
+
+It produces the most useful output when the Zendesk tickets are linked (via the account or an explicit `problem`/`incident` link) and tagged consistently, and when at least one Gong call in the window has a transcript. It is calibrated for a single escalation event with a bounded window — typically the 14 to 30 days around the triggering incident — not for a quarter-long pattern analysis.
+
+## When NOT to use
+
+Do not ship the Skill's output to the customer unedited. It is a draft engine. The root cause is a hypothesis the CSM and support lead confirm against their own knowledge before anyone signs their name to it. An RCA sent to an angry customer with a wrong root cause does more damage than no RCA.
+
+Do not use it when the timeline has fewer than three events. With one ticket and no calls there is nothing to reconstruct, and the Skill is built to return `insufficient data` rather than manufacture a narrative — but only if you respect that refusal instead of forcing a run. A confident RCA built on two data points reads authoritative and misleads everyone who acts on it.
+
+Do not use it for legal or contractual disputes, security-incident postmortems, or anything heading toward a SLA-credit negotiation where the wording is adversarial. The Skill writes an operational RCA in a neutral, accountable register; it does not write defensible legal language and will understate or overstate liability in ways that matter when money or contract terms are on the line. Route those to the team that owns them.
+
+Do not use it as a churn predictor or a health score. It explains one past event. The composite-health-score workflow is the tool calibrated for forward-looking retention risk; reading this RCA's severity rating as a churn probability will mislead you.
+
+## Setup
+
+Roughly 45 to 60 minutes the first time, most of it spent adapting the cause taxonomy in `references/2-cause-taxonomy.md` to your team's actual failure modes.
+
+1. **Install the Skill.** Drop the bundle from `apps/web/public/artifacts/escalation-rca-skill/` into `~/.claude/skills/escalation-rca/`. The Skill defines a single command, `draft_rca(account_id, escalation_window, anchor_ticket_id)`, plus internal helpers for the Zendesk pull, the Gong pull, timeline merge, and the two-pass Claude pipeline.
+2. **Wire credentials.** Set `ZENDESK_SUBDOMAIN` and `ZENDESK_API_TOKEN` (read access on Tickets, Ticket Comments, and Ticket Audits — the audits are what give you status-change timestamps), and `GONG_API_KEY` (read access on calls and transcripts). The Skill makes no writes to either system; it is read-only by design so it can run against production without a change-control review.
+3. **Adapt the cause taxonomy.** Open `references/2-cause-taxonomy.md` and replace the placeholder categories with your team's real ones. The default set is `product-defect`, `config-error`, `documentation-gap`, `process-breakdown`, `capacity-overload`, `communication-failure`, and `third-party-dependency`. The Skill classifies the root cause into exactly one of these and lists the rest as contributing factors where the evidence supports them; a free-text root cause is the most common reason two RCAs of the same incident disagree, so the fixed taxonomy is load-bearing, not decoration.
+4. **Adapt the template and the voice sample.** Edit `references/1-rca-template.md` so the section names match what your postmortem process expects (some teams need a `customer-impact` section with affected-user counts; some need a `detection` section). Replace the worked example in `references/3-sample-rca.md` with two or three anonymized prior RCAs your team has written, so the tone-match pass mimics your house style rather than the generic sample.
+5. **Run for one escalation.** `draft_rca(account_id="...", escalation_window="2026-05-20:2026-06-03", anchor_ticket_id="48213")`. The Skill writes one Markdown file: the reconstructed timeline, the root-cause section, the contributing-factors list, the corrective-action table, and a one-paragraph customer-facing summary the CSM can lift or rewrite.
+
+## What the Skill actually does
+
+The Skill pulls Zendesk and Gong in parallel because they hit independent systems and the bottleneck is API latency, not Claude tokens. From Zendesk it pulls the anchor ticket, every sibling ticket linked to the same account or problem within the window, and — critically — each ticket's audit log, because the audits carry the status-change and assignee-change timestamps that the comment thread alone does not. From Gong it pulls calls on the account inside the window, capped at the six most recent, with transcripts truncated to 4,000 characters each. If either system returns empty, the Skill records the gap in the timeline rather than filling it.
+
+It then merges everything into a single chronological timeline keyed on UTC timestamps. The merge is a deterministic step, not a Claude step, because timestamp ordering is exactly the kind of thing a language model gets subtly wrong and a sort does not. Each event carries its source (`zendesk-comment`, `zendesk-status-change`, `gong-call`), its actor, and a one-line summary. This merged timeline is the spine of the whole RCA, and it is in the output verbatim so the reader can audit every downstream claim against it.
+
+Then two Claude passes. Pass one is causal analysis: Claude reads the merged timeline and the cause taxonomy and produces a single named root cause, a separated list of contributing factors, and the specific timeline events that support each. Separating root cause from contributing factors in a dedicated pass matters because the most common RCA failure is conflating the two — calling the loudest symptom the cause. The pass is instructed to cite timeline events by their timestamp for every causal claim and to return `insufficient data` if fewer than three events exist within the window.
+
+Pass two is the corrective-action plan and the tone-match. Claude takes the confirmed root cause plus contributing factors and proposes a corrective-action table — each row an action, an owner role (not a named person; the team assigns names), a due-date offset, and the contributing factor it closes. It then rewrites the whole RCA in the team's voice using the samples in `references/3-sample-rca.md`, and writes the one-paragraph customer-facing summary in a more conservative register that names impact and remediation without admitting liability the team has not agreed to. Splitting actions and tone into their own pass keeps the causal reasoning in pass one uncontaminated by the softening that the customer-facing summary requires.
+
+## Cost reality
+
+A full run costs roughly 15,000 to 30,000 input tokens and 2,000 to 4,000 output tokens on Claude Sonnet — call it 6 to 12 cents per RCA at current Sonnet pricing. The dominant input variable is Gong transcript volume; a heavily-escalated account with six logged calls in the window lands near the top, a ticket-only escalation with no calls near the bottom. The two-pass design shares prefix context, so the second pass is cheaper than the first.
+
+Wall-clock time is two to four minutes, dominated by the Zendesk audit-log pulls (one extra API call per ticket) and the Gong transcript fetch. The two Claude passes add 40 to 70 seconds after the parallel pull completes.
+
+A CSM or support lead writing an RCA from scratch typically spends 60 to 120 minutes — pulling tickets, reading audits, listening back to calls, reconstructing the timeline, then writing. The Skill takes that to 20 to 35 minutes of editing, so the saving is roughly an hour per escalation. A support org running 15 to 25 formal escalations a quarter recovers 15 to 25 hours of senior IC time, which is where the cost is felt most because escalations land on the most experienced people.
+
+## Success metric
+
+Track time from "escalation declared" to "RCA circulated for internal sign-off." The Skill should pull the median under 90 minutes within the first quarter of use, against a from-scratch baseline of half a day or more. Also track the rate at which the proposed root cause survives the support lead's review unchanged — aim for 60% or higher. Lower than that and the cause taxonomy needs re-cutting to match how your incidents actually fail; higher than 85% and the lead is probably rubber-stamping rather than reviewing, which defeats the human-in-the-loop guard.
+
+A second number worth watching: the share of corrective actions from past RCAs that were actually closed by their due date. The Skill does not enforce this — it only proposes the actions — but if that share stays under 50%, the RCA process is theater and a faster draft engine will not fix it. The metric tells you whether the organization is acting on root causes or just documenting them.
+
+## Versus the alternatives
+
+**Versus a manual RCA in a Google Doc.** The status quo for most teams. Manual RCAs are higher-fidelity when the author was personally in the loop on the incident, because they carry context the systems never recorded — the Slack thread, the hallway conversation, the gut read on the customer's real grievance. The trade-off is the hour-plus of timeline assembly, which is pure mechanical toil the Skill eliminates. Use manual for the rare board-level escalation where every word is weighed; use the Skill for the steady volume of operational escalations where the constraint is senior-IC time, not narrative craft. Even for the board-level case the Skill's reconstructed timeline is a useful starting artifact.
+
+**Versus Zendesk's native ticket-merge and side-conversation features.** Zendesk can link and merge related tickets and surface them in one consolidated view, and if all you need is the consolidated ticket history that is less work than installing a Skill. But Zendesk surfaces the tickets; it does not reconstruct a cross-system timeline that includes Gong calls, and it does not name a root cause or propose corrective actions. It gives you the raw material; the Skill writes the analysis. Use Zendesk's linking to keep the sibling tickets discoverable — the Skill relies on that linking to find them — and the Skill to turn the linked set into an RCA.
+
+**Versus a dedicated incident-management tool (an incident.io or a FireHydrant).** These are excellent for engineering-led incident response with on-call rotations, status pages, and automated postmortem scaffolding. If your escalations are infrastructure incidents and you already run one, use its postmortem flow. But those tools are built around the engineering incident lifecycle, not the customer-relationship one; they do not read your Gong calls or write in your CSM team's customer-facing voice. For a CS-owned escalation that is about a relationship as much as a defect, this Skill fits the seam those tools leave open.
+
+## Watch-outs
+
+- **Hindsight bias in the causal pass.** Reading a timeline backward from a known-bad outcome makes every earlier decision look like an obvious mistake, and Claude will narrate it that way if unguarded. Guard: pass one is instructed to distinguish what was knowable at each event from what is only knowable in hindsight, and to mark any claim that depends on hindsight. It also returns `insufficient data` rather than guessing when fewer than three timeline events exist within the window — no narrative gets built on a foundation too thin to support one.
+- **Missing audit logs collapse the timeline.** If the Zendesk token lacks audit-read scope, the Skill silently gets comments without status-change timestamps, and the timeline loses the "ticket sat in pending for nine days" events that are often the real story. Guard: the Skill checks for audit access on the anchor ticket during setup verification and refuses to run with a `ZENDESK_AUDIT_SCOPE_MISSING` error rather than producing a timeline that omits the most important events.
+- **Root cause conflated with the loudest symptom.** The event the customer complained about most is rarely the root cause; it is usually a downstream symptom. An unguarded model anchors on volume. Guard: the cause taxonomy in `references/2-cause-taxonomy.md` forces a single classified category, and pass one must cite the specific timeline event that is the earliest point the cause was in play — not the loudest, the earliest. Symptoms that came later are filed as contributing factors.
+- **Gong sentiment over-read on thin transcripts.** A single short call gets over-weighted as "the customer is furious" when the transcript is a 90-second voicemail. Guard: the Skill caps Gong influence in the causal pass to corroborating evidence — a call can support a timeline event but cannot by itself be the named root cause, because a recorded complaint is a symptom, not a cause. Transcripts under 200 words are flagged low-confidence and excluded from the sentiment read.
+- **Customer-facing summary admitting liability the team has not agreed to.** Pass two writes a summary the customer may read, and an LLM left to its own register will apologize for things the company has not decided to own. Guard: the customer-facing summary prompt names impact and remediation only, explicitly forbids assigning blame or promising compensation, and prefixes the paragraph with a `REVIEW BEFORE SENDING` marker the CSM must remove by hand — there is no path where customer-facing text leaves the Skill without a human touch.
+
+## Stack
+
+- **Zendesk** — ticket thread, sibling tickets, and the audit logs that carry status-change timestamps (REST API, read-only)
+- **Gong** — call transcripts and metadata for the account inside the escalation window (Gong API, read-only)
+- **Claude** — two-pass analysis: causal analysis against the taxonomy, then corrective-action plan plus tone-match (Sonnet recommended for cost; Opus only if the customer-facing summary carries unusual sensitivity)

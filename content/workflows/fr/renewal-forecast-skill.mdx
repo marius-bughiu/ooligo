@@ -1,0 +1,85 @@
+---
+slug: renewal-forecast-skill
+canonical_slug: renewal-forecast-skill
+locale: fr
+verticals: [customer-success]
+title: Prévoir les renewals et signaler le risque avec Claude
+artifact_type: claude-skill
+tools_used: [claude, churnzero]
+roles: [csm, cs-ops]
+difficulty: intermediate
+time_to_setup: "45-60 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+Une Claude Skill qui score chaque renewal d'une fenêtre glissante par risque de churn, classe la cohorte pour que le CSM sache quels comptes travailler en premier, et rédige un save plan pour ceux qui scorent en rouge. Elle lit les signaux de santé, d'engagement et de support depuis ChurnZero, produit une bande de risque accompagnée des trois drivers qui la sous-tendent, et émet une worklist priorisée plus un brouillon de save plan d'une page par compte à risque. La sortie est une prévision qu'un CSM peut défendre en revue de renewals et un point de départ qu'il peut éditer — ni un chiffre, ni un plan terminé.
+
+Le bundle de l'artifact se trouve dans `apps/web/public/artifacts/renewal-forecast-skill/` — `SKILL.md` plus trois fichiers de référence (`references/1-risk-signal-weights.md`, `references/2-save-plan-format.md`, `references/3-sample-output.md`) que la Skill charge à chaque exécution.
+
+## Quand l'utiliser
+
+Vous êtes un CSM, ou un lead CS Ops appuyant un pod de CSMs, et vous possédez un book de renewals dont les dates s'étalent sur le trimestre à venir. Vous voulez arriver à la revue hebdomadaire de prévision des renewals avec la cohorte déjà classée par risque, chaque compte en rouge portant déjà un brouillon de save plan, plutôt que de construire ce tableau à la main la veille au soir. La Skill est conçue pour la fenêtre de T-120 à T-90 jours : assez tôt pour qu'une save motion ait de la piste, assez tard pour que les signaux ne soient pas du pur bruit.
+
+Elle convient quand vous avez ChurnZero (ou une plateforme CS comparable vers laquelle la couche HTTP peut être repointée) produisant des données d'usage, d'engagement et de support auxquelles vous faites confiance au niveau de la direction, et quand votre cohorte de renewals sur une semaine donnée se situe entre environ 10 et 60 comptes. En dessous de 10, classez-les de tête : vous n'avez pas besoin d'une Skill. Au-dessus de 60 sur une seule exécution, découpez par segment pour que chaque brouillon de save plan obtienne encore un budget de tokens réel plutôt qu'un budget rogné.
+
+Elle est la plus utile quand vous avez au moins deux trimestres de résultats de renewal étiquetés (renouvelé, churned, downsold) contre lesquels vérifier les pondérations. Sans cela, vous scorez sur une intuition déguisée en chiffre, ce qui est pire qu'une intuition honnête parce que cela porte une fausse autorité.
+
+## Quand NE PAS l'utiliser
+
+- **Comme pilote automatique.** La Skill rédige ; le CSM décide. Elle n'envoie jamais d'email au client, n'écrit jamais une prévision en retour dans ChurnZero, ne réserve jamais une save play d'elle-même. La sortie est un échafaudage interne.
+- **Pour des estimations ponctuelles de probabilité de renewal.** Elle renvoie quatre bandes (plus de 70 pour cent de chances de renouveler, 40 à 70, 15 à 40, moins de 15), pas « ce compte est à 63 pour cent ». Personne n'agit différemment à 63 contre 58, et une estimation ponctuelle invite à un excès de confiance que les données ne soutiennent pas.
+- **Pour des comptes en auto-renewal véritable sans fenêtre d'opt-out ouverte.** Il n'y a pas de save motion à planifier ; le compte se renouvelle à moins que le client n'initie une sortie. La Skill signale `AUTO_RENEW_NO_ACTION` et saute la rédaction d'un plan plutôt que d'inventer du travail.
+- **Pour des conditions commerciales.** Les montants de remise, la durée du terme et les prix restent avec le CSM et le Deal Desk. La Skill a l'interdiction de recommander une remise précise et refusera si on le lui demande.
+- **Comme substitut à un deep dive par compte sur vos trois principaux renewals.** Pour les comptes qui font bouger le trimestre, un CSM et son responsable réfléchissant avec soin l'emportent sur la Skill. Utilisez-la sur la long tail : les comptes 4 à 60 qui seraient autrement sautés faute de temps.
+
+## Setup
+
+Environ 45 à 60 minutes la première fois, dont l'essentiel passé à ajuster les pondérations contre vos propres résultats étiquetés.
+
+1. **Installez la Skill.** Déposez le bundle de `apps/web/public/artifacts/renewal-forecast-skill/` dans `~/.claude/skills/renewal-forecast/`. La Skill expose une seule commande, `forecast_renewals(window_start, window_end, segment)`, plus des helpers internes pour les pulls ChurnZero et le pipeline de scoring à deux passes.
+2. **Branchez les identifiants.** Définissez `CHURNZERO_API_KEY` et `CHURNZERO_APP_KEY` (accès en lecture sur accounts, ChurnScore, activities et tickets de support). La Skill lit seulement ; elle n'écrit jamais en retour. Si vos données de support vivent hors de ChurnZero, pointez `SUPPORT_SOURCE` vers l'export CSV à la place et la Skill valide le header contre `references/1-risk-signal-weights.md` avant de l'utiliser.
+3. **Ajustez les pondérations de signal.** Ouvrez `references/1-risk-signal-weights.md`. Les valeurs par défaut livrées pondèrent la tendance d'usage à 0.45, la récence d'engagement à 0.30 et la friction de support à 0.25, avec des overrides par segment (les books PLG penchent l'usage vers 0.6 ; l'enterprise high-touch penche l'engagement vers 0.4). Remplacez-les par les pondérations qui font le meilleur backtest contre vos deux derniers trimestres de résultats de renewal. Éditez une pondération à la fois et re-scorez une cohorte connue pour voir ce qui a bougé.
+4. **Adaptez le template de save plan.** Ouvrez `references/2-save-plan-format.md` et remplacez l'échafaudage de sections par les motions de votre équipe : les asks de stakeholder, la structure de récap de valeur, la porte d'escalade. Remplacez l'exemple travaillé dans `references/3-sample-output.md` par trois à cinq save plans réels anonymisés pour que la passe de rédaction imite la voix de votre équipe plutôt qu'une voix générique.
+5. **Exécutez pour une cohorte.** `forecast_renewals(window_start="2026-07-01", window_end="2026-09-30", segment="mid-market")`. La Skill émet une worklist Markdown classée (une ligne par compte : bande, trois drivers, ARR, date de renewal, owner) plus un brouillon de save plan par compte rouge et ambre. Lisez-la, éditez-la, puis convertissez les motions en Plays ou tâches ChurnZero à la main pour la première exécution.
+
+## Ce que fait réellement la skill
+
+La Skill tire trois familles de signaux de ChurnZero par compte dans la fenêtre : la tendance d'usage (volume d'événements actifs des 28 derniers jours rapporté au baseline propre du compte sur 90 jours, et non à une moyenne globale), la récence d'engagement (réunions consignées par le CSM, QBRs et exec touches avec une décroissance de récence exponentielle, demi-vie de 21 jours), et la friction de support (nombre de tickets ouverts, mix de sévérité et temps médian de résolution sur les 90 derniers jours). Rapporter au baseline propre du compte plutôt qu'à une moyenne de cohorte est le choix porteur : une baisse d'usage de 40 pour cent compte que le compte soit un gros ou un petit utilisateur, et une moyenne globale l'enterre.
+
+Elle exécute ensuite deux passes Claude. La passe une est le scoring. Claude prend les trois sous-scores normalisés et les pondérations par segment et produit un composite, une bande, et les trois drivers concrets qui sous-tendent la bande — chaque driver nommant un chiffre réel (« utilisateurs actifs en baisse de 38 pour cent par rapport au baseline de 90 jours », « aucun exec touch consigné depuis 74 jours », « deux tickets sev-1 ouverts depuis 9 jours »), jamais une impression. Le scoring est une passe dédiée pour que les drivers soient raisonnés à partir des sous-scores réels plutôt que justifiés à rebours après le choix de la bande. Une garde plafonne la bande : si moins de trois drivers indépendants peuvent être cités, la bande descend d'un niveau, parce qu'une prévision confiante sur un signal unique est le mode de défaillance qui érode la confiance le plus vite.
+
+La passe deux est la rédaction du save plan, et elle ne s'exécute que pour les comptes des bandes rouge (moins de 15, et 15 à 40) et ambre (40 à 70). Claude lit les drivers de la passe une plus le template de save plan dans `references/2-save-plan-format.md` et produit un brouillon d'une page : l'archétype de churn probable, les motions de stakeholder rattachées à un rythme de 30/60/90 jours, les deux ou trois objections les plus probables au vu des drivers, et une porte d'escalade. Les comptes en bande verte (plus de 70) reçoivent une note « surveiller » d'une ligne, pas un plan — rédiger un save plan pour un compte qui n'est pas à risque, c'est des tokens gaspillés et du temps de lecture CSM gaspillé.
+
+Le classement qui relie le tout trie la cohorte par bande croissante (le plus à risque d'abord), puis par ARR décroissant à l'intérieur de chaque bande, puis par date de renewal croissante. Cet ordre est délibéré : il place les plus grosses pertes proches en haut de la worklist, qui est l'ordre dans lequel un CSM devrait réellement travailler le book.
+
+## Réalité des coûts
+
+Une exécution complète sur une cohorte trimestrielle de 40 comptes coûte environ 20 000 à 35 000 tokens d'input pour le scoring (account JSON, pulls de signaux, la référence de pondérations) plus 3 000 à 6 000 d'input et 2 000 à 4 000 d'output par brouillon de save plan. Avec Claude Sonnet aux prix de liste actuels (environ 3 $ par million d'input, 15 $ par million d'output) une cohorte de 40 comptes dont un tiers score rouge ou ambre se situe autour de 25 à 45 centimes par exécution. Exécutez chaque semaine sur un trimestre glissant et la dépense Anthropic est de quelques dollars par mois — une erreur d'arrondi face à un seul renewal mid-market sauvé.
+
+Le temps d'horloge est de deux à cinq minutes par cohorte, dominé par les pulls ChurnZero ; les deux passes Claude ajoutent peut-être une minute. Le coût qui compte est humain : un CSM prévoyant un book de 40 comptes à la main passe 60 à 90 minutes à tirer des ChurnScores, lire des timelines d'activité et classer des comptes avant la revue. La Skill ramène cela à environ 20 minutes de lecture et d'édition, donc l'économie est d'environ une heure par revue hebdomadaire par CSM.
+
+## À quoi ressemble le succès
+
+Suivez trois chiffres sur le premier trimestre. Premièrement, **l'accord de prévision** : sondez le pod de CSMs après chaque revue sur la fraction des bandes ayant correspondu à leur propre lecture une fois le compte travaillé. Visez plus de 70 pour cent à la quatrième semaine ; moins de 50 pour cent signifie que les pondérations sont fausses, pas le modèle, et la correction est dans `references/1-risk-signal-weights.md`, pas dans le prompt. Deuxièmement, **la conversion du save plan** : la fraction des motions rédigées qui deviennent des Plays ou tâches ChurnZero suivis dans les 48 heures. Visez plus de 80 pour cent ; plus bas signifie que les brouillons sont trop génériques pour agir. Troisièmement, le signal retardé qui compte le plus : **le taux de renewal sur les comptes ambre et rouge où la Skill a été utilisée contre une cohorte comparable où elle ne l'a pas été**, trimestre après trimestre. La Skill n'est pas la seule variable, mais si le taux de renewal à risque ne bouge pas, les prévisions sont générées puis ignorées.
+
+## vs alternatives
+
+- **La prévision native de renewal et le ChurnScore de ChurnZero.** ChurnZero produit déjà un health score et une lecture de probabilité de renewal, et si votre équipe leur fait confiance et agit dessus, vous n'avez pas besoin de cette Skill. Ce qu'il ne fait pas, c'est expliquer le score en trois drivers concrets qu'un CSM peut défendre en revue, ni rédiger le save plan pour les comptes qui scorent mal. Utilisez ChurnZero comme système d'enregistrement et source de signal ; utilisez la Skill pour l'explication et le brouillon de plan. Ils sont complémentaires — la Skill lit les données de ChurnZero, elle ne remplace pas son moteur de scoring.
+- **La Skill [générateur de renewal playbook](/en/workflows/cs-renewal-playbook-skill/).** Cette Skill va en profondeur sur un seul compte que vous avez déjà signalé — matrice complète stakeholder-motion, échafaudage de talk-track, portes d'escalade. Cette Skill-ci fait l'étape d'avant : elle vous dit quels comptes de toute la cohorte signaler en premier lieu, et donne à chacun un brouillon de plan plus léger. Exécutez celle-ci pour trier le book, puis exécutez le générateur de playbook sur les deux ou trois rouges qui justifient le traitement plus approfondi.
+- **Le [digest quotidien de risque de churn](/en/workflows/churn-risk-summarizer-claude/).** Ce digest est déclenché par événement et porte sur les 24 dernières heures — il vous dit ce qui a changé pendant la nuit. Cette Skill est basée sur une fenêtre et tournée vers l'avant — elle classe une cohorte de renewals par risque sur un trimestre. Horizon temporel différent, travail différent. Beaucoup d'équipes exécutent les deux : le digest pour la réaction quotidienne, celle-ci pour la prévision hebdomadaire.
+- **Une prévision manuelle sur tableur.** Ce que font la plupart des pods aujourd'hui : un CSM tire des ChurnScores dans une feuille, scrute la timeline d'activité, et code par couleur au jugé. Contexte maximal, cohérence minimale — chaque CSM invente son propre framing et les chiffres ne sont pas comparables d'un CSM à l'autre. La Skill échange un peu de ce contexte contre un framing partagé que tout le pod peut contester en éditant le fichier de pondérations. Gardez le tableur si vous êtes une équipe de deux ; adoptez la Skill à partir de quatre CSMs, là où la cohérence commence à composer.
+
+## Points de vigilance
+
+- **Un tagging d'usage sale produit une bande confiante mais fausse.** Si les événements ChurnZero sont tagués de façon incohérente entre les surfaces produit, le baseline par compte n'a aucun sens et la Skill fera remonter des baisses qui reflètent un changement de tagging, pas un changement de comportement. Garde : avant la mise en production, la Skill effectue une vérification unique de la distribution des noms d'événements par compte sur 90 jours et refuse de scorer tout compte dont les cinq types d'événements principaux ne sont pas stables, le marquant `BASELINE_UNTRUSTWORTHY` plutôt que de deviner.
+- **Des bandes surconfiantes sur un seul signal fort.** Une situation de support en rouge peut à elle seule tirer vers l'ambre un compte par ailleurs sain, ou un QBR récent peut masquer un effondrement silencieux de l'usage. Garde : la bande doit être étayée par trois drivers indépendants ; si seulement un ou deux peuvent être cités, la bande descend d'un niveau et la ligne de la worklist est taguée `THIN_SIGNAL` pour que le CSM la traite comme une hypothèse, pas une prévision.
+- **Des données ChurnZero périmées scorées comme fraîches.** Un ChurnScore qui n'a pas été recalculé depuis des jours sera scoré comme s'il était à jour. Garde : la Skill lit l'horodatage de dernière mise à jour de chaque signal et, si le signal le plus frais d'un compte a plus de 7 jours, préfixe la ligne par `DATA_STALE (n jours)` plutôt que de présenter une bande périmée comme actuelle.
+- **Des save plans dérivant vers des conditions commerciales.** La passe de rédaction tendra vers « proposer une remise » si elle n'est pas contrainte, ce qui est précisément le territoire qui appartient au Deal Desk. Garde : le prompt du save plan interdit toute mention de montants de remise, de durée de terme ou de prix, et le template de sortie n'a pas de slot pour eux ; les mouvements commerciaux sont signalés « escalader au Deal Desk », jamais rédigés.
+- **Traiter la worklist comme le travail.** Une liste classée que personne ne convertit en motions suivies ne change rien. Garde : chaque brouillon de save plan se termine par le rappel explicite que les motions ne valent rien tant qu'elles ne sont pas des Plays ou tâches ChurnZero revus chaque semaine, et l'étape de setup lie la génération à une étape de conversion.
+
+## Stack
+
+- **ChurnZero** — tendance d'usage, ChurnScore, activities d'engagement et signaux de support (lecture seule via API) ; destination des Plays que le CSM crée à partir des brouillons
+- **Claude (Sonnet recommandé)** — pipeline à deux passes : scoring avec drivers concrets, puis rédaction de save plan pour les comptes rouges et ambre
+- **Bundle de l'artifact** dans `apps/web/public/artifacts/renewal-forecast-skill/` (`SKILL.md`, `references/1-risk-signal-weights.md`, `references/2-save-plan-format.md`, `references/3-sample-output.md`)

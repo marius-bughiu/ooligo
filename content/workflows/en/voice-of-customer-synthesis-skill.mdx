@@ -1,0 +1,86 @@
+---
+slug: voice-of-customer-synthesis-skill
+canonical_slug: voice-of-customer-synthesis-skill
+locale: en
+verticals: [customer-success]
+title: Synthesize Voice of the Customer with Claude
+artifact_type: claude-skill
+tools_used: [claude, canny, sprig]
+roles: [cs-ops, product-manager]
+difficulty: intermediate
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+A Claude Skill that merges three feedback streams the CS and Product orgs already collect separately — Canny feature requests, Sprig in-product survey responses, and a support-ticket export — into one prioritized Voice of the Customer report. The output is a ranked theme list where each theme carries a weighted demand score, the segments asking for it, representative verbatims with their source, and a one-line product implication. Instead of three people reading three tools and arguing about what customers "really want," CS Ops runs one command and gets a synthesized doc that a product review can act on. The artifact bundle ships the `SKILL.md`, three reference files the team adapts once, and an example output.
+
+## When to use
+
+You are a CS Ops lead or Product Manager who has to produce a recurring VoC summary — monthly product council, quarterly roadmap input, or an annual planning artifact — and the raw signal lives in at least two of Canny, Sprig, and a support tool's ticket export. The Skill is built for the case where the feedback volume is past the point a human can read all of it (roughly 150+ items per cycle) but the team still wants traceability back to specific verbatims rather than a black-box score.
+
+It works best when the three sources can each be exported with a stable schema — Canny posts with vote counts and board, Sprig responses with the survey question and a segment attribute, support tickets with a category and account tier. The Skill clusters across all three, deduplicates the same ask phrased five different ways, and weights each theme by a formula you control. It produces the most defensible output when you can attach an account-value or segment field to each item, because that is what lets the report rank by revenue-weighted demand rather than raw mention count.
+
+## When NOT to use
+
+Do not use this Skill as the only input to a roadmap decision. It synthesizes stated demand; it does not measure willingness to pay, technical cost, or strategic fit. A theme topping the ranked list means many valuable accounts asked for it loudly, not that it is the right thing to build. The product implication line is a prompt for discussion, not a verdict.
+
+Do not point it at fewer than ~50 items in a cycle. Below that, a PM can read every item directly in less time than it takes to adapt the reference files, and the clustering overfits — you get "themes" of two items each that are really just two phrasings of one request.
+
+Do not use it when your sources have no segment or account-value attribute at all. Without that, every theme weights to raw count, which over-indexes on whichever segment is loudest (usually low-ARR self-serve users filing Canny posts) and under-counts the enterprise accounts who email their CSM instead of filing a ticket. A count-only VoC report actively misleads roadmap prioritization.
+
+Do not treat the verbatims as anonymized for external sharing. The Skill preserves enough source context (account tier, sometimes a quoted phrase) that a report can leak who said what. Keep the output internal unless you run a separate redaction pass.
+
+## Setup
+
+Roughly 45 to 90 minutes the first time, almost all of it spent adapting the three reference files to your own export schemas and weighting policy.
+
+1. **Install the Skill.** Drop the bundle from `apps/web/public/artifacts/voice-of-customer-synthesis-skill/` into `~/.claude/skills/voc-synthesis/`. The Skill defines one entry command, `synthesize_voc(period, sources)`, plus internal helpers for normalizing each source, clustering, and the two-pass Claude pipeline.
+2. **Export the three sources.** Pull Canny posts for the period via the Canny API (or a CSV export) with `title`, `details`, `score` (vote count), `board`, and any linked company field. Pull Sprig responses with the survey question, the free-text answer, and at least one segment attribute. Pull the support-ticket export (Zendesk, Freshdesk, Front, Help Scout — any tool that exports CSV) with `subject`, `description`, `category`, and `account_tier`. Drop all three into `inputs/` as CSV or JSON.
+3. **Adapt the schema map.** Open `references/1-source-schema-map.md` and map each source's real column names to the Skill's internal fields (`text`, `weight_signal`, `segment`, `source_label`). This is the file that breaks most often on the first run because every team's Canny board names and Sprig survey IDs differ. The Skill refuses to run if a required field is unmapped rather than silently scoring on partial data.
+4. **Set the weighting policy.** Open `references/2-weighting-policy.md` and set the formula. The default is `theme_score = sum over items of (segment_weight * recency_factor)`, where `segment_weight` is 3 for enterprise, 2 for mid-market, 1 for self-serve, and `recency_factor` decays linearly from 1.0 at day 0 to 0.5 at the period boundary. Replace these with your own bands. Having the policy in a file rather than hard-coded is what lets a product council challenge the weights and you re-run in two minutes instead of editing code.
+5. **Adapt the output template.** Open `references/3-report-template.md` and align the section order and the verbatim-quoting format to what your product review expects. Then run `synthesize_voc(period="2026-Q2", sources=["canny", "sprig", "support"])`. The Skill writes one Markdown report plus a CSV of every item with its assigned theme so a skeptic can audit the clustering.
+
+## What the Skill actually does
+
+The Skill runs in two passes, and the split is deliberate. Pass one is extract-and-cluster; pass two is rank-and-explain. Doing both in a single pass produces clustering that drifts toward whatever the model rationalizes last, because it is simultaneously deciding what the themes are and arguing for their priority — the priority reasoning contaminates the clustering.
+
+Pass one normalizes all three sources through the schema map into a common record shape, then asks Claude to cluster the items into candidate themes. The prompt forces the model to assign every item to exactly one theme or to an explicit `unclustered` bucket, and to quote the span of text that justifies each assignment. The `unclustered` bucket is a guard, not a failure: a healthy run leaves 5 to 15 percent unclustered (genuinely one-off requests), and an unclustered rate above 30 percent is a signal the sources are too heterogeneous to merge this cycle, which the Skill surfaces rather than forcing a merge.
+
+Between passes, scoring is deterministic Python, not Claude. The weighting formula from `references/2-weighting-policy.md` runs over the clustered items in code, so the same inputs always produce the same ranking and a reviewer can recompute any theme's score by hand. Letting Claude "weight" the themes would make the ranking unauditable and non-reproducible; the model clusters and explains, the code scores.
+
+Pass two takes the ranked themes and, for each, selects two to three representative verbatims (one per source where possible, so a theme is not carried entirely by Canny's vocal minority), writes the one-line product implication, and names the segments driving the score. The output is a ranked report plus the per-item CSV. The report leads with the top themes; the CSV is the audit trail.
+
+## Cost reality
+
+A full run on Claude Sonnet costs roughly 30,000 to 90,000 input tokens depending on item count and text length, and 5,000 to 10,000 output tokens — call it 12 to 30 cents per VoC cycle. The input variable that dominates is support-ticket description length; capping each item's text at 600 characters in the schema map keeps a 400-item cycle near the lower end without losing the clustering signal. Wall-clock time is two to five minutes, almost all of it the two Claude passes since the export and scoring are local.
+
+Against the alternative — a PM spending a focused day reading and tagging 300 items by hand each cycle — the Skill takes that to about 90 minutes (adapting nothing after the first run, then reviewing the report and spot-auditing the CSV). For a team running VoC monthly, that is roughly a day of PM time reclaimed per month, and the trade is well within budget at well under a dollar a month in tokens.
+
+## What success looks like
+
+Track three numbers. First, **clustering agreement**: sample 30 items from the per-item CSV and have a PM judge whether each is in the right theme. Target 85 percent or higher by the second cycle; below 70 percent means the schema map is feeding the model noisy text (usually un-stripped HTML or signatures in ticket bodies). Second, **roadmap traceability**: the share of roadmap decisions in the next two quarters that cite a VoC theme by name. If it stays at zero, the report is being produced but not consumed, and the format needs to match the product review's actual ritual. Third, **unclustered rate** per cycle — trending stable in the 5 to 15 percent band is healthy; a sudden spike means a source schema changed upstream.
+
+## Versus the alternatives
+
+**Versus a Productboard or Canny native roadmap view.** Both Productboard and Canny aggregate feedback inside their own walls and rank by votes or insights, and if all your signal already lives in one of them, their native view is less work. The gap: neither merges across all three of Canny plus Sprig plus support tickets, and both rank by their own engagement signal rather than a revenue-weighted formula you control. Use the native view when one tool holds 80 percent of your signal; use this Skill when the signal is genuinely split across three systems and you need the segment weighting.
+
+**Versus a manual tagging pass in a spreadsheet.** A PM reading and tagging every item produces the highest-fidelity clustering because the human catches nuance the model misses. The trade is the focused day per cycle and the fact that it does not scale past a few hundred items or survive the PM changing jobs. Use manual tagging for the first cycle or two to calibrate your weighting bands against reality, then let the Skill carry the recurring volume and reserve human reading for the `unclustered` bucket.
+
+**Versus a generic LLM dump ("summarize this feedback").** Pasting all three exports into a chat window and asking for a summary is faster to start and produces a confident, unauditable blob with no scores, no source traceability, and silent deduplication you cannot inspect. The two-pass split with deterministic scoring exists precisely to make the output defensible in a roadmap argument, which the generic dump never is.
+
+## Watch-outs
+
+- **Loudest-segment bias.** Self-serve users file Canny posts; enterprise champions email their CSM. A count-based view systematically over-weights the segment that happens to use the public channel. Guard: scoring multiplies each item by `segment_weight` from `references/2-weighting-policy.md`, so a single enterprise ticket can outweigh several self-serve votes — and the report names the driving segments per theme so a reviewer can see the weighting at work rather than trusting a bare number.
+- **Clustering hallucination across sources.** Asked to merge three vocabularies, the model can invent a theme that smooths over a real distinction (treating "slow export" and "export missing columns" as one). Guard: pass one quotes the justifying span for every assignment and writes the per-item CSV, so a reviewer can spot a bad merge in the audit trail; the `unclustered` bucket gives the model an explicit out instead of forcing a stretch.
+- **Stale or shifted source schema.** A renamed Canny board or a new Sprig survey ID silently changes what the export contains, and the report then scores against partial data. Guard: the schema map validation refuses to run on an unmapped required field and reports which source and column failed, rather than scoring on what loaded.
+- **Reading demand as priority.** The ranked list measures stated demand weighted by segment value — not willingness to pay, build cost, or strategy fit. Guard: the product-implication line is phrased as a question for the review, not a recommendation, and the report carries a standing header noting it is one input among several, so a reader cannot mistake rank for a build decision.
+- **Verbatim leakage.** The preserved source context can identify who said what if the report is shared externally. Guard: the report is marked internal-only in the template header, and the bundle ships a `redact` flag that strips account identifiers and quoted phrases for any version that leaves the building.
+
+## Stack
+
+- **Canny** — feature-request posts with vote counts and board (Canny API or CSV export)
+- **Sprig** — in-product survey free-text responses with a segment attribute
+- **Support tool** — ticket export (Zendesk, Freshdesk, Front, or Help Scout) with category and account tier
+- **Claude** — two-pass pipeline: extract-and-cluster, then rank-and-explain (Sonnet recommended for cost)
+- **Local scoring** — deterministic Python applies the weighting policy between passes so the ranking is reproducible and auditable

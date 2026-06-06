@@ -1,0 +1,90 @@
+---
+slug: cursor-rules-cs-ops
+canonical_slug: cursor-rules-cs-ops
+locale: es
+verticals: [customer-success]
+title: Cursor rules para un ingeniero de CS Ops
+artifact_type: cursor-rule
+tools_used: [cursor, claude]
+roles: [cs-ops]
+difficulty: advanced
+time_to_setup: "20-30 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+Un archivo `.cursorrules` de Cursor afinado para el ingeniero de CS Ops que escribe el código detrás del motion de CS: jobs de health-score, scoring de churn-risk, syncs de fecha de renewal, write-backs a [Gainsight](/en/tools/gainsight/) y [Vitally](/en/tools/vitally/), ETL de rollup de uso, y los flows de [n8n](/en/tools/n8n/) que pegan el warehouse al CSP. El artifact es un solo archivo —`apps/web/public/artifacts/cursor-rules-cs-ops/.cursorrules`— que colocas en el directorio `.cursor/rules/` de tu proyecto para que [Cursor](/en/tools/cursor/) deje de sugerir un write-back nocturno no idempotente, una query de warehouse sin tope, o un score de sentimiento sin piso de confianza, y dejes de relitigar esos defaults en cada code review.
+
+La propiedad que define al código de CS Ops es que **escribe el número en el que un CSM confía para decidir quién hace churn.** Un health score que silenciosamente se invierte cuando un evento de uso se renombra, un job de churn-risk que hace doble escritura en un retry, una fecha de renewal que se sincroniza obsoleta desde el CRM —cada uno no solo rompe un script, enruta a un CSM hacia la cuenta equivocada y deja escapar un save real. Las reglas de este bundle codifican write-backs idempotentes, disciplina de scoring baseline-vs-actual, pisos de confianza en cualquier señal de LLM, y escrituras conservadoras al CSP para que el output de Cursor refleje el radio de impacto de un error de CS Ops: un renewal perdido, no un unit test fallido.
+
+## Cuándo usarla
+
+Eres un ingeniero de CS Ops, manager de CS Ops, o persona de RevOps que es dueña del tooling de CS y escribe código de integración —Python, TypeScript, SQL, modelos dbt, flows de n8n— contra un CSP ([Gainsight](/en/tools/gainsight/), [Vitally](/en/tools/vitally/), [Catalyst](/en/tools/catalyst/), [ChurnZero](/en/tools/churnzero/), [Totango](/en/tools/totango/), [Planhat](/en/tools/planhat/), [Custify](/en/tools/custify/)), un CRM ([HubSpot](/en/tools/hubspot/) o [Salesforce](/en/tools/salesforce/)), una fuente de product-analytics ([Pendo](/en/tools/pendo/), [Amplitude](/en/tools/amplitude/), [Mixpanel](/en/tools/mixpanel/), [Heap](/en/tools/heap/)), y una fuente de conversaciones ([Gong](/en/tools/gong/)). Tu equipo envía al menos unos pocos cambios al mes que mueven health scores, datos de renewal, o colas de tareas de CSM. Cursor es tu IDE.
+
+## Cuándo NO usarla
+
+- Tu "automatización" de CS son reglas construidas por admin en la UI de Gainsight o Vitally, no código en un repo. Las reglas asumen control de versiones, code review y un pipeline de deploy; no ayudan a una práctica de CS Ops solo-de-config, y el constructor de reglas no-code de tu CSP ya impone la mayoría de las preocupaciones de idempotencia por ti.
+- Eres un CSM que ocasionalmente escribe una query SQL para jalar su book. Estas reglas están escritas para alguien que es dueño del job de scoring del que depende todo el equipo, no para análisis ad-hoc. El preámbulo de "antes de escribir código, pregunta" frenará una query de una sola vez que nadie más corre.
+- Estás construyendo un producto de CS (un CSP, una herramienta de feedback) en vez de operar uno dentro de una empresa. Las reglas están afinadas para el operador in-house que vive con un health score equivocado durante todo el ciclo de renewal, no para un equipo de ingeniería enviando scoring como feature a clientes.
+
+## Setup
+
+1. **Copia el artifact.** Toma `.cursorrules` de `apps/web/public/artifacts/cursor-rules-cs-ops/.cursorrules` y colócalo en el directorio `.cursor/rules/` de tu proyecto. El indicador de Project Rules de Cursor confirma que está cargado.
+2. **Recorta las secciones de herramientas.** El archivo viene con secciones para el write-back del CSP (Gainsight / Vitally), el sync del CRM (HubSpot / Salesforce), rollups de product-analytics, sentimiento de Gong, orquestación de n8n, y dbt. Borra cada sección de una herramienta que no corres —dejar guía que el modelo pesa contra contexto irrelevante diluye la señal y produce sugerencias con hedging.
+3. **Configura la política de secrets.** Las reglas prohíben credenciales hardcodeadas y enrutan al modelo hacia tu secret manager. Edita la sección "Secrets and access" para que la llamada sugerida coincida con tu tooling (1Password CLI, Doppler, AWS Secrets Manager, Vault —elige uno). Las API keys de Gainsight y Vitally son bearer tokens de acceso completo sin scoping a nivel de campo, así que esta sección es estructural.
+4. **Arregla los targets de auditoría e idempotencia.** Las reglas asumen una tabla `health_score_history` con una llave única en `(account_id, scored_date)` y un objeto de auditoría para cada escritura al CSP. Edita los nombres de tabla y objeto a tu schema real, o las sugerencias referencian nombres que no existen.
+5. **Nombra las fuentes canónicas.** Edita el bloque "source of truth": qué sistema es dueño de la fecha de renewal (usualmente el CRM, no el CSP), cuál es dueño del baseline de uso (el warehouse, no la API en vivo del producto), cuál es dueño de la lista de cuentas en scope. El modelo las usa para rehusar una escritura que dejaría al CSP sobrescribir la fecha de renewal del CRM.
+6. **Prueba con una tarea representativa.** Pídele a Cursor: "escribe un job nocturno que califique health de cuenta a partir de un baseline de uso de 28 días y escriba el resultado a Gainsight." El output debe computar contra un baseline almacenado (no un recompute en vivo), capear el score cuando los usuarios activos distintos caen por debajo de tres, escribir de vuelta vía un upsert idempotente con llave en `(account_id, scored_date)`, y registrar en la tabla de auditoría. Si no lo hace, las reglas no están cargadas —revisa el indicador de Project Rules.
+
+## Qué hacen las reglas en realidad
+
+El bundle está estructurado como cinco capas, aplicadas a cada prompt de Cursor:
+
+1. **Un preámbulo de "antes de escribir código, pregunta".** Seis preguntas que el modelo saca a la superficie antes de generar: qué sistema es la fuente de verdad para este campo, cuál es el volumen de cuentas y el rate cap del proveedor, qué significa un valor equivocado para el día de un CSM, es esto una sola vez o un job nocturno, es la escritura idempotente en retry, y quién lee el audit trail. La específica de CS es la primera —el código de CS Ops constantemente pelea sobre si el CRM o el CSP es dueño de la fecha de renewal, y el modelo debe forzar esa decisión antes de escribir el sync.
+2. **Guía específica por herramienta.** Una subsección por superficie, cada una citando límites y rarezas reales: Gainsight (Rules Engine vs. Connectors API, el cap de lectura clase 3-llamadas-por-segundo, provisión de custom-field antes de escribir), Vitally (REST API, la semántica de upsert de `traits`, sin endpoint bulk nativo así que haz el batch en código), HubSpot (SDK v4, circuit breaker de quota diaria al 80% consumido, timeout de 20 segundos), Salesforce (límites de governor de SOQL, bulkificación, `WITH SECURITY_ENFORCED`), product analytics (paginación de la export-API de Pendo/Amplitude/Mixpanel y la trampa de deriva de nombres de eventos), Gong (ventana de llamadas de últimos 90 días, check de transcripción habilitada, piso de confianza en cualquier señal de sentimiento), n8n (`executionOrder`, timezone explícito de Cron, tamaño de batch bajo el cap del proveedor), y dbt (tests unique en cada grano, `ref()`, estrategia incremental, source freshness en el rollup del warehouse).
+3. **Defaults a imponer** a través de las cuatro dimensiones requeridas, cada una con un valor concreto:
+   - **Rate-limiting** —haz batch de escrituras al CSP a 25 cuentas por grupo; detén HubSpot al 80% de la quota diaria; respeta el cap de 3-llamadas/seg por workspace de Gong con un wait explícito por batch.
+   - **Idempotencia** —cada escritura de historial es un upsert con llave en `(account_id, scored_date)` con `ON CONFLICT DO UPDATE`; cada write-back al CSP checa el valor previo y es seguro de re-correr a las 09:00 tras una falla de las 02:00.
+   - **Observabilidad** —cada job de scoring registra los inputs de sub-score (uso, actividad, sentimiento) junto al compuesto, para que un score equivocado sea debuggeable sin re-correr; los cambios de banda emiten un evento estructurado.
+   - **Secrets** —nunca inlinees un token de CSP o CRM; enruta a través del secret manager nombrado; los tokens de acceso completo obtienen el scope de deploy más estrecho disponible.
+4. **Anti-patrones a rehusar, cada uno con la razón.** Recomputar el baseline de uso en vivo cada noche en vez de congelarlo (un cambio de tagging entonces se lee como un cambio de comportamiento y el score se mueve sobre ruido); un campo de sentimiento o churn-reason de LLM sin piso de confianza (una conjetura confiada sobre un voicemail de 50 palabras es peor que `null`); un write-back al CSP sin check de valor previo (doble escritura en retry, contamina el audit trail); dejar que el CSP sobrescriba la fecha de renewal del CRM (el CSP está downstream del CRM, no es la fuente); una escritura de `health_score` sin `scored_at` y sin fila de historial (no puedes ver la trayectoria, que es el punto entero de un score).
+5. **Una sección de "cuando el usuario está equivocado".** Los atajos que los ingenieros de CS Ops buscan bajo la presión del renewal-crunch que el modelo rechaza en vez de ejecutar. El rechazo de más alto valor: declinar enviar un score de churn-risk que no tiene backtest de churn etiquetado detrás de sus pesos, porque un score sin backtest carga la autoridad de un número mientras enruta a los CSMs sobre conjeturas —es peor que ningún score, y el modelo lo dice en vez de generarlo.
+
+## Realidad de costos
+
+- **Costo de tokens: cero.** Las reglas de Cursor son contexto local enviado en cada prompt —sin cargo de API por request más allá de los ~6 KB que ocupan en la ventana de contexto.
+- **Tiempo de setup: 20-30 minutos** para colocar el archivo, configurar el secret manager, nombrar las fuentes canónicas, y apuntar la tabla de historial y el objeto de auditoría a nombres reales. El bloque "source of truth" es el que toma más tiempo porque fuerza una decisión que tu equipo pudo haber estado evitando.
+- **Overhead por tarea:** el preámbulo agrega 1-2 turnos de diálogo antes de generar. Para una query desechable es pesado; sáltatelo ahí. Para un job de scoring nocturno en el que todo el equipo de CS confiará, saca a la superficie las decisiones de idempotencia y fuente-de-verdad que de otro modo aparecen como un simulacro de incendio el día del forecast tres meses después.
+- **Mantenimiento: ~30 minutos por trimestre.** Las versiones de SDK y API derivan (HubSpot v3 → v4 ya; Gainsight y Vitally revisan sus APIs sin anuncios ruidosos). Etiqueta con versión cada regla que nombre una versión para que el siguiente revisor sepa cuándo revisar de nuevo.
+
+## Cómo se ve el éxito
+
+- **Los incidentes de health-score atados a escrituras no idempotentes caen a cero.** El default de upsert-en-`(account_id, scored_date)` termina la clase de bug de doble escritura que llena la tabla de historial con filas duplicadas y rompe los gráficos de trayectoria.
+- **"El score dice verde pero la cuenta claramente está haciendo churn" se debuggea desde logs, no re-runs.** Porque cada job registra sus inputs de sub-score, la queja de un CSM se resuelve leyendo una línea de log, no re-corriendo el job y esperando que reproduzca.
+- **Ningún CSM abre nunca una cuenta a una fecha de renewal con tres semanas de obsolescencia.** La regla de fuente-de-verdad mantiene al CRM como el dueño del renewal y rehúsa la escritura del CSP que la ensombrecería.
+- **El code review deja de cazar "¿agregaste un piso de confianza?".** Las reglas sugieren el piso inline en cualquier señal de LLM; los revisores se enfocan en la lógica de pesos en su lugar.
+
+## Versus las alternativas
+
+- **Ninguna regla (status quo).** Cursor genera un job de scoring plausible que recomputa el baseline en vivo y hace doble escritura en retry. La primera vez que un rename de evento de uso invierte el score de cada cuenta de la noche a la mañana y el equipo de CS pasa una semana de renewal sin confiar en el número, la ausencia de reglas se vuelve el cuello de botella.
+- **El propio constructor de reglas no-code del CSP (Gainsight Rules Engine, la automatización de Vitally).** Para equipos que no escriben código esta es la respuesta correcta —maneja idempotencia y scheduling por ti. Estas reglas son para el equipo que lo ha superado: matemática de scoring custom, una señal de sentimiento de LLM que el constructor de reglas no puede expresar, o un baseline de warehouse que el CSP no puede alcanzar. Usa el constructor de reglas para el motion estándar y el código (formado por estas reglas) para las partes que no puede hacer.
+- **Un doc de convenciones de CS Ops en Notion.** Funcionalmente equivalente a ninguna regla —el doc no está en el contexto del modelo. El archivo `.cursorrules` es ese doc de convenciones, cargado en cada prompt.
+- **Un linter o tests de dbt.** Capturan problemas después de que el código está escrito. Coexisten con las reglas: las reglas previenen que la escritura no idempotente se escriba, los tests de dbt capturan el grano de rollup que se escapa. Mantén ambos.
+
+## A vigilar
+
+- **Deriva de reglas.** Los equipos agregan reglas y nunca las quitan; el archivo se vuelve un museo de guía que el modelo aún aplica. Guarda: revisión trimestral con `git blame` —cualquier cosa más vieja que 18 meses se re-justifica o se borra, y el archivo se mantiene bajo ~300 líneas.
+- **Churn de la API del CSP.** "Usa el upsert de `traits` de Vitally" o "Gainsight Connectors API v2" se vuelve obsoleto cuando el vendor revisa la API sin un anuncio ruidoso. Guarda: etiqueta con versión cada regla que nombre una versión de API (ej. `# Gainsight Connectors API (verified 2026-Q2)`) para que el siguiente revisor sepa la fecha de re-revisión.
+- **Reglas de fuente-de-verdad que pelean con tu arquitectura real.** El default que viene hace al CRM dueño de la fecha de renewal, pero algunas orgs genuinamente corren el CSP como la fuente de renewal. Guarda: el bloque "source of truth" es lo primero que editas en setup; una entrada equivocada aquí hace que el modelo rehúse escrituras correctas y apruebe equivocadas.
+- **Overrides por repo.** Un default de escritura-permitida que es correcto en tu repo de scoring es equivocado en tu repo de reporting solo-de-lectura. Guarda: usa el soporte de reglas por directorio de Cursor y documenta la divergencia en el README de cada repo; prefiere un solo archivo compartido con excepciones documentadas en vez de bifurcarlo.
+- **Las reglas no reemplazan un backtest.** Hacen que Cursor rehúse enviar un modelo de churn sin backtest, pero no pueden correr el backtest por ti. Guarda: mantén el backtest de churn etiquetado, los tests de dbt, y el code review como capas de enforcement separadas —las reglas forman las sugerencias, no son un control.
+
+## Stack
+
+- **[Cursor](/en/tools/cursor/)** —IDE y motor de reglas
+- **[Claude](/en/tools/claude/)** —el modelo detrás de la generación de Cursor; también el LLM que las reglas le dicen a los jobs de scoring que llamen para sentimiento y oraciones de why-changed, siempre con un piso de confianza
+- **`.cursor/rules/cs-ops.md`** —versionado en repo, con code review
+- **CSP (Gainsight / Vitally / Catalyst / ChurnZero)** —target de write-back de health-score y renewal; nunca la fuente de verdad para la fecha de renewal
+- **CRM (HubSpot / Salesforce)** —fuente canónica de fecha de renewal y lista de cuentas
+- **Secret manager de elección** —referenciado desde las reglas, nunca inlineado; los tokens de CSP son de acceso completo, así que dales scope estrecho
+- **Tabla `health_score_history`** —llave de idempotencia `(account_id, scored_date)` y audit trail de trayectoria

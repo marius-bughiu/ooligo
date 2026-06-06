@@ -1,0 +1,88 @@
+---
+slug: nps-verbatim-triage-skill
+canonical_slug: nps-verbatim-triage-skill
+locale: en
+verticals: [customer-success]
+title: Triage NPS verbatims into themes with Claude
+artifact_type: claude-skill
+tools_used: [claude, delighted]
+roles: [cs-ops, csm]
+difficulty: beginner
+time_to_setup: "20-40 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+A Claude Skill that takes a batch of open-text NPS responses exported from Delighted and returns three things a CS Ops lead can act on the same afternoon: a clustered list of themes with a count and representative quotes for each, a sentiment label per response cross-tabulated against the NPS bucket (promoter / passive / detractor), and a ranked action list that ties the loudest themes to an owner and a next step. The point is to turn the verbatim column nobody reads into the part of the survey that actually drives a roadmap conversation. The artifact bundle ships `SKILL.md` plus two reference files the team adapts once and reuses every survey cycle.
+
+The bundle lives at `apps/web/public/artifacts/nps-verbatim-triage-skill/`. It contains `SKILL.md`, `references/1-theme-taxonomy.md` (the seed theme list you tune to your product), and `references/2-output-format.md` (the literal Markdown the Skill emits). Read both before the first run.
+
+## When to use
+
+You are a CS Ops lead or a CSM who has just closed an NPS cycle in Delighted and has somewhere between 50 and 2,000 open-text responses sitting in a CSV. You want themes, not a word cloud — a list you can take into a roadmap meeting that says "47 detractors mention onboarding friction, here are five of their exact words, the owner is the onboarding team." The Skill is built for the recurring quarterly or monthly read, where the value is consistency: the same taxonomy applied the same way every cycle so trends are comparable across surveys.
+
+It works best when responses are in one language, the survey question is stable across cycles, and you have at least 30 verbatims — below that, read them yourself; clustering 12 comments is busywork the model dresses up as analysis. It is a beginner-level Skill on purpose: no warehouse, no API wiring beyond a Delighted export, no orchestration. You paste a CSV path and a question label and you get Markdown back.
+
+## When NOT to use
+
+Do not use this Skill as a system of record for closing the loop with individual detractors. It clusters and ranks; it does not track who you replied to. Delighted's own inbox and tags own that workflow — the Skill reads the export, it does not write back. If you need per-response follow-up tracking, do that in Delighted or your CRM and use this Skill for the aggregate read on top.
+
+Do not use it on fewer than 30 responses. The theme counts are not meaningful at small-n, and a "theme" backed by two comments invites you to over-rotate on noise. The Skill refuses below 30 by default and tells you to read the responses directly instead.
+
+Do not use it on mixed-language batches without splitting them first. The clustering quality drops sharply when the model is asked to group a Spanish comment and an English comment under one theme, and the representative-quote step will surface a quote half your stakeholders cannot read. Export per language, run the Skill per language, merge the theme tables yourself.
+
+Do not read the sentiment label as a substitute for the NPS score itself. A 9 with a mildly critical comment is still a promoter. The Skill cross-tabs sentiment against the score bucket precisely so you can see the mismatches (the detractor whose comment is neutral, the promoter who is quietly furious about one feature) — those mismatches are the signal, not a reason to relabel the score.
+
+## Setup
+
+Roughly 20 to 40 minutes the first time, almost all of it spent tuning the seed taxonomy to your product's vocabulary.
+
+1. **Install the Skill.** Drop the bundle from `apps/web/public/artifacts/nps-verbatim-triage-skill/` into `~/.claude/skills/nps-verbatim-triage/`. The Skill exposes one command, `triage_nps(csv_path, question_label, nps_column, comment_column)`, plus internal helpers for CSV parsing, the two-pass clustering pipeline, and the cross-tab.
+2. **Export from Delighted.** In Delighted, go to your survey, Export → CSV. You need at minimum the score column and the comment column; keep the response date and any segment fields (plan tier, CSM, region) you want the Skill to break themes down by. Note the exact column headers — you pass them as `nps_column` and `comment_column` so the Skill never guesses which column is which.
+3. **Tune the seed taxonomy.** Open `references/1-theme-taxonomy.md` and replace the placeholder themes with the 8 to 15 categories that match your product — `onboarding`, `pricing`, `performance`, `support-responsiveness`, `feature-gap:reporting`, and so on. The seed list is not a hard filter; it primes the first clustering pass so themes are named consistently across cycles. The Skill still surfaces an `other` bucket and proposes new themes when a cluster does not fit the seed list, so you are not blind to genuinely new feedback.
+4. **Adapt the output format.** Open `references/2-output-format.md` and confirm the Markdown layout matches what your roadmap meeting expects — theme table, cross-tab table, ranked action list. If your team pastes into Notion, leave it as Markdown; if it pastes into a Google Doc, the format still survives the paste.
+5. **Run for one survey.** `triage_nps(csv_path="q2-2026-nps.csv", question_label="What is the primary reason for your score?", nps_column="Score", comment_column="Comment")`. The Skill writes one Markdown file with the three sections. Read it against ten or fifteen of the raw comments to confirm the clustering matches your read before you take it to the meeting.
+
+## What the Skill actually does
+
+The Skill runs two Claude passes, not one, and the split is the engineering choice that matters. A single pass that both invents themes and assigns every comment to them produces drifting theme names — the model coins "activation issues" on comment 4 and "onboarding friction" on comment 80 for the same underlying complaint, and your counts fracture across near-duplicate labels.
+
+Pass one is taxonomy resolution. Claude reads the full batch (or a representative sample of 200 if the batch is larger, to control token cost) alongside the seed taxonomy from `references/1-theme-taxonomy.md`, and returns a consolidated theme list: the seed themes that actually appear, plus any new themes it proposes for clusters the seed list does not cover, each with a one-line definition. This pass fixes the vocabulary before any comment is assigned, so the labels are stable.
+
+Pass two is assignment and sentiment. Claude takes the frozen theme list and walks every comment, assigning one primary theme (and up to two secondary themes), a sentiment label (positive / neutral / negative), and the comment's existing NPS bucket. It is told to assign `other` rather than force-fit a comment into a theme it does not match, and to return the comment verbatim as a candidate representative quote. Doing assignment after the taxonomy is frozen is what keeps the counts honest — every comment is scored against the same fixed list.
+
+The Skill then computes deterministically, in code, not in the model: theme counts, the sentiment-by-NPS-bucket cross-tab, and the ranked action list. Ranking is by detractor-weighted volume — a theme mentioned by 40 detractors ranks above a theme mentioned by 40 promoters, because the detractor theme is the one costing you renewals. The counting is done in code because asking the model to tally its own output is the single most common source of a confidently wrong number.
+
+The output is one Markdown file: a theme table (theme, definition, total count, detractor count, three representative quotes), a cross-tab table (sentiment × NPS bucket), and a ranked action list (theme, detractor count, a suggested owner pulled from a mapping you set in the taxonomy file, and a placeholder next step you fill in). The owner and next step are scaffolding — the Skill suggests, the human decides.
+
+## Cost reality
+
+A run on 300 verbatims costs roughly 12,000 to 20,000 input tokens and 3,000 to 5,000 output tokens on Claude Sonnet — call it 5 to 9 cents per survey at current Sonnet pricing. For batches over 200 comments, pass one samples rather than reading everything, so cost grows with the assignment pass (linear in comment count) rather than quadratically. A 1,000-comment batch lands near 25 to 35 cents. Wall-clock time is one to three minutes, dominated by the assignment pass.
+
+The alternative cost is the one this replaces: a CS Ops analyst reading and tagging 300 comments by hand takes 3 to 5 hours and produces a taxonomy that drifts every quarter because a different person tags it each time. The Skill takes that to about 20 minutes including the review pass, and the taxonomy stays fixed in `references/1-theme-taxonomy.md` so cycle-over-cycle comparison is real rather than an artifact of who did the tagging.
+
+## Success metric
+
+Track the share of detractor comments that land in a named theme rather than `other`. Aim for under 20% in `other` after two cycles of taxonomy tuning. A persistently high `other` rate means the seed taxonomy is missing a real category — that is a signal to add a theme, not to ignore the bucket. Second, track whether the top-ranked theme each cycle actually produced a roadmap or playbook change; a triage that never changes a decision is a report nobody needed. Third, track cycle-over-cycle theme-count deltas — the whole reason for a fixed taxonomy is that "onboarding friction up 60% this quarter" is only a real claim when the label meant the same thing last quarter.
+
+## vs alternatives
+
+**vs Delighted's built-in Trends and tagging.** Delighted ships keyword-based tagging and a trends view, and if your verbatims are short and your themes map cleanly to keywords, that is less work and stays inside the tool you already pay for. The trade-off: keyword tags miss the comment that describes onboarding friction without using the word "onboarding," and they cannot weight by detractor volume or cross-tab sentiment against the score. Use Delighted's tags for the always-on inbox triage and this Skill for the quarterly aggregate read where theme quality and detractor-weighting matter.
+
+**vs a dedicated text-analytics product (Thematic, Chattermill, or similar).** These are genuinely stronger at scale — tens of thousands of responses, multi-source feedback, longitudinal dashboards. If feedback analysis is a standing function with a dedicated owner and budget, buy one of those. This Skill is for the CS Ops lead who has a quarterly NPS read and does not have a five-figure text-analytics line item; it covers the 80% case at the cost of a Claude API call.
+
+**vs reading them yourself.** For under ~50 comments, reading them yourself is faster and you retain context the Skill flattens (the sarcasm, the one comment that names a specific account about to churn). The Skill earns its keep at volume and across cycles, where consistency beats the depth a human read gives a single batch. Use the manual read for small surveys and the high-stakes individual detractors; use the Skill for the aggregate.
+
+## Watch-outs
+
+- **Theme drift across cycles.** If you re-tune the taxonomy heavily every quarter, your cross-cycle trend numbers become meaningless because the labels no longer mean the same thing. Guard: treat `references/1-theme-taxonomy.md` as versioned. Add themes when the `other` bucket justifies it, but do not rename or merge existing themes without noting it, and never compare a count across a cycle where the definition changed.
+- **Small-n themes read as signal.** A "theme" with three mentions invites a roadmap argument it cannot support. Guard: the Skill refuses to run under 30 total responses, and the ranked action list suppresses any theme with fewer than 5 mentions into a "low-volume mentions" footnote rather than ranking it alongside real themes.
+- **Sarcasm and negation flipping sentiment.** "Oh great, another outage" reads positive to a naive classifier. Guard: pass two is instructed to label sentiment from the commenter's evident intent and to default to `neutral` when intent is genuinely ambiguous rather than guessing positive; the sentiment-by-NPS cross-tab then surfaces mismatches (a detractor labeled positive) so a human can spot-check the edge cases the model got wrong.
+- **The model tallying its own counts.** Asking Claude to report "37 comments mention pricing" produces a number that is often off by several and looks authoritative. Guard: all counts are computed in code from the per-comment assignment table, never reported by the model. The model's job ends at labeling each comment; arithmetic is deterministic.
+- **Representative quotes that expose a customer.** A verbatim can name a person, an account, or a dollar figure you do not want in a slide that leaves the building. Guard: the output format flags any quote containing a capitalized multi-word proper noun, an `@` handle, or a currency figure with a `[REVIEW: may identify customer]` marker so you scrub it before the deck goes wide.
+
+## Stack
+
+- **Delighted** — NPS survey delivery and the CSV export the Skill reads (score column + comment column required)
+- **Claude** — two-pass pipeline: taxonomy resolution, then per-comment assignment and sentiment (Sonnet recommended for cost)
+- **Your roadmap surface (Notion, Google Docs, a planning tool)** — where the Markdown action list lands for the roadmap conversation

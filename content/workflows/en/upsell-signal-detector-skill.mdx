@@ -1,0 +1,87 @@
+---
+slug: upsell-signal-detector-skill
+canonical_slug: upsell-signal-detector-skill
+locale: en
+verticals: [customer-success]
+title: Detect upsell signals from product usage with Claude
+artifact_type: claude-skill
+tools_used: [claude, pendo, gong]
+roles: [csm, ae]
+difficulty: intermediate
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+A Claude Skill that scans three independent expansion signals — product usage from Pendo, seat consumption against the contracted entitlement, and buying-intent language from Gong calls — and ranks an account book by expansion-readiness. For each account that clears the bar it emits a one-line verdict, the three sub-scores that produced it, the single strongest piece of evidence, and a recommended play (seat true-up, tier upgrade, new-module land, or multi-threading into a new team). The output is a sorted Markdown table a CSM scans in two minutes and a per-account brief the AE pastes into the deal note. The artifact bundle ships `SKILL.md` plus three reference files the team adapts once and reuses across the whole book.
+
+The bundle lives at `apps/web/public/artifacts/upsell-signal-detector-skill/`: `SKILL.md`, `references/1-signal-thresholds.md` (the scoring bands and the play-mapping table you tune to your pricing), `references/2-usage-event-map.md` (which Pendo feature events map to which paid tier), and `references/3-sample-output.md` (the literal table and brief format, with three filled examples). Read all four before the first run.
+
+## When to use
+
+You are a CSM or AE with a book of 30 to 300 accounts and you want the book triaged for expansion before your weekly pipeline review, not a generic "who's healthy" list. The Skill is built for the case where three signals have to be read together because any one alone misleads: usage is up but they bought the top tier already (no headroom), seats are maxed but the renewal is in 11 months (timing wrong), Gong shows a budget-holder asking about a module you do not sell them yet (the real signal). Reading the three in combination is what separates "looks busy" from "ready to buy more."
+
+It produces the most useful output when Pendo has at least 28 days of usage history on the account, the contracted seat count and tier are recorded in a field the Skill can read, and there are at least two Gong calls in the trailing 90 days. Below those thresholds it returns `insufficient-signal` for that account rather than guessing — a confident upsell rank built on one data point is worse than no rank, because the AE acts on it.
+
+## When NOT to use
+
+Do not use it as a renewal-risk or churn detector. High usage and a maxed seat count read as expansion-ready here, but the same account can be one bad QBR from churning; this Skill scores buying-readiness, not retention. Run a health score (the `cs-health-score-builder-skill`) alongside it and treat a red health band as a veto on any play this Skill recommends.
+
+Do not point it at accounts in their first 60 days. Onboarding-phase usage spikes are activation, not expansion intent, and the Skill will misread a power-onboarding as a seat true-up. The `references/1-signal-thresholds.md` file ships a `min_account_age_days: 60` guard; keep it.
+
+Do not let it auto-create opportunities or send outreach. It ranks and recommends; a human reads the brief, sanity-checks the evidence against context the Skill cannot see (the champion who just left, the budget freeze mentioned off-call), and decides. Wiring the output straight into a sequence tool turns a triage aid into a spray-and-pray engine and burns the relationship.
+
+Do not use it where Pendo usage is not tied to paid value. If your feature events are not mapped to tiers in `references/2-usage-event-map.md`, the usage sub-score is noise — heavy use of a free feature is not an expansion signal.
+
+## Setup
+
+Roughly 45 to 90 minutes the first time, most of it spent mapping your own feature events to paid tiers and calibrating the thresholds to your pricing.
+
+1. **Install the Skill.** Drop the bundle from `apps/web/public/artifacts/upsell-signal-detector-skill/` into `~/.claude/skills/upsell-signal-detector/`. It exposes one command, `rank_book(account_ids, window_days=90)`, plus internal resolvers for Pendo, the seat/tier field source, and Gong.
+2. **Wire credentials.** Set `PENDO_API_KEY` (read on aggregated feature events and account metadata), `GONG_API_KEY` (read on calls and transcripts), and `ENTITLEMENT_SOURCE` — a path or query that returns each account's contracted seat count, active seat count, and current tier. Most teams point this at a CRM field or a billing export; the Skill does not assume Pendo holds the contract.
+3. **Map usage events to tiers.** Open `references/2-usage-event-map.md` and replace the example mapping with your real Pendo feature event IDs grouped by the paid tier each unlocks. This is the load-bearing setup step — the usage sub-score is only as good as this map. Mark free-tier events explicitly so they are excluded.
+4. **Calibrate thresholds.** Open `references/1-signal-thresholds.md` and set the seat-saturation band (default: a true-up play fires at active seats at or above 90% of contracted for 14 consecutive days), the usage-headroom band, and the Gong intent keyword list (default seeds: "add seats", "another team", "upgrade", "what would it cost to", competitor module names). Tune the play-mapping table so each signal combination maps to the right recommended play for your pricing.
+5. **Run for the book.** `rank_book(account_ids=[...], window_days=90)`. The Skill writes one sorted Markdown table plus one brief per qualifying account. Review the top of the table in your pipeline meeting; the briefs feed the deal notes.
+
+## What the Skill actually does
+
+The Skill pulls the three signals per account in parallel because they hit independent systems and the bottleneck is API latency, not Claude tokens. Pendo returns the trailing-window aggregated feature events; the entitlement source returns contracted seats, active seats, and tier; Gong returns call metadata and transcripts for the window. If any source returns empty, that sub-score is recorded as `unavailable` and the composite is computed from what remains, with the gap named in the brief — never silently zero-filled.
+
+It then scores each signal deterministically before any Claude reasoning, because the bands are policy decisions the team owns, not judgment calls a model should make. **Seat saturation** is active seats over contracted seats, scored against the band in `references/1-signal-thresholds.md`; a true-up signal only fires after the saturation holds for 14 consecutive days, so a one-day onboarding spike does not trigger it. **Usage headroom** maps the account's heaviest-used features to tiers via `references/2-usage-event-map.md` and scores how much paid value above their current tier they are already pressing against — heavy use of next-tier-gated features is the strongest single signal. **Account age** and the health veto are applied here as hard gates, not soft weights.
+
+Only the Gong signal goes to Claude, and only as a two-pass classification, because intent language is the one signal a keyword match gets wrong. Pass one extracts candidate intent utterances from the transcripts; the system prompt forbids inventing quotes and requires every candidate to cite the verbatim line and the speaker role. Pass two classifies each candidate as expansion-intent / status-quo / churn-risk-language and assigns a confidence; anything below 0.5 confidence is dropped rather than counted, because a soft "we might look at more seats eventually" is not a signal and the AE should not chase it. Splitting extraction from classification matters: a single pass over long transcripts over-weights whichever call it read last and inflates intent.
+
+`Compute Composite` combines the three sub-scores with the per-account weights (defaults: usage 0.4, seat 0.35, intent 0.25 — tunable in the thresholds file), produces a 0-100 expansion-readiness score and a band, and selects the recommended play from the mapping table by the dominant signal. `Write Brief` then has Claude produce the one-line verdict and a three-sentence brief that names the single strongest evidence item with its concrete number or verbatim quote — never a synthesized generality. The table is sorted descending; accounts below the qualifying band and `insufficient-signal` accounts are listed separately at the bottom so the book is fully accounted for, not silently dropped.
+
+## Cost reality
+
+Per account a full run makes three external reads (Pendo, entitlement source, Gong) plus two Claude calls — the two-pass Gong classification (roughly 4,000 to 9,000 input tokens depending on transcript volume, under 600 output) and the brief (~800 input, ~150 output). At Claude Sonnet pricing that is about 2 to 4 cents per account; a 200-account book costs roughly $4 to $8 per full run. The dominant input variable is Gong transcript volume, so capping at the six most-recent calls per account and 4,000 characters each keeps the cost bounded. Wall-clock time for 200 accounts lands around 8 to 14 minutes, dominated by the Gong fetch at three calls per second per workspace.
+
+Against the manual baseline: a CSM triaging a 200-account book for expansion by eye — opening Pendo, checking seats in the CRM, recalling call context — spends a half to full day per quarter and still misses the quiet accounts where the signal is in a call nobody reviewed. The Skill runs in minutes and reads every transcript. The honest trade is that it surfaces candidates; the CSM still spends the judgment time on the top 10 to 20, which is where it belongs.
+
+## Success metric
+
+Track the conversion rate from "ranked in the qualifying band" to "expansion opportunity created" over a quarter. A useful Skill lands above 30% — meaning a clear majority of what it surfaces is at least worth a conversation. Below 20% the thresholds are too loose or the event map is wrong (usually the latter — free features leaking into the usage score). Also track expansion ARR sourced from Skill-flagged accounts versus the book baseline, and the count of `insufficient-signal` accounts, which is a leading indicator of Pendo or Gong coverage gaps you can fix upstream.
+
+## vs alternatives
+
+**vs Gainsight or Pendo's own expansion/product-qualified-lead scoring.** If you already pay for Gainsight's expansion scorecards or Pendo's PQL signals, they cover the usage and seat dimensions well and require no build. What they do not do is read Gong call language — the budget-holder asking about a module they do not own yet — and fold it into the same rank. This Skill exists to add the conversation signal and to emit a play, not just a score. If you have Gainsight, run this as the Gong-intent layer and let Gainsight own the usage rollup; they are complementary.
+
+**vs a DIY SQL query over the usage warehouse.** A query is the right tool for the seat-saturation and usage-headroom math and is cheaper to run at scale. It cannot classify call intent, and it produces a number, not a recommended play with a quoted reason an AE can act on. Use the query for the deterministic sub-scores if you have the data engineering; point this Skill at its output for the intent pass and the brief.
+
+**vs eyeballing it in the weekly pipeline meeting.** The status quo. It works for a 30-account book and breaks at 100-plus, because the quiet expansion-ready account — steady usage, no fires, a single call where someone asked about another team — is exactly the one a human triage misses. The Skill's edge is that it reads every transcript every week without fatigue.
+
+## Watch-outs
+
+- **Free-feature usage inflating the score.** If `references/2-usage-event-map.md` is incomplete, heavy use of a free or already-owned feature reads as expansion headroom and floods the top of the table with false positives. Guard: the event map requires every scored event to carry an explicit tier tag, and unmapped events are excluded from the usage sub-score rather than counted as generic activity. Audit the map quarterly against your current pricing.
+- **Onboarding spikes misread as expansion.** A new account ramping hard looks identical to a saturated account about to true up. Guard: the `min_account_age_days: 60` gate and the 14-consecutive-day saturation requirement both exclude activation-phase spikes; the Skill returns `onboarding-phase` rather than a true-up play for accounts under the age gate.
+- **Keyword false positives on intent.** "We're not adding seats this year" contains "adding seats" and a naive keyword match scores it as intent. Guard: the two-pass Claude classification reads the full utterance in context and the confidence floor of 0.5 drops ambiguous or negated language; only classified expansion-intent above the floor counts.
+- **Expanding an account that is actually at churn risk.** A maxed, heavily-using account can still be unhappy. Guard: the health-band veto — pass a health score in and any account in the red band is moved to a separate `do-not-expand` section with the health flag named, so the AE never gets a play on an account the CSM is firefighting.
+- **Stale entitlement data.** If the seat and tier source lags reality (a true-up closed last week but the field has not synced), the saturation math is wrong. Guard: the Skill reads and reports the entitlement source's own last-sync timestamp in the brief; if it is older than 7 days the seat sub-score is flagged `entitlement-stale` and the true-up play is suppressed until the data is current.
+
+## Stack
+
+- **Pendo** — trailing-window aggregated feature events and account metadata (Pendo API)
+- **Gong** — call transcripts for the two-pass intent classification (Gong API, last 90 days, capped at six calls per account)
+- **Claude** — two-pass Gong intent classification plus the per-account brief (Sonnet recommended for cost; the deterministic sub-scores run without a model)
+- **Entitlement source** — contracted seats, active seats, and current tier (CRM field or billing export — pick one canonical source)

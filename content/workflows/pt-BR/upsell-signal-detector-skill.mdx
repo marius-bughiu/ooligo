@@ -1,0 +1,87 @@
+---
+slug: upsell-signal-detector-skill
+canonical_slug: upsell-signal-detector-skill
+locale: pt-BR
+verticals: [customer-success]
+title: Detecte sinais de upsell a partir do uso do produto com Claude
+artifact_type: claude-skill
+tools_used: [claude, pendo, gong]
+roles: [csm, ae]
+difficulty: intermediate
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+Uma Claude Skill que escaneia três sinais de expansão independentes —uso do produto pelo Pendo, consumo de assentos contra o entitlement contratado e linguagem de intenção de compra em calls do Gong— e prioriza um book de contas por readiness de expansão. Para cada conta que passa o threshold ela emite um veredito de uma linha, os três sub-scores que o produziram, a peça de evidência mais forte e um play recomendado (true-up de assentos, upgrade de tier, land de um módulo novo, ou multi-threading para um time novo). O output é uma tabela Markdown ordenada que um CSM escaneia em dois minutos e um brief por conta que o AE cola na nota do deal. O bundle do artifact inclui `SKILL.md` mais três arquivos de referência que o time adapta uma vez e reusa em todo o book.
+
+O bundle fica em `apps/web/public/artifacts/upsell-signal-detector-skill/`: `SKILL.md`, `references/1-signal-thresholds.md` (as bandas de scoring e a tabela de mapeamento de plays que você ajusta ao seu pricing), `references/2-usage-event-map.md` (quais eventos de feature do Pendo mapeiam para qual tier pago) e `references/3-sample-output.md` (o formato literal de tabela e brief, com três exemplos preenchidos). Leia os quatro antes da primeira run.
+
+## Quando usar
+
+Você é um CSM ou AE com um book de 30 a 300 contas e quer o book triado para expansão antes do seu pipeline review semanal, não uma lista genérica de "quem está saudável". A Skill foi construída para o caso onde três sinais precisam ser lidos juntos porque qualquer um sozinho engana: o uso está alto mas eles já compraram o tier mais alto (sem headroom), os assentos estão no máximo mas o renewal é daqui a 11 meses (timing errado), o Gong mostra um dono de orçamento perguntando sobre um módulo que você ainda não vende para ele (o sinal real). Ler os três em combinação é o que separa "parece ocupado" de "pronto para comprar mais".
+
+Ela produz o output mais útil quando o Pendo tem pelo menos 28 dias de histórico de uso na conta, a contagem de assentos contratados e o tier estão registrados em um campo que a Skill consegue ler, e há pelo menos duas calls do Gong nos 90 dias anteriores. Abaixo desses thresholds ela retorna `insufficient-signal` para aquela conta em vez de adivinhar —um rank de upsell confiante construído sobre um único dado é pior que nenhum rank, porque o AE age em cima dele.
+
+## Quando NÃO usar
+
+Não use como detector de risco de renewal ou churn. Uso alto e contagem de assentos no máximo são lidos como expansion-ready aqui, mas a mesma conta pode estar a um QBR ruim de churnar; esta Skill pontua readiness de compra, não retenção. Rode um health score (a `cs-health-score-builder-skill`) em paralelo e trate uma banda de health vermelha como um veto sobre qualquer play que esta Skill recomende.
+
+Não a aponte para contas nos primeiros 60 dias. Picos de uso na fase de onboarding são ativação, não intenção de expansão, e a Skill vai ler errado um power-onboarding como um true-up de assentos. O arquivo `references/1-signal-thresholds.md` inclui um guard `min_account_age_days: 60`; mantenha-o.
+
+Não deixe ela auto-criar oportunidades ou enviar outreach. Ela prioriza e recomenda; um humano lê o brief, confere a evidência contra contexto que a Skill não consegue ver (o champion que acabou de sair, o congelamento de orçamento mencionado fora da call) e decide. Ligar o output direto numa ferramenta de sequências transforma uma ajuda de triage num motor de spray-and-pray e queima a relação.
+
+Não use onde o uso do Pendo não está atrelado a valor pago. Se seus eventos de feature não estão mapeados para tiers em `references/2-usage-event-map.md`, o sub-score de uso é ruído —uso intenso de uma feature grátis não é um sinal de expansão.
+
+## Setup
+
+Aproximadamente 45 a 90 minutos na primeira vez, a maior parte gasta mapeando seus próprios eventos de feature para tiers pagos e calibrando os thresholds ao seu pricing.
+
+1. **Instale a Skill.** Coloque o bundle de `apps/web/public/artifacts/upsell-signal-detector-skill/` em `~/.claude/skills/upsell-signal-detector/`. Ela expõe um único comando, `rank_book(account_ids, window_days=90)`, mais resolvers internos para o Pendo, a fonte do campo de assentos/tier e o Gong.
+2. **Conecte as credenciais.** Configure `PENDO_API_KEY` (leitura em eventos de feature agregados e metadata de conta), `GONG_API_KEY` (leitura em calls e transcrições) e `ENTITLEMENT_SOURCE` —um path ou query que retorna a contagem de assentos contratados, assentos ativos e tier atual de cada conta. A maioria dos times aponta isso para um campo de CRM ou um export de billing; a Skill não assume que o Pendo guarda o contrato.
+3. **Mapeie eventos de uso para tiers.** Abra `references/2-usage-event-map.md` e substitua o mapeamento de exemplo pelos seus IDs reais de eventos de feature do Pendo agrupados pelo tier pago que cada um desbloqueia. Este é o passo de setup que carrega o peso —o sub-score de uso é tão bom quanto esse mapa. Marque os eventos de tier grátis explicitamente para que fiquem excluídos.
+4. **Calibre os thresholds.** Abra `references/1-signal-thresholds.md` e configure a banda de saturação de assentos (default: um play de true-up dispara com assentos ativos em ou acima de 90% dos contratados por 14 dias consecutivos), a banda de headroom de uso e a lista de keywords de intenção do Gong (sementes default: "add seats", "another team", "upgrade", "what would it cost to", nomes de módulos de concorrentes). Ajuste a tabela de mapeamento de plays para que cada combinação de sinais mapeie para o play recomendado certo para o seu pricing.
+5. **Rode para o book.** `rank_book(account_ids=[...], window_days=90)`. A Skill escreve uma tabela Markdown ordenada mais um brief por conta que qualifica. Revise o topo da tabela na sua reunião de pipeline; os briefs alimentam as notas do deal.
+
+## O que a Skill realmente faz
+
+A Skill puxa os três sinais por conta em paralelo porque eles batem em sistemas independentes e o gargalo é a latência da API, não os tokens do Claude. O Pendo retorna os eventos de feature agregados da janela anterior; a fonte de entitlement retorna assentos contratados, assentos ativos e tier; o Gong retorna metadata de calls e transcrições para a janela. Se qualquer fonte retornar vazio, aquele sub-score é registrado como `unavailable` e o composite é computado com o que sobra, com o gap nomeado no brief —nunca preenchido com zero silenciosamente.
+
+Depois ela pontua cada sinal de forma determinística antes de qualquer raciocínio do Claude, porque as bandas são decisões de política que o time possui, não julgamentos que um modelo deveria fazer. **Saturação de assentos** é assentos ativos sobre assentos contratados, pontuada contra a banda em `references/1-signal-thresholds.md`; um sinal de true-up só dispara depois que a saturação se sustenta por 14 dias consecutivos, então um pico de onboarding de um dia não a dispara. **Headroom de uso** mapeia as features mais usadas da conta para tiers via `references/2-usage-event-map.md` e pontua quanto valor pago acima do tier atual eles já estão pressionando —uso intenso de features bloqueadas no próximo tier é o sinal individual mais forte. **Idade da conta** e o veto de health são aplicados aqui como gates duros, não como pesos suaves.
+
+Só o sinal do Gong vai para o Claude, e só como uma classificação de duas passadas, porque a linguagem de intenção é o único sinal que um match de keywords erra. A passada um extrai as frases candidatas de intenção das transcrições; o system prompt proíbe inventar citações e exige que cada candidato cite a linha verbatim e o papel do speaker. A passada dois classifica cada candidato como expansion-intent / status-quo / churn-risk-language e atribui uma confiança; qualquer coisa abaixo de 0.5 de confiança é descartada em vez de contada, porque um suave "talvez a gente veja mais assentos em algum momento" não é um sinal e o AE não deveria persegui-lo. Separar extração de classificação importa: uma única passada sobre transcrições longas superpondera a call que leu por último e infla a intenção.
+
+`Compute Composite` combina os três sub-scores com os pesos por conta (defaults: uso 0.4, assentos 0.35, intenção 0.25 —ajustáveis no arquivo de thresholds), produz um score de readiness de expansão de 0-100 e uma banda, e seleciona o play recomendado da tabela de mapeamento pelo sinal dominante. `Write Brief` então faz o Claude produzir o veredito de uma linha e um brief de três frases que nomeia a peça de evidência mais forte com seu número concreto ou citação verbatim —nunca uma generalidade sintetizada. A tabela é ordenada de forma decrescente; as contas abaixo da banda de qualificação e as contas `insufficient-signal` são listadas separadamente embaixo para que o book fique totalmente contabilizado, não descartado em silêncio.
+
+## Realidade de custos
+
+Por conta uma run completa faz três leituras externas (Pendo, fonte de entitlement, Gong) mais duas chamadas de Claude —a classificação do Gong de duas passadas (aproximadamente 4,000 a 9,000 tokens de input dependendo do volume de transcrições, menos de 600 de output) e o brief (~800 de input, ~150 de output). A preços de Claude Sonnet isso é cerca de 2 a 4 centavos por conta; um book de 200 contas custa aproximadamente $4 a $8 por run completa. A variável de input dominante é o volume de transcrições do Gong, então limitar às seis calls mais recentes por conta e 4,000 caracteres cada mantém o custo limitado. O tempo de relógio para 200 contas fica em torno de 8 a 14 minutos, dominado pelo fetch do Gong a três calls por segundo por workspace.
+
+Contra a baseline manual: um CSM triando um book de 200 contas para expansão no olho —abrindo o Pendo, checando assentos no CRM, lembrando contexto de calls— gasta de meio a um dia inteiro por trimestre e ainda perde as contas caladas onde o sinal está numa call que ninguém revisou. A Skill roda em minutos e lê cada transcrição. O trade honesto é que ela traz candidatos à superfície; o CSM ainda gasta o tempo de julgamento no top 10 a 20, que é onde ele deve estar.
+
+## Métrica de sucesso
+
+Acompanhe a taxa de conversão de "rankeado na banda de qualificação" para "oportunidade de expansão criada" ao longo de um trimestre. Uma Skill útil fica acima de 30% —significando que uma maioria clara do que ela traz à superfície vale pelo menos uma conversa. Abaixo de 20% os thresholds estão muito soltos ou o mapa de eventos está errado (geralmente o segundo —features grátis vazando para o score de uso). Acompanhe também o ARR de expansão originado de contas marcadas pela Skill versus a baseline do book, e a contagem de contas `insufficient-signal`, que é um indicador líder de gaps de cobertura de Pendo ou Gong que você pode corrigir upstream.
+
+## vs alternativas
+
+**vs o scoring de expansão / product-qualified-lead próprio do Gainsight ou Pendo.** Se você já paga pelas scorecards de expansão do Gainsight ou pelos sinais de PQL do Pendo, elas cobrem bem as dimensões de uso e assentos e não exigem build. O que elas não fazem é ler a linguagem de calls do Gong —o dono de orçamento perguntando sobre um módulo que ele ainda não possui— e dobrá-la no mesmo rank. Esta Skill existe para adicionar o sinal de conversa e emitir um play, não só um score. Se você tem Gainsight, rode isto como a camada de intenção do Gong e deixe o Gainsight possuir o rollup de uso; são complementares.
+
+**vs um query SQL DIY sobre o warehouse de uso.** Um query é a ferramenta certa para a matemática de saturação de assentos e headroom de uso e é mais barato de rodar em escala. Ele não consegue classificar intenção de calls, e produz um número, não um play recomendado com uma razão citada sobre a qual um AE possa agir. Use o query para os sub-scores determinísticos se você tem o data engineering; aponte esta Skill ao output dele para a passada de intenção e o brief.
+
+**vs olhar no olho na reunião de pipeline semanal.** O status quo. Funciona para um book de 30 contas e quebra em 100 ou mais, porque a conta calada pronta para expansão —uso estável, sem incêndios, uma única call onde alguém perguntou sobre outro time— é exatamente a que um triage humano perde. A vantagem da Skill é que ela lê cada transcrição toda semana sem fadiga.
+
+## Pontos de atenção
+
+- **Uso de features grátis inflando o score.** Se `references/2-usage-event-map.md` está incompleto, uso intenso de uma feature grátis ou já possuída é lido como headroom de expansão e inunda o topo da tabela com falsos positivos. Guard: o mapa de eventos exige que cada evento pontuado carregue uma tag de tier explícita, e eventos não mapeados são excluídos do sub-score de uso em vez de contados como atividade genérica. Audite o mapa a cada trimestre contra seu pricing atual.
+- **Picos de onboarding lidos errado como expansão.** Uma conta nova rampando forte parece idêntica a uma conta saturada prestes a fazer true-up. Guard: o gate `min_account_age_days: 60` e o requisito de 14 dias consecutivos de saturação ambos excluem os picos de fase de ativação; a Skill retorna `onboarding-phase` em vez de um play de true-up para contas abaixo do gate de idade.
+- **Falsos positivos de keywords na intenção.** "We're not adding seats this year" contém "adding seats" e um match de keywords ingênuo pontua como intenção. Guard: a classificação do Claude de duas passadas lê a frase completa em contexto e o piso de confiança de 0.5 descarta linguagem ambígua ou negada; só conta a expansion-intent classificada acima do piso.
+- **Expandir uma conta que na verdade está em risco de churn.** Uma conta no máximo e de uso intenso ainda pode estar insatisfeita. Guard: o veto de banda de health —passe um health score e qualquer conta em banda vermelha é movida para uma seção `do-not-expand` separada com o flag de health nomeado, para que o AE nunca receba um play sobre uma conta que o CSM está apagando incêndio.
+- **Dados de entitlement desatualizados.** Se a fonte de assentos e tier vai atrás da realidade (um true-up fechou semana passada mas o campo não sincronizou), a matemática de saturação está errada. Guard: a Skill lê e reporta o timestamp da última sincronização da própria fonte de entitlement no brief; se for mais velho que 7 dias o sub-score de assentos é marcado `entitlement-stale` e o play de true-up é suprimido até o dado estar atualizado.
+
+## Stack
+
+- **Pendo** —eventos de feature agregados da janela anterior e metadata de conta (Pendo API)
+- **Gong** —transcrições de calls para a classificação de intenção de duas passadas (Gong API, últimos 90 dias, limitado a seis calls por conta)
+- **Claude** —classificação de intenção do Gong de duas passadas mais o brief por conta (Sonnet recomendado por custo; os sub-scores determinísticos rodam sem modelo)
+- **Entitlement source** —assentos contratados, assentos ativos e tier atual (campo de CRM ou export de billing —escolha uma fonte canônica)

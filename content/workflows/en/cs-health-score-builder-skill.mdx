@@ -1,0 +1,87 @@
+---
+slug: cs-health-score-builder-skill
+canonical_slug: cs-health-score-builder-skill
+locale: en
+verticals: [customer-success]
+title: Build a customer health score model with Claude
+artifact_type: claude-skill
+tools_used: [claude, vitally, planhat]
+roles: [csm, cs-ops]
+difficulty: intermediate
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+A Claude Skill that turns four raw input streams — product usage, relationship engagement, support burden, and survey sentiment — into a single weighted health score per account, a green/yellow/red tier, and a ranked remediation queue the CSM team works top-down. The point is not the number; most CSPs already give you a number. The point is that the Skill makes every weight, threshold, and tier cutoff explicit in a config file you edit, then explains each account's score in one sentence that names the largest negative driver with its real value. A CSM opening the queue sees "Acme — 48, red — support burden: 11 P1 tickets in 30 days against a baseline of 2" rather than a colored pill nobody trusts. The artifact bundle ships `SKILL.md` plus three reference files: a fillable scoring-config schema, a tier-and-action playbook template, and a worked sample output.
+
+The artifact bundle lives at `apps/web/public/artifacts/cs-health-score-builder-skill/`. Read `SKILL.md` and adapt all three files in `references/` before the first run.
+
+## When to use
+
+You are a CSM or CS Ops lead who needs a health score model you can defend in a QBR, and your current score — whether it is the default from [Vitally](/en/tools/vitally/), [Planhat](/en/tools/planhat/), or a spreadsheet — is a black box the team has stopped trusting. The Skill is for the design-and-iterate phase: you feed it the four input streams for a batch of accounts, it computes scores against an explicit config, and it hands back a queue plus a per-account explanation. You read the explanations, decide whether the weights match reality, edit the config, and re-run. After three or four iterations against accounts you already understand, you have a model whose every cutoff you can justify.
+
+It works best when you have at least 50 accounts to score (smaller books a CSM can read by hand), a clean usage signal you can pull as a CSV or via your CSP's API, and ideally 12 months of labelled churn history to backtest the weights against. The remediation queue is most useful when the team commits to working it top-down — the score earns trust only when the red accounts at the top are the ones that actually churn.
+
+## When NOT to use
+
+Do not use the Skill as a live nightly scoring engine wired into [Vitally](/en/tools/vitally/) or [Planhat](/en/tools/planhat/). It is a model-design tool, not production infrastructure. Once you have a config you trust, port the weights and thresholds into your CSP's native scorecard or an n8n flow that runs on a schedule — the Skill's job is to get the config right, not to run forever.
+
+Do not use it if your usage telemetry is unreliable. A score built on inconsistently-tagged events surfaces drops that reflect a tagging change, not a behavior change, and the explanation sentence will name a confident wrong driver. Fix the data first.
+
+Do not use it if you have no churn definition and no labelled history. Without a backtest you are guessing at weights, and a guessed model is worse than no model because it carries the authority of a number. The Skill returns an `UNBACKTESTED` warning on the queue header when you skip the backtest input, but it cannot stop you from shipping the guess.
+
+Do not use it for fewer than ~50 accounts, for revenue forecasting, or for individual-user scoring (it scores accounts, not seats).
+
+## Setup
+
+Roughly 45 to 90 minutes the first time, almost all of it spent filling in the scoring config to match your data, not wiring anything.
+
+1. **Install the Skill.** Drop the bundle from `apps/web/public/artifacts/cs-health-score-builder-skill/` into `~/.claude/skills/cs-health-score/`. No credentials are required — the Skill reads files you provide, it does not call [Vitally](/en/tools/vitally/) or [Planhat](/en/tools/planhat/) directly. You export the data; the Skill scores it.
+2. **Fill in the scoring config.** Open `references/1-scoring-config.md` and set, per account segment, the four input weights (must sum to 1.0), the baseline window for usage, and the green/yellow/red cutoffs. The template ships with starter values — Enterprise weights engagement 0.35 and usage 0.30 because relationship health drives the renewal; PLG weights usage 0.55 because the product is the deal. These are starting points to edit against your own backtest, not recommendations.
+3. **Adapt the action playbook.** Open `references/2-tier-playbook.md` and replace the placeholder plays with your team's real motions — what a CSM does when an account lands red on support burden versus red on usage are different motions, and the queue is only useful if each red row points at one.
+4. **Provide the data.** Export per account: a usage CSV (account_id, current 28-day event count, baseline event count, distinct active users), an engagement CSV (days since last meaningful touch, meeting count last 90 days), a support CSV (open P1 count, ticket count vs prior period, median time-to-resolve), and a sentiment input (latest NPS/CSAT/CES score, or recent survey verbatims for the Skill to classify). Optionally provide a labelled churn CSV for the backtest.
+5. **Run.** Invoke the Skill with the config path and the data directory. It writes a queue file (accounts ranked worst-first, with score, tier, and the one-sentence driver) plus a per-segment calibration report. Read the explanations, edit `1-scoring-config.md`, re-run. Repeat until the red accounts match your gut on the accounts you know.
+
+## What the Skill actually does
+
+The Skill runs in four stages. **Stage one — normalize.** Each of the four input streams is mapped to a 0-100 sub-score against the config. Usage is the ratio of current 28-day events to the account's own baseline, linear from 0 (ratio ≤ 0.5) to 100 (ratio ≥ 1.0), with a hard cap at 40 if distinct active users drops under three — single-user dependency is a churn risk raw event volume cannot see. Engagement applies a 21-day half-life decay to recency of last touch. Support inverts ticket burden (more open P1s, lower score) normalized against the account's own prior-period baseline, not a global average, because a 10-ticket account and a 200-ticket account have different normal. Sentiment maps the latest survey score, or — when you pass verbatims instead of a number — Claude classifies the text on a strict rubric that returns a neutral 50 at confidence under 0.4 rather than guessing.
+
+**Stage two — composite.** The four sub-scores combine using the per-segment weights from the config. The tier is assigned by the config cutoffs (green ≥ 75, yellow ≥ 50, red under 50 by default). Computing sub-scores before weighting, rather than blending raw inputs, is what lets the explanation sentence name a single driver: the Skill picks the sub-score furthest below the account's composite and reports it with its real number.
+
+**Stage three — explain and queue.** Accounts sort worst-first into the remediation queue. Each row gets a one-sentence driver ("usage 22% below baseline despite four meetings this quarter") generated from the sub-score inputs only — the prompt forbids speculation beyond the numbers it was given, so the sentence cannot invent a cause the data does not support. A deterministic numeric fallback runs if Claude returns empty, so the queue never blocks.
+
+**Stage four — backtest (optional).** If you provided labelled churn history, the Skill scores the historical accounts as of 90 days before their churn date and reports how many landed red — the lead-time and recall numbers that tell you whether the weights are real or wishful.
+
+## Cost reality
+
+The expensive call is sentiment classification, and only when you pass verbatims instead of a numeric NPS/CSAT. Classifying survey text runs roughly 600 input and 80 output tokens per account on Claude Sonnet; the per-account driver sentence adds about 300 input and 40 output. For a 200-account batch with verbatim sentiment that is under $1.50 per full run on current Sonnet pricing. Pass numeric sentiment scores instead and the only Claude calls are the driver sentences — under 40 cents for the same batch. A run over 200 accounts completes in two to four minutes; the Skill processes accounts in batches of 25 to keep within rate limits.
+
+The real cost is your time on iteration, not tokens. Budget two to three rounds of config editing — call it two to three hours total across a week — before the queue matches the team's read. That is cheaper than the alternative: a CSM manually triaging a 200-account book takes a day per pass and cannot do it weekly.
+
+## What success looks like
+
+Track three numbers. First, **queue agreement** — for the top 20 red accounts, survey the owning CSMs on whether the ranking matches their read. Target over 70% agreement by the third config iteration; under 50% means the weights are wrong, not the model. Second, **churn lead time** from the backtest and from live use — median days the score sat red before the churn notice. Target a median over 30 days. Third, **driver-sentence accuracy** — sample 20 sentences and rate them actionable, accurate-but-vague, or wrong. Target over 80% actionable; a high "wrong" rate points at dirty input data, not the prompt.
+
+## Versus the alternatives
+
+**Versus your CSP's native scorecard ([Vitally](/en/tools/vitally/), [Planhat](/en/tools/planhat/), [Gainsight](/en/tools/gainsight/), [Catalyst](/en/tools/catalyst/), [ChurnZero](/en/tools/churnzero/)).** Every CSP ships a health score and you should run yours there in production. What they do not do well is the design phase: native scorecards make you set weights blind, with no backtest loop and no per-account explanation of why a number moved. The Skill is the workbench where you figure out the config; the CSP is where you deploy it. They are sequential, not competing — use the Skill to design, then transcribe the weights into your CSP's scorecard.
+
+**Versus a spreadsheet model.** A spreadsheet is where most teams start and it is fine for the math. Where it breaks is the explanation: a spreadsheet gives you a composite cell, not a sentence a CSM can act on, and backtesting in a spreadsheet means manual VLOOKUPs against churn dates that nobody maintains. The Skill automates the explanation and the backtest. If your model is stable and the team already trusts the spreadsheet, do not switch — the Skill earns its keep during design and iteration, not after.
+
+**Versus buying a dedicated predictive-churn product.** Predictive products promise a model you do not have to design. The trade-off is that you cannot defend a black box in a QBR, and a model you cannot explain is a model CSMs route around. Build the explicit version first; if it plateaus and you have the volume to justify ML, buy the predictive layer on top of a config you already understand.
+
+## Watch-outs
+
+- **Weights that sum to anything but 1.0.** A config where the four weights total 0.9 or 1.1 silently rescales every score and makes cross-segment comparison meaningless. Guard: the Skill validates the weight sum per segment on load and refuses to score, printing the offending segment and its total, rather than producing a plausible-looking wrong queue.
+- **Sentiment hallucination on thin verbatims.** Claude will produce a confident sentiment number on a two-word survey comment if unconstrained. Guard: the classification prompt requires confidence 0 on inputs under 15 words or single-clause fragments, and the Skill collapses anything under 0.4 confidence to a neutral 50, so thin sentiment contributes its weight as "unknown" rather than as fabricated signal.
+- **Driver sentence inventing causality.** A weighted composite has a largest mover, not a cause. Guard: the explanation prompt is fed only the four sub-score values and is forbidden from referencing anything outside them; it must cite the real number. A CSM reading "usage down 22%" can verify it; a sentence that guessed "the champion left" could not be verified and is never produced.
+- **Shipping an unbacktested model.** Skipping the backtest input produces a model that looks authoritative and may be random. Guard: the queue header carries an `UNBACKTESTED` banner until a labelled churn CSV is supplied and the backtest stage runs, so anyone the queue is shared with sees the model is unvalidated.
+- **Baseline computed against drifting events.** If the usage baseline is recomputed each run against event definitions that changed upstream, every account looks like it dropped. Guard: the config takes the baseline as a frozen input column you compute and audit once, not a value the Skill recalculates, so a tagging change shows up as a data-quality flag rather than a fleet-wide red.
+
+## Stack
+
+- **Claude** — sentiment classification (Sonnet, with a strict confidence-floor rubric) and the one-sentence driver per account; the scoring math itself is deterministic
+- **Vitally** — usage, engagement, and support data source; the production home for the finished score
+- **Planhat** — alternative CSP source and production target; the Skill is CSP-agnostic and reads exported CSVs from either
+- **A scoring config file** — the four per-segment weights, baseline window, and tier cutoffs, edited across iterations; this file is the actual deliverable

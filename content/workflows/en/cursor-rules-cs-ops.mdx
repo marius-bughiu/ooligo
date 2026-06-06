@@ -1,0 +1,90 @@
+---
+slug: cursor-rules-cs-ops
+canonical_slug: cursor-rules-cs-ops
+locale: en
+verticals: [customer-success]
+title: Cursor rules for a CS Ops engineer
+artifact_type: cursor-rule
+tools_used: [cursor, claude]
+roles: [cs-ops]
+difficulty: advanced
+time_to_setup: "20-30 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+A Cursor `.cursorrules` file tuned for the CS Ops engineer who writes the code behind the CS motion: health-score jobs, churn-risk scoring, renewal-date syncs, [Gainsight](/en/tools/gainsight/) and [Vitally](/en/tools/vitally/) write-backs, usage-rollup ETL, and the [n8n](/en/tools/n8n/) flows that glue the warehouse to the CSP. The artifact is one file — `apps/web/public/artifacts/cursor-rules-cs-ops/.cursorrules` — that you drop into your project's `.cursor/rules/` directory so [Cursor](/en/tools/cursor/) stops suggesting a non-idempotent nightly write-back, an uncapped warehouse query, or a sentiment score with no confidence floor, and you stop relitigating those defaults in every code review.
+
+The defining property of CS Ops code is that **it writes the number a CSM trusts to decide who churns.** A health score that silently inverts when a usage event gets renamed, a churn-risk job that double-writes on a retry, a renewal date that syncs stale from the CRM — each one doesn't just break a script, it routes a CSM to the wrong account and lets a real save slip. The rules in this bundle encode idempotent write-backs, baseline-vs-current scoring discipline, confidence floors on any LLM signal, and conservative CSP writes so Cursor's output reflects the blast radius of a CS Ops mistake: a missed renewal, not a failed unit test.
+
+## When to use this
+
+You're a CS Ops engineer, CS Ops manager, or RevOps person who owns CS tooling and writes integration code — Python, TypeScript, SQL, dbt models, n8n flows — against a CSP ([Gainsight](/en/tools/gainsight/), [Vitally](/en/tools/vitally/), [Catalyst](/en/tools/catalyst/), [ChurnZero](/en/tools/churnzero/), [Totango](/en/tools/totango/), [Planhat](/en/tools/planhat/), [Custify](/en/tools/custify/)), a CRM ([HubSpot](/en/tools/hubspot/) or [Salesforce](/en/tools/salesforce/)), a product-analytics source ([Pendo](/en/tools/pendo/), [Amplitude](/en/tools/amplitude/), [Mixpanel](/en/tools/mixpanel/), [Heap](/en/tools/heap/)), and a conversation source ([Gong](/en/tools/gong/)). Your team ships at least a few changes a month that move health scores, renewal data, or CSM task queues. Cursor is your IDE.
+
+## When NOT to use this
+
+- Your CS "automation" is admin-built rules in the Gainsight or Vitally UI, not code in a repo. The rules assume version control, code review, and a deploy pipeline; they don't help a config-only CS Ops practice, and the no-code rule builder in your CSP already enforces most of the idempotence concerns for you.
+- You're a CSM who occasionally writes a SQL query to pull your book. These rules are written for someone who owns the scoring job the whole team depends on, not for ad-hoc analysis. The "before writing code, ask" preamble will slow down a one-off query that nobody else runs.
+- You're building a CS product (a CSP, a feedback tool) rather than operating one inside a company. The rules are tuned for the in-house operator who lives with a wrong health score for the full renewal cycle, not for an engineering team shipping scoring as a feature to customers.
+
+## Setup
+
+1. **Copy the artifact.** Grab `.cursorrules` from `apps/web/public/artifacts/cursor-rules-cs-ops/.cursorrules` and drop it in your project's `.cursor/rules/` directory. Cursor's Project Rules indicator confirms it's loaded.
+2. **Trim the tool sections.** The file ships sections for the CSP write-back (Gainsight / Vitally), the CRM sync (HubSpot / Salesforce), product-analytics rollups, Gong sentiment, n8n orchestration, and dbt. Delete every section for a tool you don't run — leaving guidance the model weighs against irrelevant context dilutes the signal and produces hedged suggestions.
+3. **Set the secrets policy.** The rules ban hardcoded credentials and route the model to your secret manager. Edit the "Secrets and access" section so the suggested call matches your tooling (1Password CLI, Doppler, AWS Secrets Manager, Vault — pick one). The Gainsight and Vitally API keys are full-access bearer tokens with no field-level scoping, so this section is load-bearing.
+4. **Fix the audit and idempotence targets.** The rules assume a `health_score_history` table with a unique key on `(account_id, scored_date)` and an audit object for every CSP write. Edit the table and object names to your team's real schema, or suggestions reference names that don't exist.
+5. **Name the canonical sources.** Edit the "source of truth" block: which system owns renewal date (usually the CRM, not the CSP), which owns usage baseline (the warehouse, not the live product API), which owns the account list in scope. The model uses these to refuse a write that would let the CSP overwrite the CRM's renewal date.
+6. **Test on a representative task.** Ask Cursor: "write a nightly job that scores account health from a 28-day usage baseline and writes the result to Gainsight." The output should compute against a stored baseline (not a live recompute), cap the score when distinct active users drop below three, write back through an idempotent upsert keyed on `(account_id, scored_date)`, and log to the audit table. If it doesn't, the rules aren't loaded — check the Project Rules indicator.
+
+## What the rules actually do
+
+The bundle is structured as five layers, applied to every Cursor prompt:
+
+1. **A "before writing code, ask" preamble.** Six questions the model surfaces before generating: which system is the source of truth for this field, what's the account volume and the provider rate cap, what does a wrong value mean for a CSM's day, is this a one-off or a nightly job, is the write idempotent on retry, and who reads the audit trail. The CS-specific one is the first — CS Ops code constantly fights over whether the CRM or the CSP owns renewal date, and the model should force that decision before writing the sync.
+2. **Tool-specific guidance.** One subsection per surface, each citing real limits and quirks: Gainsight (Rules Engine vs. Connectors API, the 3-calls-per-second-class read cap, custom-field provisioning before write), Vitally (REST API, the `traits` upsert semantics, no native bulk endpoint so batch in code), HubSpot (v4 SDK, daily quota circuit breaker at 80% consumed, 20-second timeout), Salesforce (SOQL governor limits, bulkification, `WITH SECURITY_ENFORCED`), product analytics (Pendo/Amplitude/Mixpanel export-API pagination and the event-naming-drift trap), Gong (last-90-day call window, transcript-enabled check, confidence floor on any sentiment signal), n8n (`executionOrder`, explicit Cron timezone, batch size under the provider cap), and dbt (unique tests on every grain, `ref()`, incremental strategy, source freshness on the warehouse rollup).
+3. **Defaults to enforce** across all four required dimensions, each with a concrete value:
+   - **Rate-limiting** — batch CSP writes at 25 accounts per group; halt HubSpot at 80% of daily quota; respect the Gong 3-calls/sec workspace cap with an explicit per-batch wait.
+   - **Idempotence** — every history write is an upsert keyed on `(account_id, scored_date)` with `ON CONFLICT DO UPDATE`; every CSP write-back checks the prior value and is safe to re-run after a 02:00 failure at 09:00.
+   - **Observability** — every scoring job logs sub-score inputs (usage, activity, sentiment) alongside the composite, so a wrong score is debuggable without re-running; band changes emit a structured event.
+   - **Secrets** — never inline a CSP or CRM token; route through the named secret manager; full-access tokens get the narrowest deploy scope available.
+4. **Anti-patterns to refuse, each with the reason.** Recomputing the usage baseline live every night instead of freezing it (a tagging change then reads as a behavior change and the score moves on noise); an LLM sentiment or churn-reason field with no confidence floor (a confident guess on a 50-word voicemail is worse than `null`); a CSP write-back with no prior-value check (double-writes on retry, pollutes the audit trail); letting the CSP overwrite the CRM's renewal date (the CSP is downstream of the CRM, not the source); a `health_score` write with no `scored_at` and no history row (you can't see trajectory, which is the whole point of a score).
+5. **A "when the user is wrong" section.** The shortcuts CS Ops engineers reach for under renewal-crunch pressure that the model pushes back on rather than execute. The highest-value refusal: declining to ship a churn-risk score that has no labelled-churn backtest behind its weights, because an unbacktested score carries the authority of a number while routing CSMs on guesswork — it's worse than no score, and the model says so instead of generating it.
+
+## Cost reality
+
+- **Token cost: zero.** Cursor rules are local context shipped on each prompt — no per-request API charge beyond the ~6 KB they occupy in the context window.
+- **Setup time: 20-30 minutes** to drop the file, set the secret manager, name the canonical sources, and point the history table and audit object at real names. The "source of truth" block takes the longest because it forces a decision your team may have been avoiding.
+- **Per-task overhead:** the preamble adds 1-2 turns of dialogue before generation. For a throwaway query it's heavy; skip it there. For a nightly scoring job that the whole CS team will trust, it surfaces the idempotence and source-of-truth decisions that otherwise surface as a forecast-day fire drill three months later.
+- **Maintenance: ~30 minutes per quarter.** SDK and API versions drift (HubSpot v3 → v4 already; Gainsight and Vitally rev their APIs without loud announcements). Version-tag every rule that names a version so the next reviewer knows when to recheck.
+
+## What success looks like
+
+- **Health-score incidents tied to non-idempotent writes drop to zero.** The upsert-on-`(account_id, scored_date)` default ends the double-write class of bug that fills the history table with duplicate rows and breaks trajectory charts.
+- **"The score says green but the account is clearly churning" gets debugged from logs, not re-runs.** Because every job logs its sub-score inputs, a CSM's complaint resolves by reading one log line, not by re-running the job and hoping it reproduces.
+- **No CSM ever opens an account to a renewal date that's three weeks stale.** The source-of-truth rule keeps the CRM as the renewal owner and refuses the CSP write that would shadow it.
+- **Code review stops catching "did you add a confidence floor."** The rules suggest the floor inline on any LLM signal; reviewers focus on the weighting logic instead.
+
+## Versus the alternatives
+
+- **No rules at all (status quo).** Cursor generates a plausible scoring job that recomputes the baseline live and double-writes on retry. The first time a usage-event rename inverts every account's score overnight and the CS team spends a renewal week not trusting the number, the absence of rules becomes the bottleneck.
+- **The CSP's own no-code rule builder (Gainsight Rules Engine, Vitally's automation).** For teams that don't write code this is the right answer — it handles idempotence and scheduling for you. These rules are for the team that has outgrown it: custom scoring math, an LLM sentiment signal the rule builder can't express, or a warehouse baseline the CSP can't reach. Use the rule builder for the standard motion and the code (shaped by these rules) for the parts it can't do.
+- **A CS Ops conventions doc in Notion.** Functionally equivalent to no rules — the doc isn't in the model's context. The `.cursorrules` file is that conventions doc, loaded on every prompt.
+- **A linter or dbt tests.** Catch problems after the code is written. Coexist with the rules: the rules prevent the non-idempotent write from being written, dbt tests catch the rollup grain that slips through. Keep both.
+
+## Watch-outs
+
+- **Rule drift.** Teams add rules and never remove them; the file becomes a museum of guidance the model still applies. Guard: quarterly `git blame` review — anything older than 18 months gets re-justified or deleted, and the file stays under ~300 lines.
+- **CSP API churn.** "Use the Vitally `traits` upsert" or "Gainsight Connectors API v2" goes stale when the vendor revs the API without a loud announcement. Guard: version-tag every rule that names an API version (e.g. `# Gainsight Connectors API (verified 2026-Q2)`) so the next reviewer knows the recheck date.
+- **Source-of-truth rules that fight your actual architecture.** The shipped default makes the CRM own renewal date, but some orgs genuinely run the CSP as the renewal source. Guard: the "source of truth" block is the first thing you edit in setup; a wrong entry here makes the model refuse correct writes and approve wrong ones.
+- **Per-repo overrides.** A write-allowed default that's right in your scoring repo is wrong in your read-only reporting repo. Guard: use Cursor's per-directory rule support and document the divergence in each repo's README; prefer one shared file with documented exceptions over forking it.
+- **Rules don't replace a backtest.** They make Cursor refuse to ship a churn model with no backtest, but they cannot run the backtest for you. Guard: keep the labelled-churn backtest, dbt tests, and code review as separate enforcement layers — the rules shape suggestions, they are not a control.
+
+## Stack
+
+- **[Cursor](/en/tools/cursor/)** — IDE and rules engine
+- **[Claude](/en/tools/claude/)** — the model behind Cursor's generation; also the LLM the rules tell scoring jobs to call for sentiment and why-changed sentences, always with a confidence floor
+- **`.cursor/rules/cs-ops.md`** — versioned in repo, code-reviewed
+- **CSP (Gainsight / Vitally / Catalyst / ChurnZero)** — health-score and renewal write-back target; never the source of truth for renewal date
+- **CRM (HubSpot / Salesforce)** — canonical renewal date and account list source
+- **Secret manager of choice** — referenced from the rules, never inlined; CSP tokens are full-access, so scope tightly
+- **`health_score_history` table** — idempotence key `(account_id, scored_date)` and trajectory audit trail

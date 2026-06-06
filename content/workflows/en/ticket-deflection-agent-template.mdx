@@ -1,0 +1,78 @@
+---
+slug: ticket-deflection-agent-template
+canonical_slug: ticket-deflection-agent-template
+locale: en
+verticals: [customer-success]
+title: Deploy a support ticket-deflection AI agent
+artifact_type: agent-template
+tools_used: [decagon, zendesk]
+roles: [support-lead, cs-ops]
+difficulty: advanced
+time_to_setup: "1-2 weeks"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+Most "AI support" rollouts fail the same way: a bot answers everything, confidently, including the 8% of tickets where being wrong costs a refund, a churn, or a compliance incident. This agent template inverts that. It is a Decagon AI agent — wired into Zendesk — scoped to fully resolve a tightly-defined slice of tier-1 tickets, and engineered to escalate cleanly the moment a ticket leaves that slice. The deliverable is not "an agent that tries"; it is an agent with an explicit resolvable-intent allowlist, a confidence gate, a tool-call boundary, and a handoff payload that lands a human in context instead of starting cold. Deflection rate is the vanity metric; the metric this template optimizes is *resolved-without-reopen* on the allowlisted intents while escalations arrive better-prepared than a human-routed ticket would have.
+
+The artifact bundle is described in prose here and ships as four parts: `agent-instructions.md` (the system prompt and persona), `intent-allowlist.yaml` (the resolvable intents with per-intent guardrails), `escalation-schema.json` (the handoff payload contract), and `_README.md` (the Decagon + Zendesk wiring and the 12-case acceptance suite). Read all four before you point the agent at live traffic.
+
+## When to use this
+
+Use this when you run a support org with a Zendesk instance and a meaningful, repetitive tier-1 volume — order status, password and login resets, plan and billing-cycle questions, "where is my invoice," basic how-to, and known-issue acknowledgements. The pattern earns its keep above roughly 2,000 tickets/month, where the allowlisted slice is large enough that even 30-50% containment on it frees a measurable chunk of agent hours. You also need a real knowledge base: Decagon's resolution quality is a direct function of the help-center articles and macros it can ground answers in. Garbage KB, garbage agent.
+
+It fits best when your tier-1 mix is genuinely deflectable — informational and transactional intents with deterministic correct answers — and when you have a support lead who will own the allowlist and review escalation transcripts weekly. This is an operated system, not a set-and-forget toggle.
+
+## When NOT to use this
+
+Do not deploy this on intents where a wrong answer is expensive and not reversible: cancellations, refunds above a trivial threshold, security and account-takeover reports, data-deletion (GDPR/CCPA) requests, anything touching payments beyond reading invoice status, and anything legal or contractual. These belong on the escalation path from day one — they are not allowlisted, full stop. The template ships with them pre-excluded in `intent-allowlist.yaml` and you should resist the pressure to add them because containment looks good on a dashboard.
+
+Do not deploy it if your help center is thin or stale. An agent grounded on 40 out-of-date articles will confidently cite the old refund policy. Fix the KB first; the agent amplifies whatever quality is underneath it.
+
+Do not use it as a deflection wall that makes reaching a human hard. The single fastest way to destroy CSAT is to trap a frustrated customer in a loop. This template's escalation logic is deliberately eager — it would rather hand off a borderline ticket than win a containment point. If your mandate is "reduce ticket volume at any cost," this is the wrong template; you want a worse one, and you will regret it.
+
+Do not deploy it for under ~500 tickets/month. The setup and weekly review cost more than the hours saved; a few good macros and routing rules beat an agent at that scale.
+
+## Setup
+
+Budget one to two weeks, most of it spent curating the allowlist and running the acceptance suite — the Decagon and Zendesk wiring itself is an afternoon.
+
+1. **Connect Decagon to Zendesk.** In Decagon, add the Zendesk channel and authorize against a dedicated API user (not a person's seat) scoped to read tickets and KB and to write public replies, internal notes, and tags. Point Decagon's knowledge source at your Zendesk Help Center and re-index. Confirm the agent can read a test ticket and post a draft reply before going further.
+2. **Load the intent allowlist.** Import `intent-allowlist.yaml`. Each entry names an intent (e.g. `order_status`), the KB articles that ground it, the tools it may call (e.g. read order via the order-status webhook), and a per-intent guardrail (`order_status` may state status and ETA but must never promise a refund or expedite). Anything not on the allowlist routes to a human by definition — the default action is escalate, not attempt.
+3. **Set the confidence gate.** In `agent-instructions.md` the agent is required to self-assess retrieval grounding before answering. If it cannot cite a specific KB article or a tool result for its answer, it must escalate rather than generalize. Set the gate to escalate when grounding is absent; do not let it answer from parametric memory.
+4. **Wire the escalation payload.** `escalation-schema.json` defines the internal note Decagon writes on handoff: detected intent, what the customer asked in one line, what the agent already tried and ruled out, relevant KB links, customer sentiment, and the reason for escalation. Map these to Zendesk fields and a triage view so the receiving human opens a ticket that is already triaged.
+5. **Run the 12-case acceptance suite.** `_README.md` ships twelve canary tickets — six that must be resolved (clean order-status, password reset, invoice link) and six that must escalate (a refund demand, a security report, an angry cancellation, an ambiguous multi-intent message, an out-of-allowlist how-to, a non-English edge case). The agent passes only if all six resolve cleanly and all six escalate with a complete payload. Do not enable auto-reply on live traffic until the suite is green.
+6. **Shadow, then go live.** Run the agent in draft-only mode for three to five business days: it composes replies and escalation notes but a human approves every send. Review the drafts, tighten the allowlist and guardrails, then flip the allowlisted intents to auto-resolve while everything else stays human.
+
+## What the agent actually does
+
+Per inbound ticket, the agent first classifies intent against the allowlist. If the intent is not allowlisted, it stops immediately and escalates — no answer attempt, no partial reply. If it is allowlisted, it retrieves grounding (KB articles plus any tool result the intent permits) and self-assesses whether that grounding actually answers the question. The classify-first, ground-second order matters: classifying after drafting tempts the model to justify an answer it has already written, which is exactly how confidently-wrong replies happen.
+
+When grounded, it composes a reply constrained by the per-intent guardrail and posts it. When not grounded — the article does not cover the edge case, the tool returned an error, the customer's message spans two intents — it escalates with the full `escalation-schema.json` payload rather than answering partially. Multi-intent messages always escalate; the template deliberately refuses to split a ticket and half-resolve it, because the half it resolves trains the customer to distrust the half it punted.
+
+The handoff is the part that earns trust internally. A human picking up an escalated ticket sees the detected intent, the one-line summary, the steps the agent already ruled out, the KB it consulted, and the sentiment read. That is strictly more context than a cold human-routed ticket, which is the argument that wins support-lead buy-in: escalations are not failures, they are pre-triaged tickets.
+
+## Cost reality
+
+Decagon prices on resolution volume (custom, typically a platform fee plus a per-resolution rate; get a quote — public per-unit pricing is not published, treat any figure as an estimate until quoted). The honest framing for the business case: model the cost per *contained* ticket against your fully-loaded human cost per ticket, which most support orgs put at roughly $5-15 depending on region and complexity. Containment only saves money when the contained ticket would otherwise have consumed a human; a ticket the customer would have self-served anyway is not a saving.
+
+Setup cost is one to two weeks of a support lead's time, front-loaded on allowlist curation and KB cleanup. Ongoing cost is roughly two to four hours per week of transcript review for the first two months, tapering as the allowlist stabilizes. Do not skip the review: an unreviewed agent drifts as your product and policies change underneath it.
+
+## What success looks like
+
+Watch four numbers. First, **resolved-without-reopen rate on allowlisted intents** — the real containment metric, not raw deflection. Target above 85% within the allowlisted slice by week six; reopens mean the agent is answering things it should escalate. Second, **CSAT on agent-resolved tickets versus human-resolved** — it should be within a few points, not lower; a gap means the guardrails are too loose or the KB is thin. Third, **escalation payload completeness** — sample escalated tickets weekly and confirm the receiving human did not have to re-ask the customer for context the agent already had. Fourth, **false-escalation rate** — escalations a human resolved in one touch using only allowlisted info, meaning the agent could have handled it; if this climbs, the confidence gate is too conservative and you can widen specific intents.
+
+## Versus the alternatives
+
+**Versus Zendesk's native bot and Advanced AI (agent copilot, intelligent triage).** Zendesk's built-in AI is the lowest-friction option if you are already paying for it and your needs are suggestion-and-triage rather than full autonomous resolution. It is excellent at routing and at drafting agent-facing suggestions. The reason to reach for Decagon instead is autonomous resolution depth and the per-intent guardrail model — native Zendesk AI is improving fast but the allowlist-plus-confidence-gate discipline this template depends on is more controllable in a purpose-built resolution agent. If you only need triage and reply suggestions, stay native; if you need audited autonomous resolution on a defined slice, the dedicated agent earns the integration.
+
+**Versus [Forethought](/en/tools/forethought/).** Forethought is the closest direct competitor for autonomous resolution on a ticketing backbone, and the choice is genuinely close. Forethought tends to be the pick when your priority is its discovery/triage analytics and you want tight Zendesk-native packaging; Decagon tends to win when conversational resolution quality and agent-design control are the priority. Evaluate both against your own allowlist with the same 12-case suite — the differentiator is which one resolves *your* intents cleanly, not the demo.
+
+**Versus a DIY agent on raw LLM APIs plus the Zendesk API.** A homegrown agent gives you total control and the lowest per-resolution marginal cost, but you rebuild what Decagon ships: retrieval grounding, conversation state, analytics, guardrail enforcement, and the operations console a support lead uses without engineering escort. Pick DIY only if you have a permanent platform team and resolution is core enough to own; otherwise the build-and-maintain cost dwarfs the license. The template's allowlist and escalation schema are portable — if you do go DIY later, you keep the design and swap the engine.
+
+## Stack
+
+- **Decagon** — the autonomous resolution agent: intent classification, retrieval grounding, guardrail enforcement, conversation state, analytics
+- **Zendesk** — ticketing system of record, Help Center as the knowledge source, destination for public replies, internal escalation notes, and tags
+- **[Forethought](/en/tools/forethought/)** — the named alternative resolution agent to bake-off against on your own allowlist
+- Order/billing webhooks — read-only tool calls the allowlisted intents are permitted to make (status and invoice lookups, never writes)

@@ -1,0 +1,85 @@
+---
+slug: renewal-forecast-skill
+canonical_slug: renewal-forecast-skill
+locale: ja
+verticals: [customer-success]
+title: Claude で renewal を予測しリスクを検知する
+artifact_type: claude-skill
+tools_used: [claude, churnzero]
+roles: [csm, cs-ops]
+difficulty: intermediate
+time_to_setup: "45-60 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+ローリングウィンドウ内のすべての renewal を churn リスクでスコアリングし、CSM がどのアカウントを先に対応すべきか分かるようにコホートを並べ替え、赤と判定されたアカウントには save plan のドラフトを作成する Claude Skill です。ChurnZero から health、engagement、サポートのシグナルを読み取り、その裏付けとなる 3 つの driver を伴うリスクバンドを生成し、優先順位付けされた worklist と、リスクのある各アカウント向けの 1 ページの save plan ドラフトを出力します。出力は CSM が renewal レビューで説明できる予測であり、編集して使える出発点です。単なる数値でも完成した計画でもありません。
+
+artifact バンドルは `apps/web/public/artifacts/renewal-forecast-skill/` にあります。`SKILL.md` と、Skill が実行ごとにロードする 3 つの参照ファイル(`references/1-risk-signal-weights.md`、`references/2-save-plan-format.md`、`references/3-sample-output.md`)です。
+
+## いつ使うか
+
+あなたは CSM、または CSM の pod を支援する CS Ops のリードで、次の四半期にわたって日付が散らばった renewal の book を担当しています。前夜に手作業でその全体像を組み立てるのではなく、毎週の renewal 予測レビューに、リスクで並べ替え済みのコホートを持って臨み、赤の各アカウントにはすでに save plan のドラフトが付いている状態にしたい。この Skill は T-120 から T-90 日のウィンドウ向けに作られています。save motion に滑走路があるくらい早く、シグナルが純粋なノイズではないくらい遅いタイミングです。
+
+ChurnZero(または HTTP レイヤーを向け直せる同等の CS プラットフォーム)が、方向性のレベルで信頼できる使用状況・engagement・サポートのデータを生成しており、ある週の renewal コホートがおよそ 10 から 60 アカウントに収まるときに適合します。10 未満なら頭の中で並べればよく、Skill は不要です。1 回の実行で 60 を超える場合は、各 save plan ドラフトが薄まったものではなく実際のトークン予算を得られるように、segment で分割してください。
+
+ラベル付けされた renewal の結果(更新・churned・downsold)が少なくとも 2 四半期分あり、それに対して重みを検証できるときに最も有用です。それがなければ、数値に偽装された直感でスコアリングしていることになり、これは誠実な直感より悪いものです。偽の権威を帯びるからです。
+
+## いつ使わないか
+
+- **オートパイロットとして。** Skill はドラフトを作り、CSM が判断します。顧客にメールを送ることも、ChurnZero に予測を書き戻すことも、save play を自分で予約することもありません。出力は内部の足場です。
+- **renewal 確率の点推定として。** 4 つのバンド(更新する確率 70 パーセント超、40〜70、15〜40、15 未満)を返し、「このアカウントは 63 パーセント」とは返しません。63 と 58 で行動を変えられる人はおらず、点推定はデータが支えない過信を招きます。
+- **opt-out ウィンドウが開いていない真の auto-renewal のアカウントに対して。** 計画すべき save motion はありません。顧客が離脱を始めない限りアカウントは更新されます。Skill は `AUTO_RENEW_NO_ACTION` を立て、無駄な作業を生み出す代わりに計画の作成をスキップします。
+- **商業条件に対して。** 割引額、契約期間、価格は CSM と Deal Desk に残ります。Skill は特定の割引を推奨することを禁じられており、求められても拒否します。
+- **上位 3 件の renewal に対するアカウント単位の深掘りの代替として。** 四半期を動かすアカウントについては、CSM とそのリーダーが慎重に考えるほうが Skill に勝ります。Skill は long tail に使ってください。時間切れでなければ飛ばされてしまうアカウント 4 から 60 です。
+
+## Setup
+
+初回はおよそ 45 から 60 分で、その大半は自分のラベル付き結果に対して重みを調整することに費やされます。
+
+1. **Skill をインストールする。** `apps/web/public/artifacts/renewal-forecast-skill/` のバンドルを `~/.claude/skills/renewal-forecast/` に置きます。Skill は単一のコマンド `forecast_renewals(window_start, window_end, segment)` と、ChurnZero の pull と 2 パスのスコアリングパイプライン用の内部ヘルパーを公開します。
+2. **認証情報を接続する。** `CHURNZERO_API_KEY` と `CHURNZERO_APP_KEY`(accounts、ChurnScore、activities、サポートチケットへの読み取りアクセス)を設定します。Skill は読み取りのみで、書き戻しは決して行いません。サポートデータが ChurnZero の外にある場合は、代わりに `SUPPORT_SOURCE` を CSV エクスポートに向けると、Skill は使用前に header を `references/1-risk-signal-weights.md` に対して検証します。
+3. **シグナルの重みを調整する。** `references/1-risk-signal-weights.md` を開きます。同梱のデフォルトは使用状況トレンドを 0.45、engagement の新しさを 0.30、サポート摩擦を 0.25 で重み付けし、segment ごとの override を持ちます(PLG の book は使用状況を 0.6 に傾け、high-touch の enterprise は engagement を 0.4 に傾けます)。これらを、直近 2 四半期の renewal 結果に対して最もよく backtest する重みに置き換えてください。一度に 1 つの重みを編集し、既知のコホートを再スコアリングして何が動いたか確認します。
+4. **save plan テンプレートを適応させる。** `references/2-save-plan-format.md` を開き、セクションの足場をチームの motion に置き換えます。stakeholder への ask、価値リキャップの構造、エスカレーションのゲートです。`references/3-sample-output.md` の作業例を、匿名化した実際の save plan を 3〜5 件に置き換え、ドラフト作成パスが汎用ではなくチームの声を模倣するようにします。
+5. **1 つのコホートで実行する。** `forecast_renewals(window_start="2026-07-01", window_end="2026-09-30", segment="mid-market")`。Skill は並べ替えられた Markdown の worklist(1 アカウント 1 行: バンド、3 つの driver、ARR、renewal 日、owner)と、赤と琥珀の各アカウントにつき 1 つの save plan ドラフトを出力します。読んで編集し、最初の実行では motion を手作業で ChurnZero の Plays やタスクに変換してください。
+
+## skill が実際に行うこと
+
+Skill はウィンドウ内のアカウントごとに ChurnZero から 3 つのシグナルファミリーを取得します。使用状況トレンド(直近 28 日のアクティブイベント量を、グローバル平均ではなくそのアカウント自身の直近 90 日 baseline と比較)、engagement の新しさ(CSM が記録したミーティング、QBR、exec touch を指数的な新しさ減衰、半減期 21 日で重み付け)、サポート摩擦(直近 90 日のオープンチケット数、重大度の構成、解決までの中央値時間)です。コホート平均ではなくアカウント自身の baseline と比較することが、重要な選択です。40 パーセントの使用低下は、そのアカウントがヘビーユーザーでもライトユーザーでも重要であり、グローバル平均はそれを埋もれさせます。
+
+次に Claude を 2 パス実行します。パス 1 はスコアリングです。Claude は 3 つの正規化されたサブスコアと segment ごとの重みを取り、composite、バンド、そしてバンドの裏付けとなる 3 つの具体的な driver を生成します。各 driver は実際の数値を挙げます(「アクティブユーザーが 90 日 baseline 比で 38 パーセント減」「74 日間 exec touch の記録なし」「sev-1 チケット 2 件が 9 日間オープン」)。決して雰囲気ではありません。スコアリングを専用パスにするのは、driver がバンドを選んだ後に逆算で正当化されるのではなく、実際のサブスコアから推論されるようにするためです。ガードがバンドを制限します。独立した driver を 3 つ未満しか挙げられない場合、バンドは 1 段階下がります。単一シグナルに基づく自信のある予測は、信頼を最も速く損なう失敗モードだからです。
+
+パス 2 は save plan のドラフト作成で、赤(15 未満、および 15〜40)と琥珀(40〜70)のバンドのアカウントに対してのみ実行されます。Claude はパス 1 の driver と `references/2-save-plan-format.md` の save plan テンプレートを読み、1 ページのドラフトを生成します。想定される churn のアーキタイプ、30/60/90 日のペースに結びつけた stakeholder の motion、driver から見て最も起こりやすい 2〜3 件の反論、そしてエスカレーションのゲートです。緑バンド(70 超)のアカウントには計画ではなく 1 行の「監視」メモが付きます。リスクのないアカウントに save plan を書くのは、トークンの無駄であり CSM の読み時間の無駄です。
+
+すべてを結びつける並べ替えは、コホートをバンド昇順(最もリスクの高いものを先頭)、次に各バンド内で ARR 降順、次に renewal 日昇順で並べます。この順序は意図的です。最大の直近損失を worklist の先頭に置き、それは CSM が実際に book を進めるべき順序です。
+
+## コストの実際
+
+40 アカウントの四半期コホートに対するフル実行は、スコアリングにおよそ 20,000 から 35,000 input トークン(account JSON、シグナルの pull、重みの参照)、加えて save plan ドラフトごとに 3,000 から 6,000 input と 2,000 から 4,000 output トークンかかります。Claude Sonnet の現在のリスト価格(input 100 万あたり約 $3、output 100 万あたり $15)では、3 分の 1 が赤または琥珀になる 40 アカウントのコホートで、1 実行あたり 25 から 45 セントに収まります。ローリング四半期で毎週実行しても Anthropic の費用は月に数ドルで、mid-market の renewal を 1 件救えば丸め誤差です。
+
+実時間はコホートあたり 2 から 5 分で、ChurnZero の pull が支配的です。2 つの Claude パスはせいぜい 1 分を加えます。重要なコストは人的なものです。40 アカウントの book を手作業で予測する CSM は、レビュー前に ChurnScore を取得し、活動タイムラインを読み、アカウントを並べるのに 60 から 90 分かかります。Skill はそれをおよそ 20 分の読みと編集にし、節約は CSM 1 人あたり毎週のレビューでおよそ 1 時間です。
+
+## 成功の指標
+
+最初の四半期にわたって 3 つの数値を追跡します。第一に、**予測の一致** —各レビュー後に CSM の pod に、アカウントを対応した後でバンドが自分の読みとどれだけ一致したかを尋ねます。第 4 週までに 70 パーセント超を目標にします。50 パーセント未満なら、モデルではなく重みが間違っており、修正は prompt ではなく `references/1-risk-signal-weights.md` にあります。第二に、**save plan の変換** —ドラフトされた motion のうち、48 時間以内に追跡可能な ChurnZero の Plays やタスクになる割合。80 パーセント超を目標にします。低い場合はドラフトが汎用すぎて行動できないということです。第三に、最も重要な遅行指標: **Skill を使った琥珀と赤のアカウントの renewal 率と、使わなかった比較可能なコホートの renewal 率**を四半期ごとに比較します。Skill は唯一の変数ではありませんが、リスクのある renewal 率がまったく動かないなら、予測が生成されては無視されているということです。
+
+## 代替案との比較
+
+- **ChurnZero のネイティブ renewal 予測と ChurnScore。** ChurnZero はすでに health score と renewal 確率の読みを生成しており、チームがそれらを信頼して行動するなら、この Skill は不要です。ChurnZero が行わないのは、スコアを CSM がレビューで説明できる 3 つの具体的な driver で説明すること、そして悪いスコアのアカウントに save plan をドラフトすることです。ChurnZero を記録システムおよびシグナルソースとして使い、Skill を説明とドラフト計画に使ってください。両者は補完的です。Skill は ChurnZero のデータを読みますが、そのスコアリングエンジンを置き換えるものではありません。
+- **[renewal playbook ジェネレーター](/en/workflows/cs-renewal-playbook-skill/) Skill。** あの Skill はすでにフラグを立てた単一アカウントを深掘りします。完全な stakeholder-motion マトリクス、talk-track の足場、エスカレーションのゲートです。この Skill はその前段を行います。コホート全体のどのアカウントをそもそもフラグすべきかを教え、各アカウントにより軽いドラフト計画を与えます。これを book のトリアージに使い、その後、より深い扱いに値する 2〜3 件の赤に playbook ジェネレーターを実行してください。
+- **[churn リスクの日次ダイジェスト](/en/workflows/churn-risk-summarizer-claude/)。** あのダイジェストはイベント駆動で直近 24 時間のもので、一晩で何が変わったかを教えます。この Skill はウィンドウベースで先を見ます。renewal コホートを四半期にわたってリスクで並べます。時間軸が違い、仕事が違います。多くのチームは両方を実行します。ダイジェストは日々の反応に、これは毎週の予測に使います。
+- **手作業のスプレッドシート予測。** 今日ほとんどの pod がやっていること: CSM が ChurnScore をシートに取り込み、活動タイムラインを目視し、勘で色分けします。文脈は最も豊富ですが一貫性は最も低く、各 CSM が独自の framing を作り、数値は pod 間で比較できません。Skill はその文脈の一部を、pod 全体が重みファイルを編集して議論できる 1 つの共有 framing と引き換えにします。2 人チームならスプレッドシートのままで構いません。一貫性が効いてくる CSM 4 人以上で Skill を採用してください。
+
+## 注意点
+
+- **使用状況のタグ付けが汚いと、自信のある誤ったバンドを生む。** ChurnZero のイベントが製品面をまたいで一貫せずタグ付けされていると、アカウントごとの baseline は無意味になり、Skill は行動変化ではなくタグ付け変化を反映した低下を浮かび上がらせます。ガード: 本番化の前に、Skill は 90 日にわたってアカウントごとのイベント名分布を一度チェックし、上位 5 つのイベントタイプが安定していないあらゆるアカウントのスコアリングを拒否し、推測する代わりに `BASELINE_UNTRUSTWORTHY` と記します。
+- **単一の強いシグナルに基づく過信のバンド。** 赤のサポート状況だけで本来健全なアカウントを琥珀に引きずり込んだり、最近の QBR が静かな使用崩壊を覆い隠したりします。ガード: バンドは 3 つの独立した driver で裏付けられなければなりません。1 つか 2 つしか挙げられない場合、バンドは 1 段階下がり、worklist の行に `THIN_SIGNAL` のタグが付き、CSM は予測ではなく仮説として扱います。
+- **古い ChurnZero データが新鮮として採点される。** 数日間再計算されていない ChurnScore は、現在のものとして採点されます。ガード: Skill は各シグナルの最終更新タイムスタンプを読み、アカウント上の最新シグナルが 7 日より古い場合、古いバンドをライブとして提示する代わりに行に `DATA_STALE (n 日)` を付けます。
+- **save plan が商業条件に漂流する。** ドラフト作成パスは制約しなければ「割引を提示する」に手を伸ばしますが、それは Deal Desk に属する領域です。ガード: save plan の prompt は割引額、契約期間、価格への言及を禁じ、出力テンプレートにはそれらの slot がありません。商業的な動きは「Deal Desk にエスカレーション」と記され、決してドラフトされません。
+- **worklist を仕事そのものと扱う。** 誰も追跡可能な motion に変換しない並べ替えられたリストは何も変えません。ガード: 各 save plan ドラフトは、motion は毎週レビューされる ChurnZero の Plays やタスクになるまで価値がないという明示的なリマインダーで終わり、setup ステップは生成を変換ステップに結びつけます。
+
+## Stack
+
+- **ChurnZero** —使用状況トレンド、ChurnScore、engagement の activities、サポートシグナル(API 経由の読み取り専用)。CSM がドラフトから作成する Plays の宛先
+- **Claude(Sonnet 推奨)** —2 パスのパイプライン: 具体的な driver を伴うスコアリング、その後、赤と琥珀のアカウントへの save plan ドラフト作成
+- **artifact バンドル** は `apps/web/public/artifacts/renewal-forecast-skill/`(`SKILL.md`、`references/1-risk-signal-weights.md`、`references/2-save-plan-format.md`、`references/3-sample-output.md`)

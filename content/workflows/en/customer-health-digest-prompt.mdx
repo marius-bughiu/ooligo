@@ -1,0 +1,86 @@
+---
+slug: customer-health-digest-prompt
+canonical_slug: customer-health-digest-prompt
+locale: en
+verticals: [customer-success]
+title: Weekly customer health digest prompt
+artifact_type: prompt
+tools_used: [claude, gainsight]
+roles: [csm, cs-ops]
+difficulty: beginner
+time_to_setup: "20-30 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+A reusable prompt that turns the weekly Gainsight account export into a CSM-ready digest: the accounts that moved this week, the ones that crossed into a risk band, and a ranked list of which three to touch on Monday. The CSM pastes a CSV (or the prompt's three-block input) into Claude and gets back a digest organized by movers, risks, and recommended actions — each action naming the account, the trigger, and the next step. No integration to build, no n8n flow to maintain: it is a prompt you paste into Claude.ai or Claude Code, and the artifact bundle at `apps/web/public/artifacts/customer-health-digest-prompt/` ships the prompt text plus the column manifest the prompt expects.
+
+This is the entry-level version of the [composite health score in n8n](/en/workflows/customer-health-score-n8n/) workflow. That one builds and writes back a defensible score on a nightly schedule; this one reads the score you already have and turns it into a Monday-morning to-do list. Start here. Graduate to the n8n flow when you stop trusting the number itself.
+
+## When to use this
+
+Use it when you (or the CS pod you run) already have a health score in Gainsight that you broadly trust, and the gap is not the score — it is that nobody reads it before the week starts. The most common failure mode it fixes: a CSM with 40-80 accounts opens Gainsight on Monday, sees a wall of coloured pills, and triages by whichever account emailed last rather than by which account moved. The digest replaces "scan the dashboard and hope" with a ranked three-account list and the reason each one is on it.
+
+It fits a CSM book of roughly 30-120 accounts. Below 30, you can read every account yourself and the digest saves little. Above ~150, a per-CSM export gets long enough that you want the [n8n flow](/en/workflows/customer-health-score-n8n/) batching and alerting instead of a manual paste. It also fits a CS Ops lead who wants one consistent digest format across the whole team so the Monday CS standup runs off the same artifact for every book.
+
+## When NOT to use this
+
+Do not use it as the health score itself. The prompt summarizes a score; it does not compute one. If your Gainsight score is not trusted — CSMs already ignore it and pull raw usage — a digest of a number nobody believes is just a faster way to surface noise. Fix the score first (that is the [n8n workflow's](/en/workflows/customer-health-score-n8n/) job), then digest it.
+
+Do not point it at an export with no week-over-week delta column. The whole digest hinges on movement — "what changed since last week" — so the export needs both the current score and the prior-period score (or a precomputed delta). Without the delta the prompt will rank by absolute score, which buries the account that fell from 80 to 55 (still "yellow", but cratering) under the account that has been a stable red for a year. The column manifest in the bundle lists the delta column as required for exactly this reason.
+
+Do not use it to send anything to the customer. The output is an internal CSM digest. It names risks bluntly ("ACME usage down 41% week-over-week, single-user dependency") in language you would never put in front of the account. It is a Monday-prep artifact, not a customer comms draft.
+
+Do not feed it more than ~150 account rows in one paste. Past that the model starts compressing the middle of the list and the ranking degrades. Split a large book into two pastes, or move to the batched n8n flow.
+
+## Setup
+
+Roughly 20-30 minutes, almost all of it spent getting the Gainsight export columns to match the manifest once.
+
+1. **Build the export.** In Gainsight, create (or reuse) a report on the Company object with these columns: account name, account ID, current health score, prior-week health score (or the delta directly), ARR, renewal date, CSM owner, and your two or three sub-scores if you have them (usage, sentiment, activity). Export to CSV. The bundle's `column-manifest.md` lists the exact column names the prompt reads and which are required vs optional.
+2. **Drop in the prompt.** Copy the prompt body from `apps/web/public/artifacts/customer-health-digest-prompt/prompt.md` into a Claude.ai Project (or a Claude Code session). It is structured in the five-part shape: role, input format, task, things-to-avoid, output format. Do not paraphrase it — the things-to-avoid section is what stops the model inventing a churn reason the data does not support.
+3. **Paste your data.** Paste the CSV under the prompt. If your column names differ from the manifest, either rename them in the report or add a one-line mapping note at the top of your paste ("treat `Score_Prev` as the prior-week score"). The prompt tolerates a mapping note; it does not tolerate a missing delta.
+4. **Set the thresholds once.** The prompt's task block has three tunable numbers: the band cutoffs (default green at or above 75, yellow at or above 50, red under 50 — written as "under 50" deliberately, never the literal less-than glyph, so it is safe to paste), the delta that counts as a "mover" (default 5 points), and how many accounts to put in the recommended-actions list (default 3). Edit those to your team's calibration before first use, then leave them stable so week-over-week digests are comparable.
+5. **Run it weekly.** Same prompt, fresh export, every Monday (or Friday for the following week). Because the prompt is deterministic in structure, two CSMs running it on their own books produce the same digest shape, which is the point for a CS Ops lead standardizing the standup.
+
+## What the prompt actually does
+
+The prompt does four things in order, and the order is the design. First it classifies every account into a band from the current score using your cutoffs, so the digest opens with a one-line tally ("12 green, 9 yellow, 4 red"). Second it computes movers: any account whose week-over-week delta exceeds the mover threshold, sorted by absolute delta, so the biggest swings — up or down — surface first. Naming upward movers matters as much as downward ones; an account that jumped 20 points is an expansion signal, not just a non-problem.
+
+Third it flags band crossings separately from raw movers, because crossing from yellow into red is a different event than dropping five points inside green. A band crossing is the line that triggers a play; a within-band wobble usually does not. Keeping them in separate sections stops a CSM from treating every five-point dip as an emergency.
+
+Fourth — the part that makes it a to-do list rather than a report — it produces a ranked recommended-actions list. Each entry names the account, the single largest contributing signal (drawn from the sub-scores if present, e.g. "usage down 41%", "no CSM touch in 38 days"), and a concrete next step ("book a check-in", "loop in the AE on the renewal in 22 days"). The ranking weights band crossings into red first, then large downward movers, then renewal proximity. The things-to-avoid block forbids the model from inventing a cause the columns do not show: if only the composite moved and no sub-score explains it, the entry reads "composite down 11, no single driver in the data — pull the account manually" rather than a confabulated reason.
+
+The output format is fixed: a tally line, a Movers table, a Band crossings table, and a numbered Recommended actions list capped at your N. That fixed shape is what lets a CS Ops lead diff this week's digest against last week's and what lets the Monday standup run off it without reformatting.
+
+## Cost reality
+
+A typical book of 60-100 accounts is a single paste of roughly 3,000-6,000 input tokens (the CSV) plus the ~600-token prompt, and the digest back is 400-900 output tokens. On Claude Sonnet at current pricing that is well under a cent per run — call it $0.02-0.04 per CSM per week, or a few dollars a year for a 10-CSM team. There is no infrastructure cost: no n8n executor, no credentials to rotate, no warehouse view to maintain. The only recurring cost is the two minutes a CSM spends pulling the export and pasting it, which is far less than the 15-30 minutes of dashboard-staring it replaces.
+
+The honest trade-off against the [n8n flow](/en/workflows/customer-health-score-n8n/): this prompt cannot write anything back, cannot run on a schedule unattended, and cannot alert Slack. It is a human-in-the-loop paste. That is a feature at this scale (the CSM reads every digest) and a bottleneck past ~150 accounts (the paste gets unwieldy). The cost of graduating is the ~2 hours of n8n setup; the cost of staying is the weekly two-minute paste.
+
+## What success looks like
+
+Watch three numbers in the first month. First, **digest-to-action latency**: the share of accounts in the recommended-actions list that got a logged CSM touch within 48 hours of the digest. Target above 70% by week three; below that the digest is being read and ignored, which usually means the ranking does not match the CSM's gut and the thresholds need tuning. Second, **band-crossing catch rate**: of the accounts that churned or escalated in the quarter, how many appeared in a red band crossing in the digest at least 30 days prior. This is the leading-indicator test — if the digest never flagged them early, the underlying score is the problem, not the digest. Third, **standup time**: a CS Ops lead should see the Monday CS standup shorten once everyone arrives with the same digest format; if it does not, the digest is not actually being used to drive the meeting.
+
+## Versus the alternatives
+
+**Versus reading the Gainsight dashboard directly.** The dashboard shows current state; it does not rank, does not foreground movement, and does not produce a to-do list. A disciplined CSM can replicate the digest manually by sorting on the delta column and reading down — and for a 30-account book, that is genuinely faster than pasting into Claude. The prompt earns its keep at 60+ accounts where the manual sort-and-read takes 20 minutes and degrades by Wednesday.
+
+**Versus Gainsight's own CTAs and Cockpit.** Gainsight can fire a Call To Action when a score crosses a threshold, which overlaps with the band-crossing section here. Use CTAs for the events that must trigger a workflow regardless of whether anyone reads a digest (a red crossing on a top-20 account). Use this digest for the weekly triage that CTAs do not give you: the ranked "touch these three first" judgment across the whole book. They are complementary — CTAs are the hard interrupts, the digest is the weekly read.
+
+**Versus the [composite health score n8n flow](/en/workflows/customer-health-score-n8n/).** That flow is the right tool when the score itself needs rebuilding, when you want nightly write-back and Slack alerts, or when the book is large enough that manual paste does not scale. This prompt is the right tool when the score is fine and the gap is purely "turn it into a Monday plan." Most teams should start with this prompt and only build the flow once they have evidence the score needs to change, not just be summarized.
+
+## Watch-outs
+
+- **No delta column, useless digest.** Without a week-over-week delta the prompt cannot compute movers and silently falls back to ranking by absolute score, which surfaces chronic reds and buries fresh fallers. Guard: the bundle's `column-manifest.md` marks the delta (or prior-week score) as required, and the prompt's input-format block instructs the model to halt with "missing delta column — cannot compute movers" rather than degrade to absolute-score ranking.
+- **Invented churn causes.** Asked to explain a score drop, a model will happily manufacture a plausible-sounding reason the columns do not support. Guard: the things-to-avoid block forbids any causal claim not traceable to a named sub-score, and forces the literal output "no single driver in the data — pull the account manually" when only the composite moved. A CSM acting on a fabricated cause is worse than one told to go look.
+- **Stale export read as live.** A CSM pastes last week's CSV by accident and acts on movement that already resolved. Guard: the prompt requires an "as-of date" line at the top of the paste and echoes it in the digest header, so a stale export is visible at a glance rather than acted on blind.
+- **Over-long paste compressing the middle.** Past ~150 rows the model compresses mid-list accounts and the ranking quietly degrades. Guard: the input-format block caps the row count and instructs the model to refuse and request a split rather than silently summarize a truncated list.
+- **Threshold drift between weeks.** If a CSM edits the band cutoffs or mover threshold between runs, this week's digest is not comparable to last week's and the "what moved" framing breaks. Guard: the thresholds live in the prompt's task block, not in the pasted data, precisely so they stay fixed across runs; the column manifest notes that thresholds should be set once at setup and version-controlled with the prompt.
+
+## Stack
+
+- **Claude** — reads the export, ranks movers and band crossings, writes the recommended-actions list (Sonnet is plenty; the task is structured summarization, not deep reasoning)
+- **Gainsight** — source of the weekly account export (current score, prior-week score or delta, ARR, renewal date, sub-scores)
+- **Any CSV source** — the prompt reads columns, not Gainsight specifically; repoint the manifest at a Catalyst, Vitally, or ChurnZero export and it works the same

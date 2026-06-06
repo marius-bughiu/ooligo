@@ -1,0 +1,86 @@
+---
+slug: customer-health-digest-prompt
+canonical_slug: customer-health-digest-prompt
+locale: es
+verticals: [customer-success]
+title: Prompt de digest semanal de salud del cliente
+artifact_type: prompt
+tools_used: [claude, gainsight]
+roles: [csm, cs-ops]
+difficulty: beginner
+time_to_setup: "20-30 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+Un prompt reutilizable que convierte el export semanal de cuentas de Gainsight en un digest listo para el CSM: las cuentas que se movieron esta semana, las que cruzaron a una banda de riesgo y una lista priorizada de cuáles tres tocar el lunes. El CSM pega un CSV (o el input de tres bloques del prompt) en Claude y recibe de vuelta un digest organizado por movers, riesgos y acciones recomendadas —cada acción nombrando la cuenta, el trigger y el siguiente paso. Sin integración que construir, sin workflow de n8n que mantener: es un prompt que pegas en Claude.ai o Claude Code, y el bundle del artifact en `apps/web/public/artifacts/customer-health-digest-prompt/` incluye el texto del prompt más el manifesto de columnas que el prompt espera.
+
+Esta es la versión de nivel de entrada del workflow de [composite health score en n8n](/en/workflows/customer-health-score-n8n/). Ese construye y escribe de vuelta un score defendible en un schedule nocturno; este lee el score que ya tienes y lo convierte en una lista de pendientes del lunes por la mañana. Empieza aquí. Gradúate al flow de n8n cuando dejes de confiar en el número en sí.
+
+## Cuándo usarlo
+
+Úsalo cuando tú (o el pod de CS que diriges) ya tienen un health score en Gainsight en el que confías a grandes rasgos, y el gap no es el score —es que nadie lo lee antes de que empiece la semana. El modo de falla más común que arregla: un CSM con 40-80 cuentas abre Gainsight el lunes, ve una pared de pills de colores y prioriza por la cuenta que envió email al último en vez de por la cuenta que se movió. El digest reemplaza "escanear el dashboard y esperar" con una lista priorizada de tres cuentas y la razón por la que cada una está ahí.
+
+Encaja en un book de CSM de aproximadamente 30-120 cuentas. Por debajo de 30, puedes leer cada cuenta tú mismo y el digest ahorra poco. Por encima de ~150, un export por CSM se vuelve lo bastante largo que querrás el batching y alerting del [flow de n8n](/en/workflows/customer-health-score-n8n/) en vez de un pegado manual. También encaja en un lead de CS Ops que quiere un formato de digest consistente a través de todo el equipo para que el standup de CS del lunes corra del mismo artifact para cada book.
+
+## Cuándo NO usarlo
+
+No lo uses como el health score en sí. El prompt resume un score; no calcula uno. Si tu score de Gainsight no es confiable —los CSMs ya lo ignoran y jalan el uso crudo— un digest de un número que nadie cree es solo una forma más rápida de sacar ruido a la superficie. Arregla el score primero (ese es el trabajo del [workflow de n8n](/en/workflows/customer-health-score-n8n/)), después haz el digest.
+
+No lo apuntes a un export sin columna de delta semana-a-semana. Todo el digest depende del movimiento —"qué cambió desde la semana pasada"— así que el export necesita tanto el score actual como el score del periodo previo (o un delta precalculado). Sin el delta el prompt rankeará por score absoluto, lo que entierra la cuenta que cayó de 80 a 55 (todavía "amarilla", pero desplomándose) bajo la cuenta que ha sido un rojo estable por un año. El manifesto de columnas en el bundle lista la columna de delta como requerida por exactamente esta razón.
+
+No lo uses para enviar nada al cliente. El output es un digest interno del CSM. Nombra riesgos sin rodeos ("uso de ACME bajó 41% semana-a-semana, dependencia de un solo usuario") en lenguaje que nunca pondrías frente a la cuenta. Es un artifact de preparación del lunes, no un borrador de comunicación con el cliente.
+
+No le des más de ~150 filas de cuentas en un solo pegado. Pasado eso el modelo empieza a comprimir el medio de la lista y el ranking se degrada. Divide un book grande en dos pegados, o muévete al flow de n8n con batching.
+
+## Setup
+
+Aproximadamente 20-30 minutos, casi todo gastado en lograr que las columnas del export de Gainsight coincidan con el manifesto una vez.
+
+1. **Construye el export.** En Gainsight, crea (o reusa) un reporte en el objeto Company con estas columnas: nombre de cuenta, ID de cuenta, health score actual, health score de la semana previa (o el delta directamente), ARR, fecha de renewal, owner CSM, y tus dos o tres sub-scores si los tienes (uso, sentiment, actividad). Exporta a CSV. El `column-manifest.md` del bundle lista los nombres de columna exactos que el prompt lee y cuáles son requeridos vs opcionales.
+2. **Coloca el prompt.** Copia el cuerpo del prompt de `apps/web/public/artifacts/customer-health-digest-prompt/prompt.md` en un Project de Claude.ai (o una sesión de Claude Code). Está estructurado en la forma de cinco partes: rol, formato de input, tarea, cosas-a-evitar, formato de output. No lo parafrasees —la sección de cosas-a-evitar es lo que detiene al modelo de inventar una razón de churn que los datos no soportan.
+3. **Pega tus datos.** Pega el CSV debajo del prompt. Si tus nombres de columna difieren del manifesto, o bien renómbralos en el reporte o agrega una nota de mapeo de una línea al inicio de tu pegado ("trata `Score_Prev` como el score de la semana previa"). El prompt tolera una nota de mapeo; no tolera un delta faltante.
+4. **Fija los thresholds una vez.** El bloque de tarea del prompt tiene tres números ajustables: los cortes de banda (default verde en o por encima de 75, amarillo en o por encima de 50, rojo bajo 50 —escrito como "bajo 50" deliberadamente, nunca el glifo literal de menor-que, para que sea seguro de pegar), el delta que cuenta como un "mover" (default 5 puntos), y cuántas cuentas poner en la lista de acciones recomendadas (default 3). Edita esos a la calibración de tu equipo antes del primer uso, después déjalos estables para que los digests semana-a-semana sean comparables.
+5. **Córrelo semanalmente.** Mismo prompt, export fresco, cada lunes (o viernes para la semana siguiente). Como el prompt es determinista en estructura, dos CSMs corriéndolo en sus propios books producen la misma forma de digest, que es el punto para un lead de CS Ops estandarizando el standup.
+
+## Qué hace el prompt en realidad
+
+El prompt hace cuatro cosas en orden, y el orden es el diseño. Primero clasifica cada cuenta en una banda a partir del score actual usando tus cortes, así que el digest abre con una línea de conteo ("12 verde, 9 amarillo, 4 rojo"). Segundo computa movers: cualquier cuenta cuyo delta semana-a-semana exceda el threshold de mover, ordenada por delta absoluto, así que los swings más grandes —arriba o abajo— salen primero. Nombrar movers hacia arriba importa tanto como los de hacia abajo; una cuenta que saltó 20 puntos es una señal de expansión, no solo un no-problema.
+
+Tercero marca cruces de banda separadamente de los movers crudos, porque cruzar de amarillo a rojo es un evento distinto que caer cinco puntos dentro de verde. Un cruce de banda es la línea que dispara un play; un bamboleo dentro de banda usualmente no. Mantenerlos en secciones separadas evita que un CSM trate cada caída de cinco puntos como una emergencia.
+
+Cuarto —la parte que lo hace una lista de pendientes en vez de un reporte— produce una lista priorizada de acciones recomendadas. Cada entrada nombra la cuenta, la sola señal contribuyente más grande (sacada de los sub-scores si están presentes, ej. "uso bajó 41%", "sin toque del CSM en 38 días"), y un siguiente paso concreto ("agenda un check-in", "involucra al AE en el renewal en 22 días"). El ranking pondera primero los cruces de banda a rojo, después los movers grandes hacia abajo, después la proximidad del renewal. El bloque de cosas-a-evitar prohíbe al modelo inventar una causa que las columnas no muestran: si solo el composite se movió y ningún sub-score lo explica, la entrada dice "composite bajó 11, sin un driver único en los datos —jala la cuenta manualmente" en vez de una razón confabulada.
+
+El formato de output es fijo: una línea de conteo, una tabla de Movers, una tabla de Cruces de banda y una lista numerada de Acciones recomendadas tope a tu N. Esa forma fija es lo que le permite a un lead de CS Ops comparar el digest de esta semana contra el de la semana pasada y lo que le permite al standup del lunes correr de él sin reformatear.
+
+## Realidad de costos
+
+Un book típico de 60-100 cuentas es un solo pegado de aproximadamente 3,000-6,000 tokens de input (el CSV) más el prompt de ~600 tokens, y el digest de vuelta es 400-900 tokens de output. Con Claude Sonnet a precios actuales eso está bien por debajo de un centavo por corrida —llámalo $0.02-0.04 por CSM por semana, o unos pocos dólares al año para un equipo de 10 CSMs. No hay costo de infraestructura: sin executor de n8n, sin credenciales que rotar, sin vista de warehouse que mantener. El único costo recurrente son los dos minutos que un CSM gasta jalando el export y pegándolo, que es mucho menos que los 15-30 minutos de mirar-el-dashboard que reemplaza.
+
+El trade-off honesto contra el [flow de n8n](/en/workflows/customer-health-score-n8n/): este prompt no puede escribir nada de vuelta, no puede correr en un schedule sin atención, y no puede alertar a Slack. Es un pegado con humano-en-el-loop. Eso es una feature a esta escala (el CSM lee cada digest) y un cuello de botella pasadas ~150 cuentas (el pegado se vuelve difícil de manejar). El costo de graduarse son las ~2 horas de setup de n8n; el costo de quedarse es el pegado semanal de dos minutos.
+
+## Cómo se ve el éxito
+
+Vigila tres números en el primer mes. Primero, **latencia digest-a-acción**: la proporción de cuentas en la lista de acciones recomendadas que recibieron un toque registrado del CSM dentro de 48 horas del digest. Apunta a por encima de 70% para la semana tres; por debajo de eso el digest se está leyendo e ignorando, lo que usualmente significa que el ranking no coincide con el instinto del CSM y los thresholds necesitan ajuste. Segundo, **tasa de captura de cruce de banda**: de las cuentas que hicieron churn o escalaron en el trimestre, cuántas aparecieron en un cruce de banda a rojo en el digest al menos 30 días antes. Esta es la prueba de indicador líder —si el digest nunca las marcó temprano, el score subyacente es el problema, no el digest. Tercero, **tiempo de standup**: un lead de CS Ops debería ver el standup de CS del lunes acortarse una vez que todos llegan con el mismo formato de digest; si no, el digest no se está usando en realidad para manejar la reunión.
+
+## Versus las alternativas
+
+**Versus leer el dashboard de Gainsight directamente.** El dashboard muestra el estado actual; no rankea, no pone el movimiento en primer plano, y no produce una lista de pendientes. Un CSM disciplinado puede replicar el digest manualmente ordenando por la columna de delta y leyendo hacia abajo —y para un book de 30 cuentas, eso es genuinamente más rápido que pegar en Claude. El prompt gana su lugar en 60+ cuentas donde el ordenar-y-leer manual toma 20 minutos y se degrada para el miércoles.
+
+**Versus las CTAs y el Cockpit propios de Gainsight.** Gainsight puede disparar un Call To Action cuando un score cruza un threshold, lo que se traslapa con la sección de cruce de banda aquí. Usa CTAs para los eventos que deben disparar un workflow sin importar si alguien lee un digest (un cruce a rojo en una cuenta top-20). Usa este digest para el triage semanal que las CTAs no te dan: el juicio priorizado de "toca estas tres primero" a través de todo el book. Son complementarios —las CTAs son las interrupciones duras, el digest es la lectura semanal.
+
+**Versus el [flow de composite health score en n8n](/en/workflows/customer-health-score-n8n/).** Ese flow es la herramienta correcta cuando el score en sí necesita reconstruirse, cuando quieres write-back nocturno y alertas de Slack, o cuando el book es lo bastante grande que el pegado manual no escala. Este prompt es la herramienta correcta cuando el score está bien y el gap es puramente "conviértelo en un plan del lunes". La mayoría de los equipos deberían empezar con este prompt y solo construir el flow una vez que tienen evidencia de que el score necesita cambiar, no solo resumirse.
+
+## A vigilar
+
+- **Sin columna de delta, digest inútil.** Sin un delta semana-a-semana el prompt no puede computar movers y silenciosamente cae a rankear por score absoluto, lo que saca a la superficie rojos crónicos y entierra a los que cayeron recién. Guarda: el `column-manifest.md` del bundle marca el delta (o score de la semana previa) como requerido, y el bloque de formato-de-input del prompt instruye al modelo a detenerse con "columna de delta faltante —no se pueden computar movers" en vez de degradar a ranking por score absoluto.
+- **Causas de churn inventadas.** Pedido a explicar una caída de score, un modelo felizmente fabricará una razón que suena plausible que las columnas no soportan. Guarda: el bloque de cosas-a-evitar prohíbe cualquier afirmación causal no rastreable a un sub-score nombrado, y fuerza el output literal "sin un driver único en los datos —jala la cuenta manualmente" cuando solo el composite se movió. Un CSM actuando sobre una causa fabricada es peor que uno al que se le dice ir a mirar.
+- **Export obsoleto leído como en vivo.** Un CSM pega el CSV de la semana pasada por accidente y actúa sobre movimiento que ya se resolvió. Guarda: el prompt requiere una línea de "fecha-de" al inicio del pegado y la repite en el header del digest, así que un export obsoleto es visible de un vistazo en vez de actuarse a ciegas.
+- **Pegado demasiado largo comprimiendo el medio.** Pasadas ~150 filas el modelo comprime las cuentas del medio de la lista y el ranking se degrada calladamente. Guarda: el bloque de formato-de-input tope el conteo de filas e instruye al modelo a rehusar y pedir una división en vez de resumir silenciosamente una lista truncada.
+- **Deriva de threshold entre semanas.** Si un CSM edita los cortes de banda o el threshold de mover entre corridas, el digest de esta semana no es comparable con el de la semana pasada y el framing de "qué se movió" se rompe. Guarda: los thresholds viven en el bloque de tarea del prompt, no en los datos pegados, precisamente para que se mantengan fijos a través de las corridas; el manifesto de columnas nota que los thresholds deben fijarse una vez en el setup y mantenerse bajo control de versiones con el prompt.
+
+## Stack
+
+- **Claude** —lee el export, rankea movers y cruces de banda, escribe la lista de acciones recomendadas (Sonnet es de sobra; la tarea es resumen estructurado, no razonamiento profundo)
+- **Gainsight** —fuente del export semanal de cuentas (score actual, score de la semana previa o delta, ARR, fecha de renewal, sub-scores)
+- **Cualquier fuente CSV** —el prompt lee columnas, no Gainsight específicamente; reapunta el manifesto a un export de Catalyst, Vitally o ChurnZero y funciona igual

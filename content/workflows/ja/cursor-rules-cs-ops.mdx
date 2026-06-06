@@ -1,0 +1,90 @@
+---
+slug: cursor-rules-cs-ops
+canonical_slug: cursor-rules-cs-ops
+locale: ja
+verticals: [customer-success]
+title: CS Ops エンジニア向けの Cursor rules
+artifact_type: cursor-rule
+tools_used: [cursor, claude]
+roles: [cs-ops]
+difficulty: advanced
+time_to_setup: "20-30 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+CS の motion を支えるコードを書く CS Ops エンジニア向けに調整した Cursor の `.cursorrules` ファイルです。health-score ジョブ、churn-risk のスコアリング、renewal 日付の sync、[Gainsight](/en/tools/gainsight/) と [Vitally](/en/tools/vitally/) への write-back、使用状況の rollup ETL、そして warehouse を CSP に繋ぐ [n8n](/en/tools/n8n/) の flow を対象にしています。artifact は単一ファイル —`apps/web/public/artifacts/cursor-rules-cs-ops/.cursorrules`— で、プロジェクトの `.cursor/rules/` ディレクトリに置くことで、[Cursor](/en/tools/cursor/) が冪等でない夜間 write-back、上限のない warehouse クエリ、信頼度フロアのない感情スコアを提案しなくなり、それらの default を毎回の code review で蒸し返さずに済みます。
+
+CS Ops のコードを定義する性質は、**CSM が誰が churn するかを判断するために信頼する数字を書く**という点です。使用イベントの名前が変わったときに health score が静かに反転する、churn-risk ジョブが retry で二重書き込みする、renewal 日付が CRM から古いまま sync される —どれも単にスクリプトを壊すだけでなく、CSM を誤ったアカウントへ誘導し、本来救えたはずの save を取りこぼします。この bundle のルールは、冪等な write-back、baseline 対 現在のスコアリング規律、あらゆる LLM シグナルへの信頼度フロア、保守的な CSP 書き込みをコード化しており、Cursor の出力が CS Ops のミスの影響範囲 —失敗した unit test ではなく失われた renewal— を反映するようにします。
+
+## 使うべきとき
+
+あなたは CS の tooling を所有し、CSP（[Gainsight](/en/tools/gainsight/)、[Vitally](/en/tools/vitally/)、[Catalyst](/en/tools/catalyst/)、[ChurnZero](/en/tools/churnzero/)、[Totango](/en/tools/totango/)、[Planhat](/en/tools/planhat/)、[Custify](/en/tools/custify/)）、CRM（[HubSpot](/en/tools/hubspot/) または [Salesforce](/en/tools/salesforce/)）、product-analytics ソース（[Pendo](/en/tools/pendo/)、[Amplitude](/en/tools/amplitude/)、[Mixpanel](/en/tools/mixpanel/)、[Heap](/en/tools/heap/)）、会話ソース（[Gong](/en/tools/gong/)）に対して統合コード（Python、TypeScript、SQL、dbt モデル、n8n flow）を書く CS Ops エンジニア、CS Ops マネージャー、または RevOps の担当者です。あなたのチームは、health score、renewal データ、CSM のタスクキューを動かす変更を月に少なくとも数件出荷しています。Cursor があなたの IDE です。
+
+## 使うべきでないとき
+
+- あなたの CS の「自動化」が repo のコードではなく Gainsight や Vitally の UI で admin が構築したルールである場合。このルールはバージョン管理、code review、deploy パイプラインを前提とします。config のみの CS Ops の運用には役立たず、CSP の no-code ルールビルダーが既に冪等性の懸念の大半を強制してくれています。
+- あなたが自分の book を引くために時々 SQL クエリを書く CSM である場合。このルールはチーム全体が依存するスコアリングジョブを所有する人向けに書かれており、ad-hoc な分析向けではありません。「コードを書く前に問え」の前置きは、他の誰も実行しない一回限りのクエリを遅くします。
+- あなたが社内で CSP を運用するのではなく、CS 製品（CSP、フィードバックツール）を構築している場合。このルールは renewal サイクル全体にわたって誤った health score と付き合う社内のオペレーター向けに調整されており、スコアリングを顧客向けの feature として出荷するエンジニアリングチーム向けではありません。
+
+## Setup
+
+1. **artifact をコピーする。** `apps/web/public/artifacts/cursor-rules-cs-ops/.cursorrules` から `.cursorrules` を取得し、プロジェクトの `.cursor/rules/` ディレクトリに置きます。Cursor の Project Rules インジケーターが読み込み済みを確認します。
+2. **ツールのセクションを削る。** ファイルには CSP write-back（Gainsight / Vitally）、CRM sync（HubSpot / Salesforce）、product-analytics の rollup、Gong 感情、n8n オーケストレーション、dbt のセクションが付属します。使わないツールのセクションは全て削除してください —モデルが無関係な文脈と比較せざるを得ないガイダンスを残すと、シグナルが薄まり hedging した提案を生みます。
+3. **secrets ポリシーを設定する。** ルールはハードコードされた認証情報を禁じ、モデルをあなたの secret manager へ誘導します。提案される呼び出しがあなたの tooling（1Password CLI、Doppler、AWS Secrets Manager、Vault —いずれか 1 つを選ぶ）に合うように「Secrets and access」セクションを編集します。Gainsight と Vitally の API キーはフィールド単位の scoping のないフルアクセスの bearer token なので、このセクションは要となります。
+4. **監査と冪等性のターゲットを修正する。** ルールは `(account_id, scored_date)` に一意キーを持つ `health_score_history` テーブルと、CSP への各書き込みに対する監査オブジェクトを前提とします。テーブル名とオブジェクト名をあなたの実際の schema に編集してください。さもないと提案が存在しない名前を参照します。
+5. **正規ソースを指定する。** 「source of truth」ブロックを編集します。どのシステムが renewal 日付を所有するか（通常は CSP ではなく CRM）、どれが使用 baseline を所有するか（製品のライブ API ではなく warehouse）、どれが scope 内のアカウントリストを所有するか。モデルはこれらを使って、CSP が CRM の renewal 日付を上書きする書き込みを拒否します。
+6. **代表的なタスクでテストする。** Cursor にこう頼みます。「28 日の使用 baseline からアカウント health をスコアリングし、結果を Gainsight に書き込む夜間ジョブを書け。」出力は、保存された baseline に対して計算し（ライブの再計算ではなく）、distinct なアクティブユーザーが 3 を下回ったらスコアに上限を設け、`(account_id, scored_date)` をキーとする冪等な upsert で書き戻し、監査テーブルにログを残すべきです。そうでなければルールが読み込まれていません —Project Rules インジケーターを確認してください。
+
+## ルールが実際に行うこと
+
+bundle は 5 つのレイヤーとして構成され、全ての Cursor prompt に適用されます。
+
+1. **「コードを書く前に問え」の前置き。** モデルが生成前に表面化させる 6 つの質問です。このフィールドの source of truth はどのシステムか、アカウント数とプロバイダーの rate cap はどれくらいか、誤った値は CSM の 1 日にとって何を意味するか、これは一回限りか夜間ジョブか、書き込みは retry で冪等か、誰が audit trail を読むか。CS 固有のものは最初の質問です —CS Ops のコードは CRM と CSP のどちらが renewal 日付を所有するかで絶えず揉めるので、モデルは sync を書く前にその判断を強制すべきです。
+2. **ツール固有のガイダンス。** 各サーフェスごとに 1 サブセクションで、それぞれ実際の上限と癖を引用します。Gainsight（Rules Engine 対 Connectors API、毎秒 3 コール級の読み取り上限、書き込み前の custom-field プロビジョニング）、Vitally（REST API、`traits` の upsert セマンティクス、ネイティブな bulk エンドポイントがないのでコードで batch する）、HubSpot（SDK v4、消費 80% での日次 quota の circuit breaker、20 秒の timeout）、Salesforce（SOQL の governor 制限、bulkification、`WITH SECURITY_ENFORCED`）、product analytics（Pendo/Amplitude/Mixpanel の export-API のページネーションとイベント名のドリフトの罠）、Gong（過去 90 日の call ウィンドウ、トランスクリプト有効化のチェック、あらゆる感情シグナルへの信頼度フロア）、n8n（`executionOrder`、明示的な Cron の timezone、プロバイダー上限以下の batch サイズ）、dbt（各 grain への unique test、`ref()`、incremental 戦略、warehouse rollup の source freshness）。
+3. **強制する default** を、必須の 4 次元全てにわたって、それぞれ具体的な値とともに示します。
+   - **Rate-limiting** —CSP への書き込みは 1 グループあたり 25 アカウントで batch する。HubSpot は日次 quota の 80% で停止する。Gong の workspace あたり毎秒 3 コール上限を、batch ごとの明示的な wait で尊重する。
+   - **冪等性** —各履歴書き込みは `(account_id, scored_date)` をキーとする `ON CONFLICT DO UPDATE` の upsert とする。各 CSP write-back は前の値をチェックし、02:00 の失敗後に 09:00 で再実行しても安全である。
+   - **可観測性** —各スコアリングジョブは sub-score の入力（使用、活動、感情）を composite と並べてログに残し、誤ったスコアが再実行なしでデバッグ可能なようにする。バンドの変化は構造化イベントを emit する。
+   - **Secrets** —CSP や CRM の token を決して inline しない。指定された secret manager 経由でルーティングする。フルアクセスの token には利用可能な最も狭い deploy scope を与える。
+4. **拒否すべきアンチパターンを、それぞれ理由とともに。** 使用 baseline を凍結せず毎晩ライブで再計算する（tagging の変更が振る舞いの変更として読まれ、スコアがノイズで動く）。信頼度フロアのない LLM の感情または churn-reason フィールド（50 語のボイスメールに対する自信ありげな当て推量は `null` より悪い）。前値チェックのない CSP write-back（retry で二重書き込みし、audit trail を汚染する）。CSP が CRM の renewal 日付を上書きするのを許す（CSP は CRM の downstream であり、ソースではない）。`scored_at` も履歴行もない `health_score` の書き込み（トラジェクトリが見えず、それこそがスコアの全要点である）。
+5. **「ユーザーが間違っているとき」のセクション。** renewal-crunch のプレッシャー下で CS Ops エンジニアが手を伸ばすショートカットを、モデルは実行せず押し返します。最も価値の高い拒否は、重みの背後にラベル付き churn の backtest がない churn-risk スコアの出荷を断ることです。backtest のないスコアは当て推量の上で CSM をルーティングしながら数字の権威をまといます —スコアがないより悪く、モデルはそれを生成する代わりにそう述べます。
+
+## コストの実態
+
+- **トークンコスト: ゼロ。** Cursor のルールは各 prompt で送られるローカル文脈であり、コンテキストウィンドウで占める ~6 KB を超えるリクエストごとの API 課金はありません。
+- **Setup 時間: 20-30 分** —ファイルを置き、secret manager を設定し、正規ソースを指定し、履歴テーブルと監査オブジェクトを実際の名前に向けるまで。「source of truth」ブロックが最も時間がかかります。チームが避けてきたかもしれない判断を強制するからです。
+- **タスクごとのオーバーヘッド:** 前置きは生成前に対話を 1-2 ターン追加します。使い捨てのクエリには重いので、そこではスキップします。CS チーム全体が信頼する夜間スコアリングジョブには、さもなければ 3 か月後に forecast の日に火消し騒ぎとして現れる冪等性と source-of-truth の判断を表面化させます。
+- **メンテナンス: 四半期あたり ~30 分。** SDK と API のバージョンはドリフトします（HubSpot は既に v3 → v4。Gainsight と Vitally は大きな告知なく API を改訂します）。バージョンに言及する各ルールにバージョンタグを付け、次のレビュアーが再確認の時期を分かるようにします。
+
+## 成功の姿
+
+- **冪等でない書き込みに紐づく health-score のインシデントがゼロに落ちる。** `(account_id, scored_date)` の upsert default が、履歴テーブルを重複行で埋めてトラジェクトリのチャートを壊す二重書き込みのバグ群を終わらせます。
+- **「スコアは緑だがアカウントは明らかに churn している」が再実行ではなくログからデバッグされる。** 各ジョブが sub-score の入力をログに残すため、CSM の苦情はログ 1 行を読めば解決し、ジョブを再実行して再現を祈る必要はありません。
+- **どの CSM も、3 週間古い renewal 日付でアカウントを開くことが二度とない。** source-of-truth ルールが CRM を renewal の所有者として保ち、それを覆い隠す CSP の書き込みを拒否します。
+- **code review が「信頼度フロアを追加したか」を追うのをやめる。** ルールはあらゆる LLM シグナルにフロアを inline で提案し、レビュアーは代わりに重み付けのロジックに集中します。
+
+## 代替案との比較
+
+- **ルールなし（status quo）。** Cursor は baseline をライブで再計算し retry で二重書き込みする、もっともらしいスコアリングジョブを生成します。使用イベントの rename が一晩で全アカウントのスコアを反転させ、CS チームが renewal の 1 週間をその数字を信頼せずに過ごす最初のとき、ルールの不在がボトルネックになります。
+- **CSP 自身の no-code ルールビルダー（Gainsight Rules Engine、Vitally の自動化）。** コードを書かないチームにはこれが正解です —冪等性とスケジューリングを代わりに処理してくれます。このルールはそれを卒業したチーム向けです。custom なスコアリング計算、ルールビルダーでは表現できない LLM の感情シグナル、CSP が到達できない warehouse の baseline。標準の motion にはルールビルダーを、それができない部分には（このルールで形作った）コードを使ってください。
+- **Notion の CS Ops 規約ドキュメント。** 機能的にはルールなしと同じ —ドキュメントはモデルの文脈に入りません。`.cursorrules` ファイルこそが、各 prompt で読み込まれるその規約ドキュメントです。
+- **linter または dbt の test。** コードが書かれた後に問題を捕まえます。ルールと共存します。ルールは冪等でない書き込みが書かれるのを防ぎ、dbt の test はすり抜ける rollup の grain を捕まえます。両方を維持してください。
+
+## 注意点
+
+- **ルールのドリフト。** チームはルールを追加して決して削除せず、ファイルはモデルが今も適用するガイダンスの博物館になります。ガード: `git blame` での四半期レビュー —18 か月より古いものは再正当化するか削除し、ファイルは ~300 行以下に保ちます。
+- **CSP API の churn。** 「Vitally の `traits` upsert を使え」や「Gainsight Connectors API v2」は、vendor が大きな告知なく API を改訂すると古くなります。ガード: API バージョンに言及する各ルールにバージョンタグ（例: `# Gainsight Connectors API (verified 2026-Q2)`）を付け、次のレビュアーが再確認日を分かるようにします。
+- **実際のアーキテクチャと衝突する source-of-truth ルール。** 付属の default は CRM を renewal 日付の所有者にしますが、一部の org は本当に CSP を renewal のソースとして運用します。ガード: 「source of truth」ブロックは setup で最初に編集するものです。ここの誤った記載はモデルに正しい書き込みを拒否させ誤った書き込みを承認させます。
+- **repo ごとのオーバーライド。** スコアリング repo では正しい書き込み許可の default が、読み取り専用の reporting repo では誤りです。ガード: Cursor のディレクトリ単位のルールサポートを使い、各 repo の README に差異を記録します。フォークするより、文書化された例外を持つ単一の共有ファイルを好みます。
+- **ルールは backtest を置き換えない。** ルールは Cursor に backtest のない churn モデルの出荷を拒否させますが、backtest を代わりに実行することはできません。ガード: ラベル付き churn の backtest、dbt の test、code review を別個の enforcement レイヤーとして維持します —ルールは提案を形作るのであって、control ではありません。
+
+## Stack
+
+- **[Cursor](/en/tools/cursor/)** —IDE とルールエンジン
+- **[Claude](/en/tools/claude/)** —Cursor の生成の背後にあるモデル。また、ルールがスコアリングジョブに感情と why-changed の文のために呼び出させる LLM でもあり、常に信頼度フロアを伴います
+- **`.cursor/rules/cs-ops.md`** —repo にバージョン管理され、code review される
+- **CSP（Gainsight / Vitally / Catalyst / ChurnZero）** —health-score と renewal の write-back ターゲット。renewal 日付の source of truth には決してしない
+- **CRM（HubSpot / Salesforce）** —renewal 日付とアカウントリストの正規ソース
+- **選んだ secret manager** —ルールから参照され、決して inline されない。CSP の token はフルアクセスなので、scope を狭く絞る
+- **`health_score_history` テーブル** —冪等性キー `(account_id, scored_date)` とトラジェクトリの audit trail

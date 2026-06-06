@@ -1,0 +1,86 @@
+---
+slug: voice-of-customer-synthesis-skill
+canonical_slug: voice-of-customer-synthesis-skill
+locale: pt-BR
+verticals: [customer-success]
+title: Sintetize a Voice of the Customer com Claude
+artifact_type: claude-skill
+tools_used: [claude, canny, sprig]
+roles: [cs-ops, product-manager]
+difficulty: intermediate
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+Uma Claude Skill que funde três streams de feedback que os times de CS e Product já coletam separadamente —feature requests do Canny, respostas de surveys in-product do Sprig e um export de tickets de suporte— em um único relatório priorizado de Voice of the Customer. O output é uma lista de temas rankeada onde cada tema carrega um score de demanda ponderado, os segmentos que o pedem, verbatims representativos com sua fonte e uma implicação de produto de uma linha. Em vez de três pessoas lendo três ferramentas e discutindo o que os clientes "realmente" querem, CS Ops roda um único comando e obtém um doc sintetizado sobre o qual um product review pode agir. O bundle do artifact inclui o `SKILL.md`, três arquivos de referência que o time adapta uma vez e um output de exemplo.
+
+## Quando usar
+
+Você é um lead de CS Ops ou um Product Manager que precisa produzir um resumo recorrente de VoC —product council mensal, input de roadmap trimestral ou um artifact de planejamento anual— e o sinal cru vive em pelo menos dois de Canny, Sprig e o export de tickets de uma ferramenta de suporte. A Skill é construída para o caso onde o volume de feedback passou do ponto em que um humano consegue ler tudo (aproximadamente 150+ items por ciclo) mas o time ainda quer rastreabilidade de volta a verbatims específicos em vez de um score de caixa-preta.
+
+Funciona melhor quando as três fontes podem ser exportadas cada uma com um schema estável —posts do Canny com contagens de votos e board, respostas do Sprig com a pergunta do survey e um atributo de segmento, tickets de suporte com uma categoria e tier de conta. A Skill clusteriza através das três, deduplica o mesmo pedido fraseado de cinco maneiras diferentes e pondera cada tema com uma fórmula que você controla. Produz o output mais defensável quando você consegue anexar um campo de valor-de-conta ou segmento a cada item, porque é isso que permite ao relatório rankear por demanda ponderada por revenue em vez de contagem crua de menções.
+
+## Quando NÃO usar
+
+Não use esta Skill como o único input para uma decisão de roadmap. Ela sintetiza demanda declarada; não mede disposição a pagar, custo técnico ou fit estratégico. Um tema encabeçando a lista rankeada significa que muitas contas valiosas o pediram alto, não que seja a coisa certa a construir. A linha de implicação de produto é um gatilho para discussão, não um veredito.
+
+Não a aponte para menos de ~50 items em um ciclo. Abaixo disso, um PM consegue ler cada item diretamente em menos tempo do que leva para adaptar os arquivos de referência, e o clustering faz overfitting —você obtém "temas" de dois items cada que na verdade são só dois fraseios de um pedido.
+
+Não a use quando suas fontes não têm nenhum atributo de segmento ou valor-de-conta. Sem isso, cada tema se pondera por contagem crua, o que sobre-indexa no segmento que for mais barulhento (geralmente usuários self-serve de baixo ARR enchendo posts no Canny) e subconta as contas enterprise que mandam email para o CSM em vez de abrir um ticket. Um relatório de VoC baseado só em contagem ativamente engana a priorização de roadmap.
+
+Não trate os verbatims como anonimizados para compartilhamento externo. A Skill preserva contexto de fonte suficiente (tier de conta, às vezes uma frase citada) para que um relatório possa vazar quem disse o quê. Mantenha o output interno a menos que você rode uma passada de redação separada.
+
+## Setup
+
+Aproximadamente 45 a 90 minutos na primeira vez, quase tudo gasto adaptando os três arquivos de referência aos seus próprios schemas de export e política de ponderação.
+
+1. **Instale a Skill.** Coloque o bundle de `apps/web/public/artifacts/voice-of-customer-synthesis-skill/` em `~/.claude/skills/voc-synthesis/`. A Skill define um comando de entrada, `synthesize_voc(period, sources)`, mais helpers internos para normalizar cada fonte, clusterizar e o pipeline de duas passadas do Claude.
+2. **Exporte as três fontes.** Puxe os posts do Canny do período via a Canny API (ou um export CSV) com `title`, `details`, `score` (contagem de votos), `board` e qualquer campo de empresa linkado. Puxe as respostas do Sprig com a pergunta do survey, a resposta de texto livre e pelo menos um atributo de segmento. Puxe o export de tickets de suporte (Zendesk, Freshdesk, Front, Help Scout —qualquer ferramenta que exporte CSV) com `subject`, `description`, `category` e `account_tier`. Coloque as três em `inputs/` como CSV ou JSON.
+3. **Adapte o mapa de schema.** Abra `references/1-source-schema-map.md` e mapeie os nomes de coluna reais de cada fonte para os campos internos da Skill (`text`, `weight_signal`, `segment`, `source_label`). Este é o arquivo que mais quebra na primeira rodada porque os nomes de board do Canny e os IDs de survey do Sprig de cada time diferem. A Skill se recusa a rodar se um campo obrigatório está sem mapear em vez de pontuar silenciosamente sobre dados parciais.
+4. **Configure a política de ponderação.** Abra `references/2-weighting-policy.md` e configure a fórmula. O default é `theme_score = soma sobre items de (segment_weight * recency_factor)`, onde `segment_weight` é 3 para enterprise, 2 para mid-market, 1 para self-serve, e `recency_factor` decai linearmente de 1.0 no dia 0 para 0.5 na borda do período. Substitua esses pelas suas próprias bandas. Ter a política em um arquivo em vez de hard-coded é o que permite a um product council questionar as ponderações e você re-rodar em dois minutos em vez de editar código.
+5. **Adapte o template de output.** Abra `references/3-report-template.md` e alinhe a ordem das seções e o formato de citação de verbatims ao que seu product review espera. Depois rode `synthesize_voc(period="2026-Q2", sources=["canny", "sprig", "support"])`. A Skill escreve um relatório Markdown mais um CSV de cada item com seu tema atribuído para que um cético possa auditar o clustering.
+
+## O que a Skill realmente faz
+
+A Skill roda em duas passadas, e a divisão é deliberada. A passada um é extrair-e-clusterizar; a passada dois é rankear-e-explicar. Fazer ambas em uma única passada produz clustering que deriva para o que o modelo racionaliza por último, porque ele está simultaneamente decidindo quais são os temas e argumentando por sua prioridade —o raciocínio de prioridade contamina o clustering.
+
+A passada um normaliza as três fontes através do mapa de schema para uma forma de registro comum, depois pede ao Claude para clusterizar os items em temas candidatos. O prompt força o modelo a atribuir cada item a exatamente um tema ou a um bucket explícito `unclustered`, e a citar o span de texto que justifica cada atribuição. O bucket `unclustered` é uma guarda, não uma falha: uma rodada saudável deixa 5 a 15 por cento sem clusterizar (pedidos genuinamente pontuais), e uma taxa de unclustered acima de 30 por cento é um sinal de que as fontes são heterogêneas demais para fundir neste ciclo, o que a Skill traz à tona em vez de forçar uma fusão.
+
+Entre passadas, o scoring é Python determinístico, não Claude. A fórmula de ponderação de `references/2-weighting-policy.md` roda sobre os items clusterizados em código, então os mesmos inputs sempre produzem o mesmo ranking e um revisor consegue recalcular o score de qualquer tema na mão. Deixar o Claude "ponderar" os temas tornaria o ranking não-auditável e não-reproduzível; o modelo clusteriza e explica, o código pontua.
+
+A passada dois pega os temas rankeados e, para cada um, seleciona dois a três verbatims representativos (um por fonte onde possível, para que um tema não seja carregado inteiramente pela minoria barulhenta do Canny), escreve a implicação de produto de uma linha e nomeia os segmentos que impulsionam o score. O output é um relatório rankeado mais o CSV por item. O relatório encabeça com os temas top; o CSV é a trilha de auditoria.
+
+## Realidade de custos
+
+Uma rodada completa com Claude Sonnet custa aproximadamente 30,000 a 90,000 tokens de input dependendo da contagem de items e do tamanho do texto, e 5,000 a 10,000 tokens de output —chame de 12 a 30 centavos por ciclo de VoC. A variável de input que domina é o tamanho da descrição dos tickets de suporte; cap do texto de cada item em 600 caracteres no mapa de schema mantém um ciclo de 400 items perto do extremo baixo sem perder o sinal de clustering. O tempo de relógio é dois a cinco minutos, quase tudo as duas passadas do Claude já que o export e o scoring são locais.
+
+Contra a alternativa —um PM gastando um dia focado lendo e taggeando 300 items na mão a cada ciclo— a Skill leva isso a aproximadamente 90 minutos (não adaptando nada depois da primeira rodada, depois revisando o relatório e auditando pontualmente o CSV). Para um time rodando VoC mensalmente, isso é aproximadamente um dia de tempo de PM recuperado por mês, e o trade está bem dentro do orçamento em bem menos de um dólar por mês em tokens.
+
+## Como o sucesso se parece
+
+Acompanhe três números. Primeiro, **concordância de clustering**: amostre 30 items do CSV por item e peça a um PM para julgar se cada um está no tema certo. Mire 85 por cento ou mais no segundo ciclo; abaixo de 70 por cento significa que o mapa de schema está alimentando texto ruidoso ao modelo (geralmente HTML não limpo ou assinaturas nos corpos dos tickets). Segundo, **rastreabilidade de roadmap**: a proporção de decisões de roadmap nos próximos dois trimestres que citam um tema de VoC pelo nome. Se ficar em zero, o relatório está sendo produzido mas não consumido, e o formato precisa coincidir com o ritual real do product review. Terceiro, **taxa de unclustered** por ciclo —com tendência estável na banda de 5 a 15 por cento é saudável; um pico súbito significa que um schema de fonte mudou upstream.
+
+## Versus as alternativas
+
+**Versus uma vista de roadmap nativa do Productboard ou Canny.** Tanto Productboard quanto Canny agregam feedback dentro de seus próprios muros e rankeiam por votos ou insights, e se todo o seu sinal já vive em um deles, a vista nativa dá menos trabalho. O gap: nenhum funde através das três de Canny mais Sprig mais tickets de suporte, e ambos rankeiam pelo seu próprio sinal de engagement em vez de uma fórmula ponderada por revenue que você controla. Use a vista nativa quando uma ferramenta tem 80 por cento do seu sinal; use esta Skill quando o sinal está genuinamente dividido através de três sistemas e você precisa da ponderação por segmento.
+
+**Versus uma passada manual de tagging em uma planilha.** Um PM lendo e taggeando cada item produz o clustering de mais alta fidelidade porque o humano pega a nuance que o modelo perde. O trade é o dia focado por ciclo e o fato de que não escala além de algumas centenas de items nem sobrevive ao PM trocar de emprego. Use tagging manual para o primeiro ciclo ou dois para calibrar suas bandas de ponderação contra a realidade, depois deixe a Skill carregar o volume recorrente e reserve a leitura humana para o bucket `unclustered`.
+
+**Versus um dump genérico para um LLM ("resuma este feedback").** Colar os três exports em uma janela de chat e pedir um resumo é mais rápido de começar e produz um blob confiante e não-auditável sem scores, sem rastreabilidade de fonte e com deduplicação silenciosa que você não consegue inspecionar. A divisão de duas passadas com scoring determinístico existe precisamente para tornar o output defensável em uma discussão de roadmap, o que o dump genérico nunca é.
+
+## A vigiar
+
+- **Viés do segmento mais barulhento.** Usuários self-serve enchem posts no Canny; champions enterprise mandam email para o CSM. Uma vista baseada em contagem sobre-pondera sistematicamente o segmento que por acaso usa o canal público. Guarda: o scoring multiplica cada item por `segment_weight` de `references/2-weighting-policy.md`, então um único ticket enterprise pode pesar mais do que vários votos self-serve —e o relatório nomeia os segmentos que impulsionam cada tema para que um revisor possa ver a ponderação em ação em vez de confiar em um número nu.
+- **Alucinação de clustering através de fontes.** Pedido para fundir três vocabulários, o modelo pode inventar um tema que suaviza uma distinção real (tratando "export lento" e "export com colunas faltando" como um). Guarda: a passada um cita o span justificante de cada atribuição e escreve o CSV por item, então um revisor consegue detectar uma má fusão na trilha de auditoria; o bucket `unclustered` dá ao modelo uma saída explícita em vez de forçar um esticamento.
+- **Schema de fonte obsoleto ou deslocado.** Um board do Canny renomeado ou um novo ID de survey do Sprig muda silenciosamente o que o export contém, e o relatório então pontua contra dados parciais. Guarda: a validação do mapa de schema se recusa a rodar sobre um campo obrigatório sem mapear e reporta qual fonte e coluna falhou, em vez de pontuar sobre o que carregou.
+- **Ler demanda como prioridade.** A lista rankeada mede demanda declarada ponderada por valor de segmento —não disposição a pagar, custo de build ou fit de estratégia. Guarda: a linha de implicação de produto é fraseada como uma pergunta para o review, não uma recomendação, e o relatório carrega um header permanente notando que é um input entre vários, então um leitor não consegue confundir rank com uma decisão de build.
+- **Vazamento de verbatims.** O contexto de fonte preservado pode identificar quem disse o quê se o relatório for compartilhado externamente. Guarda: o relatório é marcado como só-interno no header do template, e o bundle inclui um flag `redact` que remove identificadores de conta e frases citadas para qualquer versão que saia do prédio.
+
+## Stack
+
+- **Canny** —posts de feature-request com contagens de votos e board (Canny API ou export CSV)
+- **Sprig** —respostas de texto livre de surveys in-product com um atributo de segmento
+- **Ferramenta de suporte** —export de tickets (Zendesk, Freshdesk, Front ou Help Scout) com categoria e tier de conta
+- **Claude** —pipeline de duas passadas: extrair-e-clusterizar, depois rankear-e-explicar (Sonnet recomendado por custo)
+- **Scoring local** —Python determinístico aplica a política de ponderação entre passadas para que o ranking seja reproduzível e auditável

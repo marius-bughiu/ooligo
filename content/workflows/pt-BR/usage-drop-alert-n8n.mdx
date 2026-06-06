@@ -1,0 +1,81 @@
+---
+slug: usage-drop-alert-n8n
+canonical_slug: usage-drop-alert-n8n
+locale: pt-BR
+verticals: [customer-success]
+title: Alerte os CSMs sobre quedas de uso com n8n
+artifact_type: n8n-flow
+tools_used: [n8n, amplitude, slack]
+roles: [cs-ops]
+difficulty: intermediate
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+O sinal de churn mais confiável que um time de CS tem é o uso do produto despencando, e a forma mais comum desse sinal passar batido é ninguém estar olhando a semana certa. Quando um QBR traz a queda à tona, a conta já está em silêncio há dois meses. Este workflow fecha esse gap com o menor mecanismo possível: um flow semanal de n8n que lê a contagem de usuários ativos de cada conta no Amplitude, compara a semana passada com a anterior, e envia uma mensagem direta no Slack para o CSM dono quando a queda cruza um threshold que o lead de CS Ops controla por conta. Ele faz uma coisa só —trazer à tona uma queda de uso semana-contra-semana enquanto ainda é o problema desta semana— e faz isso sem um dashboard que ninguém abre.
+
+O bundle do artifact fica em `apps/web/public/artifacts/usage-drop-alert-n8n/`. O export do n8n é `usage-drop-alert-n8n.json` e o guia de credenciais, schema e verificação é `_README.md`. Ambos são leitura obrigatória antes de ativar o schedule, porque o bundle vem com credenciais placeholder e duas tabelas Postgres que precisam existir antes da primeira execução.
+
+## Quando usar
+
+Use isto quando você é um lead de CS Ops tocando um book de contas que cresceu além de olhar a olho um dashboard de uso —algo acima de 50 contas por CSM, onde ninguém consegue manter o portfólio inteiro na cabeça. Você precisa do Amplitude (ou uma ferramenta de product analytics para a qual o node HTTP possa ser reapontado) rastreando um sinal de usuários ativos por conta, um workspace de Slack, e um lugar para guardar thresholds por conta. O flow é a escolha certa quando a organização de CS já confia no uso do produto como indicador líder mas não tem um mecanismo que empurre o sinal para um humano antes do próximo QBR.
+
+Ele encaixa especialmente bem como a camada inicial barata embaixo de um modelo de saúde mais pesado. Se você já roda o [customer health score composto em n8n](/pt-BR/workflows/customer-health-score-n8n/), este flow é o complemento de reação rápida: o score composto recalcula toda noite e diz onde uma conta está parada, enquanto este alerta dispara semanalmente e diz o que acabou de se mover. Muitos times sobem o alerta primeiro porque é uma tarde de trabalho e ganha confiança em dias, e depois graduam para o composto quando os CSMs estão agindo sobre os pings.
+
+## Quando NÃO usar
+
+Pule isto se um CSM consegue ler o portfólio inteiro na mão. Abaixo de cerca de 30 contas por CSM, um humano escaneando o dashboard de uso na segunda de manhã pega as mesmas quedas com mais contexto, e o custo de falsos positivos de um threshold automatizado não compensa. O flow ganha seu lugar por volume, não por esperteza.
+
+Pule se o seu tagging em nível de conta no Amplitude não for confiável. O flow inteiro repousa em `gp:account_id` (ou sua propriedade de usuário equivalente) estar setada consistentemente em cada evento. Se as contas estão tagueadas de forma inconsistente —alguns eventos carregam a propriedade, outros não— a contagem de ativos semanais não significa nada e o alerta dispara sobre um artefato de tagging, não sobre uma mudança de comportamento. Conserte a taxonomia primeiro; um alerta sobre dados sujos é pior que nenhum alerta, porque carrega a autoridade de um número.
+
+Pule se a queda que te importa é em nível de assento ou de feature em vez de em nível de conta. Este flow vigia um sinal —ativos únicos semanais por conta— e uma queda de 40% em ativos totais pode esconder uma conta saudável que simplesmente perdeu um power user durante uma semana de feriado. Se o seu risco de churn vive no abandono de um feature específico ou em um único champion nomeado ficando em silêncio, você precisa de um cohort por-feature ou por-usuário, que é um flow diferente (mais pesado). E pule se o time não tem um playbook do que fazer quando um alerta de queda dispara; uma notificação sem ação seguinte definida treina as pessoas a descartá-la.
+
+## Setup
+
+O setup está documentado de ponta a ponta em `apps/web/public/artifacts/usage-drop-alert-n8n/_README.md`. A versão curta: importe o JSON no n8n em **Settings → Import From File**, crie as três credenciais placeholder (Postgres, Amplitude Basic auth, Slack bot token), crie as duas tabelas Postgres a partir do DDL no README (`accounts_in_scope` e `usage_alert_history`), semeie uma conta canary, e rode a sequência de verificação de oito passos antes de ativar o schedule. A partir de uma instalação limpa de n8n, reserve 45 a 90 minutos —a maior parte gasta confirmando que a query de segmentação do Amplitude bate com a sua taxonomia de eventos e que o app de Slack consegue mandar DM para usuários no seu workspace.
+
+A tabela `accounts_in_scope` é onde mora a política por conta, e acertar nela é a diferença entre um alerta útil e um bot mutado. Cada linha carrega `drop_threshold_pct` (o percentual de queda que dispara um alerta) e `min_baseline_events` (o piso de usuários ativos abaixo do qual a conta é pequena demais para julgar). Contas enterprise frequentemente rodam um threshold mais apertado —uma queda de 25% numa conta de 200 assentos vale uma olhada— enquanto contas self-serve toleram mais ruído e rodam a 50%. Manter isso como colunas de tabela em vez de constantes hard-coded significa que reajustar é um único `UPDATE`, não um redeploy.
+
+## O que o flow realmente faz
+
+O cron dispara na segunda às 09:00 em `America/New_York` (a expressão é `0 13 * * 1` —13:00 UTC— então confirme que o timezone do workflow está setado). Segunda de manhã é deliberado: a semana anterior está completamente fechada, então não há comparação de semana-parcial que leria toda segunda como uma queda. `Pull Accounts In Scope` lê até 500 contas ativas que têm um Slack id de CSM setado; contas sem dono são filtradas no SQL porque não há para quem notificar. `Batch Accounts (20/group)` as divide em grupos para que as chamadas paralelas ao Amplitude fiquem abaixo do cap de concorrência da Dashboard REST API, com uma espera de um segundo entre batches.
+
+`Amplitude — Weekly Actives (14d)` chama o endpoint `/api/2/events/segmentation` com `i=7` (buckets semanais) sobre uma janela de 14 dias, segmentado na propriedade `gp:account_id` da conta. Isso retorna dois pontos semanais: a semana passada e a anterior. `Compute WoW Drop` é a única lógica real no flow e toma duas decisões. Primeiro, o guard de ruído: se a contagem de ativos da semana anterior está abaixo de `min_baseline_events`, a conta é marcada `skipped_low_baseline` e nunca alerta —uma mudança de quatro ativos para dois é uma queda de 50% e puro ruído. Segundo, o threshold: computa `(week_before - last_week) / week_before` como percentual e, só se isso atingir ou exceder o `drop_threshold_pct` da conta, marca a linha `alert` com uma razão legível como "ativos semanais caíram 47% (de 120 para 64) vs a semana anterior".
+
+`Crosses Threshold?` roteia as linhas de alerta adiante; todo o resto vai direto para o throttle. `Lookup Recent Alert` então checa `usage_alert_history` por qualquer alerta sobre esta conta nos últimos 14 dias, e `Outside Cooldown?` suprime a repetição se uma existir. Este é o segundo guard contra a fadiga: uma queda sustentada de outra forma daria ping no CSM toda segunda até o uso se recuperar, o que o treina a ignorar o bot. Com o cooldown, uma queda real dá ping uma vez, e o CSM se torna dono do follow-up dali.
+
+As linhas que sobrevivem batem em `Slack — DM Owning CSM`, que posta uma mensagem Block Kit diretamente no Slack user id do CSM com o nome da conta, o segmento, as contagens de ativos antes/depois, o percentual de queda, e o threshold que disparou. `Persist Alert (idempotent per week)` escreve o alerta em `usage_alert_history` com uma cláusula `ON CONFLICT` chaveada em `(account_id, date_trunc('week', alerted_at))`, então uma execução retentada atualiza a linha existente em vez de mandar DM para o CSM duas vezes, e carimba `last_alerted_at` na conta para a leitura de cooldown do caminho rápido.
+
+## Realidade de custos
+
+Este flow é quase de graça para rodar. Não há chamada de LLM —a comparação é aritmética num node Code, então o único custo é cota de API e tempo de execução do n8n. Por conta por semana o flow faz uma leitura de segmentação do Amplitude, no máximo uma escrita de Slack, e duas ou três queries Postgres. A Dashboard REST API do Amplitude não cobra por chamada em planos pagos; a restrição é seu limite baixo de concorrência, que é exatamente por que o batch size é 20 com um throttle de um segundo. Para 500 contas a execução inteira completa em aproximadamente três a seis minutos no executor pequeno do n8n Cloud, dominada pelas leituras serializadas do Amplitude. O `chat.postMessage` do Slack é rate-limited a aproximadamente uma mensagem por segundo por contexto de canal, confortavelmente abaixo do que um volume de alerta semanal precisa.
+
+O custo real é humano, e é o custo que você está tentando reduzir: um lead de CS Ops gasta talvez uma hora por trimestre reajustando thresholds conforme os segmentos mudam, contra a alternativa de os CSMs cada um gastar 20 a 30 minutos por semana olhando dashboards a olho (ou, mais frequentemente, não fazendo isso e descobrindo no QBR). Num time de 10 CSMs isso são aproximadamente 40 a 50 horas por trimestre de escaneamento manual substituídas por uma hora de manutenção de thresholds —e o escaneamento estava pegando quedas um mês atrasado de qualquer jeito.
+
+## Como é o sucesso
+
+Vigie três números no primeiro trimestre. Primeiro, **a taxa de ação sobre os alertas** —a parcela de DMs que resultam num touch logado do CSM (um email, uma call agendada, uma nota) dentro de cinco dias úteis. Pesquise ou instrumente isto; mire acima de 60% até o fim do primeiro mês. Uma taxa de ação abaixo de 40% significa que o threshold está frouxo demais e o bot está gritando lobo —suba `drop_threshold_pct` para os segmentos ruidosos. Segundo, **o lead time até a intervenção** —para contas que depois deram churn ou se contraíram, meça quantos dias o alerta de queda de uso precedeu o primeiro outreach do CSM versus o baseline histórico de "descobriu no QBR". O ponto inteiro é mover esse número de aproximadamente 60 dias para menos de 14. Terceiro, **a taxa de supressão** —a parcela de contas que cruzaram o threshold mas foram retidas pelo cooldown. Um número saudável é baixo e estável; uma taxa de supressão em alta significa que um cohort está em declínio sustentado e o alerta semanal não é mais a ferramenta certa —essas contas precisam do customer health score composto e um save play, não de outro ping.
+
+## Versus as alternativas
+
+A alternativa default é o **alerting próprio do Amplitude** —seus monitores de Anomaly e Threshold conseguem vigiar um chart e disparar para Slack ou email. Se você precisa de exatamente um alerta global ("ativos semanais totais caíram"), use o monitor nativo do Amplitude; é menos trabalho que subir n8n. A razão deste flow existir é o roteamento por conta: os monitores do Amplitude alertam sobre um chart, não sobre um mapeamento conta-para-CSM, então um monitor em nível de portfólio não consegue dizer ao CSM dono que a conta *dele* caiu. Para tirar roteamento por-conta, por-dono só do Amplitude você acaba construindo um monitor por conta, o que não escala além de um punhado. Este flow mantém o mapa conta-para-CSM e os thresholds por conta numa tabela que você possui e roteia de acordo.
+
+Uma segunda alternativa são os **alertas de uso integrados do seu CSP** —Gainsight, Catalyst, ChurnZero, [Vitally](/pt-BR/tools/vitally/), [Planhat](/pt-BR/tools/planhat/) e [Totango](/pt-BR/tools/totango/) todos vêm com alguma forma de trigger de queda de uso. Se você já roda um CSP e canaliza o uso do produto para ele, use o trigger nativo —os dados já estão lá e o roteamento para o CSM já está cabeado. Este flow é para o time que tem product analytics no Amplitude mas ainda não centralizou o uso num CSP, ou cujo CSP atrasa os dados de uso do Amplitude por um ciclo de sync. É a ponte que entrega o indicador líder antes do rollup do CSP se atualizar.
+
+Uma terceira alternativa é um **script DIY num cron** —um job Python batendo na API do Amplitude e na API do Slack. É mais rápido escrever a primeira versão que cabear o flow de n8n, mas carrega o peso de rotação de credenciais em código, não tem semântica de retry out of the box, e é invisível para o lead de CS Ops que não é engenheiro. A versão de n8n troca flexibilidade crua por uma UI de credenciais, retries integrados, e um flow visual que um não-engenheiro consegue ler e reajustar. Escolha DIY se CS Ops tem um engenheiro permanente; escolha o flow de n8n se a pessoa ajustando thresholds é a mesma pessoa lendo os alertas.
+
+## A vigiar
+
+- **Um artefato de tagging se lê como um despenque de uso.** Se a instrumentação do produto muda —um evento é renomeado, a propriedade `account_id` para de ser setada numa superfície— toda conta naquela superfície mostra uma queda a zero e o bot manda DM para todos os CSMs de uma vez. Guarda: antes de ativar, consulte a contagem distinta de contas com `gp:account_id` não-nulo das últimas duas semanas e confirme que é estável; e trate um pico de volume de alerta na mesma semana através de muitas contas como um incidente de instrumentação, não uma onda de churn —a tabela `usage_alert_history` torna esse pico visível num relance.
+- **Contas pequenas geram quedas fantasma.** Uma conta com quatro ativos semanais caindo para dois é uma queda de 50% e não significa nada. Guarda: o piso `min_baseline_events` em `accounts_in_scope` marca qualquer conta abaixo do threshold da semana anterior como `skipped_low_baseline` e nunca alerta sobre ela. Sete o piso por segmento —self-serve pode rodar um piso de 5, enterprise raramente precisa de um.
+- **Quedas sustentadas spamam o CSM.** Sem supressão, uma conta que cai e fica embaixo dispararia toda segunda até se recuperar. Guarda: `Lookup Recent Alert` mais o cooldown de 14 dias em `Outside Cooldown?` garante um alerta por evento de queda; o CSM se torna dono do follow-up depois do primeiro ping, e uma conta ainda em declínio aparece no customer health score composto, não num alerta repetido.
+- **Retries mandam DM duplicado.** Uma falha de node no meio do batch que dispara um retry do n8n poderia mandar o DM de Slack duas vezes. Guarda: `usage_alert_history` tem um índice único em `(account_id, date_trunc('week', alerted_at))` e `Persist Alert` usa `ON CONFLICT ... DO UPDATE`, então a segunda tentativa atualiza a linha semanal existente em vez de inserir uma nova —e como a escrita de Slack precede o persist, a leitura de cooldown no retry o pega.
+- **O DM chega e nada acontece.** Um alerta sem próximo passo definido é ruído com um timestamp. Guarda: este é um guard de processo, não de código —emparelhe o rollout com um playbook de uma linha ("DM de queda de uso → cheque a conta no seu CSP → logue um touch dentro de cinco dias úteis") e rastreie a taxa de ação acima. Se a taxa de ação está baixa, o conserto é o playbook ou o threshold, não mais alertas.
+
+## Stack
+
+- **n8n** —orquestração, o schedule semanal, retries, gestão de credenciais, e um flow visual que um lead de CS Ops consegue reajustar sem um engenheiro
+- **Amplitude** —a fonte de uso do produto; ativos únicos semanais por conta via o endpoint `events/segmentation` da Dashboard REST
+- **Slack** —o canal de entrega; um DM Block Kit para o user id do CSM dono (reapontável para um canal compartilhado)
+- **Postgres** —`accounts_in_scope` para thresholds por conta e roteamento de CSM, `usage_alert_history` para o cooldown e a chave de idempotência

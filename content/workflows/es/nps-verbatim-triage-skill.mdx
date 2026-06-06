@@ -1,0 +1,88 @@
+---
+slug: nps-verbatim-triage-skill
+canonical_slug: nps-verbatim-triage-skill
+locale: es
+verticals: [customer-success]
+title: Clasifica los verbatims de NPS en temas con Claude
+artifact_type: claude-skill
+tools_used: [claude, delighted]
+roles: [cs-ops, csm]
+difficulty: beginner
+time_to_setup: "20-40 min"
+human_tested: false
+last_updated: "2026-06-06"
+---
+
+Una Claude Skill que toma un batch de respuestas abiertas de NPS exportadas de Delighted y devuelve tres cosas sobre las que un lead de CS Ops puede actuar la misma tarde: una lista de temas agrupados con un conteo y citas representativas por cada uno, una etiqueta de sentimiento por respuesta cruzada contra el bucket de NPS (promoter / passive / detractor), y una lista priorizada de acciones que ata los temas más ruidosos a un dueño y un siguiente paso. El punto es convertir la columna de verbatims que nadie lee en la parte de la encuesta que de verdad mueve una conversación de roadmap. El bundle del artifact incluye `SKILL.md` más dos archivos de referencia que el equipo adapta una vez y reusa cada ciclo de encuesta.
+
+El bundle vive en `apps/web/public/artifacts/nps-verbatim-triage-skill/`. Contiene `SKILL.md`, `references/1-theme-taxonomy.md` (la lista semilla de temas que ajustas a tu producto), y `references/2-output-format.md` (el Markdown literal que la Skill emite). Lee ambos antes de la primera corrida.
+
+## Cuándo usarla
+
+Eres un lead de CS Ops o un CSM que acaba de cerrar un ciclo de NPS en Delighted y tiene entre 50 y 2,000 respuestas abiertas en un CSV. Quieres temas, no una nube de palabras —una lista que puedas llevar a una reunión de roadmap que diga "47 detractors mencionan fricción de onboarding, aquí están cinco de sus palabras exactas, el dueño es el equipo de onboarding". La Skill está construida para la lectura recurrente trimestral o mensual, donde el valor es la consistencia: la misma taxonomía aplicada de la misma forma cada ciclo para que las tendencias sean comparables entre encuestas.
+
+Funciona mejor cuando las respuestas están en un solo idioma, la pregunta de la encuesta es estable entre ciclos, y tienes al menos 30 verbatims —por debajo de eso, léelos tú mismo; agrupar 12 comentarios es trabajo de relleno que el modelo disfraza de análisis. Es una Skill de nivel beginner a propósito: sin warehouse, sin wiring de API más allá de una exportación de Delighted, sin orquestación. Pegas un path de CSV y una etiqueta de pregunta y recibes Markdown de vuelta.
+
+## Cuándo NO usarla
+
+No uses esta Skill como sistema de registro para cerrar el ciclo con detractors individuales. Agrupa y prioriza; no rastrea a quién respondiste. El inbox y los tags propios de Delighted son dueños de ese workflow —la Skill lee la exportación, no escribe de vuelta. Si necesitas rastreo de seguimiento por respuesta, hazlo en Delighted o tu CRM y usa esta Skill para la lectura agregada encima.
+
+No la uses con menos de 30 respuestas. Los conteos de temas no son significativos en muestra pequeña, y un "tema" respaldado por dos comentarios te invita a sobre-rotar sobre ruido. La Skill rehúsa por debajo de 30 por default y te dice que leas las respuestas directamente en su lugar.
+
+No la uses en batches de idioma mixto sin separarlos primero. La calidad del clustering cae fuerte cuando se le pide al modelo agrupar un comentario en español y uno en inglés bajo un mismo tema, y el paso de cita representativa sacará a la superficie una cita que la mitad de tus stakeholders no puede leer. Exporta por idioma, corre la Skill por idioma, mezcla las tablas de temas tú mismo.
+
+No leas la etiqueta de sentimiento como sustituto del score de NPS en sí. Un 9 con un comentario levemente crítico sigue siendo un promoter. La Skill cruza el sentimiento contra el bucket del score precisamente para que veas los desajustes (el detractor cuyo comentario es neutral, el promoter que está calladamente furioso por una sola feature) —esos desajustes son la señal, no una razón para reetiquetar el score.
+
+## Setup
+
+Aproximadamente 20 a 40 minutos la primera vez, casi todo gastado en ajustar la taxonomía semilla al vocabulario de tu producto.
+
+1. **Instala la Skill.** Coloca el bundle de `apps/web/public/artifacts/nps-verbatim-triage-skill/` en `~/.claude/skills/nps-verbatim-triage/`. La Skill expone un solo comando, `triage_nps(csv_path, question_label, nps_column, comment_column)`, más helpers internos para parseo de CSV, el pipeline de clustering de dos pasadas, y el cruce.
+2. **Exporta de Delighted.** En Delighted, ve a tu encuesta, Export → CSV. Necesitas como mínimo la columna del score y la columna del comentario; conserva la fecha de respuesta y cualquier campo de segmento (plan tier, CSM, región) por el que quieras que la Skill desglose los temas. Anota los headers de columna exactos —los pasas como `nps_column` y `comment_column` para que la Skill nunca adivine qué columna es cuál.
+3. **Ajusta la taxonomía semilla.** Abre `references/1-theme-taxonomy.md` y reemplaza los temas placeholder con las 8 a 15 categorías que coinciden con tu producto —`onboarding`, `pricing`, `performance`, `support-responsiveness`, `feature-gap:reporting`, etc. La lista semilla no es un filtro duro; ceba la primera pasada de clustering para que los temas se nombren consistentemente entre ciclos. La Skill todavía saca a la superficie un bucket `other` y propone temas nuevos cuando un cluster no encaja en la lista semilla, así que no estás ciego a feedback genuinamente nuevo.
+4. **Adapta el formato de output.** Abre `references/2-output-format.md` y confirma que el layout de Markdown coincide con lo que tu reunión de roadmap espera —tabla de temas, tabla de cruce, lista priorizada de acciones. Si tu equipo pega en Notion, déjalo como Markdown; si pega en un Google Doc, el formato igual sobrevive el pegado.
+5. **Corre para una encuesta.** `triage_nps(csv_path="q2-2026-nps.csv", question_label="What is the primary reason for your score?", nps_column="Score", comment_column="Comment")`. La Skill escribe un archivo Markdown con las tres secciones. Léelo contra diez o quince de los comentarios crudos para confirmar que el clustering coincide con tu lectura antes de llevarlo a la reunión.
+
+## Qué hace la Skill en realidad
+
+La Skill corre dos pasadas de Claude, no una, y la división es la decisión de ingeniería que importa. Una sola pasada que a la vez inventa temas y asigna cada comentario a ellos produce nombres de temas que derivan —el modelo acuña "problemas de activación" en el comentario 4 y "fricción de onboarding" en el comentario 80 para la misma queja subyacente, y tus conteos se fracturan entre etiquetas casi-duplicadas.
+
+La pasada uno es resolución de taxonomía. Claude lee el batch completo (o una muestra representativa de 200 si el batch es más grande, para controlar el costo de tokens) junto con la taxonomía semilla de `references/1-theme-taxonomy.md`, y devuelve una lista consolidada de temas: los temas semilla que de hecho aparecen, más cualquier tema nuevo que proponga para clusters que la lista semilla no cubre, cada uno con una definición de una línea. Esta pasada fija el vocabulario antes de asignar cualquier comentario, así que las etiquetas son estables.
+
+La pasada dos es asignación y sentimiento. Claude toma la lista congelada de temas y recorre cada comentario, asignando un tema primario (y hasta dos temas secundarios), una etiqueta de sentimiento (positivo / neutral / negativo), y el bucket de NPS existente del comentario. Se le indica asignar `other` en vez de forzar un comentario en un tema con el que no coincide, y devolver el comentario verbatim como candidato a cita representativa. Hacer la asignación después de congelar la taxonomía es lo que mantiene honestos los conteos —cada comentario se evalúa contra la misma lista fija.
+
+La Skill entonces calcula de forma determinista, en código, no en el modelo: conteos de temas, el cruce de sentimiento-por-bucket-de-NPS, y la lista priorizada de acciones. La priorización es por volumen ponderado por detractors —un tema mencionado por 40 detractors prioriza por encima de uno mencionado por 40 promoters, porque el tema de detractors es el que te está costando renewals. El conteo se hace en código porque pedirle al modelo que cuente su propio output es la fuente más común de un número confiadamente equivocado.
+
+El output es un archivo Markdown: una tabla de temas (tema, definición, conteo total, conteo de detractors, tres citas representativas), una tabla de cruce (sentimiento × bucket de NPS), y una lista priorizada de acciones (tema, conteo de detractors, un dueño sugerido tomado de un mapeo que defines en el archivo de taxonomía, y un siguiente paso placeholder que tú llenas). El dueño y el siguiente paso son andamiaje —la Skill sugiere, el humano decide.
+
+## Realidad de costos
+
+Una corrida sobre 300 verbatims cuesta aproximadamente 12,000 a 20,000 tokens de input y 3,000 a 5,000 tokens de output con Claude Sonnet —llámalo 5 a 9 centavos por encuesta a precios actuales de Sonnet. Para batches de más de 200 comentarios, la pasada uno muestrea en vez de leer todo, así que el costo crece con la pasada de asignación (lineal en el conteo de comentarios) en vez de cuadráticamente. Un batch de 1,000 comentarios aterriza cerca de 25 a 35 centavos. El tiempo de reloj es uno a tres minutos, dominado por la pasada de asignación.
+
+El costo alternativo es el que esto reemplaza: un analista de CS Ops leyendo y etiquetando 300 comentarios a mano toma 3 a 5 horas y produce una taxonomía que deriva cada trimestre porque una persona distinta la etiqueta cada vez. La Skill lleva eso a unos 20 minutos incluyendo la pasada de revisión, y la taxonomía se queda fija en `references/1-theme-taxonomy.md` así que la comparación ciclo-a-ciclo es real en vez de un artefacto de quién hizo el etiquetado.
+
+## Métrica de éxito
+
+Rastrea la proporción de comentarios de detractors que aterrizan en un tema nombrado en vez de en `other`. Apunta a menos del 20% en `other` después de dos ciclos de ajuste de taxonomía. Una tasa de `other` persistentemente alta significa que la taxonomía semilla está perdiendo una categoría real —eso es una señal para agregar un tema, no para ignorar el bucket. Segundo, rastrea si el tema mejor priorizado de cada ciclo de verdad produjo un cambio de roadmap o de playbook; una clasificación que nunca cambia una decisión es un reporte que nadie necesitaba. Tercero, rastrea los deltas de conteo de temas ciclo-a-ciclo —toda la razón de una taxonomía fija es que "fricción de onboarding subió 60% este trimestre" solo es una afirmación real cuando la etiqueta significó lo mismo el trimestre pasado.
+
+## vs alternativas
+
+**vs Trends y tagging integrados de Delighted.** Delighted viene con tagging basado en keywords y una vista de tendencias, y si tus verbatims son cortos y tus temas mapean limpiamente a keywords, eso es menos trabajo y se queda dentro de la herramienta que ya pagas. El trade-off: los tags de keyword pierden el comentario que describe fricción de onboarding sin usar la palabra "onboarding", y no pueden ponderar por volumen de detractors ni cruzar sentimiento contra el score. Usa los tags de Delighted para la clasificación always-on del inbox y esta Skill para la lectura agregada trimestral donde la calidad de los temas y la ponderación por detractors importan.
+
+**vs un producto dedicado de text-analytics (Thematic, Chattermill, o similar).** Estos son genuinamente más fuertes a escala —decenas de miles de respuestas, feedback multi-fuente, dashboards longitudinales. Si el análisis de feedback es una función permanente con dueño y presupuesto dedicados, compra uno de esos. Esta Skill es para el lead de CS Ops que tiene una lectura trimestral de NPS y no tiene una partida de cinco cifras de text-analytics; cubre el caso del 80% al costo de una llamada de API de Claude.
+
+**vs leerlos tú mismo.** Para menos de ~50 comentarios, leerlos tú mismo es más rápido y retienes contexto que la Skill aplana (el sarcasmo, el único comentario que nombra una cuenta específica a punto de churn). La Skill se gana su lugar a volumen y a través de ciclos, donde la consistencia le gana a la profundidad que una lectura humana le da a un solo batch. Usa la lectura manual para encuestas pequeñas y los detractors individuales de alto riesgo; usa la Skill para lo agregado.
+
+## A vigilar
+
+- **Deriva de temas entre ciclos.** Si reajustas la taxonomía pesadamente cada trimestre, tus números de tendencia entre ciclos se vuelven sin sentido porque las etiquetas ya no significan lo mismo. Guarda: trata `references/1-theme-taxonomy.md` como versionado. Agrega temas cuando el bucket `other` lo justifique, pero no renombres ni mezcles temas existentes sin anotarlo, y nunca compares un conteo a través de un ciclo donde la definición cambió.
+- **Temas de muestra pequeña leídos como señal.** Un "tema" con tres menciones invita a un argumento de roadmap que no puede sostener. Guarda: la Skill rehúsa correr por debajo de 30 respuestas totales, y la lista priorizada de acciones suprime cualquier tema con menos de 5 menciones a una nota al pie de "menciones de bajo volumen" en vez de priorizarlo junto a temas reales.
+- **Sarcasmo y negación volteando el sentimiento.** "Ah qué bien, otra caída" se lee positivo para un clasificador ingenuo. Guarda: a la pasada dos se le indica etiquetar el sentimiento desde la intención evidente del comentarista y caer a `neutral` cuando la intención es genuinamente ambigua en vez de adivinar positivo; el cruce de sentimiento-por-NPS entonces saca a la superficie los desajustes (un detractor etiquetado positivo) para que un humano revise los casos límite que el modelo erró.
+- **El modelo contando sus propios conteos.** Pedirle a Claude reportar "37 comentarios mencionan pricing" produce un número que a menudo está desviado por varios y se ve autoritario. Guarda: todos los conteos se calculan en código a partir de la tabla de asignación por comentario, nunca los reporta el modelo. El trabajo del modelo termina en etiquetar cada comentario; la aritmética es determinista.
+- **Citas representativas que exponen a un cliente.** Un verbatim puede nombrar a una persona, una cuenta, o una cifra en dólares que no quieres en una slide que sale del edificio. Guarda: el formato de output marca cualquier cita que contenga un nombre propio capitalizado de varias palabras, un handle `@`, o una cifra de moneda con un marcador `[REVIEW: may identify customer]` para que la limpies antes de que el deck salga ampliamente.
+
+## Stack
+
+- **Delighted** —entrega de la encuesta de NPS y la exportación de CSV que la Skill lee (columna de score + columna de comentario requeridas)
+- **Claude** —pipeline de dos pasadas: resolución de taxonomía, luego asignación por comentario y sentimiento (Sonnet recomendado por costo)
+- **Tu superficie de roadmap (Notion, Google Docs, una herramienta de planeación)** —donde aterriza la lista de acciones en Markdown para la conversación de roadmap
