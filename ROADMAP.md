@@ -90,7 +90,8 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 ## Phase 7 — Vertical 4 + scale (Month 8-12)
 
-- [ ] Marketing Ops vertical (or Customer Success — to be decided based on Phase 4-5 traction signal)
+- [x] Customer Success vertical shipped (chosen over Marketing Ops on Phase 4-5 signal) — config, landing page, 44 tools, 36 learn entries, 22 workflows, 19 comparisons, 4 stacks tagged, all 6 locales
+- [ ] Marketing Ops vertical (still on deck)
 - [ ] Add DE locale (or FR — to be decided based on which language showed strongest organic signal in GA4 segment data)
 - [ ] 6,000+ indexed pages total
 - [ ] First $10K MRR milestone
@@ -99,12 +100,12 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 | Locale | Status | Tools | Notes |
 |---|---|---|---|
-| English (en) | Launched | 150 | Canonical |
-| Spanish (es) | Launched | 150 | LATAM neutral; full parity with EN canonical |
-| Portuguese, Brazil (pt-BR) | Launched | 150 | Full parity with EN canonical |
-| Japanese (ja) | Launched | 150 | Full parity with EN canonical |
-| French (fr) | Launched | 150 | Full parity with EN canonical |
-| German (de) | Launched | 150 | Full parity with EN canonical |
+| English (en) | Launched | 186 | Canonical |
+| Spanish (es) | Launched | 186 | LATAM neutral; full parity with EN canonical |
+| Portuguese, Brazil (pt-BR) | Launched | 186 | Full parity with EN canonical |
+| Japanese (ja) | Launched | 186 | Full parity with EN canonical |
+| French (fr) | Launched | 186 | Full parity with EN canonical |
+| German (de) | Launched | 186 | Full parity with EN canonical |
 
 "Launched" = full content parity with the active verticals. All six locales are now at full parity across every content type (tools, comparisons, workflows, learn, stacks).
 
@@ -112,15 +113,15 @@ Public, rolling. Updated as we ship. Issues and milestones on GitHub mirror this
 
 | Metric | Status |
 |---|---|
-| Content pages live | 506 EN canonical (tools 150 / comparisons 129 / workflows 85 / learn 127 / stacks 15); 3,036 files across all 6 locales at full parity |
-| Verticals live | 3 (RevOps, Legal Ops, Recruiting — all clearing per-phase floor) |
+| Content pages live | 612 EN canonical (tools 186 / comparisons 148 / workflows 99 / learn 161 / stacks 18); 3,758 built pages across all 6 locales at full parity |
+| Verticals live | 4 (RevOps, Legal Ops, Recruiting, Customer Success — all clearing per-phase floor) |
 | Locales live | 6 launched (en, es, pt-BR, de, fr, ja — all at full parity) |
 | Newsletter subscribers | 0 (beehiiv live; signup wired) |
 | Discord members | 0 |
 | Paid library subscribers | 0 |
 | MRR | $0 |
 
-*as of 2026-06-02*
+*as of 2026-06-06*
 
 ## How to follow
 
