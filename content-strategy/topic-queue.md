@@ -94,7 +94,7 @@ Format per item:
 - [type:comparison] [vertical:revops] pairwise: default-vs-chili-piper — inbound routing/scheduling; routes on lightweight orchestration + enrichment layer vs four-product demand-conversion suite → slug: default-vs-chili-piper
 - [type:comparison] [vertical:revops] pairwise: revenuehero-vs-chili-piper — inbound lead-to-meeting; routes on single-product cost efficiency vs incumbent feature breadth → slug: revenuehero-vs-chili-piper
 - [type:comparison] [vertical:recruiting] pairwise: brighthire-vs-metaview — interview intelligence; routes on structured-hiring + ATS depth vs notes + coaching UX → slug: brighthire-vs-metaview
-- [type:comparison] [vertical:legal-ops] pairwise: icertis-vs-sirionlabs — enterprise CLM; routes on contract-intelligence platform breadth vs obligation / SRM management depth
+- [type:comparison] [vertical:legal-ops] pairwise: icertis-vs-sirionlabs — enterprise CLM; routes on contract-intelligence platform breadth vs obligation / SRM management depth → slug: icertis-vs-sirionlabs
 - [type:comparison] [vertical:revops] pairwise: gainsight-vs-catalyst — CS platforms; routes on enterprise CS-Ops depth vs lean workflow customization and time-to-value
 - [type:comparison] [vertical:revops] pairwise: unify-vs-11x — signal-driven vs autonomous AI SDR; routes on warm signal-led pipeline + control vs fully-autonomous outbound volume
 - [type:comparison] [vertical:revops] pairwise: nooks-vs-orum — parallel dialers / live conversation platforms; routes on AI-coaching + on-call assistant depth vs established connect-rate reliability at SDR scale
