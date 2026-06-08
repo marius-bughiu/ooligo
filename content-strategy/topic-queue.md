@@ -56,7 +56,7 @@ Format per item:
 - [type:tool] [vertical:cross] new entry: dust — enterprise AI-agent platform to build and govern agents over company tools; deployed across RevOps, Legal, and Recruiting with permissioned data → slug: dust
 - [type:tool] [vertical:cross] new entry: relevance-ai — AI agent workforce / orchestration for back-office ops processes; the no-code multi-agent builder ops teams compare to Dust → slug: relevance-ai
 - [type:tool] [vertical:revops] new entry: 1mind — AI "superhuman" GTM agent (face + voice + product brain) that qualifies, runs live demos, handles objections across site/deal-room; $40M raise led by Battery, founded by 6sense's Amanda Kahlow; the AI-video-selling pole buyers ask about → slug: 1mind
-- [type:tool] [vertical:legal-ops] new entry: gc-ai — AI platform purpose-built for in-house legal teams (contract review, research, drafting); $60M Series B Nov-2025 at ~$555M, $500/seat published pricing; anchors the in-house GC-copilot cluster vs Spellbook/Harvey
+- [type:tool] [vertical:legal-ops] new entry: gc-ai — AI platform purpose-built for in-house legal teams (contract review, research, drafting); $60M Series B Nov-2025 at ~$555M, $500/seat published pricing; anchors the in-house GC-copilot cluster vs Spellbook/Harvey → slug: gc-ai
 - [type:tool] [vertical:legal-ops] new entry: ivo — AI contract review/redlining for in-house counsel ($77M+ raised); the review-first in-house alternative readers weigh against GC AI and Spellbook
 - [type:tool] [vertical:recruiting] new entry: goperfect — autonomous AI sourcing agent (semantic search over 800M+ profiles, multi-channel autopilot outreach, 60+ ATS integrations); the Juicebox/SeekOut alternative for continuous sourcing
 
