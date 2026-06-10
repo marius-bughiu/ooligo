@@ -97,7 +97,7 @@ Format per item:
 - [type:comparison] [vertical:legal-ops] pairwise: icertis-vs-sirionlabs — enterprise CLM; routes on contract-intelligence platform breadth vs obligation / SRM management depth → slug: icertis-vs-sirionlabs
 - [type:comparison] [vertical:revops] pairwise: gainsight-vs-catalyst — CS platforms; routes on enterprise CS-Ops depth vs lean workflow customization and time-to-value → slug: gainsight-vs-catalyst
 - [type:comparison] [vertical:revops] pairwise: unify-vs-11x — signal-driven vs autonomous AI SDR; routes on warm signal-led pipeline + control vs fully-autonomous outbound volume → slug: unify-vs-11x
-- [type:comparison] [vertical:revops] pairwise: nooks-vs-orum — parallel dialers / live conversation platforms; routes on AI-coaching + on-call assistant depth vs established connect-rate reliability at SDR scale
+- [type:comparison] [vertical:revops] pairwise: nooks-vs-orum — parallel dialers / live conversation platforms; routes on AI-coaching + on-call assistant depth vs established connect-rate reliability at SDR scale → slug: nooks-vs-orum
 - [type:comparison] [vertical:revops] pairwise: smartlead-vs-instantly — cold email infrastructure; routes on deliverability/unified-inbox control + agency scale vs built-in lead database and simpler onboarding
 - [type:comparison] [vertical:revops] pairwise: pocus-vs-koala — product-led sales signal platforms; routes on full PLS workflow + account scoring vs lightweight product-signal-to-SDR alerting
 - [type:comparison] [vertical:revops] pairwise: warmly-vs-rb2b — website visitor de-anonymization; routes on warm-outbound orchestration + intent layer vs free/low-cost person-level reveal pushed to Slack
