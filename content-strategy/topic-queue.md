@@ -100,7 +100,7 @@ Format per item:
 - [type:comparison] [vertical:revops] pairwise: nooks-vs-orum — parallel dialers / live conversation platforms; routes on AI-coaching + on-call assistant depth vs established connect-rate reliability at SDR scale → slug: nooks-vs-orum
 - [type:comparison] [vertical:revops] pairwise: smartlead-vs-instantly — cold email infrastructure; routes on deliverability/unified-inbox control + agency scale vs built-in lead database and simpler onboarding → slug: smartlead-vs-instantly
 - [type:comparison] [vertical:revops] pairwise: pocus-vs-koala — product-led sales signal platforms; routes on full PLS workflow + account scoring vs lightweight product-signal-to-SDR alerting
-- [type:comparison] [vertical:revops] pairwise: warmly-vs-rb2b — website visitor de-anonymization; routes on warm-outbound orchestration + intent layer vs free/low-cost person-level reveal pushed to Slack
+- [type:comparison] [vertical:revops] pairwise: warmly-vs-rb2b — website visitor de-anonymization; routes on warm-outbound orchestration + intent layer vs free/low-cost person-level reveal pushed to Slack → slug: warmly-vs-rb2b
 - [type:comparison] [vertical:revops] pairwise: pipedrive-vs-hubspot — SMB CRM; routes on lightweight pipeline-first simplicity + price vs all-in-one marketing/sales/service platform breadth
 - [type:comparison] [vertical:revops] pairwise: aisdr-vs-artisan — AI SDR head-to-head; routes on email+voice with published pricing vs single-rep Ava with multichannel suite and human-in-loop QA
 - [type:comparison] [vertical:revops] pairwise: calendly-vs-chili-piper — scheduling vs inbound routing; routes on universal individual scheduling baseline vs instant lead qualification + round-robin routing
