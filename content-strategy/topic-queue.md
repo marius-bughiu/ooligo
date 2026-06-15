@@ -103,7 +103,7 @@ Format per item:
 - [type:comparison] [vertical:revops] pairwise: warmly-vs-rb2b — website visitor de-anonymization; routes on warm-outbound orchestration + intent layer vs free/low-cost person-level reveal pushed to Slack → slug: warmly-vs-rb2b
 - [type:comparison] [vertical:revops] pairwise: pipedrive-vs-hubspot — SMB CRM; routes on lightweight pipeline-first simplicity + price vs all-in-one marketing/sales/service platform breadth → slug: pipedrive-vs-hubspot
 - [type:comparison] [vertical:revops] pairwise: aisdr-vs-artisan — AI SDR head-to-head; routes on email+voice with published pricing vs single-rep Ava with multichannel suite and human-in-loop QA → slug: aisdr-vs-artisan
-- [type:comparison] [vertical:revops] pairwise: calendly-vs-chili-piper — scheduling vs inbound routing; routes on universal individual scheduling baseline vs instant lead qualification + round-robin routing
+- [type:comparison] [vertical:revops] pairwise: calendly-vs-chili-piper — scheduling vs inbound routing; routes on universal individual scheduling baseline vs instant lead qualification + round-robin routing → slug: calendly-vs-chili-piper
 - [type:comparison] [vertical:revops] pairwise: qualified-vs-drift — conversational inbound conversion; routes on Salesforce-native pipeline + Piper AI SDR vs chat/conversational-marketing heritage
 - [type:comparison] [vertical:recruiting] pairwise: karat-vs-codesignal — technical interviewing; routes on interview-as-a-service human interviewers vs standardized proctored assessment platform
 - [type:comparison] [vertical:recruiting] pairwise: pillar-vs-brighthire — interview intelligence; routes on bias/quality scoring + lighter footprint vs structured-hiring depth and ATS integration
