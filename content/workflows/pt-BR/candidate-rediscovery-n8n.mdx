@@ -1,0 +1,98 @@
+---
+slug: candidate-rediscovery-n8n
+canonical_slug: candidate-rediscovery-n8n
+locale: pt-BR
+verticals: [recruiting]
+title: Candidate rediscovery for silver medalists with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, greenhouse, claude, slack]
+roles: [recruiter, sourcer, talent-acquisition]
+difficulty: intermediate
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-06-15"
+---
+
+Um flow do n8n que monitora o [Greenhouse](/pt-BR/tools/greenhouse/) em busca de reqs recém-abertas, encontra os candidatos do passado que chegaram a um estágio avançado de entrevista em uma req relacionada e foram rejeitados por um motivo não desqualificante — os "silver medalists" — re-pontua cada um contra a rubrica da nova req com o [Claude](/pt-BR/tools/claude/) e publica uma shortlist ranqueada em um único canal do Slack. Ele nunca entra em contato com ninguém, nunca adiciona um candidato a um pipeline e nunca move um candidato no ATS. O recrutador decide cada abordagem. Ele transforma "contratamos outra pessoa na primavera passada, quem foi o segundo colocado mesmo?" de uma escavação arqueológica de 40 minutos em uma mensagem no Slack que chega na hora em que a req abre.
+
+## Quando usar
+
+- Você roda no [Greenhouse](/pt-BR/tools/greenhouse/) (ou outro ATS com uma API de leitura — os nodes de intake são trocáveis) e abre reqs suficientes em famílias de vaga recorrentes para que os finalistas do ano passado sejam a shortlist deste ano.
+- Você de fato rejeita finalistas com motivos de rejeição estruturados. Todo o modelo de segurança do flow se apoia em distinguir "contratamos outra pessoa" de "não passou na verificação de antecedentes". Se sua equipe rejeita todo mundo com um único motivo genérico, corrija isso primeiro; o flow não tem em que se basear para filtrar.
+- Você tem feeder reqs para apontar. O flow não adivinha quais reqs do passado são "relacionadas" — você lista os IDs de vaga do Greenhouse do passado por família de vaga em um arquivo de config. Isso torna o match auditável em vez de uma caixa-preta de similaridade.
+- Um recrutador percorre o digest e decide a abordagem. O flow expõe e ranqueia; um humano faz a re-triagem e o contato.
+
+## Quando NÃO usar
+
+- **Auto-abordagem no loop.** O flow ranqueia e publica no Slack; ele nunca envia e-mail, nunca adiciona a uma sequência, nunca move um estágio. Conectar um envio de abordagem ao digest transforma uma sugestão de re-contato em processamento automatizado de dados de candidatos — e re-contatar um candidato depois do período de retenção que você divulgou a ele é uma violação de GDPR, não um growth hack. A linha `Confirm first:` por candidato no digest existe justamente para que um recrutador verifique consentimento e atualidade antes de qualquer mensagem.
+- **Sem janela de recência.** O GDPR exige que você não retenha nem reprocesse dados de candidatos além do período de retenção que você informou ao candidato — comumente 12–24 meses para candidatos não selecionados. O gate `recency_months` do flow descarta qualquer um fora da janela. Defini-lo maior que o seu período de retenção declarado para ampliar o pool é a única edição que transforma este flow em um passivo.
+- **Motivos de rejeição em que você não pode confiar.** Se "Position filled" é usado silenciosamente para "tivemos preocupações", a deny-list não consegue proteger você. O flow é tão seguro quanto a disciplina de motivos de rejeição por trás dele.
+- **Contratação pequena ou pontual.** Uma equipe que abre três reqs não relacionadas por ano é mais rápida lendo a própria memória do que escrevendo uma rubrica e uma lista de feeder reqs. O setup se paga quando uma família de vaga se repete.
+- **Buscas confidenciais ou executivas.** Postura de consentimento diferente, cadeia de auditoria diferente. Essas não pertencem a um canal compartilhado do Slack.
+
+## Setup
+
+1. **Importe o flow.** Solte `apps/web/public/artifacts/candidate-rediscovery-n8n/candidate-rediscovery-n8n.json` na sua instância do n8n. Todo node carrega `notesInFlow: true`, então as notas no canvas explicam cada escolha.
+2. **Conecte as credenciais.** Três: `PLACEHOLDER_GREENHOUSE_CRED_ID` (chave da Harvest API, escopo de leitura apenas — Jobs, Applications, Scorecards), `PLACEHOLDER_ANTHROPIC_CRED_ID` (chave da API do Claude), `PLACEHOLDER_SLACK_CRED_ID` (token de bot do Slack com `chat:write` para `#talent-rediscovery`). O `_README.md` do bundle mostra onde cada valor fica.
+3. **Escreva um arquivo de config por família de vaga** em `${CONFIG_DIR}/<family>.json`. Ele contém os `match_job_ids` (as feeder reqs), `min_stage_reached` (o gate de estágio avançado), as allow-lists e deny-lists de motivos de rejeição, `recency_months`, `fit_threshold`, `top_n` e a rubrica. O formato completo está no `_README.md`. Sem config para uma família → o flow para com `missing_config` em vez de pontuar contra defaults.
+4. **Defina o lookback.** `POLL_LOOKBACK_HOURS` precisa ser ≥ ao intervalo do schedule (default 6h) ou uma req aberta entre os polls escapa. Os dois são ajustados em conjunto.
+5. **Faça um dry-run em uma família para a qual você acabou de contratar.** Os segundos colocados de que você se lembra devem aparecer perto do topo do digest. Ajuste `min_stage_reached` e as âncoras da rubrica contra a sua memória antes de confiar nele em uma família nova.
+6. **Habilite o trigger.** Vire `active: true` apenas depois de um digest sobre o qual você de fato agiria.
+
+## O que o flow faz
+
+Doze nodes, em ordem. Os gates determinísticos de consentimento e fairness rodam antes da chamada do modelo, porque soltar um LLM no arquivo completo de rejeições é como você re-contata alguém que pediu para nunca mais ser contatado.
+
+1. **Every 6 Hours** — schedule trigger. O Greenhouse não tem um webhook confiável de job-created, então o flow faz polling.
+2. **Fetch New Open Reqs** — `GET /v1/jobs?status=open&created_after=…` contra a Greenhouse Harvest. O array JSON é dividido em um item por nova req.
+3. **Load Match Config** — resolve a família de vaga da req, carrega sua config, faz o hash dela para o audit log. Para em `missing_config`.
+4. **Config Loaded?** — gate IF; reqs sem config param aqui.
+5. **Fetch Rejected Pool** — `GET /v1/applications?status=rejected&last_activity_after=…`, paginado. Um item por aplicação rejeitada.
+6. **Eligibility Filter** — o piso de cinco gates: match de feeder-req, estágio avançado alcançado, allow/deny de motivo de rejeição (deny vence), janela de recência, supressão de do-not-contact. Todo o resto é descartado antes que qualquer modelo veja.
+7. **Fetch Scorecards** — puxa os scorecards de entrevistas anteriores do candidato, o texto de grounding para o re-match.
+8. **Claude Re-Match** — pontua o candidato do passado contra a rubrica da *nova* req no Sonnet 4.6, instruído explicitamente a não herdar a antiga decisão de rejeição e a não pontuar com base em proxies de classe protegida. Evidência obrigatória: sem citação literal de scorecard → fit 1.
+9. **Parse + Keep** — aplica a regra de evidência, sinaliza keep quando o fit ≥ ao threshold da config.
+10. **Audit Append** — uma linha JSONL pseudônima por candidato pontuado (ID do candidato + link, sem nome, sem texto de scorecard).
+11. **Build Digest** — agrupa por req, deduplica um candidato que deu match via duas feeder reqs (o fit mais alto vence), ranqueia, trunca para `top_n`.
+12. **Slack Digest** — publica uma shortlist ranqueada por req em `#talent-rediscovery`, cada candidato com um motivo de uma linha para ressurgir e uma nota `Confirm first:`.
+
+## Realidade de custo
+
+- **Tokens da Anthropic API** — cada candidato envia texto de scorecard + rubrica (~4-5k tokens de input) e retorna ~300 tokens de output. No preço de tabela do Sonnet 4.6, isso fica em torno de $0.015-0.03 por candidato pontuado, então uma família que puxa 200 silver medalists elegíveis custa aproximadamente $3-6 por req aberta (calculado a partir de contagens de tokens, não medido nos seus dados).
+- **Chamadas à Greenhouse Harvest** — somente leitura: um poll de jobs, um pull paginado de applications, um fetch de scorecards por candidato elegível. Isso fica dentro do rate limit documentado por chave da Harvest para qualquer tamanho realista de família.
+- **Custo do n8n** — self-hosted é grátis em container. O plano Starter do n8n Cloud cobre o volume de polling; só uma vazão de reqs muito alta precisa do Pro.
+- **Tempo do recrutador — o ganho.** Reconstruir à mão uma lista de silver medalists ao longo de reqs do passado consome boa parte de uma hora por req; o digest chega ranqueado, com flags de consentimento e prompts de re-triagem pré-montados, nos minutos seguintes à abertura da req.
+- **A economia por trás do ganho.** Benchmarks publicados de recruiting colocam o custo por contratação acima de $4,500 e a economia de uma contratação por rediscovery em aproximadamente $2,000-3,000, com o time-to-fill em contratações por rediscovery caindo 20-30 dias. As equipes normalmente começam com uma taxa de rediscovery de 5-15% e miram 35-50% em um ano; o benchmark de taxa de contratação de silver medalist fica em torno de 8-15%. O flow existe para tornar bater esses números um default, não um projeto trimestral.
+
+## Métrica de sucesso
+
+Acompanhe três números por família de vaga por trimestre:
+
+- **Taxa de shortlist-para-triagem** — fração de candidatos do digest que um recrutador leva a uma re-triagem. Abaixo de ~20% significa que a rubrica ou o `min_stage_reached` está frouxo demais; aperte as âncoras antes de ampliar o pool.
+- **Taxa de contratação por rediscovery** — fração de contratações na família originadas do digest. O benchmark de 8-15% é o alvo; abaixo de 5% depois de dois trimestres significa que a lista de feeder reqs ou a janela de recência está estreita demais.
+- **Tempo da abertura da req ao primeiro slate qualificado** — a métrica de experiência do candidato e do hiring manager. O digest deve mover isso de dias para o mesmo dia.
+
+## vs alternativas
+
+- **vs rediscovery do [Gem](/pt-BR/tools/gem/) ou [hireEZ](/pt-BR/tools/hireez/)** — esses são produtos gerenciados de talent-CRM com suas próprias campanhas de re-engajamento e um candidate graph; escolha-os se você quer a plataforma e o orçamento suporta. Escolha o flow se você quer as regras de matching, a deny-list e o audit log versionados no seu próprio repo, escopados para feeder reqs que você escolhe, com o digest chegando no seu stack.
+- **vs a busca de "prospect pool" do próprio Greenhouse** — a busca nativa encontra candidatos por keyword e estágio, mas não os re-pontua contra a rubrica de uma nova req com evidência citada, e o ranking de relevância é uma caixa-preta. Escolha o flow quando o `reason_to_resurface` e as linhas `Confirm first:` por candidato são o que faz o recrutador agir.
+- **vs um recrutador minerando o ATS manualmente** — mesma qualidade em um bom dia, mas o recrutador esquece a janela de recência, pula a deny-list sob pressão de prazo e só faz isso para as reqs de que se lembra. O flow faz isso para toda req recorrente, toda vez, com os gates de consentimento não opcionais.
+
+## Pontos de atenção
+
+- **Re-contatar além da retenção.** *Proteção:* o gate `recency_months` descarta qualquer um fora da janela de retenção divulgada antes de pontuar, e o audit log registra a janela usada. Defina-o como o seu período de retenção declarado ou menor — nunca maior para crescer o pool.
+- **Candidatos desqualificados ressurgindo.** *Proteção:* a deny-list de motivos de rejeição roda antes do modelo e deny vence allow. Verificações de antecedentes/referências reprovadas, preocupações de conduta, ausência de autorização de trabalho e motivos explícitos de do-not-contact nunca podem chegar ao digest. A disciplina depende de motivos de rejeição honestos a montante.
+- **Carregamento de viés de decisões antigas.** *Proteção:* o modelo é instruído a não herdar o veredito de rejeição anterior — um candidato preterido porque outra pessoa foi escolhida pode ser um 5 para uma nova req — e a não pontuar com base em nome, escola como sinal isolado, idade, gênero ou lacunas de emprego. O `config_sha` no audit log torna as regras de matching usadas em qualquer data reproduzíveis sob uma revisão de [AI-screening-bias](/pt-BR/learn/ai-screening-bias/).
+- **Estado desatualizado do candidato.** *Proteção:* a linha `Confirm first:` por candidato no digest força o recrutador a verificar se a pessoa ainda está na região, ainda interessada e ainda é um fit antes da abordagem; o flow afirma um match, não um fato atual. Candidatos ativos em outro lugar são a verificação do recrutador no Greenhouse, anotada nos known limits do bundle.
+- **Scorecards rasos pontuando baixo.** *Proteção:* o texto do scorecard é o único grounding, então um candidato rejeitado antes de entrevistas substantivas pontua baixo por design. Aumente `min_stage_reached` em vez de alimentar o modelo com currículos que ele não consegue ver.
+
+## Stack
+
+O bundle do artifact fica em `apps/web/public/artifacts/candidate-rediscovery-n8n/` e contém:
+
+- `candidate-rediscovery-n8n.json` — o export do flow do n8n (todo node configurado, sem parâmetros stub)
+- `_README.md` — setup de credenciais, formato do arquivo de config, os gates de consentimento e fairness, o procedimento de dry-run
+
+Ferramentas que o workflow assume que você usa: [Greenhouse](/pt-BR/tools/greenhouse/) (o ATS — troque para [Ashby](/pt-BR/tools/ashby/) ou [Lever](/pt-BR/tools/lever/) substituindo os nodes de intake), [Claude](/pt-BR/tools/claude/) (o scorer de re-match), [n8n](/pt-BR/tools/n8n/) (a orquestração), [Slack](/pt-BR/tools/slack/) (a superfície de decisão do recrutador). Para triar inbound novo contra uma rubrica, veja o [flow de triagem de candidatos inbound](/pt-BR/workflows/inbound-applicant-triage-n8n/); para aquecer os candidatos que este flow expõe, veja a [sequência de engajamento de candidatos](/pt-BR/workflows/candidate-engagement-sequence-n8n/) e a [Claude Skill de sourcing de candidatos](/pt-BR/workflows/candidate-sourcing-claude-skill/).
+
+Conceitos relacionados: [métricas de funil de recruiting](/pt-BR/learn/recruiting-funnel-metrics/), [experiência do candidato](/pt-BR/learn/candidate-experience/), [viés de screening por IA](/pt-BR/learn/ai-screening-bias/), [entrevista estruturada](/pt-BR/learn/structured-interviewing/).

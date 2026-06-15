@@ -1,0 +1,343 @@
+{
+  "name": "Candidate rediscovery (silver medalists)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000001",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 400],
+      "notesInFlow": true,
+      "notes": "Polls for newly-opened reqs every 6 hours. Greenhouse has no reliable job.created webhook, so this is a scheduled poll. The lookback window in the next node must be >= this interval so no req is missed. Tune both together."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://harvest.greenhouse.io/v1/jobs",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "status", "value": "open" },
+            { "name": "created_after", "value": "={{ new Date(Date.now() - (($env.POLL_LOOKBACK_HOURS || 6) * 3600000)).toISOString() }}" },
+            { "name": "per_page", "value": "100" }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": { "responseFormat": "json", "neverError": false }
+          }
+        }
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000002",
+      "name": "Fetch New Open Reqs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 400],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "PLACEHOLDER_GREENHOUSE_CRED_ID",
+          "name": "Greenhouse Harvest API (read scope)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Greenhouse Harvest is Basic auth: username = API token, password = blank. `created_after` filters to reqs opened since the last poll. The JSON-array response is split into one item per req by n8n; downstream nodes run once per new req."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map each new req to its job-family config and load it from disk.\n// Config keys the rubric, the feeder-req list, the recency window, the\n// rejection-reason allow/deny lists, and the fit threshold. Halt (do not\n// fall back to defaults) if no config exists for the req's job family.\nconst fs = require('fs');\nconst path = require('path');\nconst crypto = require('crypto');\n\nconst CONFIG_DIR = $env.CONFIG_DIR || '/data/rediscovery';\nconst job = $json;\n\nfunction slugify(s) {\n  return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');\n}\n\n// Job family resolves from a `job_family` custom field if present, else the\n// first department name. This is the filename the recruiter authored.\nconst customFamily = (job.custom_fields && (job.custom_fields.job_family || job.custom_fields.Job_Family)) || '';\nconst deptName = (job.departments && job.departments[0] && job.departments[0].name) || '';\nconst family = slugify(customFamily) || slugify(deptName);\n\nif (!family) {\n  return [{ json: { status: 'halted', reason: 'no_job_family', job_id: job.id, job_name: job.name } }];\n}\n\nconst configPath = path.join(CONFIG_DIR, `${family}.json`);\nif (!fs.existsSync(configPath)) {\n  return [{ json: { status: 'halted', reason: 'missing_config', job_family: family, expected_path: configPath } }];\n}\n\nconst raw = fs.readFileSync(configPath, 'utf8');\nconst cfg = JSON.parse(raw);\nconst configSha = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16);\n\nconst recencyMonths = Number(cfg.recency_months) || 18;\nconst recencyCutoffIso = new Date(Date.now() - recencyMonths * 30 * 24 * 3600000).toISOString();\n\nreturn [{\n  json: {\n    status: 'config_loaded',\n    req_id: job.id,\n    req_title: job.name,\n    req_url: `https://app.greenhouse.io/sdash/${job.id}`,\n    job_family: family,\n    config_sha: configSha,\n    recency_months: recencyMonths,\n    recency_cutoff_iso: recencyCutoffIso,\n    match_job_ids: cfg.match_job_ids || [],\n    min_stage_reached: cfg.min_stage_reached || [],\n    rejection_reasons_allow: cfg.rejection_reasons_allow || [],\n    rejection_reasons_deny: cfg.rejection_reasons_deny || [],\n    do_not_contact_tags: cfg.do_not_contact_tags || ['do-not-contact', 'gdpr-erased', 'opted-out'],\n    fit_threshold: Number(cfg.fit_threshold) || 4,\n    top_n: Number(cfg.top_n) || 10,\n    rubric: cfg.rubric || {},\n  }\n}];"
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000003",
+      "name": "Load Match Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400],
+      "notesInFlow": true,
+      "notes": "One config file per job family at /data/rediscovery/<family>.json. No config -> halt (the req is left for manual sourcing). The config SHA is logged so the exact matching rules used on a given date are reproducible under audit."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "config_loaded",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000004",
+      "name": "Config Loaded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://harvest.greenhouse.io/v1/applications",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "status", "value": "rejected" },
+            { "name": "last_activity_after", "value": "={{ $json.recency_cutoff_iso }}" },
+            { "name": "per_page", "value": "500" }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  { "name": "page", "value": "={{ $pageCount + 1 }}" }
+                ]
+              },
+              "paginationCompleteWhen": "responseEmpty",
+              "type": "updateAParameterInEachRequest"
+            }
+          },
+          "response": {
+            "response": { "responseFormat": "json", "neverError": false }
+          }
+        }
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000005",
+      "name": "Fetch Rejected Pool",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 320],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "PLACEHOLDER_GREENHOUSE_CRED_ID",
+          "name": "Greenhouse Harvest API (read scope)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Pulls rejected applications active within the recency window. Paginated (500/page). Returns one item per application. The deterministic filtering happens in the next node, not in the query, so the filter rules are auditable and version-controlled rather than buried in URL params."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic eligibility filter. Runs once per rejected application.\n// Keeps an application only if it is a genuine silver medalist for THIS req:\n// - applied to one of the configured feeder reqs (match_job_ids)\n// - reached a late stage (min_stage_reached)\n// - rejection reason is in the allow-list AND not in the deny-list\n// - last activity within the recency window\n// - candidate carries no do-not-contact / erasure / opt-out tag\n// Drops everything else silently. No LLM has seen the record yet.\nconst app = $json;\nconst cfg = $('Load Match Config').item.json;\n\nfunction drop(reason) { return []; }\n\n// 1) Feeder-req match: the candidate must have applied to a configured past req.\nconst appJobIds = (app.jobs || []).map((j) => j.id);\nconst isFeeder = appJobIds.some((id) => cfg.match_job_ids.includes(id));\nif (!isFeeder) return drop('not_a_feeder_req');\n\n// 2) Late-stage gate: silver medalists reached a configured late stage.\nconst stage = (app.current_stage && app.current_stage.name) || '';\nif (cfg.min_stage_reached.length && !cfg.min_stage_reached.includes(stage)) {\n  return drop('did_not_reach_late_stage');\n}\n\n// 3) Rejection-reason gates. Deny wins over allow.\nconst reason = (app.rejection_reason && app.rejection_reason.name) || '';\nif (cfg.rejection_reasons_deny.includes(reason)) return drop('disqualifying_rejection_reason');\nif (cfg.rejection_reasons_allow.length && !cfg.rejection_reasons_allow.includes(reason)) {\n  return drop('rejection_reason_not_in_allow_list');\n}\n\n// 4) Recency: last activity must be within the window.\nconst lastActivity = app.last_activity_at || app.last_activity || null;\nif (lastActivity && new Date(lastActivity) < new Date(cfg.recency_cutoff_iso)) {\n  return drop('outside_recency_window');\n}\n\n// 5) Consent / suppression tags on the candidate.\nconst tags = (app.candidate_tags || (app.candidate && app.candidate.tags) || []).map((t) => String(t).toLowerCase());\nif (cfg.do_not_contact_tags.some((t) => tags.includes(String(t).toLowerCase()))) {\n  return drop('suppressed_do_not_contact');\n}\n\nconst candidateId = app.candidate_id || (app.candidate && app.candidate.id);\n\nreturn [{\n  json: {\n    status: 'eligible',\n    req_id: cfg.req_id,\n    req_title: cfg.req_title,\n    req_url: cfg.req_url,\n    job_family: cfg.job_family,\n    config_sha: cfg.config_sha,\n    fit_threshold: cfg.fit_threshold,\n    top_n: cfg.top_n,\n    rubric: cfg.rubric,\n    candidate_id: candidateId,\n    application_id: app.id,\n    prior_stage_reached: stage,\n    prior_rejection_reason: reason,\n    prior_req_ids: appJobIds,\n    last_activity_at: lastActivity,\n  }\n}];"
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000006",
+      "name": "Eligibility Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 320],
+      "notesInFlow": true,
+      "notes": "Five deterministic gates run BEFORE any LLM call: feeder-req match, late-stage reached, rejection-reason allow/deny, recency window, do-not-contact suppression. A candidate failing any gate is dropped and never scored. This is the consent + fairness floor; do not move it after the model call."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://harvest.greenhouse.io/v1/applications/{{ $json.application_id }}/scorecards",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": { "responseFormat": "json", "neverError": true }
+          }
+        }
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000007",
+      "name": "Fetch Scorecards",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 320],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "PLACEHOLDER_GREENHOUSE_CRED_ID",
+          "name": "Greenhouse Harvest API (read scope)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Pulls the prior interview scorecards for the candidate. These are the grounding text for the re-match score. `neverError: true` so a candidate with no scorecards (rejected early) does not break the run; the next node handles the empty case."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $credentials.anthropicApi.apiKey }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 900,\n  \"system\": \"You re-match a PAST candidate against a NEW open req. Score fit 1-5 against the rubric using only evidence in the supplied scorecard text. Cite a verbatim string as `evidence`. If you cannot cite verbatim evidence, fit is 1. Do NOT inherit the prior hire/no-hire decision: a candidate rejected because someone else was chosen can be a 5 for a new req. Do NOT score on name, school as a standalone signal, age, gender, or employment gaps. Return ONLY JSON: {\\\"fit\\\":{\\\"score\\\":N,\\\"evidence\\\":\\\"...\\\"},\\\"reason_to_resurface\\\":\\\"one sentence\\\",\\\"verify_before_outreach\\\":\\\"what a recruiter must confirm is still true\\\"}.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"New req: {{ $('Eligibility Filter').item.json.req_title }}\\n\\nRubric:\\n{{ JSON.stringify($('Eligibility Filter').item.json.rubric) }}\\n\\nPrior stage reached: {{ $('Eligibility Filter').item.json.prior_stage_reached }}\\nPrior rejection reason: {{ $('Eligibility Filter').item.json.prior_rejection_reason }}\\n\\nPrior scorecards (JSON):\\n{{ JSON.stringify($json).slice(0, 12000) }}\"\n    }\n  ]\n}",
+        "options": {
+          "response": {
+            "response": { "responseFormat": "json", "neverError": false }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000008",
+      "name": "Claude Re-Match",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 240],
+      "credentials": {
+        "anthropicApi": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic API key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Scores the past candidate against the NEW req's rubric, grounded in the prior scorecards. System prompt explicitly tells the model NOT to inherit the old reject decision and NOT to score on protected-class proxies. Evidence-required: no citation -> fit 1."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's JSON, enforce the evidence rule, decide keep vs drop.\nconst input = $json;\nconst ctx = $('Eligibility Filter').item.json;\n\nlet parsed;\ntry {\n  const text = (input.content && input.content[0] && input.content[0].text) || '';\n  const m = text.match(/\\{[\\s\\S]*\\}/);\n  if (!m) throw new Error('no JSON object in response');\n  parsed = JSON.parse(m[0]);\n} catch (e) {\n  return [{ json: { status: 'scored', keep: false, error: 'unparseable_score', req_id: ctx.req_id, candidate_id: ctx.candidate_id } }];\n}\n\nconst rawScore = Number(parsed.fit && parsed.fit.score) || 1;\nconst evidence = (parsed.fit && parsed.fit.evidence) || '';\nconst fit = (rawScore > 1 && evidence.trim().length > 0) ? Math.min(5, Math.max(1, rawScore)) : 1;\nconst keep = fit >= ctx.fit_threshold;\n\nreturn [{\n  json: {\n    status: 'scored',\n    keep,\n    req_id: ctx.req_id,\n    req_title: ctx.req_title,\n    req_url: ctx.req_url,\n    job_family: ctx.job_family,\n    config_sha: ctx.config_sha,\n    top_n: ctx.top_n,\n    candidate_id: ctx.candidate_id,\n    application_id: ctx.application_id,\n    prior_stage_reached: ctx.prior_stage_reached,\n    prior_rejection_reason: ctx.prior_rejection_reason,\n    fit,\n    evidence: evidence.slice(0, 240),\n    reason_to_resurface: (parsed.reason_to_resurface || '').slice(0, 240),\n    verify_before_outreach: (parsed.verify_before_outreach || '').slice(0, 240),\n    scored_at: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "3b3b3b3b-0001-0000-0000-000000000009",
+      "name": "Parse + Keep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2020, 240],
+      "notesInFlow": true,
+      "notes": "Parses the model output, enforces the evidence-required guarantee (empty evidence -> fit 1), and flags keep when fit >= the config threshold. Unparseable responses are kept in the stream as keep:false so they show up in the audit log rather than vanishing."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Append one audit line per scored candidate. Pseudonymous: candidate_id +\n// the Greenhouse link only, no name / no scorecard text. This is the record\n// that a past candidate was machine-scored for re-contact consideration.\nconst fs = require('fs');\nconst path = require('path');\n\nconst AUDIT_DIR = $env.AUDIT_DIR || '/data/audit';\nfs.mkdirSync(AUDIT_DIR, { recursive: true });\n\nconst input = $json;\nconst yyyymm = new Date().toISOString().slice(0, 7);\nconst auditPath = path.join(AUDIT_DIR, `rediscovery-${yyyymm}.jsonl`);\n\nconst entry = {\n  ts: new Date().toISOString(),\n  req_id: input.req_id,\n  job_family: input.job_family,\n  config_sha: input.config_sha,\n  candidate_id: input.candidate_id,\n  application_id: input.application_id,\n  prior_stage_reached: input.prior_stage_reached,\n  prior_rejection_reason: input.prior_rejection_reason,\n  fit: input.fit,\n  kept: !!input.keep,\n  model: 'claude-sonnet-4-6',\n};\n\nfs.appendFileSync(auditPath, JSON.stringify(entry) + '\\n', 'utf8');\nreturn [{ json: input }];"
+      },
+      "id": "3b3b3b3b-0001-0000-0000-00000000000a",
+      "name": "Audit Append",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2240, 240],
+      "notesInFlow": true,
+      "notes": "One JSONL line per scored candidate (kept or not). No PII beyond the candidate_id reference. This log is what makes a GDPR / EEOC inquiry about automated re-contact decisions answerable. Retention should match the firm's hiring-records policy."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Aggregate all scored candidates, group by req, dedupe by candidate (keep\n// the highest fit), keep the top_n above threshold, and build one Slack\n// digest payload per req. Emits one item per req for the Slack node.\nconst all = $input.all().map((i) => i.json).filter((j) => j && j.keep);\n\nconst byReq = {};\nfor (const r of all) {\n  byReq[r.req_id] = byReq[r.req_id] || { req: r, candidates: {} };\n  const existing = byReq[r.req_id].candidates[r.candidate_id];\n  if (!existing || r.fit > existing.fit) {\n    byReq[r.req_id].candidates[r.candidate_id] = r;\n  }\n}\n\nconst out = [];\nfor (const reqId of Object.keys(byReq)) {\n  const group = byReq[reqId];\n  const ranked = Object.values(group.candidates).sort((a, b) => b.fit - a.fit).slice(0, group.req.top_n);\n  if (!ranked.length) continue;\n\n  const lines = ranked.map((c, idx) =>\n    `*${idx + 1}. fit ${c.fit}/5* — <https://app.greenhouse.io/people/${c.candidate_id}|candidate ${c.candidate_id}>\\n   _Reached:_ ${c.prior_stage_reached} · _Rejected:_ ${c.prior_rejection_reason}\\n   _Why:_ ${c.reason_to_resurface}\\n   _Confirm first:_ ${c.verify_before_outreach}`\n  ).join('\\n\\n');\n\n  out.push({\n    json: {\n      req_id: group.req.req_id,\n      req_title: group.req.req_title,\n      req_url: group.req.req_url,\n      config_sha: group.req.config_sha,\n      shortlist_count: ranked.length,\n      slack_text: `*Silver-medalist shortlist — ${group.req.req_title}*\\n${ranked.length} past candidate(s) re-matched. The recruiter decides outreach — nothing has been contacted or moved.\\n\\n${lines}\\n\\n_Matching rules: config \\`${group.req.config_sha}\\`. <${group.req.req_url}|Open the req>_`,\n    }\n  });\n}\n\nreturn out;"
+      },
+      "id": "3b3b3b3b-0001-0000-0000-00000000000b",
+      "name": "Build Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2460, 240],
+      "notesInFlow": true,
+      "notes": "Runs once over every scored candidate. Dedupes a candidate who matched via two feeder reqs (keeps the higher fit), ranks, truncates to top_n, and builds one Slack digest per req. A req with zero kept candidates produces no message rather than a noisy empty digest."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json; charset=utf-8" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#talent-rediscovery\",\n  \"text\": \"{{ $json.slack_text }}\"\n}",
+        "options": {}
+      },
+      "id": "3b3b3b3b-0001-0000-0000-00000000000c",
+      "name": "Slack Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2680, 240],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack bot token (chat:write)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Posts one ranked digest per req to #talent-rediscovery. The message is a decision surface for the recruiter, not an action: no candidate is contacted, moved, or added to a pipeline by the flow."
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": {
+      "main": [[{ "node": "Fetch New Open Reqs", "type": "main", "index": 0 }]]
+    },
+    "Fetch New Open Reqs": {
+      "main": [[{ "node": "Load Match Config", "type": "main", "index": 0 }]]
+    },
+    "Load Match Config": {
+      "main": [[{ "node": "Config Loaded?", "type": "main", "index": 0 }]]
+    },
+    "Config Loaded?": {
+      "main": [
+        [{ "node": "Fetch Rejected Pool", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Fetch Rejected Pool": {
+      "main": [[{ "node": "Eligibility Filter", "type": "main", "index": 0 }]]
+    },
+    "Eligibility Filter": {
+      "main": [[{ "node": "Fetch Scorecards", "type": "main", "index": 0 }]]
+    },
+    "Fetch Scorecards": {
+      "main": [[{ "node": "Claude Re-Match", "type": "main", "index": 0 }]]
+    },
+    "Claude Re-Match": {
+      "main": [[{ "node": "Parse + Keep", "type": "main", "index": 0 }]]
+    },
+    "Parse + Keep": {
+      "main": [[{ "node": "Audit Append", "type": "main", "index": 0 }]]
+    },
+    "Audit Append": {
+      "main": [[{ "node": "Build Digest", "type": "main", "index": 0 }]]
+    },
+    "Build Digest": {
+      "main": [[{ "node": "Slack Digest", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false,
+  "versionId": "1"
+}
