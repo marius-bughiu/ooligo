@@ -106,7 +106,7 @@ Format per item:
 - [type:comparison] [vertical:revops] pairwise: calendly-vs-chili-piper — scheduling vs inbound routing; routes on universal individual scheduling baseline vs instant lead qualification + round-robin routing → slug: calendly-vs-chili-piper
 - [type:comparison] [vertical:revops] pairwise: qualified-vs-drift — conversational inbound conversion; routes on Salesforce-native pipeline + Piper AI SDR vs chat/conversational-marketing heritage → slug: qualified-vs-drift
 - [type:comparison] [vertical:recruiting] pairwise: karat-vs-codesignal — technical interviewing; routes on interview-as-a-service human interviewers vs standardized proctored assessment platform → slug: karat-vs-codesignal
-- [type:comparison] [vertical:recruiting] pairwise: pillar-vs-brighthire — interview intelligence; routes on bias/quality scoring + lighter footprint vs structured-hiring depth and ATS integration
+- [type:comparison] [vertical:recruiting] pairwise: pillar-vs-brighthire — interview intelligence; routes on bias/quality scoring + lighter footprint vs structured-hiring depth and ATS integration → slug: pillar-vs-brighthire
 - [type:comparison] [vertical:recruiting] pairwise: apriora-vs-hirevue — AI video interviewing; routes on real-time conversational AI interviewer (Alex) + cheat detection vs enterprise async assessment incumbent
 - [type:comparison] [vertical:legal-ops] pairwise: evenup-vs-eve-legal — plaintiff-side personal-injury AI; routes on demand-package generation at volume vs full case-workup + litigation prep
 - [type:comparison] [vertical:legal-ops] pairwise: definely-vs-spellbook — Word-native legal drafting add-ins; routes on defined-terms/navigation + redlining productivity vs generative drafting and clause generation
