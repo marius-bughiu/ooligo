@@ -59,6 +59,15 @@ Format per item:
 - [type:tool] [vertical:legal-ops] new entry: gc-ai — AI platform purpose-built for in-house legal teams (contract review, research, drafting); $60M Series B Nov-2025 at ~$555M, $500/seat published pricing; anchors the in-house GC-copilot cluster vs Spellbook/Harvey → slug: gc-ai
 - [type:tool] [vertical:legal-ops] new entry: ivo — AI contract review/redlining for in-house counsel ($77M+ raised); the review-first in-house alternative readers weigh against GC AI and Spellbook → slug: ivo
 - [type:tool] [vertical:recruiting] new entry: goperfect — autonomous AI sourcing agent (semantic search over 800M+ profiles, multi-channel autopilot outreach, 60+ ATS integrations); the Juicebox/SeekOut alternative for continuous sourcing → slug: goperfect
+- [type:tool] [vertical:revops] new entry: rox — agentic CRM / AI sales-agent platform that acts over CRM data (research, outreach, account plays); $1.2B valuation (General Catalyst), the "agentic CRM" pole buyers weigh vs build-it-yourself Clay
+- [type:tool] [vertical:cross] new entry: sierra — agentic AI customer-experience platform (Bret Taylor / Clay Bavor); $15B valuation 2026, the enterprise AI-support-agent standard CS/Support orgs evaluate vs Decagon
+- [type:tool] [vertical:legal-ops] new entry: eudia — augmented-intelligence platform for in-house corporate legal teams (AI agents over contracts/research/workflows); $105M Series A (General Catalyst), anchors the enterprise in-house GC-agent cluster
+- [type:tool] [vertical:legal-ops] new entry: robin-ai — contract negotiation/review AI (drafting, redlining, Q&A over agreements); established European legal-AI player readers weigh vs Spellbook/Legora
+- [type:tool] [vertical:legal-ops] new entry: supio — AI for plaintiff personal-injury & mass-tort firms (medical-record chronology, case workup, demand prep); $91M raised + Thomson Reuters partnership, the third PI pole alongside EvenUp and Eve Legal
+- [type:tool] [vertical:cross] new entry: lindy — AI-agent builder for always-on assistants over email/calendar/SaaS (judgment-driven multi-step agents); the "AI assistant" pole ops teams weigh vs Dust and Gumloop
+- [type:tool] [vertical:cross] new entry: gumloop — no-code AI automation canvas (drag-and-drop nodes, document processing, browser extension); the visual AI-workflow pole vs n8n/Make and Lindy
+- [type:tool] [vertical:recruiting] new entry: sapia-ai — chat/text-based AI smart-interview platform (structured async, bias-controlled scoring); the text-interview pole vs video-first HireVue/Apriora
+- [type:tool] [vertical:recruiting] new entry: fetcher — AI sourcing + automated outreach with human-validated shortlists; the human-in-the-loop sourcing pole readers compare to Gem/Juicebox
 
 ## Comparisons
 
@@ -112,6 +121,14 @@ Format per item:
 - [type:comparison] [vertical:legal-ops] pairwise: definely-vs-spellbook — Word-native legal drafting add-ins; routes on defined-terms/navigation + redlining productivity vs generative drafting and clause generation
 - [type:comparison] [vertical:legal-ops] pairwise: ivo-vs-spellbook — AI contract review in Word; routes on review/redline-first in-house workflow vs broad drafting + negotiation coverage
 - [type:comparison] [vertical:cross] pairwise: dust-vs-relevance-ai — enterprise AI-agent platforms; routes on governed agents over permissioned company data vs no-code multi-agent "AI workforce" for back-office processes
+- [type:comparison] [vertical:cross] pairwise: lindy-vs-gumloop — AI automation platforms; routes on always-on judgment-driven assistant (Lindy) vs visual no-code workflow canvas with cheaper credits (Gumloop)
+- [type:comparison] [vertical:cross] pairwise: gumloop-vs-n8n — AI-native no-code automation vs open-source workflow automation; routes on managed AI-first canvas + document processing vs self-hostable flexibility and integration breadth
+- [type:comparison] [vertical:cross] pairwise: sierra-vs-decagon — AI customer-experience/support agents; routes on enterprise omnichannel CX-agent platform (Sierra) vs support-ticket-deflection AI agent (Decagon)
+- [type:comparison] [vertical:legal-ops] pairwise: supio-vs-eve-legal — plaintiff personal-injury AI; routes on medical-record-heavy case workup + demand prep (Supio) vs full litigation case-workup breadth (Eve)
+- [type:comparison] [vertical:legal-ops] pairwise: robin-ai-vs-spellbook — contract AI in the lawyer's workflow; routes on negotiation/review + agreement Q&A (Robin) vs Word-native generative drafting and clause generation (Spellbook)
+- [type:comparison] [vertical:revops] pairwise: rox-vs-clay — acting on CRM data; routes on autonomous agentic-CRM that executes account plays (Rox) vs build-it-yourself data enrichment + workflow workbench (Clay)
+- [type:comparison] [vertical:recruiting] pairwise: sapia-ai-vs-hirevue — AI interviewing; routes on chat/text structured async with bias-controlled scoring (Sapia) vs enterprise video-assessment incumbent (HireVue)
+- [type:comparison] [vertical:recruiting] pairwise: fetcher-vs-gem — sourcing + outreach; routes on human-validated AI sourcing with done-for-you outreach (Fetcher) vs all-in-one recruiting CRM + sequencing (Gem)
 
 ## Workflows
 
@@ -135,6 +152,8 @@ Format per item:
 - [type:workflow] [vertical:revops] mcp-server-apollo-revops — MCP server exposing Apollo contacts, sequences, and engagement to Claude for natural-language prospecting and sequence Q&A; artifact_type: mcp-server
 - [type:workflow] [vertical:recruiting] mcp-server-lever-recruiting — MCP server exposing Lever candidates, postings, and pipeline stages to Claude for recruiter queries; artifact_type: mcp-server
 - [type:workflow] [vertical:revops] visitor-deanon-to-outreach-n8n — n8n flow that turns Warmly/RB2B website de-anonymization signals into ICP-filtered routing + drafted warm first-touch; artifact_type: n8n-flow
+- [type:workflow] [vertical:revops] mcp-server-gong-revops — MCP server exposing Gong calls, deals, and trackers to Claude for natural-language conversation-intelligence and deal-risk Q&A; artifact_type: mcp-server
+- [type:workflow] [vertical:recruiting] ai-interview-compliance-audit-skill — claude skill that audits an AI video/interview setup against IL AI Video Interview Act, NYC LL144, and Colorado AI Act disclosure + bias-audit requirements; artifact_type: claude-skill
 
 ## Learn
 
@@ -165,6 +184,10 @@ Format per item:
 - [type:learn] [vertical:recruiting] concept: autonomous-ai-recruiter — what an "autonomous" AI recruiter automates end-to-end (source → outreach → schedule → shortlist) vs a sourcing tool, and where humans must stay in the loop → primary target_question: what is an autonomous AI recruiter?
 - [type:learn] [vertical:revops] concept: parallel-dialing — how parallel dialers work (connect rates, simultaneous lines), TCPA/compliance considerations, and where Nooks/Orum fit → primary target_question: what is parallel dialing and is it compliant?
 - [type:learn] [vertical:legal-ops] concept: ai-contract-review-accuracy — how to evaluate vendor "95% accuracy" claims for AI contract review (precision/recall, benchmark sets, playbook fidelity) → primary target_question: how accurate is AI contract review, really?
+- [type:learn] [vertical:recruiting] regulation: illinois-ai-video-interview-act — what Illinois' AIVIA plus the 2026 Human Rights Act AI amendments require (notice, consent, explanation, deletion, anti-discrimination) and how TA teams comply → primary target_question: what does Illinois require for AI in hiring interviews?
+- [type:learn] [vertical:cross] regulation: texas-responsible-ai-governance-act — TRAIGA (effective Jan 1 2026): who it covers, the intent-based prohibitions, AG-only enforcement + cure period, and what ops/legal/hiring deployers should do → primary target_question: does TRAIGA apply to our AI tools?
+- [type:learn] [vertical:revops] concept: waterfall-enrichment — how waterfall data enrichment works (provider cascade), the credit economics, and the verification gap before deliverability → primary target_question: what is waterfall enrichment and is it worth the credits?
+- [type:learn] [vertical:revops] definition: agentic-crm — what an "agentic CRM" is vs a system-of-record CRM with AI features, and the diagnostic questions buyers should ask (Rox/Day.ai category) → primary target_question: what is an agentic CRM?
 
 ## Stacks
 
@@ -182,3 +205,5 @@ Format per item:
 - [type:stack] [vertical:recruiting] new entry: technical-hiring-stack — CodeSignal/HackerRank + Karat + Greenhouse; use case: standardized technical screening pipeline
 - [type:stack] [vertical:recruiting] new entry: interview-intelligence-stack — BrightHire/Pillar + Greenhouse + Zoom; use case: structured-interview recording, scoring, and debrief pipeline
 - [type:stack] [vertical:legal-ops] new entry: in-house-legal-ai-stack — GC AI-or-Ivo + Ironclad + DocuSign IAM + Notion; use case: lean in-house team layering an AI copilot + review onto a CLM
+- [type:stack] [vertical:legal-ops] new entry: personal-injury-ai-stack — Supio-or-EvenUp + Eve Legal + Filevine + Clio; use case: plaintiff PI firm running intake → case workup → demand with AI in the loop
+- [type:stack] [vertical:cross] new entry: ai-agent-ops-stack — Lindy-or-Gumloop + n8n + Clay + Slack; use case: lean ops team building always-on AI agents over their SaaS without engineering
