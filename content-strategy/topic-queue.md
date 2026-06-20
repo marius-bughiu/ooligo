@@ -108,7 +108,7 @@ Format per item:
 - [type:comparison] [vertical:recruiting] pairwise: karat-vs-codesignal — technical interviewing; routes on interview-as-a-service human interviewers vs standardized proctored assessment platform → slug: karat-vs-codesignal
 - [type:comparison] [vertical:recruiting] pairwise: pillar-vs-brighthire — interview intelligence; routes on bias/quality scoring + lighter footprint vs structured-hiring depth and ATS integration → slug: pillar-vs-brighthire
 - [type:comparison] [vertical:recruiting] pairwise: apriora-vs-hirevue — AI video interviewing; routes on real-time conversational AI interviewer (Alex) + cheat detection vs enterprise async assessment incumbent → slug: apriora-vs-hirevue
-- [type:comparison] [vertical:legal-ops] pairwise: evenup-vs-eve-legal — plaintiff-side personal-injury AI; routes on demand-package generation at volume vs full case-workup + litigation prep
+- [type:comparison] [vertical:legal-ops] pairwise: evenup-vs-eve-legal — plaintiff-side personal-injury AI; routes on demand-package generation at volume vs full case-workup + litigation prep → slug: evenup-vs-eve-legal
 - [type:comparison] [vertical:legal-ops] pairwise: definely-vs-spellbook — Word-native legal drafting add-ins; routes on defined-terms/navigation + redlining productivity vs generative drafting and clause generation
 - [type:comparison] [vertical:legal-ops] pairwise: ivo-vs-spellbook — AI contract review in Word; routes on review/redline-first in-house workflow vs broad drafting + negotiation coverage
 - [type:comparison] [vertical:cross] pairwise: dust-vs-relevance-ai — enterprise AI-agent platforms; routes on governed agents over permissioned company data vs no-code multi-agent "AI workforce" for back-office processes
