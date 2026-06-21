@@ -1373,3 +1373,42 @@ This run auto-inserted **40** high-confidence links across **27** entries (each 
 - [tools/vitally] → [tools/intercom]: shares 2 verticals, named in relationship field, "Intercom" not in body (would need a new sentence — defer to authoring)
 - [tools/zapier] → [tools/notion]: shares 3 verticals, named in relationship field, "Notion" not in body (would need a new sentence — defer to authoring)
 - [tools/zapier] → [tools/slack]: shares 3 verticals, named in relationship field, "Slack" not in body (would need a new sentence — defer to authoring)
+
+## 2026-06-21
+
+### Auto-inserted this run (high confidence): 21 EN links across 14 entries (105 locale mirrors)
+
+Each below shares ≥ 2 verticals with its source AND was named in a relationship field or appeared verbatim-unlinked in the body. Anchor = target's brand name at first plain-prose occurrence; mirrored to de/es/fr/ja/pt-BR with the same anchor (glossary brand name) and locale path prefix. Per-target anti-spam cap (≤ 2/run) and per-entry cap (≤ 3/run) enforced.
+
+- [tools:glean] → [tools:slack] (rel)
+- [tools:slack] → [tools:claude] (body), → [tools:chatgpt] (body), → [tools:hubspot] (rel)
+- [tools:cursor] → [tools:claude] (body)
+- [tools:n8n] → [tools:cursor] (body), → [tools:slack] (rel), → [tools:zapier] (body)
+- [tools:perplexity] → [tools:zapier] (body)
+- [tools:relevance-ai] → [tools:n8n] (body)
+- [tools:zapier] → [tools:n8n] (body)
+- [tools:claude] → [tools:hubspot] (body), → [tools:salesforce] (body)
+- [tools:hubspot] → [tools:salesforce] (rel)
+- [tools:mixpanel] → [tools:churnzero] (body)
+- [tools:pendo] → [tools:gainsight] (body)
+- [tools:linear] → [tools:notion] (rel)
+- [workflows:cs-renewal-playbook-skill] → [tools:gainsight] (rel), → [tools:gong] (rel)
+- [workflows:customer-health-score-n8n] → [tools:churnzero] (body), → [tools:gong] (rel)
+
+### Deferred — high vertical overlap but ambiguous brand name (unsafe to auto-anchor; needs manual placement)
+
+These targets share ≥ 2 verticals with the source and are named in body/rel, but the brand name is also a common English word, so first-occurrence body-anchoring is unsafe. Place manually at a confirmed product mention.
+
+- [tools:n8n] → [tools:make]: shares revops/legal-ops/recruiting
+- [tools:perplexity] → [tools:make]: shares revops/legal-ops/recruiting
+- [tools:zapier] → [tools:make]: shares revops/legal-ops/recruiting
+- [tools:mixpanel] → [tools:catalyst]: shares customer-success/revops
+- [workflows:cs-renewal-playbook-skill] → [tools:catalyst]: shares revops/customer-success
+- [workflows:customer-health-score-n8n] → [tools:catalyst]: shares revops/customer-success
+
+### Below-floor summary (EN graph, body-link outbound + body/rel inbound)
+
+- Outbound < floor: tools 104, comparisons 40, workflows 38, learn 4 (stacks 0)
+- Inbound < floor: comparisons 148, workflows 54, tools 52, learn 39, stacks 13
+
+The bulk medium-confidence queue (single-shared-vertical candidates, mostly comparison→constituent-tool and tool→tool-in-same-vertical) is carried over from the 2026-05-24 section above and remains unresolved — those are 1-vertical-overlap and below the ≥ 2-vertical high-confidence bar, so the auto-pass correctly leaves them for manual review. The large inbound deficits on comparisons/workflows are structural: they need OTHER entries (learn/stacks) to link IN, which is an authoring-side fix, not auto-insertable from the under-floor entry.
