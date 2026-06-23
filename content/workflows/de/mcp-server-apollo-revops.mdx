@@ -1,0 +1,92 @@
+---
+slug: mcp-server-apollo-revops
+canonical_slug: mcp-server-apollo-revops
+locale: de
+verticals: [revops]
+title: MCP-Server, der Apollo-Prospecting und -Sequences an Claude weitergibt
+artifact_type: mcp-server
+tools_used: [apollo, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-06-23"
+---
+
+Ein Model-Context-Protocol-Server, der Claude scoped Zugriff auf Ihr [Apollo](/de/tools/apollo/)-Konto gibt: Prospect-Suche gegen die Apollo-Datenbank (ohne Credits zu verbrauchen), Suche über die gespeicherten Contacts Ihres Teams, Auflistung von Sequences und Engagement-Stats pro Sequence — plus zwei abgesicherte Writes und eine Credit-verbrauchende Enrichment, jeweils hinter einer Justification. Stecken Sie ihn in Claude Desktop oder Claude Code, und Ihr Team kann fragen „Welche VPs of Sales bei Fintechs unter 500 Personen sind noch in keiner Sequence?" und „Reichere diese Shortlist an, Justification: Research vor dem Call für die Acme-Renewal" — ohne den Chat zu verlassen und ohne dem Modell einen Knopf zu geben, der Credits verbrennt oder eine Liste massenhaft einschreibt. Das vollständige Scaffold liegt im Artefakt-Bundle unter `apps/web/public/artifacts/mcp-server-apollo-revops/` und liefert ein `README.md`, `pyproject.toml` und `src/apollo_revops_mcp/server.py`, bereit zur Installation mit `pip install -e .`.
+
+## Wann Sie das einsetzen
+
+Greifen Sie dazu, wenn Prospecting und Sequence-Triage einen klaren wöchentlichen Rhythmus haben — eine Liste bauen, prüfen wer schon in einer Sequence ist, Reply-Rates lesen, die wenigen Datensätze anreichern, die Sie tatsächlich anrufen — und die Kosten des Hin- und Herspringens zwischen der Apollo-UI und Ihrem Arbeitsdokument pro Frage die Kosten des Lookups selbst übersteigen. Zwei Rollen holen am meisten heraus. Der RevOps-Lead, der Apollo bisher in einem Tab offen hatte, fragt jetzt Claude in natürlicher Sprache und fügt eine strukturierte Antwort in einen Pipeline-Review ein. Der GTM Engineer, der bisher für jede einmalige Liste ein Wegwerf-Skript gegen die REST-API von Apollo schrieb, hat jetzt die vier Lese-Endpoints bereits gekapselt, wobei die Credit-verbrauchenden und Send-auslösenden Calls hinter expliziten Gates eingezäunt sind.
+
+Es ist auch das richtige Muster, wenn Sie den [Salesforce-RevOps-MCP-Server](/de/workflows/mcp-server-salesforce-revops/) bereits ausgerollt haben und dieselbe Form von Tools über Ihre Prospecting- und System-of-Record-Oberflächen wollen, damit die Claude-Prompts Ihres Teams portabel bleiben. Gleicher Antwortstil, gleiche Justification-Haltung bei allem, was schreibt oder Geld kostet.
+
+## Wann Sie das NICHT einsetzen
+
+Lassen Sie es, wenn eines davon zutrifft:
+
+- **Sie sind auf einem Plan ohne erweiterten API-Zugriff.** Apollo begrenzt den erweiterten API-Zugriff auf den Organization-Plan ($119/Nutzer/Monat bei jährlicher Abrechnung, Minimum 3 Seats per Juni 2026). Die Sequence-Tools brauchen zudem einen Master-API-Key — ein Standard-Key liefert `403`. Wenn Sie keinen Master-Key auf einem Seat der Organization-Stufe erstellen können, läuft die Sequence-Hälfte dieses Servers nicht; rollen Sie nur das Prospecting-Subset aus.
+- **Compliance verbietet Prospect-PII in einem Drittanbieter-LLM.** Suchergebnisse (Namen, Titel, Firmen) sind risikoarm, aber Enrichment liefert E-Mails und — wenn Sie den Webhook verdrahten — Telefonnummern zurück. Wenn Prospect-PII in einem LLM ausgeschlossen ist, halten Sie `APOLLO_ALLOW_CREDIT_SPEND=false` und nutzen den Server nur zum Listenbau, und enthüllen dann innerhalb von Apollo.
+- **Ihr Team versendet aus einem Sequencer, der nicht Apollo ist.** Wenn das eigentliche Outbound über Outreach, Salesloft oder Smartlead läuft, zeigen die Tools `add_contacts_to_sequence` und Engagement auf das falsche System. Nutzen Sie hier die Prospecting-Reads und verdrahten Sie die Send-Hälfte mit dem Tool, das sie besitzt.
+- **Sie haben nur ein bis zwei Prospecting-Fragen pro Woche.** Der amortisierte Wert liegt unter den Setup- und Token-Kosten. Bleiben Sie bei den gespeicherten Suchen in der Apollo-UI.
+
+## Was er bereitstellt
+
+Sieben Tools, gruppiert danach, was sie Sie kosten.
+
+- **Prospecting und Reads (keine Credits):** `search_people` trifft `POST /mixed_people/api_search` — die API-optimierte Suche, die Match-Metadaten zurückgibt, keine Credits verbraucht und keine E-Mails enthüllt. `search_contacts` trifft `POST /contacts/search` für die Personen, die Ihr Team explizit gespeichert hat.
+- **Sequence-Reads (Master-Key):** `list_sequences` (`POST /emailer_campaigns/search`) und `sequence_engagement` (`GET /emailer_messages/search`), das Nachrichten-Zählungen nach Status — delivered, opened, clicked, replied, bounced — für eine Sequence aggregiert.
+- **Credit-verbrauchende Enrichment (abgesichert):** `enrich_person` (`POST /people/match`) verbraucht Credits und ist deaktiviert, sofern nicht `APOLLO_ALLOW_CREDIT_SPEND=true`, mit einer Pflicht-Justification von mindestens 10 Zeichen.
+- **Writes (abgesichert):** `create_contact` (`POST /contacts`, `run_dedupe` standardmäßig true) und `add_contacts_to_sequence` (`POST /emailer_campaigns/{id}/add_contact_ids`), beide erfordern eine Justification; die Einschreibung ist hart auf 25 Contacts pro Call gedeckelt.
+
+Es gibt kein Delete-Tool, kein Bulk-Enrichment, keine unbegrenzte Einschreibung. Das Prinzip, gleich wie beim Salesforce-Server: Jede abrechenbare oder irreversible Aktion bekommt ihren eigenen benannten Knopf, niemals einen Freitext-Befehl.
+
+## Engineering-Haltung
+
+Ein paar eigensinnige Entscheidungen, die man vor der Übernahme des Scaffolds verstehen sollte.
+
+**Suche ist gratis; Reveal ist die Kostenposition.** `search_people` nutzt bewusst den Credit-freien Endpoint `mixed_people/api_search`, der keine Kontaktdetails zurückgibt. Eine E-Mail oder Telefonnummer zu bekommen ist ein separater `enrich_person`-Call. Die Trennung bedeutet, dass Claude eine 200-Personen-Liste zu null Credit-Kosten bauen und verfeinern kann und Sie nur ausgeben, wenn Sie die Handvoll anreichern, auf die Sie reagieren werden. Die beiden zusammenzulegen — bei jeder Suche zu enthüllen — ist, wie Teams ein Credit-Guthaben an einem Vormittag verbrennen.
+
+**Credit-Ausgabe ist ein Kill-Switch, kein Prompt.** `enrich_person` prüft `APOLLO_ALLOW_CREDIT_SPEND`, bevor es läuft. Standardmäßig aus. Die Alternative — allein dem Justification-Text zu vertrauen — lässt die Ausgabe ein selbstbewusstes Missverständnis entfernt. Das Flag macht „Erlauben wir Chat-getriebenes Enrichment überhaupt?" zu einer expliziten Deployment-Entscheidung.
+
+**Die Einschreibung ist by-construction gedeckelt.** `add_contacts_to_sequence` verweigert mehr als `APOLLO_MAX_SEQUENCE_BATCH` (Default 25) Contacts in einem einzigen Call und verlangt ein benanntes Versand-Postfach. Der Apollo-Endpoint würde gern Hunderte einschreiben; der Deckel hält eine versehentliche Einschreibung klein genug, um sie von Hand rückgängig zu machen.
+
+**Dedup ist eingeschaltet.** Apollo dedupliziert neue Contacts standardmäßig nicht — ein Re-Run mit demselben Payload erzeugt einen zweiten Datensatz. `create_contact` setzt `run_dedupe=true`, sodass ein wiederholter Call aktualisiert, statt Duplikate auszufächern.
+
+## Kostenrealität
+
+Drei Kostenpositionen.
+
+- **Claude-Abo.** Was Sie ohnehin für Claude Desktop oder Claude Code zahlen (Pro mit $20/Nutzer/Monat, Max-Stufen $100-200/Nutzer/Monat, oder API-Verbrauch). Der Server ändert das nicht.
+- **Self-Hosting des Servers.** Ein lokaler Python-Prozess pro Claude-Desktop-Nutzer — null Infra-Kosten auf einem Laptop. Kapseln Sie ihn als geteilten Service und budgetieren Sie eine kleine VM, $20-50/Monat in jeder Cloud.
+- **Apollo-Credits und API-Quota.** Suche verbraucht keine Credits. Enrichment schon — Apollo berechnet rund 1 Credit pro verifizierter Business-E-Mail und etwa 8 Credits pro enthüllter Mobilnummer (Juni 2026). Ein RevOps-Lead, der 20-40 Datensätze pro Woche anreichert, bleibt bequem innerhalb eines Standard-Credit-Kontingents; die Gefahr ist Bulk-Enrichment, weshalb es genau ein Gate hat. Apollo erzwingt zudem API-Rate-Limits pro Minute, pro Stunde und pro Tag, die mit dem Plan skalieren (Free sind 600 Requests/Tag; bezahlte Stufen liegen höher) — lesen Sie Ihre exakten Limits über den View-API-Usage-Stats-Endpoint.
+
+Die Token-Kosten auf Claudes Seite werden von den Antwort-Payloads dominiert, daher dünnt das Scaffold Suchergebnisse vor der Rückgabe auf id, Name, Titel, Firma und Link aus. Eine Suche über 25 Datensätze landet deutlich unter 10K Tokens; ein paar Suchen pro Prospecting-Session pro Woche sind einstellige Dollar/Nutzer/Monat zusätzlich zum Abo.
+
+## Wie Erfolg aussieht
+
+Ein messbares Signal nach einem Monat: Die Time-to-Answer bei „Wen sollte ich diese Woche bearbeiten?" sinkt von „Apollo öffnen, die gespeicherte Suche neu bauen, mit Sequences abgleichen, exportieren" (sagen wir fünf Minuten oder mehr) auf „Claude fragen, die Antwort lesen" (unter einer Minute). Das schwerer messbare, aber tragendere Signal: Das Team hört auf, ganze Listen „sicherheitshalber" anzureichern, weil das Anreichern der wenigen Datensätze, die es tatsächlich anfasst, jetzt der Weg des geringsten Widerstands ist — der Credit-Verbrauch pro gebuchtem Meeting sinkt, statt zu steigen.
+
+## Gegenüber den Alternativen
+
+- **Apollos eigene AI und gespeicherte Suchen.** First-Party, kein Prozess zu hosten, und die Daten sind schon da. Trade-off: Sie leben in der Apollo-UI, und deren Assistent kann Apollo-Daten nicht mit dem Rest Ihres Claude-Kontexts verbinden. Wählen Sie die native UI, wenn Ihr Team in Apollo lebt; wählen Sie diesen Server, wenn es in Claude lebt und eine einzige Chat-Oberfläche über Prospecting und den [Salesforce-Server](/de/workflows/mcp-server-salesforce-revops/) will.
+- **Ein Wegwerf-Skript gegen die REST-API von Apollo.** Maximale Kontrolle, maximaler Wartungsaufwand und null Guardrails — jedes Team baut Auth, Paging, das Credit-Gate und den Einschreibungs-Deckel von Hand neu. Dieses Scaffold gibt Ihnen all das in rund 400 Zeilen, und der Credit-Kill-Switch ist bereits verdrahtet.
+- **Eine No-Code-Plattform ([Clay](/de/tools/clay/), n8n).** Exzellent für geplante, produktivierte Enrichment-und-Routing-Pipelines. Andere Form als „eine Ad-hoc-Frage stellen, für die ich keinen Flow vorgebaut habe". Sie sind Ergänzungen: Clay oder n8n für den wiederkehrenden Waterfall, dieser Server für das Gespräch. Wenn Sie die Architektur hinter der wiederkehrenden Version wollen, lesen Sie den [AI-SDR](/de/learn/ai-sdr/)-Primer.
+
+## Watch-outs
+
+Das README dokumentiert diese vollständig; die Kurzfassung:
+
+- **Credit-Drain beim Enrichment.** Ein achtloses „reichere all diese an" gegen eine 500-Zeilen-Liste kann in Minuten Tausende Credits ausgeben. Guard: `enrich_person` ist aus, sofern nicht `APOLLO_ALLOW_CREDIT_SPEND=true`, verarbeitet einen Datensatz pro Call und erzwingt `reveal_phone_number=false` (das teure Feld) in diesem Scaffold.
+- **Versehentliche Masseneinschreibung.** `add_contacts_to_sequence` löst echte Sends aus. Guard: Der Call verweigert mehr als 25 Contacts (`APOLLO_MAX_SEQUENCE_BATCH`), verlangt ein benanntes Versand-Postfach und fordert eine Justification — es gibt keinen „alle einschreiben"-Pfad.
+- **Master-Key-403 an einem Freitag.** Die Sequence-Tools scheitern still, wenn der Key kein Master-Key ist. Guard: Das Scaffold fängt den `403` ab und liefert eine klare Meldung, die die Master-Key-Anforderung und den Erstellungsort benennt, statt eines rohen Stack-Trace.
+- **Duplikat-Contact-Ausfächerung.** Apollo dedupliziert standardmäßig nicht, also macht ein wiederholtes `create_contact` einen zweiten Datensatz. Guard: `run_dedupe` ist standardmäßig true.
+- **Rate-Limit-Überraschungen.** Eine Bulk-Paging-Schleife kann an Apollos Minuten- oder Tagesgrenze stoßen. Guard: Jede Suche ist auf 100/Seite gedeckelt und das Scaffold legt den `429` explizit offen; fügen Sie Backoff (TODO #1 im README) vor jedem unbeaufsichtigten Einsatz hinzu.
+
+## Stack
+
+- **Apollo** — Prospecting-Datenbank, Contacts, Sequences, Enrichment
+- **MCP Python SDK** — das Paket `mcp>=1.2.0`; stellt `Server`, `stdio_server` und die Tool-Registry-Dekoratoren bereit
+- **httpx** — async REST-Client gegen `api.apollo.io`, authentifiziert mit dem `x-api-key`-Header
+- **Claude Desktop oder Claude Code** — Natural-Language-Schnittstelle, Tool-Caller
+- **`APOLLO_ALLOW_CREDIT_SPEND`** — der Kill-Switch auf Env-Ebene, der entscheidet, ob Chat-getriebenes Enrichment überhaupt erlaubt ist

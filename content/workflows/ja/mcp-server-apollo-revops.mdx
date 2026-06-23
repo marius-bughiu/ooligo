@@ -1,0 +1,92 @@
+---
+slug: mcp-server-apollo-revops
+canonical_slug: mcp-server-apollo-revops
+locale: ja
+verticals: [revops]
+title: Apollo のプロスペクティングと sequences を Claude に公開する MCP サーバー
+artifact_type: mcp-server
+tools_used: [apollo, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-06-23"
+---
+
+Claude に [Apollo](/ja/tools/apollo/) アカウントへのスコープ付きアクセスを与える Model Context Protocol サーバーです。Apollo データベースに対するプロスペクト検索 (クレジットを消費しません)、チームが保存した Contacts の検索、sequences の一覧、sequence ごとの engagement 統計、さらにゲート付きの書き込みが2つとクレジットを消費する enrichment が1つあり、それぞれが justification の背後に置かれています。Claude Desktop または Claude Code に組み込めば、チームは「従業員 500 人未満の fintech で VP of Sales のうち、まだどの sequence にも入っていないのは誰か」「このショートリストを enrich して。justification: Acme の更新に向けたコール前の research」と、チャットを離れずに尋ねられます。しかもクレジットを焼いたりリストを一括登録したりするボタンをモデルに渡すことはありません。完全な scaffold は `apps/web/public/artifacts/mcp-server-apollo-revops/` のアーティファクト bundle にあり、`pip install -e .` でインストールできる `README.md`、`pyproject.toml`、`src/apollo_revops_mcp/server.py` を同梱しています。
+
+## いつ使うか
+
+プロスペクティングと sequence のトリアージに明確な週次リズムがあるとき — リストを作る、誰が既に sequence に入っているか確認する、reply rates を読む、実際に電話する数件だけを enrich する — そして質問ごとに Apollo の UI と作業ドキュメントを往復するコストが lookup 自体のコストを上回るときに、これを使ってください。2つのロールが最も恩恵を受けます。Apollo をタブで開きっぱなしにしていた RevOps リードは、今では Claude に自然言語で尋ね、構造化された回答を pipeline review に貼り付けます。一度きりのリストごとに Apollo の REST API に対する使い捨てスクリプトを書いていた GTM engineer は、今では4つの読み取り endpoint がすでにラップされ、クレジットを消費し送信をトリガーする呼び出しは明示的なゲートの背後に囲い込まれています。
+
+すでに [Salesforce RevOps MCP サーバー](/ja/workflows/mcp-server-salesforce-revops/) をデプロイしていて、プロスペクティングと system-of-record の各面で同じ形の tools が欲しい場合にも、これは正しいパターンです。そうすればチームの Claude プロンプトはポータブルなまま保てます。回答スタイルは同じ、書き込みや支出を伴うものに対する justification の姿勢も同じです。
+
+## いつ使わないか
+
+次のいずれかに当てはまる場合は見送ってください。
+
+- **高度な API アクセスのないプランにいる場合。**Apollo は高度な API アクセスを Organization プラン (年額請求で $119/ユーザー/月、2026 年6月時点で最低3 seats) に限定しています。sequences の tools にはさらに master API key が必要で、標準の key は `403` を返します。Organization 階層の seat で master key を作成できない場合、このサーバーの sequence 部分は動きません。プロスペクティングのサブセットだけをデプロイしてください。
+- **コンプライアンスがプロスペクトの PII をサードパーティ LLM に入れることを禁じている場合。**検索結果 (氏名、役職、会社) は低リスクですが、enrichment はメールアドレスを、そして webhook を配線すれば電話番号を返します。プロスペクトの PII を LLM に押し込むのが論外なら、`APOLLO_ALLOW_CREDIT_SPEND=false` のままにしてサーバーはリスト作成だけに使い、reveal は Apollo の中で行ってください。
+- **チームが Apollo 以外の sequencer から送信している場合。**実際の outbound が Outreach、Salesloft、Smartlead を通っているなら、`add_contacts_to_sequence` と engagement の tools は誤ったシステムを指します。ここではプロスペクティングの読み取りを使い、送信部分はそれを所有するツールに配線してください。
+- **プロスペクティングの質問が週に1つか2つしかない場合。**償却後の価値が setup とトークンのコストを下回ります。Apollo の UI の保存済み検索のままにしてください。
+
+## 何を公開するか
+
+7つの tools を、何のコストがかかるかでグループ分けしています。
+
+- **プロスペクティングと読み取り (クレジットなし):** `search_people` は `POST /mixed_people/api_search` を叩きます。これは API 向けに最適化された検索で、match メタデータを返し、クレジットを消費せず、メールアドレスも reveal しません。`search_contacts` は `POST /contacts/search` を叩き、チームが明示的に保存した人を対象とします。
+- **sequence の読み取り (master key):** `list_sequences` (`POST /emailer_campaigns/search`) と `sequence_engagement` (`GET /emailer_messages/search`) で、後者は1つの sequence についてメッセージ数をステータス別 (delivered、opened、clicked、replied、bounced) に集計します。
+- **クレジットを消費する enrichment (ゲート付き):** `enrich_person` (`POST /people/match`) はクレジットを消費し、`APOLLO_ALLOW_CREDIT_SPEND=true` でない限り無効で、10 文字以上の justification が必須です。
+- **書き込み (ゲート付き):** `create_contact` (`POST /contacts`、`run_dedupe` はデフォルトで true) と `add_contacts_to_sequence` (`POST /emailer_campaigns/{id}/add_contact_ids`) はどちらも justification を要求し、登録は1回の呼び出しあたり 25 contacts のハードキャップがあります。
+
+delete tool も、bulk の enrichment も、無制限の登録もありません。原則は Salesforce サーバーと同じで、課金対象または不可逆のアクションはそれぞれ専用の名前付きボタンを持ち、自由テキストのコマンドにはしません。
+
+## エンジニアリングの姿勢
+
+scaffold を採用する前に理解しておく価値のある、いくつかの意見の強い選択があります。
+
+**検索は無料、reveal がコストラインです。**`search_people` はクレジット不要の endpoint `mixed_people/api_search` を意図的に使い、これは連絡先の詳細を返しません。メールや電話を得るのは別個の `enrich_person` 呼び出しです。この分離により、Claude は 200 人のリストをクレジットコストゼロで構築・絞り込みでき、実際に動く一握りを enrich するときにだけ支出します。両者を一体化する — 検索ごとに reveal する — のは、チームが午前中にクレジット残高を焼き尽くす道です。
+
+**クレジットの支出は prompt ではなく kill-switch です。**`enrich_person` は実行前に `APOLLO_ALLOW_CREDIT_SPEND` を確認します。デフォルトはオフです。代替案 — justification のテキストだけを信じる — では、支出は自信ありげな誤読1つ分の距離に置かれます。この flag は「チャット駆動の enrichment を一体そもそも許可するのか」を明示的なデプロイ判断にします。
+
+**登録は構造上キャップされています。**`add_contacts_to_sequence` は1回の呼び出しで `APOLLO_MAX_SEQUENCE_BATCH` (デフォルト 25) を超える contacts を拒否し、名前付きの送信メールボックスを要求します。Apollo の endpoint は数百件でも喜んで登録します。キャップは、誤った登録を手で取り消せる程度に小さく保ちます。
+
+**dedup はオンになっています。**Apollo は新しい contacts をデフォルトでは重複排除しません。同じ payload での再実行は2つ目のレコードを作ります。`create_contact` は `run_dedupe=true` を設定し、繰り返しの呼び出しが重複を量産する代わりに更新するようにします。
+
+## コストの現実
+
+3つのコストライン。
+
+- **Claude のサブスクリプション。**すでに Claude Desktop または Claude Code に払っているもの (Pro は $20/ユーザー/月、Max 階層は $100-200/ユーザー/月、または API 消費)。サーバーはこれを変えません。
+- **サーバーの self-host。**Claude Desktop ユーザーごとのローカル Python プロセスで、ラップトップ上ならインフラコストはゼロです。共有サービスとしてラップするなら小さな VM を見込み、どのクラウドでも $20-50/月です。
+- **Apollo のクレジットと API クォータ。**検索はクレジットを消費しません。enrichment は消費します — Apollo は検証済みのビジネスメール 1 件につき約 1 クレジット、reveal した携帯番号 1 件につき約 8 クレジットを課金します (2026 年6月)。週に 20-40 件を enrich する RevOps リードは標準のクレジット割当の中に余裕で収まります。危険なのは bulk の enrichment で、まさにそれゆえにゲートが付いています。Apollo はさらにプランに応じてスケールする分・時・日単位の API rate limits を課します (Free は 600 requests/日、有料階層はより高い) — 正確な上限は View API Usage Stats endpoint で読んでください。
+
+Claude 側のトークンコストは応答 payload に支配されるため、scaffold は検索結果を返す前に id、名前、役職、会社、リンクへとスリム化します。25 件の検索は 10K トークンを十分に下回ります。週あたりプロスペクティングセッションごとに数回の検索なら、サブスクリプションに上乗せして1桁ドル/ユーザー/月です。
+
+## 成功はどう見えるか
+
+1か月後の測定可能なシグナル: 「今週は誰に取り組むべきか」への time-to-answer が、「Apollo を開き、保存済み検索を作り直し、sequences と突き合わせ、エクスポートする」(5分以上としましょう) から「Claude に尋ね、回答を読む」(1分未満) へと下がります。測りにくいがより効いてくるシグナル: チームが「念のため」にリスト全体を enrich するのをやめます。実際に触れる数件だけを enrich することが最小抵抗の道になるからです — 予約された会議あたりのクレジット消費は上がるのではなく下がります。
+
+## 代替案との比較
+
+- **Apollo 自身の AI と保存済み検索。**first-party で、ホストするプロセスが不要で、データはすでにそこにあります。トレードオフ: あなたは Apollo の UI の中で生きることになり、そのアシスタントは Apollo のデータを Claude のコンテキストの残りと結合できません。チームが Apollo の中で生きているならネイティブ UI を、Claude の中で生きていてプロスペクティングと [Salesforce サーバー](/ja/workflows/mcp-server-salesforce-revops/) をまたぐ単一のチャット面が欲しいならこのサーバーを選んでください。
+- **Apollo の REST API に対する使い捨てスクリプト。**最大の制御、最大の保守負担、そしてゼロの guardrails — どのチームも auth、paging、クレジットのゲート、登録のキャップを手で作り直します。この scaffold はそのすべてを約 400 行で与え、クレジットの kill-switch はすでに配線済みです。
+- **no-code プラットフォーム ([Clay](/ja/tools/clay/)、n8n)。**スケジュールされ製品化された enrichment と routing のパイプラインには優れています。「事前に flow を作っていない ad-hoc な質問を1つする」とは形が異なります。両者は補完関係です: 反復する waterfall には Clay か n8n、会話にはこのサーバー。反復版の背後にあるアーキテクチャが欲しければ、[AI SDR](/ja/learn/ai-sdr/) の primer を読んでください。
+
+## Watch-outs
+
+README が詳細に記録しています。短い版:
+
+- **enrichment でのクレジット枯渇。**500 行のリストに対する不注意な「これ全部 enrich して」は、数分で数千クレジットを使いかねません。Guard: `enrich_person` は `APOLLO_ALLOW_CREDIT_SPEND=true` でない限りオフで、1 回の呼び出しで1レコードを処理し、この scaffold では `reveal_phone_number=false` (高コストのフィールド) を強制します。
+- **誤った一括登録。**`add_contacts_to_sequence` は実際の送信をトリガーします。Guard: 呼び出しは 25 contacts (`APOLLO_MAX_SEQUENCE_BATCH`) を超えると拒否し、名前付きの送信メールボックスを要求し、justification を求めます — 「全員を登録する」経路はありません。
+- **金曜の master key 403。**sequences の tools は key が master でないと静かに失敗します。Guard: scaffold は `403` を捕捉し、生のスタックトレースの代わりに master key 要件と生成場所を名指しする明確なメッセージを返します。
+- **重複 contact のファンアウト。**Apollo はデフォルトで重複排除しないため、再試行された `create_contact` は2つ目のレコードを作ります。Guard: `run_dedupe` はデフォルトで true です。
+- **rate limit の不意打ち。**bulk の paging ループは Apollo の分単位または日単位の上限に当たりかねません。Guard: 各検索は 100/ページにキャップされ、scaffold は `429` を明示的に表面化します。無人運用の前に backoff (README の TODO #1) を追加してください。
+
+## Stack
+
+- **Apollo** — プロスペクティングのデータベース、contacts、sequences、enrichment
+- **MCP Python SDK** — `mcp>=1.2.0` パッケージ。`Server`、`stdio_server`、tool レジストリのデコレーターを提供します
+- **httpx** — `api.apollo.io` に対する async REST クライアント。`x-api-key` ヘッダーで認証します
+- **Claude Desktop または Claude Code** — 自然言語インターフェース、tool の呼び出し元
+- **`APOLLO_ALLOW_CREDIT_SPEND`** — チャット駆動の enrichment をそもそも許可するかを決める env レベルの kill-switch
