@@ -66,7 +66,7 @@ Format per item:
 - [type:tool] [vertical:legal-ops] new entry: supio — AI for plaintiff personal-injury & mass-tort firms (medical-record chronology, case workup, demand prep); $91M raised + Thomson Reuters partnership, the third PI pole alongside EvenUp and Eve Legal → slug: supio
 - [type:tool] [vertical:cross] new entry: lindy — AI-agent builder for always-on assistants over email/calendar/SaaS (judgment-driven multi-step agents); the "AI assistant" pole ops teams weigh vs Dust and Gumloop → slug: lindy
 - [type:tool] [vertical:cross] new entry: gumloop — no-code AI automation canvas (drag-and-drop nodes, document processing, browser extension); the visual AI-workflow pole vs n8n/Make and Lindy
-- [type:tool] [vertical:recruiting] new entry: sapia-ai — chat/text-based AI smart-interview platform (structured async, bias-controlled scoring); the text-interview pole vs video-first HireVue/Apriora
+- [type:tool] [vertical:recruiting] new entry: sapia-ai — chat/text-based AI smart-interview platform (structured async, bias-controlled scoring); the text-interview pole vs video-first HireVue/Apriora → slug: sapia-ai
 - [type:tool] [vertical:recruiting] new entry: fetcher — AI sourcing + automated outreach with human-validated shortlists; the human-in-the-loop sourcing pole readers compare to Gem/Juicebox
 
 ## Comparisons
