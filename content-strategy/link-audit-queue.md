@@ -1412,3 +1412,65 @@ These targets share ≥ 2 verticals with the source and are named in body/rel, b
 - Inbound < floor: comparisons 148, workflows 54, tools 52, learn 39, stacks 13
 
 The bulk medium-confidence queue (single-shared-vertical candidates, mostly comparison→constituent-tool and tool→tool-in-same-vertical) is carried over from the 2026-05-24 section above and remains unresolved — those are 1-vertical-overlap and below the ≥ 2-vertical high-confidence bar, so the auto-pass correctly leaves them for manual review. The large inbound deficits on comparisons/workflows are structural: they need OTHER entries (learn/stacks) to link IN, which is an authoring-side fix, not auto-insertable from the under-floor entry.
+
+## 2026-06-30
+
+### Auto-inserted this run (high confidence): 10 EN links across 8 entries (50 locale mirrors)
+
+Each below shares ≥ 2 verticals with its source AND appeared verbatim-unlinked in the body (anchored in place). Anchor = target's brand name at its first plain-prose occurrence in the body (never frontmatter); mirrored to de/es/fr/ja/pt-BR by wrapping the same English brand token with the locale path prefix. Per-target anti-spam cap (≤ 2/run) and per-entry cap (≤ 3/run) enforced.
+
+- [tools:lindy] → [tools:n8n] (body), → [tools:zapier] (body) — clears outbound floor
+- [tools:relevance-ai] → [tools:lindy] (body) — clears outbound floor
+- [tools:hubspot] → [tools:claude] (body) — clears outbound floor
+- [tools:apollo] → [tools:claude] (body) — still 1 below floor (claude was the only in-cap target)
+- [tools:salesforce] → [tools:hubspot] (body) — still 1 below floor (slack/claude targets cap-blocked)
+- [workflows:qbr-prep-skill] → [tools:gong] (body), → [tools:gainsight] (body) — clears outbound floor
+- [workflows:churn-risk-summarizer-claude] → [tools:slack] (body) — clears outbound floor
+- [workflows:expansion-signal-detection-claude] → [tools:slack] (body) — clears outbound floor
+
+Targets touched and their per-run usage (cap 2): claude 2 (hubspot, apollo), slack 2 (churn-risk, expansion), n8n 1, zapier 1, lindy 1, hubspot 1, gong 1, gainsight 1. All within cap.
+
+### Deferred — high confidence but cap-blocked this run (24)
+
+These share ≥ 2 verticals with the source AND are named in a relationship field or appear verbatim-unlinked in the body — auto-insertable in principle, but the per-target cap (≤ 2/run, largely consumed by `claude` and `slack`) or the per-entry cap was exhausted. Carry to next run.
+
+- `deferred-high` [tools:apollo] → [tools:slack]: shares revops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:apollo] → [tools:zapier]: shares revops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:chatgpt] → [tools:slack]: shares revops/legal-ops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:clay] → [tools:claude]: shares revops/recruiting, name in body, not yet linked (cap-blocked this run)
+- `deferred-high` [tools:common-room] → [tools:slack]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:common-room] → [tools:salesforce]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:common-room] → [tools:hubspot]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:fathom] → [tools:slack]: shares revops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:gong] → [tools:salesforce]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:gong] → [tools:hubspot]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:gong] → [tools:slack]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:gong] → [tools:claude]: shares revops/customer-success, name in body, not yet linked (cap-blocked this run)
+- `deferred-high` [tools:intercom] → [tools:salesforce]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:intercom] → [tools:slack]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:linear] → [tools:slack]: shares revops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:linear] → [tools:zapier]: shares revops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:make] → [tools:slack]: shares revops/legal-ops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:notion] → [tools:slack]: shares revops/legal-ops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:salesforce] → [tools:slack]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:salesforce] → [tools:claude]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [tools:zapier] → [tools:slack]: shares revops/legal-ops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [comparisons:claude-vs-perplexity] → [tools:claude]: shares revops/legal-ops/recruiting, named in relationship field (cap-blocked this run)
+- `deferred-high` [workflows:mcp-server-hubspot-cs] → [tools:hubspot]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+- `deferred-high` [workflows:mcp-server-hubspot-cs] → [tools:claude]: shares revops/customer-success, named in relationship field (cap-blocked this run)
+
+### Deferred — high vertical overlap but ambiguous brand name (4)
+
+Target shares ≥ 2 verticals and is named in a relationship field, but the brand name is also a common English word, so first-occurrence body-anchoring is unsafe. Place manually at a confirmed product mention.
+
+- `deferred-ambiguous` [tools:chatgpt] → [tools:notion]: shares revops/legal-ops/recruiting, brand name is a common English word — unsafe to auto-anchor at first occurrence; place manually
+- `deferred-ambiguous` [tools:make] → [tools:notion]: shares revops/legal-ops/recruiting, brand name is a common English word — unsafe to auto-anchor at first occurrence; place manually
+- `deferred-ambiguous` [tools:zapier] → [tools:notion]: shares revops/legal-ops/recruiting, brand name is a common English word — unsafe to auto-anchor at first occurrence; place manually
+- `deferred-ambiguous` [tools:zapier] → [tools:make]: shares revops/legal-ops/recruiting, brand name is a common English word — unsafe to auto-anchor at first occurrence; place manually
+
+### Below-floor summary (EN graph, post-insert; body-link outbound + body/rel inbound)
+
+- Outbound < floor: tools 96, comparisons 40, workflows 32, learn 4 (stacks 0)
+- Inbound < floor: comparisons 152, workflows 54, tools 52, learn 39, stacks 13
+
+This run cleared the outbound floor for 6 entries (tools 99→96, workflows 35→32). The remaining outbound gaps are dominated by entries whose only ≥ 2-vertical targets are `claude`/`slack` (both at the per-run cap) or are 1-vertical-overlap medium candidates carried from prior sections. Inbound deficits on comparisons/workflows are structural — they need OTHER entries (learn/stacks) to link IN, an authoring-side fix, not auto-insertable from the under-floor entry.
