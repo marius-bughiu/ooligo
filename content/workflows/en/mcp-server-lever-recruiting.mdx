@@ -1,0 +1,125 @@
+---
+slug: mcp-server-lever-recruiting
+canonical_slug: mcp-server-lever-recruiting
+locale: en
+verticals: [recruiting]
+title: Lever MCP server for recruiting workflows
+artifact_type: mcp-server
+tools_used: [lever, claude]
+roles: [recruiter, recruiting-engineer, talent-acquisition]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-07-02"
+---
+
+A Model Context Protocol (MCP) server that exposes the [Lever](/en/tools/lever/) Data API as read-mostly tools to Claude Desktop / Claude Code / any MCP-compatible client. Six read tools cover the daily recruiter questions ("which opportunities are stuck in stage X for >Y days?", "what's the funnel for this posting?", "show me this candidate's current state and notes"), one cautious write tool surfaces stage-stuck opportunities for the recruiter to act on. Designed for the recruiter who lives in Claude and wants their ATS state without context-switching, and for the recruiting engineer building agentic workflows that need Lever read access.
+
+The scaffold ships as a Python package importable from disk. It is NOT runtime-tested against a live Lever tenant — the disclaimer is repeated in the README and at the top of `server.py`. Production use requires the recruiting engineer to wire credentials, rate-limit, and verify the dispatched calls against a Lever Sandbox environment first.
+
+## Lever's data model is not Greenhouse's
+
+Before anything else: Lever does not model candidates and applications the way Greenhouse does, and every tool in this server reflects that. The pipeline object is an **Opportunity** — it ties a **Contact** (the person) to one or more **Postings** (the jobs) and carries a single current `stage`. A posting is the job; a posting's `state` is `published`, `internal`, `closed`, `draft`, `pending`, or `rejected`, and this server treats `published` as "open." Stages are their own resource, and an opportunity's `stage` field is a stage **ID**, not a display name — so `list_stages` exists specifically to resolve IDs before you filter on them. Timestamps come back as integer milliseconds since the epoch, not ISO strings. If you port a Greenhouse mental model onto Lever verbatim, the tools return empty or wrong. This is why the parallel [Greenhouse MCP](/en/workflows/mcp-server-greenhouse-recruiting/) and [Ashby MCP](/en/workflows/mcp-server-ashby-recruiting/) are separate servers rather than one server with a driver flag.
+
+## When to use
+
+- The recruiter or recruiting engineer wants Lever pipeline state available in Claude conversations and is willing to install an MCP server (low-friction in Claude Desktop and Claude Code, more setup in custom MCP clients).
+- The team is on Lever (LeverTRM) and has Data API access — the Data API is the full-access read/write API; the [Postings API](/en/tools/lever/) is the public read-only job-board one, and this server uses the Data API.
+- Read-mostly access fits the use case. The server's writes are limited to one cautious tool (`note_stage_stuck`) that adds an internal note; no opportunity-state mutations are exposed by default.
+- Recruiting engineering or IT has the security posture to handle a Lever API key. Lever keys are account-scoped, not endpoint-scoped, so the key's blast radius is set at the integration-user level — plan for that.
+
+## When NOT to use
+
+- **Production-ready, runtime-tested setup needed today.** This is a scaffold. The README says so; the docstrings say so. Use it as a starting point, not a finished deployment.
+- **You need a full stage-transition history.** Lever's Data API has no endpoint that returns a stage-by-stage transition log. `get_opportunity_detail` returns the *current* stage, `lastAdvancedAt`, and the notes feed — not a complete audit trail of every move. If your workflow depends on "when exactly did this candidate enter onsite," this server cannot give it to you, and neither can Lever's API without webhook capture.
+- **Multi-tenant SaaS use.** The server's auth model is single-tenant (one API key, one Lever account). Multi-tenant requires non-trivial reshape.
+- **Write-heavy workflows.** The server is intentionally read-mostly. If the use case needs to advance opportunities between stages, archive them, or send candidate emails, those need separate per-tool security review and explicit per-tool justification per the [recruiting cursor-rule](/en/workflows/cursor-rules-recruiting-engineer/) guidance.
+- **Bypassing the candidate-consent posture.** Lever's data is candidate-consented for hiring purposes. Pulling it into agentic workflows does not extend that consent. Stay within the disclosed processing purposes.
+
+## Setup
+
+1. **Install the package.** From `apps/web/public/artifacts/mcp-server-lever-recruiting/`:
+   ```bash
+   pip install -e .
+   ```
+   The package is structured as a uv / pip-installable Python project with `pyproject.toml`.
+2. **Set credentials.** Two env vars: `LEVER_API_KEY` (Data API key from Lever → Settings → Integrations and API → API credentials) and `LEVER_PERFORM_AS_USER_ID` (the Lever user ID that writes attribute to via the `perform_as` parameter; find it with `GET https://api.lever.co/v1/users`). The server validates both at startup, so a missing `perform_as` ID can't let unattributed writes slip through later.
+3. **Register with the MCP client.** For Claude Desktop, add to `claude_desktop_config.json`:
+   ```json
+   {
+     "mcpServers": {
+       "lever-recruiting": {
+         "command": "uv",
+         "args": ["run", "lever-recruiting-mcp"],
+         "env": {
+           "LEVER_API_KEY": "...",
+           "LEVER_PERFORM_AS_USER_ID": "..."
+         }
+       }
+     }
+   }
+   ```
+   For Claude Code, the equivalent goes in the project's `.claude/settings.local.json` MCP block.
+4. **Sanity check against Sandbox.** Lever provides a separate sandbox tenant (`hire.sandbox.lever.co`). Wire the server against sandbox first and confirm the credentials authenticate and each tool returns what the sandbox UI shows.
+5. **Production move.** Only after sandbox validation, swap the env vars to the production API key. The server runs locally to the MCP client; no separate deployment needed for single-recruiter use. For team use, run in a shared container with a per-recruiter MCP gateway.
+
+## What the server exposes
+
+Seven tools. Six are read; one is the cautious write. Per the [recruiting cursor-rule](/en/workflows/cursor-rules-recruiting-engineer/) guidance, writes need explicit per-tool justification — `note_stage_stuck` has it documented in `server.py`'s docstring.
+
+### Read tools
+
+1. **`list_opportunities_in_stage`** — given a posting ID and a stage ID, return the opportunities currently in that stage with their `lastInteractionAt`/`lastAdvancedAt` timestamps. Optional `stale_after_days` filter. Useful for "who's stuck in onsite for >10 days?" queries.
+2. **`get_opportunity_detail`** — given an opportunity ID, return its current stage, staleness timestamps, tags, sources, and notes feed. Useful for context-loading before a recruiter screen. Not a stage-transition log (see When NOT to use).
+3. **`list_postings_open`** — list published postings with team, department, location, created-at, and hiring-manager/owner user IDs. Optional team filter. Useful for the recruiter-leader's "what are we working on" overview.
+4. **`list_stages`** — list all pipeline stages with their IDs and display text. You call this first to turn a stage name into the stage ID the other tools need.
+5. **`get_funnel_for_posting`** — given a posting ID, return the opportunity count per stage, with stage IDs already resolved to human-readable names. Useful for funnel-health checks.
+6. **`search_opportunities_by_tag`** — given an exact tag, return opportunities carrying it. Useful for ad-hoc filtering across postings (e.g. a "referral" or "reengage-Q3" tag).
+
+### Write tool
+
+7. **`note_stage_stuck`** — given an opportunity ID and a free-text note, adds an internal note to the opportunity. Used to log "Claude flagged this opportunity as stage-stuck for >14 days" so the action is visible in Lever's activity feed and not silent. Per recruiting-engineer norms: every write produces an activity-feed entry attributed via the `perform_as` user ID.
+
+## Cost reality
+
+- **Lever API quota** — the Data API allows a steady-state 10 requests/second per API key, bursting to 20 (token bucket); application POSTs are separately capped at 2/second. The server includes a token-bucket rate limiter (configurable, default 8 req/s) that throttles before the steady-state limit. Bursts above the limit get 429s; the server's backoff logic retries once after a 1-second wait.
+- **LLM tokens** — depend entirely on what the calling Claude session does with the data. The server itself returns structured JSON; the Claude session's prompt budget is the cost.
+- **Server hosting cost** — runs locally to the MCP client. Zero ongoing cost for single-recruiter use. Team-wide deployment in a shared container is at-most a small VM ($5-15/month).
+- **Setup time** — 60 minutes including the sandbox sanity check and the MCP client registration. Recruiting-engineer time is the binding cost.
+
+## Success metric
+
+Hard to measure directly. The honest metric:
+
+- **Recruiter Claude-session count per week using the MCP** — how many times per week the recruiter or recruiting engineer used a Claude session that called the MCP. If it's fewer than 5 per week after a month, the use case isn't there.
+- **Average context-switch time saved per Claude session** — qualitative; the recruiter's own assessment of "how long would this question have taken without the MCP, in Lever's UI?" The MCP earns its setup cost when the answer is regularly >2 minutes per question.
+
+## vs alternatives
+
+- **vs Lever's UI directly.** UI is the right call when the recruiter is already in Lever for other reasons. The MCP earns its setup cost when the recruiter is in Claude for other reasons (drafting outreach, summarizing notes, building Boolean queries) and pulling pipeline state would otherwise be a context switch.
+- **vs Lever's native integrations.** Lever surfaces pipeline state into Slack and other tools. Pick those if the team lives in Slack. Pick the MCP if the team lives in Claude.
+- **vs a DIY Python script against the Data API.** Same data, but the MCP makes it available to ANY MCP client (Claude Desktop, Claude Code, Cursor, others as MCP adoption spreads), not just to the one script.
+- **vs the parallel Greenhouse/Ashby MCP servers.** Same read-mostly shape, different ATS. If your team is on Lever, this is the one; the [Greenhouse](/en/workflows/mcp-server-greenhouse-recruiting/) and [Ashby](/en/workflows/mcp-server-ashby-recruiting/) servers are the equivalents for those platforms.
+
+## Watch-outs
+
+- **Not runtime-tested against a live tenant.** *Guard:* explicitly disclaimed in the README and in `server.py`'s module docstring. Production deployment requires the recruiting engineer to verify each tool against a sandbox tenant first. The bundled smoke check is a credentials check, NOT a tool-by-tool validation.
+- **Stage IDs, not stage names.** *Guard:* `list_stages` exists to resolve names to IDs, and `get_funnel_for_posting` resolves IDs back to names for you. If `list_opportunities_in_stage` returns empty, the first suspect is a stage *name* passed where a stage *ID* was required.
+- **`list_postings_stalled` is quota-heavy.** *Guard:* it walks every opportunity on every published posting (O(postings × opportunities)), which on a large account can burn through the rate-limit budget and run slowly. Run it off-peak or narrow by team first; the README flags a webhook-fed cache as the real fix. The 50-page pagination cap also silently truncates very large postings — raise it or narrow the query.
+- **Millisecond-epoch timestamps.** *Guard:* every timestamp the API returns is integer milliseconds since the epoch. The server converts internally for its staleness math and returns the raw `_ms` values in tool output so downstream code is not fooled into treating them as seconds or ISO strings.
+- **Candidate PII leakage to chat-model context.** *Guard:* the server returns the data the API returns (including candidate names) to the Claude session. The session's data-handling posture is the recruiter's responsibility. The README explicitly says: don't paste session transcripts into shared Slack channels.
+- **API-key blast radius.** *Guard:* Lever keys are account-scoped, not endpoint-scoped — the server cannot narrow what the key reaches. Compensate by minting the key on a dedicated integration user with the narrowest Lever role that still exposes the postings you need, and keep the key out of shared config.
+- **Write-tool drift.** *Guard:* only `note_stage_stuck` is exposed as a write, and it stays under Lever's 2 req/s POST cap. The other six tools have no write paths. If a recruiting engineer adds new write tools, the per-tool review template in the README must be filled out and the tool's purpose documented in the `TOOL_REGISTRY` docstring in `server.py`.
+
+## Stack
+
+The artifact bundle lives at `apps/web/public/artifacts/mcp-server-lever-recruiting/` and contains:
+
+- `pyproject.toml` — package metadata, dependencies, `lever-recruiting-mcp` entrypoint
+- `README.md` — install, env vars, MCP client registration, sanity-check procedure, security model, known limits
+- `src/lever_recruiting_mcp/__init__.py` — package init
+- `src/lever_recruiting_mcp/server.py` — MCP server with seven tool definitions and dispatch implementations
+
+Tools the workflow assumes you use: [Lever](/en/tools/lever/) (the ATS), [Claude](/en/tools/claude/) (the MCP client). For the parallel Greenhouse and Ashby MCP servers, see the [Greenhouse MCP](/en/workflows/mcp-server-greenhouse-recruiting/) and [Ashby MCP](/en/workflows/mcp-server-ashby-recruiting/). For broader recruiting-engineer guardrails, see the [recruiting engineer cursor rule](/en/workflows/cursor-rules-recruiting-engineer/).
+
+Related concepts: [ATS vs recruiting CRM](/en/learn/ats-vs-recruiting-crm/), [recruiting tech stack](/en/learn/recruiting-tech-stack/).

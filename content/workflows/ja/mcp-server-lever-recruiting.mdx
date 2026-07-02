@@ -1,0 +1,125 @@
+---
+slug: mcp-server-lever-recruiting
+canonical_slug: mcp-server-lever-recruiting
+locale: ja
+verticals: [recruiting]
+title: 採用ワークフロー向けLever MCPサーバー
+artifact_type: mcp-server
+tools_used: [lever, claude]
+roles: [recruiter, recruiting-engineer, talent-acquisition]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-07-02"
+---
+
+[Lever](/ja/tools/lever/) の Data API を read-mostly なツールとして Claude Desktop / Claude Code / 任意の MCP 互換クライアントに公開する Model Context Protocol (MCP) サーバーです。6 つの読み取りツールが日々のリクルーターの疑問（「どの Opportunity がステージ X に Y 日以上滞留しているか」「この posting のファネルはどうなっているか」「この候補者の現在の状態とノートを見せて」）をカバーし、1 つの慎重な書き込みツールがステージに滞留している Opportunity をリクルーターが対処できるよう浮かび上がらせます。Claude の中で仕事をし、コンテキストスイッチなしに ATS の状態を把握したいリクルーター、そして Lever の読み取りアクセスを必要とするエージェント型ワークフローを構築する採用エンジニアのために設計されています。
+
+このスキャフォールドは、ディスクからインポート可能な Python パッケージとして提供されます。稼働中の Lever テナントに対してランタイムテストは行われて**いません**。この免責事項は README と `server.py` の冒頭で繰り返されています。本番利用にあたっては、採用エンジニアがまず認証情報を接続し、レート制限を設定し、ディスパッチされる呼び出しを Lever Sandbox 環境に対して検証する必要があります。
+
+## Lever のデータモデルは Greenhouse のそれとは違います
+
+何よりもまず、Lever は Greenhouse のように候補者とアプリケーションをモデル化しておらず、このサーバーのすべてのツールがその点を反映しています。パイプラインオブジェクトは **Opportunity** です。これは **Contact**（人物）を 1 つ以上の **Postings**（求人）に結びつけ、単一の現在の `stage` を持ちます。posting は求人であり、posting の `state` は `published`、`internal`、`closed`、`draft`、`pending`、`rejected` のいずれかで、このサーバーは `published` を「オープン」として扱います。Stage は独自のリソースであり、Opportunity の `stage` フィールドは表示名ではなくステージの **ID** です。だからこそ `list_stages` が存在し、フィルタをかける前に ID を解決するためだけに用意されています。タイムスタンプは ISO 文字列ではなく、エポックからのミリ秒の整数値として返ってきます。Greenhouse のメンタルモデルをそのまま Lever に移植すると、ツールは空の結果か誤った結果を返します。これが、並行して存在する [Greenhouse MCP](/ja/workflows/mcp-server-greenhouse-recruiting/) と [Ashby MCP](/ja/workflows/mcp-server-ashby-recruiting/) が、ドライバフラグを持つ 1 つのサーバーではなく別々のサーバーになっている理由です。
+
+## 使うべきとき
+
+- リクルーターまたは採用エンジニアが Lever のパイプライン状態を Claude の会話の中で利用できるようにしたく、MCP サーバーのインストールを厭わない場合（Claude Desktop と Claude Code では低摩擦、カスタム MCP クライアントではもう少しセットアップが必要）。
+- チームが Lever (LeverTRM) を使用していて Data API アクセスを持っている場合。Data API はフルアクセスの読み書き API であり、[Postings API](/ja/tools/lever/) は公開の読み取り専用求人ボード API です。このサーバーは Data API を使います。
+- read-mostly なアクセスがユースケースに合う場合。このサーバーの書き込みは、内部ノートを追加する 1 つの慎重なツール（`note_stage_stuck`）に限られており、デフォルトでは Opportunity の状態を変更する処理は公開されていません。
+- 採用エンジニアリングまたは IT が Lever API キーを扱えるセキュリティ体制を持っている場合。Lever のキーはアカウントスコープであってエンドポイントスコープではないため、キーの影響範囲は統合ユーザーのレベルで決まります。それを織り込んで計画してください。
+
+## 使うべきでないとき
+
+- **本番対応済みでランタイムテスト済みのセットアップが今日必要な場合。** これはスキャフォールドです。README がそう述べており、docstring もそう述べています。完成したデプロイではなく、出発点として使ってください。
+- **完全なステージ遷移履歴が必要な場合。** Lever の Data API には、ステージごとの遷移ログを返すエンドポイントがありません。`get_opportunity_detail` は*現在の*ステージ、`lastAdvancedAt`、ノートフィードを返しますが、すべての移動の完全な監査証跡は返しません。ワークフローが「この候補者が正確にいつオンサイトに入ったか」に依存しているなら、このサーバーはそれを提供できず、webhook キャプチャなしでは Lever の API も同様に提供できません。
+- **マルチテナント SaaS での利用。** このサーバーの認証モデルはシングルテナント（1 つの API キー、1 つの Lever アカウント）です。マルチテナントには単純ではない作り直しが必要です。
+- **書き込みの多いワークフロー。** このサーバーは意図的に read-mostly です。ユースケースが Opportunity をステージ間で進める、アーカイブする、候補者にメールを送る、といったことを必要とするなら、それらは [採用向け cursor ルール](/ja/workflows/cursor-rules-recruiting-engineer/) のガイダンスに従って、ツールごとの個別のセキュリティレビューとツールごとの明示的な正当化が必要です。
+- **候補者の同意に関する体制を回避する場合。** Lever のデータは採用目的について候補者の同意を得たものです。それをエージェント型ワークフローに引き込んでも、その同意は拡張されません。開示された処理目的の範囲内に留めてください。
+
+## セットアップ
+
+1. **パッケージをインストールします。** `apps/web/public/artifacts/mcp-server-lever-recruiting/` から:
+   ```bash
+   pip install -e .
+   ```
+   このパッケージは `pyproject.toml` を持つ uv / pip インストール可能な Python プロジェクトとして構成されています。
+2. **認証情報を設定します。** 2 つの環境変数があります。`LEVER_API_KEY`（Lever → Settings → Integrations and API → API credentials から取得する Data API キー）と `LEVER_PERFORM_AS_USER_ID`（`perform_as` パラメータ経由で書き込みが帰属する Lever ユーザー ID。`GET https://api.lever.co/v1/users` で見つけられます）。サーバーは起動時に両方を検証するため、`perform_as` ID の欠落によって後から帰属のない書き込みがすり抜けることはありません。
+3. **MCP クライアントに登録します。** Claude Desktop の場合は `claude_desktop_config.json` に追加します:
+   ```json
+   {
+     "mcpServers": {
+       "lever-recruiting": {
+         "command": "uv",
+         "args": ["run", "lever-recruiting-mcp"],
+         "env": {
+           "LEVER_API_KEY": "...",
+           "LEVER_PERFORM_AS_USER_ID": "..."
+         }
+       }
+     }
+   }
+   ```
+   Claude Code の場合は、同等のものをプロジェクトの `.claude/settings.local.json` の MCP ブロックに記述します。
+4. **Sandbox に対して動作確認します。** Lever は別個のサンドボックステナント（`hire.sandbox.lever.co`）を提供しています。まずサーバーをサンドボックスに接続し、認証情報が認証されること、各ツールがサンドボックスの UI に表示される内容を返すことを確認してください。
+5. **本番への移行。** サンドボックスでの検証の後にのみ、環境変数を本番 API キーに切り替えます。サーバーは MCP クライアントに対してローカルで動作し、単一リクルーターでの利用には別途のデプロイは不要です。チームでの利用には、リクルーターごとの MCP ゲートウェイを備えた共有コンテナで動作させてください。
+
+## サーバーが公開するもの
+
+7 つのツール。6 つは読み取り、1 つは慎重な書き込みです。[採用向け cursor ルール](/ja/workflows/cursor-rules-recruiting-engineer/) のガイダンスに従い、書き込みにはツールごとの明示的な正当化が必要です。`note_stage_stuck` については `server.py` の docstring にそれが文書化されています。
+
+### 読み取りツール
+
+1. **`list_opportunities_in_stage`** — posting ID とステージ ID を与えると、そのステージに現在いる Opportunity を `lastInteractionAt`/`lastAdvancedAt` のタイムスタンプとともに返します。オプションの `stale_after_days` フィルタがあります。「誰がオンサイトに 10 日以上滞留しているか」といったクエリに便利です。
+2. **`get_opportunity_detail`** — Opportunity ID を与えると、その現在のステージ、滞留タイムスタンプ、タグ、ソース、ノートフィードを返します。リクルーターのスクリーニング前のコンテキスト読み込みに便利です。ステージ遷移ログではありません（「使うべきでないとき」を参照）。
+3. **`list_postings_open`** — published な posting を、チーム、部門、勤務地、作成日時、採用マネージャー/オーナーのユーザー ID とともに一覧します。オプションのチームフィルタがあります。リクルーターリーダーの「私たちは何に取り組んでいるか」という概観に便利です。
+4. **`list_stages`** — すべてのパイプラインステージを、その ID と表示テキストとともに一覧します。ステージ名を他のツールが必要とするステージ ID に変換するために、まずこれを呼び出します。
+5. **`get_funnel_for_posting`** — posting ID を与えると、ステージごとの Opportunity 数を、ステージ ID を人間が読める名前にすでに解決した状態で返します。ファネルの健全性チェックに便利です。
+6. **`search_opportunities_by_tag`** — 完全一致のタグを与えると、それを持つ Opportunity を返します。posting をまたいだアドホックなフィルタリング（例えば「referral」や「reengage-Q3」のタグ）に便利です。
+
+### 書き込みツール
+
+7. **`note_stage_stuck`** — Opportunity ID と自由記述のノートを与えると、その Opportunity に内部ノートを追加します。「Claude がこの Opportunity をステージに 14 日以上滞留しているとフラグした」といったことを記録し、そのアクションが Lever のアクティビティフィードで可視化され、暗黙のものにならないようにするために使われます。採用エンジニアの規範に従い、すべての書き込みは `perform_as` ユーザー ID 経由で帰属されるアクティビティフィードエントリを生成します。
+
+## コストの実態
+
+- **Lever API のクォータ** — Data API は API キーごとに定常状態で毎秒 10 リクエストを許可し、バースト時は 20 まで（トークンバケット）です。アプリケーションの POST は別途毎秒 2 に制限されます。サーバーには、定常状態の上限に達する前にスロットルするトークンバケットのレートリミッタ（設定可能、デフォルト 8 req/s）が含まれています。上限を超えるバーストは 429 を受け取り、サーバーのバックオフロジックは 1 秒待った後に 1 回だけリトライします。
+- **LLM のトークン** — 呼び出し元の Claude セッションがそのデータをどう扱うかに完全に依存します。サーバー自体は構造化された JSON を返し、Claude セッションのプロンプト予算がコストになります。
+- **サーバーのホスティングコスト** — MCP クライアントに対してローカルで動作します。単一リクルーターでの利用では継続的なコストはゼロです。共有コンテナでのチーム全体のデプロイでも、せいぜい小さな VM（月額 5〜15 ドル）です。
+- **セットアップ時間** — サンドボックスでの動作確認と MCP クライアントの登録を含めて 60 分です。採用エンジニアの時間が拘束的なコストです。
+
+## 成功指標
+
+直接測定するのは難しいです。正直な指標としては:
+
+- **リクルーターが MCP を使った週あたりの Claude セッション数** — リクルーターまたは採用エンジニアが週に何回、MCP を呼び出す Claude セッションを使ったか。1 か月後に週 5 回未満なら、そのユースケースは存在しません。
+- **Claude セッションあたりに節約された平均コンテキストスイッチ時間** — 定性的なもので、「この疑問は MCP なしで Lever の UI ではどれくらい時間がかかったか」というリクルーター自身の評価です。その答えが 1 つの疑問あたり定常的に 2 分を超えるとき、MCP はそのセットアップコストに見合います。
+
+## 代替手段との比較
+
+- **Lever の UI を直接使う場合との比較。** リクルーターが別の理由ですでに Lever にいるなら、UI が正しい選択です。リクルーターが別の理由で Claude にいて（アウトリーチの下書き、ノートの要約、ブール検索クエリの構築）、パイプライン状態を取ってくることがコンテキストスイッチになる場合に、MCP はそのセットアップコストに見合います。
+- **Lever のネイティブ統合との比較。** Lever はパイプライン状態を Slack やその他のツールに表示します。チームが Slack の中で仕事をしているならそちらを選んでください。チームが Claude の中で仕事をしているなら MCP を選んでください。
+- **Data API に対する自作の Python スクリプトとの比較。** データは同じですが、MCP はそれを 1 つのスクリプトだけでなく、あらゆる MCP クライアント（Claude Desktop、Claude Code、Cursor、MCP 普及に伴うその他）で利用可能にします。
+- **並行する Greenhouse/Ashby MCP サーバーとの比較。** 同じ read-mostly の形、異なる ATS です。チームが Lever を使っているならこれが選択肢であり、[Greenhouse](/ja/workflows/mcp-server-greenhouse-recruiting/) と [Ashby](/ja/workflows/mcp-server-ashby-recruiting/) のサーバーはそれらのプラットフォーム向けの同等品です。
+
+## 注意点
+
+- **稼働中のテナントに対してランタイムテストされていません。** *ガード:* README と `server.py` のモジュール docstring で明示的に免責されています。本番デプロイにあたっては、採用エンジニアがまず各ツールをサンドボックステナントに対して検証する必要があります。同梱のスモークチェックは認証情報のチェックであり、ツールごとの検証では**ありません**。
+- **ステージ名ではなくステージ ID です。** *ガード:* `list_stages` は名前を ID に解決するために存在し、`get_funnel_for_posting` は ID を名前に戻して解決してくれます。`list_opportunities_in_stage` が空を返す場合、まず疑うべきは、ステージ *ID* が必要な箇所にステージ *名* が渡されたことです。
+- **`list_postings_stalled` はクォータを大量消費します。** *ガード:* これはすべての published な posting のすべての Opportunity を巡回する（O(postings × opportunities)）ため、大規模なアカウントではレート制限の予算を使い切り、遅く動作する可能性があります。ピーク外で実行するか、まずチームで絞り込んでください。README は真の解決策として webhook 供給のキャッシュを挙げています。50 ページのページネーション上限も、非常に大きな posting を暗黙に切り詰めます。これを引き上げるか、クエリを絞り込んでください。
+- **ミリ秒エポックのタイムスタンプ。** *ガード:* API が返すすべてのタイムスタンプはエポックからのミリ秒の整数値です。サーバーは滞留計算のために内部で変換し、ツール出力では生の `_ms` 値を返すため、下流のコードがそれらを秒や ISO 文字列として扱ってしまうことはありません。
+- **チャットモデルのコンテキストへの候補者 PII の漏洩。** *ガード:* サーバーは API が返すデータ（候補者名を含む）を Claude セッションに返します。セッションのデータ取り扱い体制はリクルーターの責任です。README は明示的にこう述べています。セッションのトランスクリプトを共有 Slack チャンネルに貼り付けないでください。
+- **API キーの影響範囲。** *ガード:* Lever のキーはアカウントスコープであってエンドポイントスコープではないため、サーバーはキーが到達する範囲を狭められません。必要な posting を公開しつつ最も狭い Lever ロールを持つ専用の統合ユーザーでキーを発行し、キーを共有設定の外に保つことで補ってください。
+- **書き込みツールのドリフト。** *ガード:* 書き込みとして公開されているのは `note_stage_stuck` だけで、Lever の 2 req/s の POST 上限の範囲内に留まります。他の 6 つのツールには書き込みパスがありません。採用エンジニアが新しい書き込みツールを追加する場合、README のツールごとのレビューテンプレートを記入し、そのツールの目的を `server.py` の `TOOL_REGISTRY` docstring に文書化する必要があります。
+
+## スタック
+
+アーティファクトバンドルは `apps/web/public/artifacts/mcp-server-lever-recruiting/` にあり、次を含みます:
+
+- `pyproject.toml` — パッケージメタデータ、依存関係、`lever-recruiting-mcp` エントリポイント
+- `README.md` — インストール、環境変数、MCP クライアントの登録、動作確認手順、セキュリティモデル、既知の制限
+- `src/lever_recruiting_mcp/__init__.py` — パッケージの init
+- `src/lever_recruiting_mcp/server.py` — 7 つのツール定義とディスパッチ実装を持つ MCP サーバー
+
+このワークフローが使用を前提とするツール: [Lever](/ja/tools/lever/)（ATS）、[Claude](/ja/tools/claude/)（MCP クライアント）。並行する Greenhouse と Ashby の MCP サーバーについては、[Greenhouse MCP](/ja/workflows/mcp-server-greenhouse-recruiting/) と [Ashby MCP](/ja/workflows/mcp-server-ashby-recruiting/) を参照してください。より広い採用エンジニアのガードレールについては、[採用エンジニア cursor ルール](/ja/workflows/cursor-rules-recruiting-engineer/) を参照してください。
+
+関連する概念: [ATS と採用 CRM の比較](/ja/learn/ats-vs-recruiting-crm/)、[採用テックスタック](/ja/learn/recruiting-tech-stack/)。
