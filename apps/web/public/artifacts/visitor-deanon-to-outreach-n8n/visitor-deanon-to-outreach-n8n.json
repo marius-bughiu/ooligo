@@ -1,0 +1,317 @@
+{
+  "name": "Visitor de-anon to outreach — ICP filter + warm draft",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "visitor-deanon",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000001",
+      "name": "Webhook — Visitor Deanon Ingest",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "visitor-deanon-webhook",
+      "notesInFlow": true,
+      "notes": "Accepts POSTs from Warmly (Settings → Webhooks) and RB2B (Integrations → Webhook / Zapier). Path: /webhook/visitor-deanon. Both vendors push person-level reveals in real time; neither needs a stored credential here."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"received\": true }",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000002",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 480],
+      "notesInFlow": true,
+      "notes": "Return immediately so the vendor webhook caller is not blocked on the ICP scoring, CRM lookup, and LLM call downstream."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize person-level de-anon payloads from two sources:\n// 1. RB2B webhook (person-level US reveal) — has Business Email, Captured URL, Seen At\n// 2. Warmly webhook (contact + company nesting) — has contact.linkedInUrl, company.*\n// 3. Generic fallback for anything else that can POST a person shape.\n//\n// Output: one normalized person record regardless of source.\n\nconst raw = $json.body || $json;\n\nlet source = 'unknown';\nlet firstName = '';\nlet lastName = '';\nlet title = '';\nlet company = '';\nlet domain = '';\nlet email = '';\nlet linkedinUrl = '';\nlet employeeCount = null;\nlet industry = '';\nlet country = '';\nlet pageViewed = '';\nlet referrer = '';\n\nconst stripDomain = (u) => (u || '').replace(/^https?:\\/\\/(www\\.)?/, '').split('/')[0];\n\nif (raw['Business Email'] !== undefined || raw['Captured URL'] !== undefined) {\n  // RB2B webhook shape (space-cased field names)\n  source = 'rb2b';\n  firstName = raw['First Name'] || '';\n  lastName = raw['Last Name'] || '';\n  title = raw['Title'] || '';\n  company = raw['Company Name'] || '';\n  domain = stripDomain(raw['Website'] || '');\n  email = raw['Business Email'] || '';\n  linkedinUrl = raw['LinkedIn URL'] || '';\n  employeeCount = parseInt(raw['Employee Count'], 10) || null;\n  industry = raw['Industry'] || '';\n  country = raw['Country'] || (raw['State'] ? 'US' : '');\n  pageViewed = raw['Captured URL'] || '';\n  referrer = raw['Referrer'] || '';\n\n} else if (raw.contact || raw.company) {\n  // Warmly webhook shape (nested contact + company)\n  source = 'warmly';\n  const c = raw.contact || {};\n  const co = raw.company || {};\n  const sig = raw.signal || {};\n  firstName = c.firstName || c.first_name || '';\n  lastName = c.lastName || c.last_name || '';\n  title = c.title || '';\n  company = co.name || '';\n  domain = stripDomain(co.website || co.domain || '');\n  email = c.businessEmail || c.email || '';\n  linkedinUrl = c.linkedInUrl || c.linkedinUrl || '';\n  employeeCount = parseInt(co.employeeCount || co.employee_count, 10) || null;\n  industry = co.industry || '';\n  country = c.country || co.country || '';\n  pageViewed = sig.capturedUrl || sig.referrer || '';\n  referrer = sig.referrer || '';\n\n} else {\n  // Generic fallback\n  source = 'generic';\n  firstName = raw.firstName || raw.first_name || '';\n  lastName = raw.lastName || raw.last_name || '';\n  title = raw.title || '';\n  company = raw.company || raw.company_name || raw.companyName || '';\n  domain = stripDomain(raw.website || raw.domain || '');\n  email = raw.email || raw.businessEmail || '';\n  linkedinUrl = raw.linkedinUrl || raw.linkedInUrl || raw.linkedin_url || '';\n  employeeCount = parseInt(raw.employeeCount || raw.employee_count, 10) || null;\n  industry = raw.industry || '';\n  country = raw.country || '';\n  pageViewed = raw.pageViewed || raw.capturedUrl || raw.captured_url || '';\n  referrer = raw.referrer || '';\n}\n\n// Identity key: prefer email, fall back to LinkedIn URL, then name+domain.\nconst identityKey = (email || linkedinUrl || `${firstName}${lastName}@${domain}`).toLowerCase();\n\nif (!identityKey || identityKey === '@') {\n  throw new Error('Normalized payload has no usable identity (email / LinkedIn / name+domain) — cannot process reveal.');\n}\n\nreturn [{\n  json: {\n    source,\n    firstName,\n    lastName,\n    fullName: `${firstName} ${lastName}`.trim(),\n    title,\n    company,\n    domain,\n    email,\n    linkedinUrl,\n    employeeCount,\n    industry,\n    country,\n    pageViewed,\n    referrer,\n    identityKey,\n    receivedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000003",
+      "name": "Normalize Visitor Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300],
+      "notesInFlow": true,
+      "notes": "Handles RB2B (space-cased fields, Captured URL), Warmly (nested contact/company/signal), and generic shapes. pageViewed is the load-bearing field for the warm draft. Throws if no usable identity."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ICP Fit Gate — the node that separates this flow from a plain intent router.\n// Scores the identified person against a readable, editable rubric. Anyone below\n// ICP_FIT_THRESHOLD is dropped (return []) and never reaches a rep.\n//\n// All thresholds come from env vars with in-code fallbacks so the flow never throws.\n// fitScore and reasons are attached to the record so a passing visitor's Slack card\n// shows WHY they qualified, and a misconfigured rubric is auditable.\n\nconst p = $json;\n\nconst minEmp = parseInt($env.ICP_MIN_EMPLOYEES, 10) || 25;\nconst maxEmp = parseInt($env.ICP_MAX_EMPLOYEES, 10) || 5000;\nconst threshold = parseInt($env.ICP_FIT_THRESHOLD, 10) || 3;\n\n// Country allowlist (comma-separated ISO codes). Empty env → allow all.\nconst countryAllow = ($env.ICP_COUNTRY_ALLOWLIST || '')\n  .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);\n\n// Title function allow / deny (comma-separated lowercase substrings).\nconst titleAllow = ($env.ICP_TITLE_ALLOWLIST ||\n  'revops,revenue operations,sales,marketing,growth,demand,founder,ceo,cofounder,product')\n  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);\nconst titleDeny = ($env.ICP_TITLE_DENYLIST ||\n  'student,intern,seeking,recruiter,talent acquisition,job')\n  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);\n\nconst titleLc = (p.title || '').toLowerCase();\nconst pageLc = (p.pageViewed || '').toLowerCase();\n\nlet score = 0;\nconst reasons = [];\n\n// Hard deny on title — an agency recruiter or job-seeker is never in-ICP.\nif (titleDeny.some(d => titleLc.includes(d))) {\n  return []; // drop silently\n}\n\n// Title function match (+2)\nif (titleAllow.some(a => titleLc.includes(a))) { score += 2; reasons.push('title-function'); }\n\n// Seniority (+1)\nif (/(chief|c[erefoit]o|founder|vp|vice president|head of|director)/i.test(titleLc)) {\n  score += 1; reasons.push('seniority');\n}\n\n// Company-size band (+1)\nif (p.employeeCount !== null && p.employeeCount >= minEmp && p.employeeCount <= maxEmp) {\n  score += 1; reasons.push('size-band');\n}\n\n// Country allowlist (+1 if allowed; hard drop if a list is set and country is off it)\nif (countryAllow.length) {\n  if (p.country && countryAllow.includes((p.country || '').toUpperCase())) {\n    score += 1; reasons.push('country');\n  } else if (p.country) {\n    return []; // country set and not on the allowlist — drop\n  }\n}\n\n// Page intent (+2 for a high-intent page)\nif (/(pricing|demo|request|contact-sales|product|trial)/.test(pageLc)) {\n  score += 2; reasons.push('high-intent-page');\n}\n\nif (score < threshold) {\n  // Below the fit bar — drop silently. (Log via execution history if needed.)\n  return [];\n}\n\nreturn [{ json: { ...p, fitScore: score, fitReasons: reasons } }];"
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000004",
+      "name": "ICP Fit Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300],
+      "notesInFlow": true,
+      "notes": "Rubric: title function (+2), seniority (+1), size band (+1), country (+1), high-intent page (+2). Hard-drops title denylist matches and off-allowlist countries. Passes at/above ICP_FIT_THRESHOLD (default 3). Attaches fitScore + fitReasons. All weights/thresholds env-tunable."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Week-level dedup using n8n workflow static data — the only correct way to persist\n// cross-execution state from a Code node (n8n's public REST API has NO static-data resource).\n//\n// Week-level (not day-level) is the right window for warm outreach: a person who visits\n// three times in five days should generate ONE rep touch, not three.\n//\n// NOTE: static data persists only for PRODUCTION executions (webhook / schedule trigger),\n// not manual Execute Workflow runs — verify dedup against the live webhook.\n\nconst staticData = $getWorkflowStaticData('global');\nconst p = $json;\n\n// ISO week key: YYYY-Www\nconst d = new Date();\nconst tmp = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));\nconst dayNum = (tmp.getUTCDay() + 6) % 7;\ntmp.setUTCDate(tmp.getUTCDate() - dayNum + 3);\nconst firstThursday = tmp.getTime();\ntmp.setUTCMonth(0, 1);\nif (tmp.getUTCDay() !== 4) {\n  tmp.setUTCMonth(0, 1 + ((4 - tmp.getUTCDay()) + 7) % 7);\n}\nconst weekNo = 1 + Math.ceil((firstThursday - tmp.getTime()) / (7 * 24 * 3600 * 1000));\nconst isoWeek = `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;\n\nconst key = `dedup_${p.identityKey}_${isoWeek}`;\n\n// Prune keys from earlier weeks so the store stays small.\nfor (const k of Object.keys(staticData)) {\n  if (k.startsWith('dedup_') && !k.endsWith(`_${isoWeek}`)) {\n    delete staticData[k];\n  }\n}\n\n// Duplicate this week → drop silently.\nif (staticData[key]) {\n  return [];\n}\n\n// Mark BEFORE any external call so two concurrent reveals can't both pass.\nstaticData[key] = p.receivedAt || new Date().toISOString();\n\nreturn [{ json: { ...p, dedupPassed: true, isoWeek } }];"
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000005",
+      "name": "Dedup Gate (Static Data)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "notesInFlow": true,
+      "notes": "Week-level dedup via $getWorkflowStaticData('global'). Per-person-per-ISO-week key. Marks before passing (race-safe), prunes prior weeks. Returns [] for a repeat visitor this week. Static data persists only on production executions — verify live, not via Execute Workflow."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $env.SFDC_INSTANCE_URL }}/services/data/v59.0/query/?q=SELECT+Id,AccountId,Account.Name,Account.Type,Current_Sequence__c,Owner.Id,Owner.Name,Owner.Email,Owner.Slack_Handle__c,(SELECT+Id+FROM+Account.Opportunities+WHERE+IsClosed=false+LIMIT+1)+FROM+Contact+WHERE+Email='{{ $json.email }}'+LIMIT+1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SFDC_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000006",
+      "name": "Salesforce — Contact Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SALESFORCE_CRED_ID",
+          "name": "Salesforce — Bearer token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Looks up an existing Contact by exact email. Returns Owner (Id/Name/Email/Slack_Handle__c), Account.Type, Current_Sequence__c, and any open Opportunity — the three suppression signals used downstream. neverError so a miss (net-new person) flows through as no records."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Routing & Suppression Logic.\n//\n// Suppression (return [] — drop) when the contact EXISTS and any of:\n//   - account has an open Opportunity, OR\n//   - contact is in an active sequence (Current_Sequence__c set), OR\n//   - account Type is 'Customer' / 'Customer - Direct' (existing customer).\n// A warm de-anon touch would step on a live motion in these cases.\n//\n// Otherwise:\n//   - contact exists (and clean) → route to account Owner, create a TASK on the contact.\n//   - no contact → route to territory SDR pool (AMER/EMEA/ROW), create a LEAD.\n\nconst p = $('Dedup Gate (Static Data)').item.json;\nconst rec = $json?.records?.[0] || null;\n\nif (rec) {\n  const acctType = (rec.Account?.Type || '').toLowerCase();\n  const inSequence = !!rec.Current_Sequence__c;\n  const openOpp = Array.isArray(rec.Opportunities?.records) && rec.Opportunities.records.length > 0;\n  const isCustomer = acctType.includes('customer');\n\n  if (inSequence || openOpp || isCustomer) {\n    // Live motion in progress — suppress the warm touch.\n    return [];\n  }\n\n  return [{\n    json: {\n      ...p,\n      createSObject: 'Task',\n      sfdcContactId: rec.Id || '',\n      sfdcAccountId: rec.AccountId || '',\n      sfdcAccountName: rec.Account?.Name || p.company,\n      sfdcOwnerId: rec.Owner?.Id || '',\n      assigneeName: rec.Owner?.Name || 'Account Owner',\n      assigneeEmail: rec.Owner?.Email || '',\n      assigneeSlack: rec.Owner?.Slack_Handle__c || '',\n      assignmentSource: 'sfdc-existing-owner',\n      contactFound: true\n    }\n  }];\n}\n\n// No contact — territory pool assignment for a net-new Lead.\nconst country = (p.country || '').toUpperCase();\nconst amer = new Set(['US', 'CA', 'AU', 'NZ', 'MX', 'BR', 'AR', 'CL', 'CO']);\nconst emea = new Set(['DE', 'AT', 'CH', 'FR', 'NL', 'SE', 'DK', 'NO', 'FI', 'BE', 'GB', 'IE', 'ES', 'PT', 'IT']);\n\nlet assigneeEmail, assigneeName, assigneeSlack, assignmentSource;\nif (amer.has(country) || country === '') {\n  assigneeEmail = $env.SDR_POOL_AMER_EMAIL || 'sdr-amer@example.com';\n  assigneeName = 'SDR Pool — AMER';\n  assigneeSlack = $env.SDR_POOL_AMER_SLACK || '';\n  assignmentSource = 'pool-amer';\n} else if (emea.has(country)) {\n  assigneeEmail = $env.SDR_POOL_EMEA_EMAIL || 'sdr-emea@example.com';\n  assigneeName = 'SDR Pool — EMEA';\n  assigneeSlack = $env.SDR_POOL_EMEA_SLACK || '';\n  assignmentSource = 'pool-emea';\n} else {\n  assigneeEmail = $env.SDR_POOL_ROW_EMAIL || 'sdr-row@example.com';\n  assigneeName = 'SDR Pool — ROW';\n  assigneeSlack = $env.SDR_POOL_ROW_SLACK || '';\n  assignmentSource = 'pool-row';\n}\n\nreturn [{\n  json: {\n    ...p,\n    createSObject: 'Lead',\n    sfdcContactId: '',\n    sfdcAccountId: '',\n    sfdcAccountName: p.company,\n    sfdcOwnerId: '',\n    assigneeName,\n    assigneeEmail,\n    assigneeSlack,\n    assignmentSource,\n    contactFound: false\n  }\n}];"
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000007",
+      "name": "Routing & Suppression Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300],
+      "notesInFlow": true,
+      "notes": "Suppresses (returns []) when an existing contact is mid-motion (open opp / active sequence / customer). Existing clean contact → account Owner + Task. Net-new person → territory SDR pool + Lead. Sets createSObject to Task or Lead. Pool env vars have fallbacks so it never throws."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 600,\n  \"system\": \"You write short, specific warm first-touch outreach for B2B SDRs acting on a website visit that a de-anonymization tool just identified. Given the person, their role, their company, and the exact page they viewed, produce a single JSON object with three fields: {\\\"subject\\\": string under 60 chars, \\\"body\\\": string under 240 chars, \\\"talking_point\\\": string under 120 chars}. The body MUST reference the specific page the person viewed and their role — the whole point is that they were just on your site. Do not use: 'I noticed', 'reach out', 'touch base', 'circle back', 'synergy', 'leverage', 'empower'. This is a starting point the SDR edits and the identity is probabilistic, so keep claims light. Tone: direct, peer-to-peer, no fluff. Reply with JSON only, no prose, no code fences.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Person: {{ $json.fullName }}\\nTitle: {{ $json.title }}\\nCompany: {{ $json.sfdcAccountName }}\\nIndustry: {{ $json.industry }}\\nEmployee count: {{ $json.employeeCount }}\\nCountry: {{ $json.country }}\\nPage viewed: {{ $json.pageViewed }}\\nReferrer: {{ $json.referrer }}\\nDe-anon source: {{ $json.source }}\\nICP fit reasons: {{ JSON.stringify($json.fitReasons) }}\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000008",
+      "name": "Claude — Draft Warm First Touch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "8s timeout, neverError so a Claude failure doesn't block Slack + Salesforce. Anchors the opener to the page viewed and the role. Draft is a starting point; identity is probabilistic — the prompt tells Claude to keep claims light. Swap to claude-sonnet-4-6 only if draft quality is off for a segment (~10x cost)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's draft; fall back to a template if parsing fails.\nconst d = $('Routing & Suppression Logic').item.json;\nconst raw = $json?.content?.[0]?.text || '';\n\nlet draft = null;\ntry { draft = JSON.parse(raw); } catch (e) { draft = null; }\n\nconst usedFallback = !draft || !draft.subject;\nconst pagePart = d.pageViewed ? d.pageViewed.replace(/^https?:\\/\\/[^/]+/, '') : 'your site';\nconst subject = draft?.subject || `Saw you on ${pagePart} — quick note`;\nconst body = draft?.body || `Hi ${d.firstName || 'there'}, saw someone from ${d.sfdcAccountName} was on ${pagePart}. If you're weighing options, happy to share what's worked for similar ${d.industry || 'teams'} — no pitch.`;\nconst talkingPoint = draft?.talking_point || `${d.fullName} (${d.title}) at ${d.sfdcAccountName} viewed ${pagePart}. Fit reasons: ${(d.fitReasons || []).join(', ')}.`;\n\nreturn [{\n  json: {\n    ...d,\n    draftSubject: subject,\n    draftBody: body,\n    draftTalkingPoint: talkingPoint,\n    draftSource: usedFallback ? 'template-fallback' : 'claude'\n  }\n}];"
+      },
+      "id": "5b5b5b5b-0007-0000-0000-000000000009",
+      "name": "Parse Draft (with fallback)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1740, 300],
+      "notesInFlow": true,
+      "notes": "Tags draftSource 'claude' or 'template-fallback' so ops can audit how often Claude actually runs. Template draft still references the page viewed."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#visitor-deanon\",\n  \"text\": \":wave: Warm visitor — {{ $json.fullName }} at {{ $json.sfdcAccountName }} (fit {{ $json.fitScore }})\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \":wave: *{{ $json.fullName }}* — {{ $json.title || 'unknown title' }} at *{{ $json.sfdcAccountName }}*  ·  fit score *{{ $json.fitScore }}* ({{ $json.fitReasons.join(', ') }})\\n*Assigned to:* {{ $json.assigneeName }}{{ $json.assigneeSlack ? ' (<@' + $json.assigneeSlack + '>)' : '' }}  ·  {{ $json.contactFound ? 'existing contact → Task' : 'net-new → Lead' }}\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Viewed:* {{ $json.pageViewed || 'unknown' }}  ·  *Source:* {{ $json.source }}  ·  *Country:* {{ $json.country || 'unknown' }}  ·  *Headcount:* {{ $json.employeeCount || 'unknown' }}\\n*LinkedIn (verify identity):* {{ $json.linkedinUrl || 'none' }}\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Draft subject:* {{ $json.draftSubject }}\\n*Draft body (edit before sending):* {{ $json.draftBody }}\\n*Talking point:* {{ $json.draftTalkingPoint }}\\n_Draft source: {{ $json.draftSource }}_\"\n      }\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"Identity is probabilistic — verify the LinkedIn URL before sending. Reveal received: {{ $json.receivedAt }}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "5b5b5b5b-0007-0000-0000-00000000000a",
+      "name": "Slack — Notify Assignee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1960, 180],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — bot token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Posts to #visitor-deanon. Leads with fit score + reasons and the LinkedIn URL so the SDR verifies the probabilistic identity in one click. Draft explicitly labeled edit-before-sending."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $env.SFDC_INSTANCE_URL }}/services/data/v59.0/sobjects/{{ $json.createSObject }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SFDC_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => {\n  const j = $json;\n  const notes = `Warm website visitor via ${j.source}.\\nViewed: ${j.pageViewed || 'n/a'}\\nICP fit: ${j.fitScore} (${(j.fitReasons||[]).join(', ')})\\nLinkedIn: ${j.linkedinUrl || 'n/a'}\\nDraft subject: ${j.draftSubject}\\nDraft body: ${j.draftBody}\\nTalking point: ${j.draftTalkingPoint}\\nDraft source: ${j.draftSource}\\nAssignment: ${j.assignmentSource}`;\n  if (j.createSObject === 'Lead') {\n    const lead = {\n      FirstName: j.firstName || 'Unknown',\n      LastName: j.lastName || j.company || 'Unknown',\n      Company: j.company || 'Unknown',\n      Title: j.title || '',\n      Email: j.email || '',\n      Website: j.domain ? `https://${j.domain}` : '',\n      Country: j.country || '',\n      NumberOfEmployees: j.employeeCount != null ? j.employeeCount : null,\n      Industry: j.industry || '',\n      LeadSource: 'Website Visitor (de-anon)',\n      Description: notes\n    };\n    return JSON.stringify(lead);\n  }\n  // Task on an existing contact.\n  const task = {\n    Subject: `Warm visitor: ${j.fullName} viewed ${ (j.pageViewed||'site').replace(/^https?:\\/\\/[^/]+/, '') }`,\n    Description: notes,\n    Priority: j.fitScore >= 5 ? 'High' : 'Normal',\n    Status: 'Not Started',\n    ActivityDate: $now.plus({ days: 2 }).toFormat('yyyy-MM-dd'),\n    Type: 'Email',\n    WhoId: j.sfdcContactId || undefined,\n    WhatId: j.sfdcAccountId || undefined\n  };\n  if (j.sfdcOwnerId) task.OwnerId = j.sfdcOwnerId;\n  Object.keys(task).forEach(k => task[k] === undefined && delete task[k]);\n  return JSON.stringify(task);\n})() }}",
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "5b5b5b5b-0007-0000-0000-00000000000b",
+      "name": "Salesforce — Create Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1960, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SALESFORCE_CRED_ID",
+          "name": "Salesforce — Bearer token"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "POSTs to /sobjects/{Lead|Task} by createSObject. Net-new person → Lead (LeadSource 'Website Visitor (de-anon)'). Existing contact → Task with WhoId (contact) + WhatId (account). OwnerId set ONLY to a real Salesforce User Id (starts with 005), never an email; undefined keys are stripped so Salesforce never sees empty Ids (avoids MALFORMED_ID)."
+    }
+  ],
+  "connections": {
+    "Webhook — Visitor Deanon Ingest": {
+      "main": [
+        [
+          { "node": "Respond 202 Accepted", "type": "main", "index": 0 },
+          { "node": "Normalize Visitor Payload", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Normalize Visitor Payload": {
+      "main": [
+        [{ "node": "ICP Fit Gate", "type": "main", "index": 0 }]
+      ]
+    },
+    "ICP Fit Gate": {
+      "main": [
+        [{ "node": "Dedup Gate (Static Data)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Dedup Gate (Static Data)": {
+      "main": [
+        [{ "node": "Salesforce — Contact Lookup", "type": "main", "index": 0 }]
+      ]
+    },
+    "Salesforce — Contact Lookup": {
+      "main": [
+        [{ "node": "Routing & Suppression Logic", "type": "main", "index": 0 }]
+      ]
+    },
+    "Routing & Suppression Logic": {
+      "main": [
+        [{ "node": "Claude — Draft Warm First Touch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude — Draft Warm First Touch": {
+      "main": [
+        [{ "node": "Parse Draft (with fallback)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Draft (with fallback)": {
+      "main": [
+        [
+          { "node": "Slack — Notify Assignee", "type": "main", "index": 0 },
+          { "node": "Salesforce — Create Record", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionId": "5b5b5b5b-0007-0000-0000-0000000000ff",
+  "meta": {
+    "templateCreatedBy": "ooligo",
+    "instanceId": "ooligo-pilot"
+  },
+  "id": "visitor-deanon-to-outreach-n8n",
+  "tags": [
+    { "name": "revops" },
+    { "name": "visitor-identification" },
+    { "name": "outbound" }
+  ]
+}

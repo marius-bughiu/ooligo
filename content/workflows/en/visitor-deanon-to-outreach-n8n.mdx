@@ -1,0 +1,89 @@
+---
+slug: visitor-deanon-to-outreach-n8n
+canonical_slug: visitor-deanon-to-outreach-n8n
+locale: en
+verticals: [revops]
+title: Turn website de-anonymization signals into ICP-filtered warm outreach with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, warmly, rb2b, salesforce, slack]
+roles: [revops, sdr]
+difficulty: intermediate
+time_to_setup: 1-2 hours
+human_tested: false
+last_updated: "2026-07-03"
+---
+
+An n8n flow that catches person-level website visitors from [Warmly](/en/tools/warmly/) and [RB2B](/en/tools/rb2b/) via their outgoing webhooks, scores each identified person against a configurable ICP rubric, drops everyone who doesn't fit, deduplicates within a week-level window, checks [Salesforce](/en/tools/salesforce/) for an existing contact and any active motion worth not stepping on, routes the survivor to the account owner or a territory SDR pool, asks Claude to draft a warm first-touch anchored to the specific page the person viewed, and delivers the context — draft included — as a [Slack](/en/tools/slack/) notification plus a Salesforce Lead or Task. The bundle at `apps/web/public/artifacts/visitor-deanon-to-outreach-n8n/` ships the complete [n8n](/en/tools/n8n/) export plus a `_README.md` covering import, environment variables, credential setup, the ICP rubric, and per-branch verification.
+
+## When to use this
+
+Use it when a de-anonymization tool is already resolving your anonymous traffic to named people, but the raw feed is unworkable. RB2B pushes every identified US visitor into a Slack channel with no ICP filter; within a week reps stop reading it because most identifications are job-seekers, students, competitors, and people three levels off your buyer. Warmly's own Autopilot can act on visits, but it's a paid black box on the $30,000/yr tier and it drafts without seeing your CRM's open opportunities. The symptom in both cases is the same: identified visitors who match your ICP exactly are getting the same treatment as the noise, so nobody acts fast on the ones that matter.
+
+This flow sits between the de-anon tool and the rep. It applies your ICP rubric — title function, seniority, company-size band, country allowlist, and page intent — in one Code node the ops team can read and change, so the only visitors that reach a rep are the ones worth a warm touch. Because de-anon gives you a *person* and the *page they viewed*, the Claude draft can reference "you were looking at the pricing page" rather than generic industry pain. That specificity is the whole point of acting on a website visit instead of a cold list.
+
+It's also the right pattern when you run **both** Warmly and RB2B, or plan to swap one for the other. The `Normalize Visitor Payload` node handles both webhook shapes and a generic fallback, so the routing, filtering, and drafting logic downstream doesn't care which vendor fired.
+
+## When NOT to use this
+
+Skip it if your de-anon tool isn't configured to send outgoing webhooks. Both Warmly (**Settings → Webhooks**) and RB2B (**Integrations → Webhook / Zapier**) support real-time person-level webhooks, but if you haven't enabled them there's nothing to ingest, and the polling fallbacks that work for account-level intent data don't exist for person-level reveals.
+
+Skip it if your identification volume is low and your ICP hit-rate is already high. RB2B's Standard tier resolves roughly 250 identified visitors/month; if most of those are already in-ICP because your traffic is tightly targeted, an ICP filter and CRM suppression layer add infrastructure you don't need — the Slack push RB2B ships is enough.
+
+Do not use it to auto-enroll identified visitors into a cold sequence. It would be trivial to wire the draft straight into Instantly or Smartlead, and that is exactly the aggressive move that gets sending domains flagged. A website visit is consent to nothing. The draft-not-send design keeps a human between the reveal and the send, which matters more for person-level de-anon than for account-level intent because the match is a probabilistic identity, not a form fill — RB2B's own accuracy runs roughly 50-70% on US ICP traffic, and Warmly's account-level resolution lands around 15-25% of visitors.
+
+Finally, this is not a compliance control. It can restrict outreach to a country allowlist in the ICP gate, but restricting the *snippet* to US traffic in Warmly/RB2B, running identified people through your suppression list, and reviewing CA/VA/CO/CT handling with counsel all happen outside n8n.
+
+## Setup
+
+1. **Import the bundle.** Drop `apps/web/public/artifacts/visitor-deanon-to-outreach-n8n/visitor-deanon-to-outreach-n8n.json` into n8n via **Workflows → Import from File**. One entry point: a webhook at `/webhook/visitor-deanon` that both Warmly and RB2B post to.
+
+2. **Set environment variables.** The flow uses environment variables for the ICP thresholds (`ICP_MIN_EMPLOYEES`, `ICP_MAX_EMPLOYEES`, `ICP_COUNTRY_ALLOWLIST`, `ICP_TITLE_ALLOWLIST`, `ICP_TITLE_DENYLIST`), the Salesforce instance and token, and the three SDR pool emails and Slack handles. Full list and where to find each value is in `_README.md`. Every variable has an in-code fallback so the flow never throws on a missing one — but the defaults are deliberately generic, so set them before going live.
+
+3. **Wire credentials.** Three credentials are required:
+   - `PLACEHOLDER_ANTHROPIC_CRED_ID` — HTTP Header Auth with `x-api-key` set to your Anthropic key
+   - `PLACEHOLDER_SLACK_CRED_ID` — HTTP Header Auth with `Authorization: Bearer xoxb-…`
+   - `PLACEHOLDER_SALESFORCE_CRED_ID` — HTTP Header Auth with `Authorization: Bearer <sfdc_token>` (or a Connected App OAuth credential for production)
+
+4. **Point the webhooks at n8n.** In Warmly, add your `https://<your-n8n-host>/webhook/visitor-deanon` URL under **Settings → Webhooks**. In RB2B, use the **Webhook** integration (or a Zapier "Catch Hook" forwarding to the same URL). No credential is stored in n8n for either vendor — they push to you.
+
+5. **Tune the ICP rubric.** Open `ICP Fit Gate` and read the scoring block. It awards points for title function, seniority, company-size band, country, and page intent, and passes anyone at or above `ICP_FIT_THRESHOLD` (default 3). Adjust the point weights and threshold to your definition of fit before activating.
+
+6. **Verify every path.** Walk the verification in `_README.md`: post a clearly in-ICP payload (should pass and draft), a clearly out-of-ICP payload (should drop at the gate), and the same in-ICP payload twice (the second should drop at dedup). Run the dedup test against the live webhook, not the Execute Workflow button — static data only persists on production runs.
+
+## What the flow does
+
+`Webhook — Visitor Deanon Ingest` accepts POST requests and immediately returns 202 via `Respond 202 Accepted` so the vendor's webhook caller isn't blocked on the LLM call. `Normalize Visitor Payload` is a Code node that detects the source by payload shape — RB2B (identified by its `Business Email` / `Captured URL` fields), Warmly (identified by its contact-plus-company nesting), and a generic fallback — and maps each to one internal record with consistent fields: `firstName`, `lastName`, `title`, `company`, `domain`, `email`, `linkedinUrl`, `employeeCount`, `industry`, `country`, `pageViewed`, and `referrer`. The `pageViewed` field comes from RB2B's `Captured URL` and Warmly's signal referrer — it's what makes the draft warm rather than cold.
+
+`ICP Fit Gate` is the node that distinguishes this flow from a plain intent router. It scores the person against a rubric: title function against an allowlist (revops, sales, marketing, growth, founder, product) and a denylist (student, intern, seeking, agency recruiter); seniority (C-level, VP, Head, Director score higher); company-size band between `ICP_MIN_EMPLOYEES` and `ICP_MAX_EMPLOYEES`; country against `ICP_COUNTRY_ALLOWLIST`; and page intent (a `/pricing`, `/demo`, or `/product` view adds points). If the total is below `ICP_FIT_THRESHOLD`, the node returns an empty array and execution halts silently — the person never reaches a rep. The `fitScore` and the reasons are attached to the record so a passing visitor's Slack card shows *why* they qualified, and so a misconfigured rubric is auditable.
+
+`Dedup Gate (Static Data)` uses n8n's workflow static data — `$getWorkflowStaticData('global')` — to hold a per-person-per-week key (`dedup_<email-or-linkedin>_<ISO-week>`). Week-level is the right window for warm outreach: someone who visits your site three times in five days should generate one rep touch, not three. That object is the only correct way to persist cross-execution state from a Code node — n8n's public REST API has no static-data resource — and the node stamps the key before any downstream call so two concurrent reveals for the same person can't both pass, and prunes keys from earlier weeks so the store stays small.
+
+`Salesforce — Contact Lookup` queries for a Contact matching the person's email, returning the Contact Id, Account Id, Owner (Id, Name, Email, `Slack_Handle__c`), and two suppression signals: whether the account has an open Opportunity and whether the contact is already in an active sequence (via a `Current_Sequence__c` field). `Routing & Suppression Logic` then decides. If the contact exists and any suppression signal is set — open opportunity, active sequence, or an existing-customer account type — the node returns an empty array: a warm de-anon touch would step on a live motion, so it's dropped and logged. Otherwise, if the contact exists, the spike routes to the account owner and the flow will create a **Task** on the existing contact. If no contact exists — the common de-anon case, since the whole point is surfacing people not yet in your CRM — it routes to a territory SDR pool (AMER/EMEA/ROW by country) and the flow will create a **Lead**. The node sets `createSObject` to `Task` or `Lead` accordingly.
+
+`Claude — Draft Warm First Touch` posts to the Anthropic API with `claude-haiku-4-5`, an 8-second timeout, and `neverError: true`. The system prompt bans filler ("I noticed," "reach out," "touch base," "circle back") and instructs Claude to anchor the opener to the specific page viewed and the person's role — because "saw you were on the pricing page" is actionable and "I'd love to connect" is not. `Parse Draft (with fallback)` handles a timeout or malformed JSON by producing a template-based draft tagged `draftSource: template-fallback`; both paths yield `draftSubject`, `draftBody`, and `draftTalkingPoint`. `Slack — Notify Assignee` posts a Block Kit card to `#visitor-deanon` with the person's name, title, company, LinkedIn URL, the page they viewed, the `fitScore` and reasons, and the draft labeled "edit before sending." `Salesforce — Create Record` POSTs to `/sobjects/{{ createSObject }}` — a Lead for net-new people, a Task linked to the existing contact via `WhatId` otherwise — with `OwnerId` set only to a real Salesforce User Id (never an email, which returns `MALFORMED_ID`) and omitted when routing to a pool.
+
+## Cost reality
+
+Per identified visitor that clears the ICP gate, `claude-haiku-4-5` receives roughly 500 input tokens and produces around 150 output tokens for the three-field draft. At Haiku 4.5 pricing (~$0.80/M input, ~$4/M output) that's about $0.0007 per draft. The ICP gate does the cost containment: if RB2B's Pro tier surfaces ~1,000 identified visitors/month and your rubric passes 30%, you draft ~300 times/month — under $0.25/month in Claude spend. The dedup window means a repeat visitor is billed once per week, not per visit.
+
+The de-anon tool is the real line item, not the automation. RB2B runs $159/month (~250 identified visitors) to $499/month (~1,000); Warmly's paid plans start at $15,000/yr and its full Autopilot suite is $30,000/yr. n8n self-hosted is free; n8n Cloud Starter at $20/month covers 5,000 executions, comfortably handling ~300 drafted visitors at ~9 nodes each. Salesforce API usage is one query plus one create per passing visitor — a few hundred calls/month against a 15,000+/day Enterprise limit. The Slack bot and the n8n webhook endpoint are free.
+
+## Failure modes
+
+- **The ICP rubric silently drops everyone.** A too-strict threshold or a title allowlist that misses how your buyers actually write their titles (e.g. "RevOps" as a denylist substring accidentally catching "Revenue Operations") means every visitor fails the gate and the `#visitor-deanon` channel goes quiet — which reads like "no traffic" when it's really "filter misconfigured." Guard: `ICP Fit Gate` attaches `fitScore` and per-rule reasons to *every* record, and the `_README.md` verification includes posting a known in-ICP payload and confirming it passes. Watch the pass-rate for the first week; if it's near zero on real traffic, loosen the rubric.
+
+- **Dedup static data persists only on production runs.** `Dedup Gate (Static Data)` reads and writes `$getWorkflowStaticData('global')`, which n8n saves only when the execution is triggered in production — never on a manual Execute Workflow run. Testing dedup by clicking Execute Workflow twice makes the gate look broken when it's working. Guard: activate the workflow and POST to the live webhook URL twice; the second POST should drop at dedup. The node prunes prior-week keys on every run, so the store self-cleans.
+
+- **The draft addresses the wrong person.** Person-level de-anon is probabilistic — RB2B's identification runs ~50-70% accurate on US ICP traffic — so a draft may greet a name that isn't actually who visited. Guard: the flow never sends. The Slack card leads with the LinkedIn URL so the SDR verifies the identity in one click before editing and sending, and the draft is labeled a starting point in both the system prompt and the Slack message.
+
+- **Salesforce Bearer token rotation stalls lookups.** A raw Bearer token in `SFDC_ACCESS_TOKEN` rotates (every ~2 hours on orgs without a persistent session policy). When it expires, `Salesforce — Contact Lookup` returns 401 silently (because `neverError: true`), so every visitor looks net-new and gets routed to a pool as a Lead — quietly bypassing suppression. Guard: watch for a run of Lead creations with zero Task creations even when you know existing contacts are visiting; for production, replace the raw token with a Connected App using OAuth 2.0 client-credentials flow. The `_README.md` covers this.
+
+## vs alternatives
+
+**vs Warmly Autopilot.** Warmly's own agent can qualify and book off a visit, and if you're already paying for the $30,000/yr tier and don't run Salesforce as the source of truth for suppression, it may be enough. It's not the right tool if you want the ICP logic and suppression rules to be readable and auditable by your ops team, if you run RB2B alongside or instead of Warmly, or if you want the touch to be a rep-edited draft rather than an autonomous send. This flow gives you all three at n8n cost and works across both vendors.
+
+**vs RB2B → Slack → manual triage.** RB2B's native Slack push is the status quo: every identified person, no ICP filter, no CRM awareness. It's free-tier friendly and fine at low volume, but at 1,000 identifications/month the channel becomes noise reps tune out, and there's no guard against pinging a contact who's mid-deal. This flow filters to ICP first and suppresses active motions, so what lands in Slack is worth reading.
+
+**vs a Zapier auto-enroll into Instantly/Smartlead.** The one-click move is RB2B/Warmly → Zapier → cold sequencer. It sends fastest and it's the highest-risk: no human check on a probabilistic identity, no suppression against open opportunities, and cold sends to freshly de-anonymized people are the fastest way to burn a sending domain. This flow trades that speed for a rep-in-the-loop draft and CRM-aware suppression.
+
+**vs a Clay table on a de-anon feed.** [Clay](/en/tools/clay/) can pull a de-anon feed, enrich it, apply an ICP rubric with formula columns, and push to a sequencer — and it's a strong fit for batch prospecting runs. It's not event-driven, so there's always batch lag between the visit and the touch. Use Clay for the weekly enrichment-and-prospecting layer; use this flow for the real-time, visit-is-still-warm response.

@@ -1,0 +1,89 @@
+---
+slug: visitor-deanon-to-outreach-n8n
+canonical_slug: visitor-deanon-to-outreach-n8n
+locale: pt-BR
+verticals: [revops]
+title: Turn website de-anonymization signals into ICP-filtered warm outreach with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, warmly, rb2b, salesforce, slack]
+roles: [revops, sdr]
+difficulty: intermediate
+time_to_setup: 1-2 hours
+human_tested: false
+last_updated: "2026-07-03"
+---
+
+Um fluxo do n8n que captura visitantes do site identificados no nível da pessoa via [Warmly](/pt-BR/tools/warmly/) e [RB2B](/pt-BR/tools/rb2b/) por meio dos webhooks de saída deles, pontua cada pessoa identificada contra uma rubrica de ICP configurável, descarta todo mundo que não se encaixa, deduplica dentro de uma janela de nível semanal, verifica no [Salesforce](/pt-BR/tools/salesforce/) se há um contato existente e qualquer motion ativo que valha a pena não atropelar, roteia o sobrevivente para o dono da conta ou para um pool de SDR por território, pede para o Claude redigir um primeiro contato warm ancorado na página específica que a pessoa visualizou, e entrega o contexto — rascunho incluído — como uma notificação do [Slack](/pt-BR/tools/slack/) mais um Lead ou Task do Salesforce. O bundle em `apps/web/public/artifacts/visitor-deanon-to-outreach-n8n/` traz o export completo do [n8n](/pt-BR/tools/n8n/) mais um `_README.md` cobrindo import, variáveis de ambiente, configuração de credenciais, a rubrica de ICP e a verificação por branch.
+
+## Quando usar isto
+
+Use quando uma ferramenta de deanonimização já estiver resolvendo seu tráfego anônimo em pessoas nomeadas, mas o feed bruto for inviável de trabalhar. O RB2B empurra todo visitante identificado dos EUA para um canal do Slack sem nenhum filtro de ICP; em uma semana os reps param de ler porque a maioria das identificações são candidatos a emprego, estudantes, concorrentes e pessoas três níveis distantes do seu comprador. O próprio Autopilot da Warmly pode agir sobre as visitas, mas é uma caixa-preta paga no tier de US$30,000/ano e redige sem enxergar as oportunidades abertas do seu CRM. O sintoma nos dois casos é o mesmo: visitantes identificados que batem exatamente com o seu ICP recebem o mesmo tratamento que o ruído, então ninguém age rápido nos que importam.
+
+Este fluxo fica entre a ferramenta de deanon e o rep. Ele aplica sua rubrica de ICP — função do cargo, senioridade, faixa de tamanho da empresa, allowlist de país e intenção da página — em um único node Code que o time de ops consegue ler e alterar, de modo que os únicos visitantes que chegam a um rep são os que valem um toque warm. Como a deanon te dá uma *pessoa* e a *página que ela visualizou*, o rascunho do Claude pode referenciar "você estava olhando a página de pricing" em vez de dor genérica do setor. Essa especificidade é o objetivo inteiro de agir sobre uma visita ao site em vez de uma lista fria.
+
+É também o padrão certo quando você roda **tanto** Warmly quanto RB2B, ou planeja trocar um pelo outro. O node `Normalize Visitor Payload` lida com os dois formatos de webhook e um fallback genérico, então a lógica de roteamento, filtragem e redação lá na frente não se importa com qual fornecedor disparou.
+
+## Quando NÃO usar isto
+
+Pule se a sua ferramenta de deanon não estiver configurada para enviar webhooks de saída. Tanto a Warmly (**Settings → Webhooks**) quanto o RB2B (**Integrations → Webhook / Zapier**) suportam webhooks em tempo real no nível da pessoa, mas se você não os habilitou não há nada para ingerir, e os fallbacks de polling que funcionam para dados de intenção no nível da conta não existem para reveals no nível da pessoa.
+
+Pule se o seu volume de identificação for baixo e a sua taxa de acerto de ICP já for alta. O tier Standard do RB2B resolve por volta de 250 visitantes identificados/mês; se a maioria deles já está dentro do ICP porque o seu tráfego é bem segmentado, um filtro de ICP e uma camada de supressão via CRM adicionam infraestrutura que você não precisa — o push do Slack que o RB2B já entrega é suficiente.
+
+Não use isto para auto-inscrever visitantes identificados em uma sequência fria. Seria trivial ligar o rascunho direto no Instantly ou Smartlead, e essa é exatamente a jogada agressiva que faz domínios de envio serem flagados. Uma visita ao site não é consentimento para nada. O design de redigir-sem-enviar mantém um humano entre o reveal e o envio, o que importa mais para deanon no nível da pessoa do que para intenção no nível da conta, porque o match é uma identidade probabilística, não um preenchimento de formulário — a própria acurácia do RB2B roda por volta de 50-70% em tráfego de ICP dos EUA, e a resolução no nível da conta da Warmly fica em torno de 15-25% dos visitantes.
+
+Por fim, isto não é um controle de compliance. Ele pode restringir o outreach a uma allowlist de país no gate de ICP, mas restringir o *snippet* a tráfego dos EUA na Warmly/RB2B, rodar as pessoas identificadas pela sua lista de supressão, e revisar o tratamento de CA/VA/CO/CT com o jurídico acontecem todos fora do n8n.
+
+## Setup
+
+1. **Importe o bundle.** Solte `apps/web/public/artifacts/visitor-deanon-to-outreach-n8n/visitor-deanon-to-outreach-n8n.json` no n8n via **Workflows → Import from File**. Um ponto de entrada: um webhook em `/webhook/visitor-deanon` para onde tanto a Warmly quanto o RB2B fazem post.
+
+2. **Defina as variáveis de ambiente.** O fluxo usa variáveis de ambiente para os thresholds de ICP (`ICP_MIN_EMPLOYEES`, `ICP_MAX_EMPLOYEES`, `ICP_COUNTRY_ALLOWLIST`, `ICP_TITLE_ALLOWLIST`, `ICP_TITLE_DENYLIST`), a instância e o token do Salesforce, e os três emails de pool de SDR e handles do Slack. A lista completa e onde encontrar cada valor está no `_README.md`. Toda variável tem um fallback no código para que o fluxo nunca dê erro por uma faltante — mas os defaults são deliberadamente genéricos, então defina-os antes de ir para produção.
+
+3. **Ligue as credenciais.** Três credenciais são necessárias:
+   - `PLACEHOLDER_ANTHROPIC_CRED_ID` — HTTP Header Auth com `x-api-key` definido para a sua chave da Anthropic
+   - `PLACEHOLDER_SLACK_CRED_ID` — HTTP Header Auth com `Authorization: Bearer xoxb-…`
+   - `PLACEHOLDER_SALESFORCE_CRED_ID` — HTTP Header Auth com `Authorization: Bearer <sfdc_token>` (ou uma credencial OAuth de Connected App para produção)
+
+4. **Aponte os webhooks para o n8n.** Na Warmly, adicione a sua URL `https://<your-n8n-host>/webhook/visitor-deanon` em **Settings → Webhooks**. No RB2B, use a integração **Webhook** (ou um "Catch Hook" do Zapier encaminhando para a mesma URL). Nenhuma credencial fica armazenada no n8n para qualquer fornecedor — eles fazem push para você.
+
+5. **Ajuste a rubrica de ICP.** Abra o `ICP Fit Gate` e leia o bloco de pontuação. Ele concede pontos por função do cargo, senioridade, faixa de tamanho da empresa, país e intenção da página, e aprova qualquer um em ou acima de `ICP_FIT_THRESHOLD` (default 3). Ajuste os pesos dos pontos e o threshold para a sua definição de fit antes de ativar.
+
+6. **Verifique cada caminho.** Percorra a verificação no `_README.md`: faça post de um payload claramente dentro do ICP (deve passar e redigir), um payload claramente fora do ICP (deve cair no gate), e o mesmo payload dentro do ICP duas vezes (o segundo deve cair na dedup). Rode o teste de dedup contra o webhook ativo, não pelo botão Execute Workflow — a static data só persiste em execuções de produção.
+
+## O que o fluxo faz
+
+`Webhook — Visitor Deanon Ingest` aceita requisições POST e retorna imediatamente 202 via `Respond 202 Accepted` para que o chamador do webhook do fornecedor não fique bloqueado na chamada do LLM. `Normalize Visitor Payload` é um node Code que detecta a fonte pelo formato do payload — RB2B (identificado pelos campos `Business Email` / `Captured URL`), Warmly (identificado pelo aninhamento de contato-mais-empresa), e um fallback genérico — e mapeia cada um para um registro interno com campos consistentes: `firstName`, `lastName`, `title`, `company`, `domain`, `email`, `linkedinUrl`, `employeeCount`, `industry`, `country`, `pageViewed` e `referrer`. O campo `pageViewed` vem do `Captured URL` do RB2B e do referrer do sinal da Warmly — é o que faz o rascunho ser warm em vez de frio.
+
+`ICP Fit Gate` é o node que distingue este fluxo de um roteador de intenção simples. Ele pontua a pessoa contra uma rubrica: função do cargo contra uma allowlist (revops, sales, marketing, growth, founder, product) e uma denylist (student, intern, seeking, agency recruiter); senioridade (C-level, VP, Head, Director pontuam mais alto); faixa de tamanho da empresa entre `ICP_MIN_EMPLOYEES` e `ICP_MAX_EMPLOYEES`; país contra `ICP_COUNTRY_ALLOWLIST`; e intenção da página (uma visualização de `/pricing`, `/demo` ou `/product` adiciona pontos). Se o total ficar abaixo de `ICP_FIT_THRESHOLD`, o node retorna um array vazio e a execução para silenciosamente — a pessoa nunca chega a um rep. O `fitScore` e as razões são anexados ao registro para que o card do Slack de um visitante aprovado mostre *por que* ele qualificou, e para que uma rubrica mal configurada seja auditável.
+
+`Dedup Gate (Static Data)` usa a static data de workflow do n8n — `$getWorkflowStaticData('global')` — para segurar uma chave por-pessoa-por-semana (`dedup_<email-or-linkedin>_<ISO-week>`). O nível semanal é a janela certa para outreach warm: alguém que visita seu site três vezes em cinco dias deveria gerar um toque de rep, não três. Esse objeto é a única forma correta de persistir estado entre execuções a partir de um node Code — a API REST pública do n8n não tem um recurso de static-data — e o node estampa a chave antes de qualquer chamada downstream para que dois reveals concorrentes da mesma pessoa não possam ambos passar, e poda chaves de semanas anteriores para que o store fique pequeno.
+
+`Salesforce — Contact Lookup` consulta um Contact que bate com o email da pessoa, retornando o Contact Id, o Account Id, o Owner (Id, Name, Email, `Slack_Handle__c`) e dois sinais de supressão: se a conta tem uma Opportunity aberta e se o contato já está em uma sequência ativa (via um campo `Current_Sequence__c`). `Routing & Suppression Logic` então decide. Se o contato existe e qualquer sinal de supressão está setado — oportunidade aberta, sequência ativa, ou um tipo de conta de cliente existente — o node retorna um array vazio: um toque warm de deanon atropelaria um motion ativo, então é descartado e logado. Caso contrário, se o contato existe, o pico roteia para o dono da conta e o fluxo criará uma **Task** no contato existente. Se nenhum contato existe — o caso comum de deanon, já que o objetivo inteiro é trazer à tona pessoas que ainda não estão no seu CRM — ele roteia para um pool de SDR por território (AMER/EMEA/ROW por país) e o fluxo criará um **Lead**. O node define `createSObject` como `Task` ou `Lead` conforme o caso.
+
+`Claude — Draft Warm First Touch` faz post para a API da Anthropic com `claude-haiku-4-5`, um timeout de 8 segundos e `neverError: true`. O system prompt bane enrolação ("I noticed", "reach out", "touch base", "circle back") e instrui o Claude a ancorar a abertura na página específica visualizada e no papel da pessoa — porque "vi que você estava na página de pricing" é acionável e "adoraria me conectar" não é. `Parse Draft (with fallback)` lida com um timeout ou JSON malformado produzindo um rascunho baseado em template marcado como `draftSource: template-fallback`; ambos os caminhos geram `draftSubject`, `draftBody` e `draftTalkingPoint`. `Slack — Notify Assignee` faz post de um card Block Kit para `#visitor-deanon` com o nome da pessoa, cargo, empresa, LinkedIn URL, a página que ela visualizou, o `fitScore` e as razões, e o rascunho rotulado "edit before sending". `Salesforce — Create Record` faz POST para `/sobjects/{{ createSObject }}` — um Lead para pessoas net-new, uma Task ligada ao contato existente via `WhatId` caso contrário — com `OwnerId` definido apenas para um Salesforce User Id real (nunca um email, que retorna `MALFORMED_ID`) e omitido quando roteando para um pool.
+
+## Realidade de custo
+
+Por visitante identificado que passa pelo gate de ICP, o `claude-haiku-4-5` recebe por volta de 500 tokens de input e produz cerca de 150 tokens de output para o rascunho de três campos. No pricing do Haiku 4.5 (~$0.80/M input, ~$4/M output) isso dá cerca de $0.0007 por rascunho. O gate de ICP faz a contenção de custo: se o tier Pro do RB2B trouxer à tona ~1,000 visitantes identificados/mês e a sua rubrica aprovar 30%, você redige ~300 vezes/mês — menos de $0.25/mês em gasto com Claude. A janela de dedup significa que um visitante recorrente é cobrado uma vez por semana, não por visita.
+
+A ferramenta de deanon é o item de linha de verdade, não a automação. O RB2B roda de $159/mês (~250 visitantes identificados) a $499/mês (~1,000); os planos pagos da Warmly começam em $15,000/ano e a suíte completa de Autopilot é $30,000/ano. O n8n self-hosted é grátis; o n8n Cloud Starter a $20/mês cobre 5,000 execuções, lidando confortavelmente com ~300 visitantes redigidos a ~9 nodes cada. O uso da API do Salesforce é uma query mais um create por visitante aprovado — algumas centenas de chamadas/mês contra um limite Enterprise de 15,000+/dia. O bot do Slack e o endpoint de webhook do n8n são grátis.
+
+## Modos de falha
+
+- **A rubrica de ICP descarta todo mundo silenciosamente.** Um threshold estrito demais ou uma allowlist de cargo que erra como seus compradores de fato escrevem os títulos deles (ex.: "RevOps" como substring de denylist pegando acidentalmente "Revenue Operations") significa que todo visitante falha no gate e o canal `#visitor-deanon` fica quieto — o que parece "sem tráfego" quando na verdade é "filtro mal configurado". Guarda: o `ICP Fit Gate` anexa `fitScore` e razões por-regra a *todo* registro, e a verificação do `_README.md` inclui fazer post de um payload conhecido dentro do ICP e confirmar que ele passa. Observe a taxa de aprovação na primeira semana; se estiver perto de zero em tráfego real, afrouxe a rubrica.
+
+- **A static data de dedup só persiste em execuções de produção.** `Dedup Gate (Static Data)` lê e escreve `$getWorkflowStaticData('global')`, que o n8n salva apenas quando a execução é disparada em produção — nunca em uma execução manual de Execute Workflow. Testar a dedup clicando Execute Workflow duas vezes faz o gate parecer quebrado quando está funcionando. Guarda: ative o workflow e faça POST para a URL do webhook ativo duas vezes; o segundo POST deve cair na dedup. O node poda chaves da semana anterior em toda execução, então o store se autolimpa.
+
+- **O rascunho se dirige à pessoa errada.** Deanon no nível da pessoa é probabilístico — a identificação do RB2B roda ~50-70% de acurácia em tráfego de ICP dos EUA — então um rascunho pode cumprimentar um nome que não é de fato quem visitou. Guarda: o fluxo nunca envia. O card do Slack começa com a LinkedIn URL para que o SDR verifique a identidade em um clique antes de editar e enviar, e o rascunho é rotulado como um ponto de partida tanto no system prompt quanto na mensagem do Slack.
+
+- **A rotação do Bearer token do Salesforce trava os lookups.** Um Bearer token bruto em `SFDC_ACCESS_TOKEN` rotaciona (a cada ~2 horas em orgs sem uma política de sessão persistente). Quando ele expira, `Salesforce — Contact Lookup` retorna 401 silenciosamente (por causa do `neverError: true`), então todo visitante parece net-new e é roteado para um pool como Lead — burlando a supressão silenciosamente. Guarda: fique de olho em uma sequência de criações de Lead com zero criações de Task mesmo quando você sabe que contatos existentes estão visitando; para produção, substitua o token bruto por um Connected App usando o fluxo OAuth 2.0 client-credentials. O `_README.md` cobre isso.
+
+## vs alternativas
+
+**vs Warmly Autopilot.** O próprio agente da Warmly consegue qualificar e agendar a partir de uma visita, e se você já está pagando pelo tier de $30,000/ano e não roda o Salesforce como fonte da verdade para supressão, pode ser suficiente. Não é a ferramenta certa se você quer que a lógica de ICP e as regras de supressão sejam legíveis e auditáveis pelo seu time de ops, se você roda o RB2B junto ou no lugar da Warmly, ou se você quer que o toque seja um rascunho editado por rep em vez de um envio autônomo. Este fluxo te dá os três ao custo do n8n e funciona nos dois fornecedores.
+
+**vs RB2B → Slack → triagem manual.** O push nativo do RB2B para o Slack é o status quo: toda pessoa identificada, sem filtro de ICP, sem consciência de CRM. É amigável para o tier grátis e ok em baixo volume, mas a 1,000 identificações/mês o canal vira ruído que os reps ignoram, e não há guarda contra pingar um contato que está no meio de um deal. Este fluxo filtra para o ICP primeiro e suprime motions ativos, então o que cai no Slack vale a pena ler.
+
+**vs um auto-enroll do Zapier no Instantly/Smartlead.** A jogada de um clique é RB2B/Warmly → Zapier → sequenciador frio. Envia mais rápido e é o de maior risco: nenhuma checagem humana sobre uma identidade probabilística, nenhuma supressão contra oportunidades abertas, e envios frios para pessoas recém-deanonimizadas são a forma mais rápida de queimar um domínio de envio. Este fluxo troca essa velocidade por um rascunho com rep no loop e supressão consciente de CRM.
+
+**vs uma tabela do Clay em um feed de deanon.** O [Clay](/pt-BR/tools/clay/) consegue puxar um feed de deanon, enriquecê-lo, aplicar uma rubrica de ICP com colunas de fórmula, e empurrar para um sequenciador — e é um forte encaixe para rodadas de prospecção em batch. Não é event-driven, então sempre há lag de batch entre a visita e o toque. Use o Clay para a camada semanal de enriquecimento-e-prospecção; use este fluxo para a resposta em tempo real, com-a-visita-ainda-warm.
