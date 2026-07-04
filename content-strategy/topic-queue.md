@@ -10,11 +10,40 @@ Format per item:
 
 `refresh:` items live in the top `## Refresh queue` section, prepended by the weekly freshness sweep. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept:` (no value yet — first sweep will set it).
+`last-swept: 2026-07-05`
 
 ## Refresh queue
 
-(Empty — the first freshness sweep will populate this.)
+- refresh: [type:tool] [vertical:revops] amplemarket — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] apollo — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] blackboiler — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] chatgpt — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] claude — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] clay — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] cognism — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] default — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:recruiting] dover — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] draftwise — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] harvey — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:recruiting] holly — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:recruiting] juicebox — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] kira-systems — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] lawgeex — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] luminance — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] lusha — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:recruiting] mercor — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] outreach — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:recruiting] paradox — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] perplexity — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] rattle — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] regie-ai — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] sales-navigator — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] salesloft — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:recruiting] sense — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] spellbook — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] thomson-reuters-cocounsel — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] zoominfo — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
 
 ## Tools
 
