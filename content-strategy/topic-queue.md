@@ -128,7 +128,7 @@ Format per item:
 - [type:comparison] [vertical:legal-ops] pairwise: robin-ai-vs-spellbook — contract AI in the lawyer's workflow; routes on negotiation/review + agreement Q&A (Robin) vs Word-native generative drafting and clause generation (Spellbook)
 - [type:comparison] [vertical:revops] pairwise: rox-vs-clay — acting on CRM data; routes on autonomous agentic-CRM that executes account plays (Rox) vs build-it-yourself data enrichment + workflow workbench (Clay) → slug: rox-vs-clay
 - [type:comparison] [vertical:recruiting] pairwise: sapia-ai-vs-hirevue — AI interviewing; routes on chat/text structured async with bias-controlled scoring (Sapia) vs enterprise video-assessment incumbent (HireVue) → slug: sapia-ai-vs-hirevue
-- [type:comparison] [vertical:recruiting] pairwise: fetcher-vs-gem — sourcing + outreach; routes on human-validated AI sourcing with done-for-you outreach (Fetcher) vs all-in-one recruiting CRM + sequencing (Gem)
+- [type:comparison] [vertical:recruiting] pairwise: fetcher-vs-gem — sourcing + outreach; routes on human-validated AI sourcing with done-for-you outreach (Fetcher) vs all-in-one recruiting CRM + sequencing (Gem) → slug: fetcher-vs-gem
 
 ## Workflows
 
