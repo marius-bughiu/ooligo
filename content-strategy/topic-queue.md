@@ -68,6 +68,11 @@ Format per item:
 - [type:tool] [vertical:cross] new entry: gumloop — no-code AI automation canvas (drag-and-drop nodes, document processing, browser extension); the visual AI-workflow pole vs n8n/Make and Lindy → slug: gumloop
 - [type:tool] [vertical:recruiting] new entry: sapia-ai — chat/text-based AI smart-interview platform (structured async, bias-controlled scoring); the text-interview pole vs video-first HireVue/Apriora → slug: sapia-ai
 - [type:tool] [vertical:recruiting] new entry: fetcher — AI sourcing + automated outreach with human-validated shortlists; the human-in-the-loop sourcing pole readers compare to Gem/Juicebox → slug: fetcher
+- [type:tool] [vertical:legal-ops] new entry: legalon — LegalOn: AI contract-review suite (Review, Assistant, Matter Mgmt, Knowledge Core, Agents, Word add-in) with 50+ playbooks; surpassed ¥10B ARR Oct-2025 + OpenAI partnership, the playbook-driven review pole buyers weigh vs Spellbook/Ivo/GC AI
+- [type:tool] [vertical:legal-ops] new entry: gavel-exec — Gavel Exec: AI contract review + drafting for transactional/deal lawyers, in Word and (new Apr-2026) a web platform; playbooks, batch/multi-doc analysis with citations, hybrid search over 1GB source collections
+- [type:tool] [vertical:revops] new entry: landbase — Landbase: autonomous GTM / AI-sales agent on its proprietary GTM-1 Omni model (trained on GTM data, not a GPT wrapper) with same-day campaign launch; the "purpose-built model" pole buyers weigh vs 11x/Artisan
+- [type:tool] [vertical:recruiting] new entry: recruiterflow — Recruiterflow: AI-native ATS + CRM for staffing / executive-search agencies with the AIRA intelligence layer across sourcing, outreach, and matching; the outbound-on-autopilot boutique/mid-market pole vs Bullhorn/Loxo
+- [type:tool] [vertical:recruiting] new entry: pin — Pin: end-to-end AI recruiting agent over 850M+ profiles (source → rank-by-fit → multi-channel outreach → schedule) with published acceptance/time-to-fill metrics; the full-stack AI-recruiter pole vs Juicebox/SeekOut
 
 ## Comparisons
 
@@ -129,6 +134,12 @@ Format per item:
 - [type:comparison] [vertical:revops] pairwise: rox-vs-clay — acting on CRM data; routes on autonomous agentic-CRM that executes account plays (Rox) vs build-it-yourself data enrichment + workflow workbench (Clay) → slug: rox-vs-clay
 - [type:comparison] [vertical:recruiting] pairwise: sapia-ai-vs-hirevue — AI interviewing; routes on chat/text structured async with bias-controlled scoring (Sapia) vs enterprise video-assessment incumbent (HireVue) → slug: sapia-ai-vs-hirevue
 - [type:comparison] [vertical:recruiting] pairwise: fetcher-vs-gem — sourcing + outreach; routes on human-validated AI sourcing with done-for-you outreach (Fetcher) vs all-in-one recruiting CRM + sequencing (Gem) → slug: fetcher-vs-gem
+- [type:comparison] [vertical:revops] pairwise: landbase-vs-11x — AI sales agents; routes on purpose-built GTM-1 model + same-day launch (Landbase) vs GPT-based multi-agent SDR suite with longer onboarding (11x)
+- [type:comparison] [vertical:legal-ops] pairwise: legalon-vs-spellbook — AI contract tools; routes on playbook-driven review suite + matter management (LegalOn) vs Word-native generative drafting and clause generation (Spellbook)
+- [type:comparison] [vertical:legal-ops] pairwise: legalon-vs-ivo — in-house AI contract review; routes on broad review suite + 50+ playbooks + matter memory (LegalOn) vs lean redline-first review workflow (Ivo)
+- [type:comparison] [vertical:legal-ops] pairwise: gavel-exec-vs-legalon — AI contract review challengers; routes on transactional/deal-lawyer drafting + web platform (Gavel Exec) vs standardized playbook review at commercial-agreement volume (LegalOn)
+- [type:comparison] [vertical:recruiting] pairwise: recruiterflow-vs-loxo — agency recruiting ATS/CRM; routes on AI-native outbound-on-autopilot for boutique/mid-market (Recruiterflow) vs sourcing-first 1.2B-profile database for retained search (Loxo)
+- [type:comparison] [vertical:recruiting] pairwise: pin-vs-juicebox — AI sourcing/recruiting agents; routes on end-to-end source-to-schedule automation (Pin) vs natural-language search over 800M+ profiles + autonomous outreach (Juicebox)
 
 ## Workflows
 
@@ -154,6 +165,8 @@ Format per item:
 - [type:workflow] [vertical:revops] visitor-deanon-to-outreach-n8n — n8n flow that turns Warmly/RB2B website de-anonymization signals into ICP-filtered routing + drafted warm first-touch; artifact_type: n8n-flow → slug: visitor-deanon-to-outreach-n8n
 - [type:workflow] [vertical:revops] mcp-server-gong-revops — MCP server exposing Gong calls, deals, and trackers to Claude for natural-language conversation-intelligence and deal-risk Q&A; artifact_type: mcp-server
 - [type:workflow] [vertical:recruiting] ai-interview-compliance-audit-skill — claude skill that audits an AI video/interview setup against IL AI Video Interview Act, NYC LL144, and Colorado AI Act disclosure + bias-audit requirements; artifact_type: claude-skill
+- [type:workflow] [vertical:recruiting] ai-interview-fraud-detection-skill — claude skill that screens interview transcripts/recordings for deepfake, proxy-interview, and AI-assisted-answer signals and flags them for human review; artifact_type: claude-skill
+- [type:workflow] [vertical:revops] mcp-server-outreach-revops — MCP server exposing Outreach sequences, prospects, and engagement to Claude for natural-language sequence and pipeline Q&A; artifact_type: mcp-server
 
 ## Learn
 
@@ -188,6 +201,9 @@ Format per item:
 - [type:learn] [vertical:cross] regulation: texas-responsible-ai-governance-act — TRAIGA (effective Jan 1 2026): who it covers, the intent-based prohibitions, AG-only enforcement + cure period, and what ops/legal/hiring deployers should do → primary target_question: does TRAIGA apply to our AI tools?
 - [type:learn] [vertical:revops] concept: waterfall-enrichment — how waterfall data enrichment works (provider cascade), the credit economics, and the verification gap before deliverability → primary target_question: what is waterfall enrichment and is it worth the credits?
 - [type:learn] [vertical:revops] definition: agentic-crm — what an "agentic CRM" is vs a system-of-record CRM with AI features, and the diagnostic questions buyers should ask (Rox/Day.ai category) → primary target_question: what is an agentic CRM?
+- [type:learn] [vertical:recruiting] concept: ai-interview-fraud — what AI interview fraud is (deepfakes, proxy interviews, AI-assisted answers), the 2026 scale, and how TA teams detect and deter it → primary target_question: how do we stop AI cheating in job interviews?
+- [type:learn] [vertical:cross] concept: vertical-ai-model-vs-gpt-wrapper — purpose-built/vertical foundation model vs a general-LLM "wrapper," what the distinction actually means for buyers, and the diagnostic questions to ask a vendor → primary target_question: does it matter if an AI tool trains its own model or wraps GPT?
+- [type:learn] [vertical:cross] concept: seat-based-vs-usage-based-ai-pricing — how AI ops tools price (per-seat vs consumption/credits vs outcome-based), the hidden-cost traps, and how to model true annual cost → primary target_question: how should I compare per-seat vs usage-based AI pricing?
 
 ## Stacks
 
@@ -207,3 +223,4 @@ Format per item:
 - [type:stack] [vertical:legal-ops] new entry: in-house-legal-ai-stack — GC AI-or-Ivo + Ironclad + DocuSign IAM + Notion; use case: lean in-house team layering an AI copilot + review onto a CLM
 - [type:stack] [vertical:legal-ops] new entry: personal-injury-ai-stack — Supio-or-EvenUp + Eve Legal + Filevine + Clio; use case: plaintiff PI firm running intake → case workup → demand with AI in the loop
 - [type:stack] [vertical:cross] new entry: ai-agent-ops-stack — Lindy-or-Gumloop + n8n + Clay + Slack; use case: lean ops team building always-on AI agents over their SaaS without engineering
+- [type:stack] [vertical:recruiting] new entry: staffing-agency-recruiting-stack — Recruiterflow-or-Bullhorn + Loxo + LinkedIn Recruiter + outreach sequencing; use case: perm/retained search and staffing desk running outbound sourcing on autopilot
