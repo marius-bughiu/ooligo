@@ -14,7 +14,7 @@ Format per item:
 
 ## Refresh queue
 
-- refresh: [type:tool] [vertical:revops] amplemarket — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] amplemarket — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: amplemarket
 - refresh: [type:tool] [vertical:revops] apollo — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
 - refresh: [type:tool] [vertical:legal-ops] blackboiler — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
 - refresh: [type:tool] [vertical:revops] chatgpt — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
