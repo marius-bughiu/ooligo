@@ -17,7 +17,7 @@ Format per item:
 - refresh: [type:tool] [vertical:revops] amplemarket — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: amplemarket
 - refresh: [type:tool] [vertical:revops] apollo — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: apollo
 - refresh: [type:tool] [vertical:legal-ops] blackboiler — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: blackboiler
-- refresh: [type:tool] [vertical:revops] chatgpt — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] chatgpt — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: chatgpt
 - refresh: [type:tool] [vertical:revops] claude — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
 - refresh: [type:tool] [vertical:revops] clay — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
 - refresh: [type:tool] [vertical:revops] cognism — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
