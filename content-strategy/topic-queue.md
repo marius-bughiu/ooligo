@@ -20,7 +20,7 @@ Format per item:
 - refresh: [type:tool] [vertical:revops] chatgpt — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: chatgpt
 - refresh: [type:tool] [vertical:revops] claude — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: claude
 - refresh: [type:tool] [vertical:revops] clay — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: clay
-- refresh: [type:tool] [vertical:revops] cognism — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:revops] cognism — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: cognism
 - refresh: [type:tool] [vertical:revops] default — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
 - refresh: [type:tool] [vertical:recruiting] dover — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
 - refresh: [type:tool] [vertical:legal-ops] draftwise — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
