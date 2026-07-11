@@ -10,10 +10,19 @@ Format per item:
 
 `refresh:` items live in the top `## Refresh queue` section, prepended by the weekly freshness sweep. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-07-05`
+`last-swept: 2026-07-12`
 
 ## Refresh queue
 
+- refresh: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03)
+- refresh: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03)
+- refresh: [type:stack] [vertical:revops] ai-outbound-prospecting-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03)
+- refresh: [type:stack] [vertical:revops] ai-sdr-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-28)
+- refresh: [type:stack] [vertical:revops] conversation-intelligence-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03)
+- refresh: [type:stack] [vertical:revops] customer-success-expansion-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03)
+- refresh: [type:stack] [vertical:revops] gtm-engineering-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-23)
+- refresh: [type:stack] [vertical:legal-ops] mid-market-legal-ops-stack — cascade (harvey refreshed 2026-07-11 > stack's last_updated 2026-05-03)
+- refresh: [type:stack] [vertical:customer-success] scaled-digital-cs-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-06-06)
 - refresh: [type:tool] [vertical:revops] amplemarket — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: amplemarket
 - refresh: [type:tool] [vertical:revops] apollo — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: apollo
 - refresh: [type:tool] [vertical:legal-ops] blackboiler — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: blackboiler
