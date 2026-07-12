@@ -1913,3 +1913,38 @@ Confidence tag: `deferred-high` = shares 2+ verticals and named/in-body (auto-in
 ### Below-floor summary (EN graph, post-insert; body-link outbound)
 
 - Outbound < floor: tools 95, comparisons 40, workflows 32, learn 4, stacks 0
+
+## 2026-07-12
+
+Auto-insert pass. Scope this run: category-A only (target name already present in body, wrap-only — safe to mirror across all 6 locales since the anchors are English proper nouns preserved in every locale). Category-B (named in relationship field but not in body — would require a synthetic sentence + 5-locale translation) was deferred as too invasive for an autonomous pass.
+
+### Auto-inserted this run (high confidence, 3 links / 2 entries)
+
+- [workflows:mcp-server-hubspot-cs] → [tools:hubspot]: wrapped `**HubSpot**` in the Stack list (cleared floor, ob 0→2). Mirrored to es, pt-BR, ja, fr, de.
+- [workflows:mcp-server-hubspot-cs] → [tools:claude]: wrapped `**Claude**` in the Stack list (cleared floor, ob 0→2). Mirrored to all 5 non-EN locales.
+- [tools:gong] → [tools:claude]: wrapped "Claude" in the Watch-outs bullet ("Claude-powered analysis"). Partial (ob 0→1, floor 3; remainder backlogged below). Mirrored to all 5 non-EN locales.
+
+### Deferred / skipped this run
+
+- `skipped-unnatural` [tools:notion] → [tools:slack]: the only in-body mention is "Slack-search archaeology" — a pain-point reference inside a compound, not a tool recommendation. Wrapping it forces an awkward anchor (`[Slack](...)-search`). Left for manual authoring; notion still ob=0, needs 3.
+- `medium` [tools:gong] → [tools:hubspot]: shares revops/customer-success, named in `integrations`, name not in body (ob 1, need 2 more).
+- `medium` [tools:gong] → [tools:salesforce]: shares revops/customer-success, named in `integrations`, name not in body (ob 1, need 2 more).
+- `medium` [tools:gong] → [tools:slack]: shares revops/customer-success, named in `integrations`, name not in body (ob 1, need 2 more).
+- `medium` [tools:chatgpt] → [tools:notion]: shares revops/legal-ops/recruiting, named in relationship field, name not in body (ob 1, need 2).
+- `medium` [tools:chatgpt] → [tools:slack]: shares revops/legal-ops/recruiting, named in relationship field, name not in body (ob 1, need 2).
+- `medium` [tools:common-room] → [tools:hubspot]: shares revops/customer-success, in `integrations`, name not in body (ob 1, need 2).
+- `medium` [tools:common-room] → [tools:salesforce]: shares revops/customer-success, in `integrations`, name not in body (ob 1, need 2).
+- `medium` [tools:fathom] → [tools:slack]: shares revops/recruiting, in `integrations`, name not in body (ob 0, need 3).
+- `medium` [tools:intercom] → [tools:slack]: shares revops/customer-success, in `integrations`, name not in body (ob 2, need 1).
+- `medium` [tools:linear] → [tools:slack]: shares revops/recruiting, in `integrations`, name not in body (ob 1, need 2).
+- `medium` [tools:linear] → [tools:zapier]: shares revops/recruiting, in `integrations`, name not in body (ob 1, need 2).
+- `medium` [tools:make] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body (ob 2, need 1).
+- `medium` [tools:make] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body (ob 2, need 1).
+- `medium` [tools:zapier] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body (ob 2, need 1).
+- `medium` [tools:zapier] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body (ob 2, need 1).
+
+### Below-floor summary (EN graph, post-insert; outbound = deduped body links + resolved cross-links)
+
+- Outbound < floor: tools 91, comparisons 40, workflows 32, learn 4, stacks 0.
+- Inbound < floor (needs OTHER entries to link in; backlog for freshness sweeps): tools 49, comparisons 157, workflows 56, learn 40, stacks 13.
+- Of the 158 outbound-under-floor entries with no high-confidence candidate: the ≥2-shared-verticals gate excludes the ~578 single-vertical entries by design — these need manual authoring or inbound backfill, not auto-links.
