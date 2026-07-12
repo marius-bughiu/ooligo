@@ -16,7 +16,7 @@ Format per item:
 
 - refresh: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03) → slug: ai-augmented-recruiting-stack
 - refresh: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03) → slug: ai-native-crm-stack
-- refresh: [type:stack] [vertical:revops] ai-outbound-prospecting-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03)
+- refresh: [type:stack] [vertical:revops] ai-outbound-prospecting-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03) → slug: ai-outbound-prospecting-stack
 - refresh: [type:stack] [vertical:revops] ai-sdr-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-28)
 - refresh: [type:stack] [vertical:revops] conversation-intelligence-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03)
 - refresh: [type:stack] [vertical:revops] customer-success-expansion-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03)
