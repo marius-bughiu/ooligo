@@ -19,7 +19,7 @@ Format per item:
 - refresh: [type:stack] [vertical:revops] ai-outbound-prospecting-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03) → slug: ai-outbound-prospecting-stack
 - refresh: [type:stack] [vertical:revops] ai-sdr-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-28) → slug: ai-sdr-stack
 - refresh: [type:stack] [vertical:revops] conversation-intelligence-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03) → slug: conversation-intelligence-stack
-- refresh: [type:stack] [vertical:revops] customer-success-expansion-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03)
+- refresh: [type:stack] [vertical:revops] customer-success-expansion-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03) → slug: customer-success-expansion-stack
 - refresh: [type:stack] [vertical:revops] gtm-engineering-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-23)
 - refresh: [type:stack] [vertical:legal-ops] mid-market-legal-ops-stack — cascade (harvey refreshed 2026-07-11 > stack's last_updated 2026-05-03)
 - refresh: [type:stack] [vertical:customer-success] scaled-digital-cs-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-06-06)
