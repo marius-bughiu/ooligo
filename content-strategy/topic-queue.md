@@ -22,7 +22,7 @@ Format per item:
 - refresh: [type:stack] [vertical:revops] customer-success-expansion-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03) → slug: customer-success-expansion-stack
 - refresh: [type:stack] [vertical:revops] gtm-engineering-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-23) → slug: gtm-engineering-stack
 - refresh: [type:stack] [vertical:legal-ops] mid-market-legal-ops-stack — cascade (harvey refreshed 2026-07-11 > stack's last_updated 2026-05-03) → slug: mid-market-legal-ops-stack
-- refresh: [type:stack] [vertical:customer-success] scaled-digital-cs-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-06-06)
+- refresh: [type:stack] [vertical:customer-success] scaled-digital-cs-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-06-06) → slug: scaled-digital-cs-stack
 - refresh: [type:tool] [vertical:revops] amplemarket — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: amplemarket
 - refresh: [type:tool] [vertical:revops] apollo — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: apollo
 - refresh: [type:tool] [vertical:legal-ops] blackboiler — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: blackboiler
