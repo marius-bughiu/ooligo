@@ -10,10 +10,11 @@ Format per item:
 
 `refresh:` items live in the top `## Refresh queue` section, prepended by the weekly freshness sweep. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-07-12`
+`last-swept: 2026-07-19`
 
 ## Refresh queue
 
+- refresh: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (juicebox refreshed 2026-07-18 > stack's last_updated 2026-07-12)
 - refresh: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03) → slug: ai-augmented-recruiting-stack
 - refresh: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03) → slug: ai-native-crm-stack
 - refresh: [type:stack] [vertical:revops] ai-outbound-prospecting-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03) → slug: ai-outbound-prospecting-stack
