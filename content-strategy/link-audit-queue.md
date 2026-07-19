@@ -1948,3 +1948,299 @@ Auto-insert pass. Scope this run: category-A only (target name already present i
 - Outbound < floor: tools 91, comparisons 40, workflows 32, learn 4, stacks 0.
 - Inbound < floor (needs OTHER entries to link in; backlog for freshness sweeps): tools 49, comparisons 157, workflows 56, learn 40, stacks 13.
 - Of the 158 outbound-under-floor entries with no high-confidence candidate: the ≥2-shared-verticals gate excludes the ~578 single-vertical entries by design — these need manual authoring or inbound backfill, not auto-links.
+
+## 2026-07-19
+
+Auto-insert pass. Scope this run: high-confidence wrap-only — the target's proper name already appears verbatim and unlinked in the source body, and that same English proper noun is preserved across all 6 locales (deterministic mirror). Candidates were gated to unambiguous names in natural context, prioritized to entries a single/dual insert clears to floor, capped at 3/entry and 2/target/run. Bounded to 45 EN links this run; the larger in-body backlog is listed under deferred-high for subsequent runs. Ambiguous-name and not-in-body (relationship-field) candidates were deferred rather than auto-inserted.
+
+### Auto-inserted this run (high confidence): 45 EN links across 37 entries (225 locale mirrors)
+
+- [comparisons:alternatives-to-cursor] → [tools:claude]: wrapped verbatim "Claude" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:apollo-vs-outreach] → [tools:sales-navigator]: wrapped verbatim "LinkedIn Sales Navigator" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:apollo-vs-salesloft] → [tools:drift]: wrapped verbatim "Drift" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:ashby-vs-lever] → [tools:ashby]: wrapped verbatim "Ashby" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:casetext-vs-lexisnexis-protege] → [tools:thomson-reuters-cocounsel]: wrapped verbatim "Thomson Reuters CoCounsel" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:claude-vs-perplexity] → [tools:zoominfo]: wrapped verbatim "ZoomInfo" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:greenhouse-vs-lever] → [tools:greenhouse]: wrapped verbatim "Greenhouse" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:harvey-vs-lexisnexis-protege] → [tools:harvey]: wrapped verbatim "Harvey" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:holly-vs-hireez] → [tools:icims]: wrapped verbatim "iCIMS" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:hubspot-vs-attio] → [tools:hubspot]: wrapped verbatim "HubSpot" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:ironclad-vs-juro] → [tools:ironclad]: wrapped verbatim "Ironclad" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:ironclad-vs-linksquares] → [tools:ironclad]: wrapped verbatim "Ironclad" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:metaview-vs-fathom] → [tools:lever]: wrapped verbatim "Lever" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:outreach-vs-default] → [tools:outreach]: wrapped verbatim "Outreach" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [learn:csat] → [tools:freshdesk]: wrapped verbatim "Freshdesk" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [learn:expansion-revenue] → [tools:churnzero]: wrapped verbatim "ChurnZero" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:aviso] → [tools:salesforce]: wrapped verbatim "Salesforce" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:goodtime] → [tools:calendly]: wrapped verbatim "Calendly" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:hackerrank] → [tools:chatgpt]: wrapped verbatim "ChatGPT" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:intercom] → [tools:zendesk]: wrapped verbatim "Zendesk" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:leandata] → [tools:salesforce]: wrapped verbatim "Salesforce" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:rb2b] → [tools:hubspot]: wrapped verbatim "HubSpot" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:vidyard] → [tools:calendly]: wrapped verbatim "Calendly" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [workflows:customer-health-digest-prompt] → [tools:churnzero]: wrapped verbatim "ChurnZero" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [workflows:matter-status-digest-claude] → [tools:brightflag]: wrapped verbatim "Brightflag" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [workflows:ticket-deflection-agent-template] → [tools:zendesk]: wrapped verbatim "Zendesk" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:gong-vs-chorus] → [tools:gong]: wrapped verbatim "Gong" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:gong-vs-chorus] → [tools:chorus]: wrapped verbatim "Chorus" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:gong-vs-fathom] → [tools:fathom]: wrapped verbatim "Fathom" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:gong-vs-fathom] → [tools:gong]: wrapped verbatim "Gong" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:hireez-vs-findem] → [tools:hireez]: wrapped verbatim "hireEZ" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:linksquares-vs-contractpodai] → [tools:contractpodai]: wrapped verbatim "ContractPodAi" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:linksquares-vs-contractpodai] → [tools:linksquares]: wrapped verbatim "LinkSquares" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:linksquares-vs-juro] → [tools:linksquares]: wrapped verbatim "LinkSquares" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:regie-ai-vs-outreach] → [tools:outreach]: wrapped verbatim "Outreach" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [comparisons:regie-ai-vs-outreach] → [tools:regie-ai]: wrapped verbatim "Regie.ai" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [learn:what-is-revops] → [tools:cursor]: wrapped verbatim "Cursor" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [learn:what-is-revops] → [tools:zapier]: wrapped verbatim "Zapier" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:eve-legal] → [tools:evenup]: wrapped verbatim "EvenUp" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:maki-people] → [tools:testgorilla]: wrapped verbatim "TestGorilla" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:maki-people] → [tools:lever]: wrapped verbatim "Lever" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:pillar] → [tools:jobvite]: wrapped verbatim "Jobvite" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [tools:pillar] → [tools:smartrecruiters]: wrapped verbatim "SmartRecruiters" in body (floor 3). Mirrored to es, pt-BR, ja, fr, de.
+- [workflows:cursor-rules-gtm-engineer] → [tools:smartlead]: wrapped verbatim "Smartlead" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+- [workflows:cursor-rules-gtm-engineer] → [tools:cursor]: wrapped verbatim "Cursor" in body (floor 2). Mirrored to es, pt-BR, ja, fr, de.
+
+### Partial — advanced but not cleared (3 entries)
+
+- [comparisons:hireez-vs-findem]: advanced but still below floor (ob=1, floor=2); remaining candidate(s) were ambiguous-name or hit the per-target cap-2 — see deferred-high below.
+- [comparisons:linksquares-vs-juro]: advanced but still below floor (ob=1, floor=2); remaining candidate(s) were ambiguous-name or hit the per-target cap-2 — see deferred-high below.
+- [tools:eve-legal]: advanced but still below floor (ob=2, floor=3); remaining candidate(s) were ambiguous-name or hit the per-target cap-2 — see deferred-high below.
+
+### Deferred to a future run (high confidence in principle — name in body, unlinked; not inserted due to the 45-link run cap, per-target cap-2, or an ambiguous name needing context review)
+
+- `deferred-high` [tools:6sense] → [tools:demandbase]: name in body, unlinked (src ob below floor, "Demandbase" x1)
+- `deferred-high` [tools:agiloft] → [tools:ironclad]: name in body, unlinked (src ob below floor, "Ironclad" x4)
+- `deferred-high-ambig` [tools:agiloft] → [tools:concord]: verify tool-context before wrap (src ob below floor, "Concord" x1)
+- `deferred-high` [tools:apriora] → [tools:hirevue]: name in body, unlinked (src ob below floor, "HireVue" x4)
+- `deferred-high` [tools:apriora] → [tools:ashby]: name in body, unlinked (src ob below floor, "Ashby" x1)
+- `deferred-high` [tools:ashby] → [tools:greenhouse]: name in body, unlinked (src ob below floor, "Greenhouse" x7)
+- `deferred-high-ambig` [tools:ashby] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x2)
+- `deferred-high` [tools:attio] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x3)
+- `deferred-high` [tools:attio] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x3)
+- `deferred-high-ambig` [tools:brightflag] → [tools:onit]: verify tool-context before wrap (src ob below floor, "Onit" x3)
+- `deferred-high` [tools:brightflag] → [tools:ironclad]: name in body, unlinked (src ob below floor, "Ironclad" x1)
+- `deferred-high` [tools:casetext] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x2)
+- `deferred-high` [tools:casetext] → [tools:spellbook]: name in body, unlinked (src ob below floor, "Spellbook" x2)
+- `deferred-high` [tools:chameleon] → [tools:catalyst]: name in body, unlinked (src ob below floor, "Catalyst" x2)
+- `deferred-high` [tools:chameleon] → [tools:gainsight]: name in body, unlinked (src ob below floor, "Gainsight" x2)
+- `deferred-high` [tools:chili-piper] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x6)
+- `deferred-high` [tools:chili-piper] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x5)
+- `deferred-high` [tools:chorus] → [tools:zoominfo]: name in body, unlinked (src ob below floor, "ZoomInfo" x8)
+- `deferred-high` [tools:chorus] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x2)
+- `deferred-high` [tools:common-room] → [tools:usergems]: name in body, unlinked (src ob below floor, "UserGems" x1)
+- `deferred-high` [tools:conga-clm] → [tools:agiloft]: name in body, unlinked (src ob below floor, "Agiloft" x2)
+- `deferred-high` [tools:conga-clm] → [tools:ironclad]: name in body, unlinked (src ob below floor, "Ironclad" x2)
+- `deferred-high` [tools:crossbeam] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x2)
+- `deferred-high` [tools:crossbeam] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x2)
+- `deferred-high` [tools:custify] → [tools:gainsight]: name in body, unlinked (src ob below floor, "Gainsight" x4)
+- `deferred-high` [tools:custify] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x2)
+- `deferred-high` [tools:decagon] → [tools:intercom]: name in body, unlinked (src ob below floor, "Intercom" x3)
+- `deferred-high` [tools:decagon] → [tools:gainsight]: name in body, unlinked (src ob below floor, "Gainsight" x2)
+- `deferred-high` [tools:delighted] → [tools:catalyst]: name in body, unlinked (src ob below floor, "Catalyst" x2)
+- `deferred-high` [tools:delighted] → [tools:gainsight]: name in body, unlinked (src ob below floor, "Gainsight" x2)
+- `deferred-high` [tools:demandbase] → [tools:6sense]: name in body, unlinked (src ob below floor, "6sense" x4)
+- `deferred-high` [tools:demandbase] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x1)
+- `deferred-high` [tools:drift] → [tools:salesloft]: name in body, unlinked (src ob below floor, "Salesloft" x6)
+- `deferred-high-ambig` [tools:drift] → [tools:default]: verify tool-context before wrap (src ob below floor, "Default" x2)
+- `deferred-high-ambig` [tools:eightfold] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x1)
+- `deferred-high` [tools:eightfold] → [tools:hireez]: name in body, unlinked (src ob below floor, "hireEZ" x1)
+- `deferred-high-ambig` [tools:eve-legal] → [tools:supio]: verify tool-context before wrap (src ob below floor, "Supio" x2)
+- `deferred-high` [tools:eve-legal] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x1)
+- `deferred-high-ambig` [tools:evenup] → [tools:supio]: verify tool-context before wrap (src ob below floor, "Supio" x2)
+- `deferred-high-ambig` [tools:everlaw] → [tools:relativity]: verify tool-context before wrap (src ob below floor, "Relativity" x5)
+- `deferred-high` [tools:everlaw] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x1)
+- `deferred-high` [tools:fathom] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x3)
+- `deferred-high` [tools:fathom] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x2)
+- `deferred-high-ambig` [tools:fetcher] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x2)
+- `deferred-high` [tools:fetcher] → [tools:hireez]: name in body, unlinked (src ob below floor, "hireEZ" x2)
+- `deferred-high-ambig` [tools:findem] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x1)
+- `deferred-high` [tools:findem] → [tools:seekout]: name in body, unlinked (src ob below floor, "SeekOut" x1)
+- `deferred-high` [tools:front] → [tools:intercom]: name in body, unlinked (src ob below floor, "Intercom" x2)
+- `deferred-high` [tools:front] → [tools:zendesk]: name in body, unlinked (src ob below floor, "Zendesk" x2)
+- `deferred-high` [tools:gem] → [tools:greenhouse]: name in body, unlinked (src ob below floor, "Greenhouse" x2)
+- `deferred-high` [tools:gem] → [tools:ashby]: name in body, unlinked (src ob below floor, "Ashby" x1)
+- `deferred-high` [tools:gong] → [tools:fathom]: name in body, unlinked (src ob below floor, "Fathom" x1)
+- `deferred-high` [tools:greenhouse] → [tools:ashby]: name in body, unlinked (src ob below floor, "Ashby" x1)
+- `deferred-high-ambig` [tools:harvey] → [tools:legora]: verify tool-context before wrap (src ob below floor, "Legora" x2)
+- `deferred-high` [tools:harvey] → [tools:spellbook]: name in body, unlinked (src ob below floor, "Spellbook" x2)
+- `deferred-high` [tools:heap] → [tools:catalyst]: name in body, unlinked (src ob below floor, "Catalyst" x2)
+- `deferred-high` [tools:heap] → [tools:gainsight]: name in body, unlinked (src ob below floor, "Gainsight" x2)
+- `deferred-high` [tools:hebbia] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x3)
+- `deferred-high` [tools:hebbia] → [tools:draftwise]: name in body, unlinked (src ob below floor, "DraftWise" x2)
+- `deferred-high` [tools:help-scout] → [tools:zendesk]: name in body, unlinked (src ob below floor, "Zendesk" x4)
+- `deferred-high` [tools:help-scout] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x3)
+- `deferred-high-ambig` [tools:hireez] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x4)
+- `deferred-high` [tools:hireez] → [tools:seekout]: name in body, unlinked (src ob below floor, "SeekOut" x2)
+- `deferred-high` [tools:icertis] → [tools:ironclad]: name in body, unlinked (src ob below floor, "Ironclad" x2)
+- `deferred-high` [tools:icertis] → [tools:sirionlabs]: name in body, unlinked (src ob below floor, "SirionLabs" x2)
+- `deferred-high` [tools:instantly] → [tools:smartlead]: name in body, unlinked (src ob below floor, "Smartlead" x8)
+- `deferred-high` [tools:instantly] → [tools:apollo]: name in body, unlinked (src ob below floor, "Apollo" x3)
+- `deferred-high` [tools:ironclad] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x2)
+- `deferred-high` [tools:ironclad] → [tools:linksquares]: name in body, unlinked (src ob below floor, "LinkSquares" x2)
+- `deferred-high-ambig` [tools:kira-systems] → [tools:litera]: verify tool-context before wrap (src ob below floor, "Litera" x9)
+- `deferred-high` [tools:kira-systems] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x2)
+- `deferred-high` [tools:kustomer] → [tools:zendesk]: name in body, unlinked (src ob below floor, "Zendesk" x4)
+- `deferred-high` [tools:kustomer] → [tools:intercom]: name in body, unlinked (src ob below floor, "Intercom" x3)
+- `deferred-high` [tools:lever] → [tools:greenhouse]: name in body, unlinked (src ob below floor, "Greenhouse" x5)
+- `deferred-high` [tools:lever] → [tools:ashby]: name in body, unlinked (src ob below floor, "Ashby" x4)
+- `deferred-high` [tools:lexisnexis-protege] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x1)
+- `deferred-high-ambig` [tools:linksquares] → [tools:slack]: verify tool-context before wrap (src ob below floor, "Slack" x1)
+- `deferred-high-ambig` [tools:logikcull] → [tools:relativity]: verify tool-context before wrap (src ob below floor, "Relativity" x3)
+- `deferred-high-ambig` [tools:logikcull] → [tools:reveal]: verify tool-context before wrap (src ob below floor, "Reveal" x1)
+- `deferred-high` [tools:luminance] → [tools:spellbook]: name in body, unlinked (src ob below floor, "Spellbook" x2)
+- `deferred-high` [tools:luminance] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x1)
+- `deferred-high` [tools:metaview] → [tools:ashby]: name in body, unlinked (src ob below floor, "Ashby" x3)
+- `deferred-high` [tools:metaview] → [tools:greenhouse]: name in body, unlinked (src ob below floor, "Greenhouse" x3)
+- `deferred-high-ambig` [tools:micro1] → [tools:mercor]: verify tool-context before wrap (src ob below floor, "Mercor" x3)
+- `deferred-high` [tools:micro1] → [tools:codesignal]: name in body, unlinked (src ob below floor, "CodeSignal" x2)
+- `deferred-high` [tools:nooks] → [tools:orum]: name in body, unlinked (src ob below floor, "Orum" x8)
+- `deferred-high` [tools:nooks] → [tools:outreach]: name in body, unlinked (src ob below floor, "Outreach" x2)
+- `deferred-high-ambig` [tools:notion] → [tools:slack]: verify tool-context before wrap (src ob below floor, "Slack" x1)
+- `deferred-high` [tools:onit] → [tools:brightflag]: name in body, unlinked (src ob below floor, "Brightflag" x5)
+- `deferred-high` [tools:orum] → [tools:nooks]: name in body, unlinked (src ob below floor, "Nooks" x4)
+- `deferred-high` [tools:orum] → [tools:apollo]: name in body, unlinked (src ob below floor, "Apollo" x1)
+- `deferred-high` [tools:outreach] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x2)
+- `deferred-high` [tools:outreach] → [tools:apollo]: name in body, unlinked (src ob below floor, "Apollo" x1)
+- `deferred-high-ambig` [tools:paradox] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x1)
+- `deferred-high` [tools:paradox] → [tools:icims]: name in body, unlinked (src ob below floor, "iCIMS" x1)
+- `deferred-high` [tools:productboard] → [tools:catalyst]: name in body, unlinked (src ob below floor, "Catalyst" x1)
+- `deferred-high` [tools:productboard] → [tools:churnzero]: name in body, unlinked (src ob below floor, "ChurnZero" x1)
+- `deferred-high-ambig` [tools:pylon] → [tools:slack]: verify tool-context before wrap (src ob below floor, "Slack" x4)
+- `deferred-high` [tools:pylon] → [tools:zendesk]: name in body, unlinked (src ob below floor, "Zendesk" x4)
+- `deferred-high` [tools:rattle] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x16)
+- `deferred-high-ambig` [tools:rattle] → [tools:slack]: verify tool-context before wrap (src ob below floor, "Slack" x14)
+- `deferred-high` [tools:regie-ai] → [tools:outreach]: name in body, unlinked (src ob below floor, "Outreach" x4)
+- `deferred-high` [tools:regie-ai] → [tools:salesloft]: name in body, unlinked (src ob below floor, "Salesloft" x3)
+- `deferred-high` [tools:relativity] → [tools:logikcull]: name in body, unlinked (src ob below floor, "Logikcull" x1)
+- `deferred-high` [tools:relativity] → [learn:ediscovery]: name in body, unlinked (src ob below floor, "eDiscovery" x1)
+- `deferred-high` [tools:rocketlane] → [tools:gainsight]: name in body, unlinked (src ob below floor, "Gainsight" x2)
+- `deferred-high` [tools:rocketlane] → [tools:vitally]: name in body, unlinked (src ob below floor, "Vitally" x2)
+- `deferred-high` [tools:rollworks] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x4)
+- `deferred-high-ambig` [tools:rollworks] → [tools:default]: verify tool-context before wrap (src ob below floor, "Default" x1)
+- `deferred-high` [tools:salesloft] → [tools:outreach]: name in body, unlinked (src ob below floor, "Outreach" x7)
+- `deferred-high` [tools:salesloft] → [tools:drift]: name in body, unlinked (src ob below floor, "Drift" x5)
+- `deferred-high-ambig` [tools:sapia-ai] → [tools:paradox]: verify tool-context before wrap (src ob below floor, "Paradox" x5)
+- `deferred-high` [tools:sapia-ai] → [tools:hirevue]: name in body, unlinked (src ob below floor, "HireVue" x3)
+- `deferred-high` [tools:seekout] → [tools:hireez]: name in body, unlinked (src ob below floor, "hireEZ" x4)
+- `deferred-high-ambig` [tools:seekout] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x3)
+- `deferred-high` [tools:sense] → [tools:bullhorn]: name in body, unlinked (src ob below floor, "Bullhorn" x3)
+- `deferred-high-ambig` [tools:sense] → [tools:paradox]: verify tool-context before wrap (src ob below floor, "Paradox" x3)
+- `deferred-high` [tools:sirionlabs] → [tools:icertis]: name in body, unlinked (src ob below floor, "Icertis" x3)
+- `deferred-high` [tools:sirionlabs] → [tools:ironclad]: name in body, unlinked (src ob below floor, "Ironclad" x2)
+- `deferred-high` [tools:smartkarrot] → [tools:gainsight]: name in body, unlinked (src ob below floor, "Gainsight" x5)
+- `deferred-high` [tools:smartkarrot] → [tools:pendo]: name in body, unlinked (src ob below floor, "Pendo" x2)
+- `deferred-high` [tools:smartlead] → [tools:apollo]: name in body, unlinked (src ob below floor, "Apollo" x4)
+- `deferred-high` [tools:smartlead] → [tools:clay]: name in body, unlinked (src ob below floor, "Clay" x4)
+- `deferred-high` [tools:spellbook] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x2)
+- `deferred-high` [tools:spellbook] → [tools:contractpodai]: name in body, unlinked (src ob below floor, "ContractPodAi" x1)
+- `deferred-high` [tools:thomson-reuters-cocounsel] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x2)
+- `deferred-high` [tools:thomson-reuters-cocounsel] → [tools:spellbook]: name in body, unlinked (src ob below floor, "Spellbook" x2)
+- `deferred-high` [tools:userflow] → [tools:pendo]: name in body, unlinked (src ob below floor, "Pendo" x3)
+- `deferred-high` [tools:userflow] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x2)
+- `deferred-high` [tools:userpilot] → [tools:pendo]: name in body, unlinked (src ob below floor, "Pendo" x3)
+- `deferred-high` [tools:userpilot] → [tools:amplitude]: name in body, unlinked (src ob below floor, "Amplitude" x2)
+- `deferred-high` [tools:zendesk] → [tools:intercom]: name in body, unlinked (src ob below floor, "Intercom" x4)
+- `deferred-high` [tools:zendesk] → [tools:gainsight]: name in body, unlinked (src ob below floor, "Gainsight" x2)
+- `deferred-high` [tools:zoominfo] → [tools:apollo]: name in body, unlinked (src ob below floor, "Apollo" x1)
+- `deferred-high` [tools:zoominfo] → [tools:chorus]: name in body, unlinked (src ob below floor, "Chorus" x1)
+- `deferred-high` [comparisons:alternatives-to-casetext] → [tools:lexisnexis-protege]: name in body, unlinked (src ob below floor, "LexisNexis Protégé" x1)
+- `deferred-high` [comparisons:alternatives-to-casetext] → [tools:thomson-reuters-cocounsel]: name in body, unlinked (src ob below floor, "Thomson Reuters CoCounsel" x1)
+- `deferred-high` [comparisons:alternatives-to-spellbook] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x6)
+- `deferred-high` [comparisons:alternatives-to-spellbook] → [tools:thomson-reuters-cocounsel]: name in body, unlinked (src ob below floor, "Thomson Reuters CoCounsel" x1)
+- `deferred-high` [comparisons:apollo-vs-zoominfo] → [tools:apollo]: name in body, unlinked (src ob below floor, "Apollo" x15)
+- `deferred-high` [comparisons:apollo-vs-zoominfo] → [tools:chorus]: name in body, unlinked (src ob below floor, "Chorus" x1)
+- `deferred-high` [comparisons:ashby-vs-greenhouse] → [tools:greenhouse]: name in body, unlinked (src ob below floor, "Greenhouse" x13)
+- `deferred-high` [comparisons:ashby-vs-greenhouse] → [tools:ashby]: name in body, unlinked (src ob below floor, "Ashby" x11)
+- `deferred-high` [comparisons:clay-vs-apollo] → [tools:apollo]: name in body, unlinked (src ob below floor, "Apollo" x13)
+- `deferred-high` [comparisons:clay-vs-apollo] → [tools:clay]: name in body, unlinked (src ob below floor, "Clay" x13)
+- `deferred-high` [comparisons:clay-vs-zoominfo] → [tools:zoominfo]: name in body, unlinked (src ob below floor, "ZoomInfo" x16)
+- `deferred-high` [comparisons:clay-vs-zoominfo] → [tools:clay]: name in body, unlinked (src ob below floor, "Clay" x13)
+- `deferred-high-ambig` [comparisons:everlaw-vs-relativity] → [tools:everlaw]: verify tool-context before wrap (src ob below floor, "Everlaw" x12)
+- `deferred-high` [comparisons:everlaw-vs-relativity] → [learn:ediscovery]: name in body, unlinked (src ob below floor, "eDiscovery" x1)
+- `deferred-high-ambig` [comparisons:gem-vs-findem] → [tools:findem]: verify tool-context before wrap (src ob below floor, "Findem" x15)
+- `deferred-high-ambig` [comparisons:gem-vs-findem] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x13)
+- `deferred-high` [comparisons:gem-vs-hireez] → [tools:hireez]: name in body, unlinked (src ob below floor, "hireEZ" x13)
+- `deferred-high-ambig` [comparisons:gem-vs-hireez] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x12)
+- `deferred-high` [comparisons:harvey-vs-casetext] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x13)
+- `deferred-high` [comparisons:harvey-vs-spellbook] → [tools:harvey]: name in body, unlinked (src ob below floor, "Harvey" x15)
+- `deferred-high` [comparisons:harvey-vs-spellbook] → [tools:spellbook]: name in body, unlinked (src ob below floor, "Spellbook" x11)
+- `deferred-high-ambig` [comparisons:hireez-vs-findem] → [tools:findem]: verify tool-context before wrap (src ob below floor, "Findem" x11)
+- `deferred-high` [comparisons:hubspot-vs-salesforce] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x17)
+- `deferred-high` [comparisons:hubspot-vs-salesforce] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x10)
+- `deferred-high` [comparisons:ironclad-vs-docusign-iam] → [tools:ironclad]: name in body, unlinked (src ob below floor, "Ironclad" x21)
+- `deferred-high-ambig` [comparisons:ironclad-vs-docusign-iam] → [tools:concord]: verify tool-context before wrap (src ob below floor, "Concord" x1)
+- `deferred-high-ambig` [comparisons:linksquares-vs-juro] → [tools:juro]: verify tool-context before wrap (src ob below floor, "Juro" x11)
+- `deferred-high` [comparisons:linksquares-vs-juro] → [tools:ironclad]: name in body, unlinked (src ob below floor, "Ironclad" x2)
+- `deferred-high` [comparisons:outreach-vs-salesloft] → [tools:outreach]: name in body, unlinked (src ob below floor, "Outreach" x13)
+- `deferred-high` [comparisons:outreach-vs-salesloft] → [tools:salesloft]: name in body, unlinked (src ob below floor, "Salesloft" x11)
+- `deferred-high-ambig` [comparisons:relativity-vs-logikcull] → [tools:relativity]: verify tool-context before wrap (src ob below floor, "Relativity" x17)
+- `deferred-high-ambig` [comparisons:relativity-vs-logikcull] → [tools:reveal]: verify tool-context before wrap (src ob below floor, "Reveal" x1)
+- `deferred-high` [comparisons:salesforce-vs-attio] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x14)
+- `deferred-high` [comparisons:salesforce-vs-attio] → [tools:attio]: name in body, unlinked (src ob below floor, "Attio" x8)
+- `deferred-high-ambig` [comparisons:salesloft-vs-default] → [tools:default]: verify tool-context before wrap (src ob below floor, "Default" x11)
+- `deferred-high` [comparisons:salesloft-vs-default] → [tools:salesloft]: name in body, unlinked (src ob below floor, "Salesloft" x11)
+- `deferred-high` [comparisons:spellbook-vs-casetext] → [tools:spellbook]: name in body, unlinked (src ob below floor, "Spellbook" x10)
+- `deferred-high` [comparisons:spellbook-vs-casetext] → [tools:thomson-reuters-cocounsel]: name in body, unlinked (src ob below floor, "Thomson Reuters CoCounsel" x1)
+- `deferred-high` [workflows:account-research-claude-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x8)
+- `deferred-high` [workflows:account-research-claude-skill] → [tools:apollo]: name in body, unlinked (src ob below floor, "Apollo" x3)
+- `deferred-high` [workflows:activity-summarizer-skill] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x14)
+- `deferred-high` [workflows:activity-summarizer-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x12)
+- `deferred-high` [workflows:ae-rep-coaching-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x14)
+- `deferred-high` [workflows:ae-rep-coaching-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x4)
+- `deferred-high` [workflows:candidate-personalization-at-scale-skill] → [tools:clay]: name in body, unlinked (src ob below floor, "Clay" x5)
+- `deferred-high-ambig` [workflows:candidate-personalization-at-scale-skill] → [tools:gem]: verify tool-context before wrap (src ob below floor, "Gem" x5)
+- `deferred-high` [workflows:competitive-battlecard-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x8)
+- `deferred-high` [workflows:competitive-battlecard-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x5)
+- `deferred-high-ambig` [workflows:competitive-intel-tracker-n8n] → [tools:slack]: verify tool-context before wrap (src ob below floor, "Slack" x16)
+- `deferred-high` [workflows:competitive-intel-tracker-n8n] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x12)
+- `deferred-high-ambig` [workflows:deal-room-generator-skill] → [tools:notion]: verify tool-context before wrap (src ob below floor, "Notion" x5)
+- `deferred-high` [workflows:deal-room-generator-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x3)
+- `deferred-high` [workflows:demo-no-show-recovery-n8n] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x18)
+- `deferred-high` [workflows:demo-no-show-recovery-n8n] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x10)
+- `deferred-high` [workflows:escalation-rca-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x14)
+- `deferred-high` [workflows:escalation-rca-skill] → [tools:zendesk]: name in body, unlinked (src ob below floor, "Zendesk" x13)
+- `deferred-high` [workflows:forecast-meeting-prep-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x4)
+- `deferred-high` [workflows:forecast-meeting-prep-skill] → [tools:clari]: name in body, unlinked (src ob below floor, "Clari" x3)
+- `deferred-high` [workflows:forecast-narrative-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x17)
+- `deferred-high` [workflows:forecast-narrative-skill] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x17)
+- `deferred-high` [workflows:icp-account-list-builder-clay] → [tools:clay]: name in body, unlinked (src ob below floor, "Clay" x26)
+- `deferred-high` [workflows:icp-account-list-builder-clay] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x13)
+- `deferred-high` [workflows:inbound-lead-triage-n8n] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x17)
+- `deferred-high` [workflows:inbound-lead-triage-n8n] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x15)
+- `deferred-high` [workflows:lead-enrichment-clay-claude] → [tools:clay]: name in body, unlinked (src ob below floor, "Clay" x14)
+- `deferred-high` [workflows:lead-enrichment-clay-claude] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x7)
+- `deferred-high` [workflows:lead-scoring-icp-rubric-skill] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x12)
+- `deferred-high` [workflows:lead-scoring-icp-rubric-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x5)
+- `deferred-high` [workflows:lost-deal-postmortem-claude-skill] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x22)
+- `deferred-high` [workflows:lost-deal-postmortem-claude-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x20)
+- `deferred-high` [workflows:mcp-server-salesforce-revops] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x24)
+- `deferred-high` [workflows:mcp-server-salesforce-revops] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x14)
+- `deferred-high` [workflows:nps-verbatim-triage-skill] → [tools:delighted]: name in body, unlinked (src ob below floor, "Delighted" x11)
+- `deferred-high` [workflows:nps-verbatim-triage-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x8)
+- `deferred-high` [workflows:onboarding-plan-generator-skill] → [tools:rocketlane]: name in body, unlinked (src ob below floor, "Rocketlane" x20)
+- `deferred-high` [workflows:onboarding-plan-generator-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x7)
+- `deferred-high` [workflows:pipeline-review-prompt-pack] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x6)
+- `deferred-high` [workflows:rep-onboarding-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x7)
+- `deferred-high-ambig` [workflows:rep-onboarding-skill] → [tools:notion]: verify tool-context before wrap (src ob below floor, "Notion" x7)
+- `deferred-high` [workflows:sales-to-cs-handoff-sop] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x16)
+- `deferred-high-ambig` [workflows:sales-to-cs-handoff-sop] → [tools:slack]: verify tool-context before wrap (src ob below floor, "Slack" x9)
+- `deferred-high` [workflows:salesforce-data-cleanup-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x5)
+- `deferred-high` [workflows:salesforce-data-cleanup-skill] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x4)
+- `deferred-high` [workflows:stage-progression-validator-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x15)
+- `deferred-high` [workflows:stage-progression-validator-skill] → [tools:salesforce]: name in body, unlinked (src ob below floor, "Salesforce" x12)
+- `deferred-high` [workflows:upsell-signal-detector-skill] → [tools:gong]: name in body, unlinked (src ob below floor, "Gong" x17)
+- `deferred-high` [workflows:upsell-signal-detector-skill] → [tools:pendo]: name in body, unlinked (src ob below floor, "Pendo" x15)
+- `deferred-high` [workflows:voice-of-customer-synthesis-skill] → [tools:canny]: name in body, unlinked (src ob below floor, "Canny" x15)
+- `deferred-high` [workflows:voice-of-customer-synthesis-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x8)
+- `deferred-high` [workflows:webhook-handler-hubspot-n8n] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x39)
+- `deferred-high` [workflows:webhook-handler-hubspot-n8n] → [tools:n8n]: name in body, unlinked (src ob below floor, "n8n" x25)
+- `deferred-high` [workflows:weekly-pipeline-report-skill] → [tools:hubspot]: name in body, unlinked (src ob below floor, "HubSpot" x13)
+- `deferred-high` [workflows:weekly-pipeline-report-skill] → [tools:claude]: name in body, unlinked (src ob below floor, "Claude" x6)
+
+### Below-floor summary (EN graph, post-insert; outbound = deduped body links only, matching prior runs)
+
+- Outbound < floor: tools 82, comparisons 22, workflows 28, learn 1, stacks 0.
+- Inbound < floor (needs OTHER entries to link in; backlog for freshness sweeps): tools 48, comparisons 157, workflows 55, learn 39, stacks 11.
+- Medium-confidence candidates (shares ≥1 vertical, named in a relationship field, name NOT in body) are regenerated each run and not enumerated here — they require a synthetic sentence + 5-locale translation and remain out of autonomous scope.
+- The remaining single-vertical outbound-under-floor tools have no ≥2-shared-vertical high-confidence target and no in-body mention to wrap; they need manual authoring or inbound backfill, not auto-links.
