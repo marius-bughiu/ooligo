@@ -40,7 +40,7 @@ Format per item:
 - refresh: [type:tool] [vertical:legal-ops] kira-systems — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: kira-systems
 - refresh: [type:tool] [vertical:legal-ops] lawgeex — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
 - refresh: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: lexisnexis-protege
-- refresh: [type:tool] [vertical:legal-ops] luminance — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] luminance — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: luminance
 - refresh: [type:tool] [vertical:revops] lusha — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
 - refresh: [type:tool] [vertical:recruiting] mercor — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
 - refresh: [type:tool] [vertical:revops] outreach — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
