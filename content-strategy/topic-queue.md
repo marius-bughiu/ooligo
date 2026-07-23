@@ -45,7 +45,7 @@ Format per item:
 - refresh: [type:tool] [vertical:recruiting] mercor — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: mercor
 - refresh: [type:tool] [vertical:revops] outreach — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: outreach
 - refresh: [type:tool] [vertical:recruiting] paradox — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: paradox
-- refresh: [type:tool] [vertical:revops] perplexity — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:revops] perplexity — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: perplexity
 - refresh: [type:tool] [vertical:revops] rattle — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
 - refresh: [type:tool] [vertical:revops] regie-ai — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
 - refresh: [type:tool] [vertical:revops] sales-navigator — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
