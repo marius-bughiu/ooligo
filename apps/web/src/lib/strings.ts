@@ -34,6 +34,7 @@ export type ChromeStrings = {
     company: string;
     about: string;
     contact: string;
+    advertise: string;
     privacy: string;
     terms: string;
     subscribe_heading: string;
@@ -93,6 +94,7 @@ const en: ChromeStrings = {
     company: "Company",
     about: "About",
     contact: "Contact",
+    advertise: "Advertise",
     privacy: "Privacy",
     terms: "Terms",
     subscribe_heading: "Get the briefing",
@@ -153,6 +155,7 @@ const es: ChromeStrings = {
     company: "Empresa",
     about: "Sobre",
     contact: "Contacto",
+    advertise: "Publicidad",
     privacy: "Privacidad",
     terms: "Términos",
     subscribe_heading: "Recibe el briefing",
@@ -213,6 +216,7 @@ const ptBR: ChromeStrings = {
     company: "Empresa",
     about: "Sobre",
     contact: "Contato",
+    advertise: "Anuncie",
     privacy: "Privacidade",
     terms: "Termos",
     subscribe_heading: "Receba o briefing",
@@ -273,6 +277,7 @@ const ja: ChromeStrings = {
     company: "運営者",
     about: "サイトについて",
     contact: "お問い合わせ",
+    advertise: "広告掲載",
     privacy: "プライバシー",
     terms: "利用規約",
     subscribe_heading: "ブリーフィングを受け取る",
@@ -333,6 +338,7 @@ const fr: ChromeStrings = {
     company: "Éditeur",
     about: "À propos",
     contact: "Contact",
+    advertise: "Publicité",
     privacy: "Confidentialité",
     terms: "Conditions",
     subscribe_heading: "Recevez le briefing",
@@ -393,6 +399,7 @@ const de: ChromeStrings = {
     company: "Anbieter",
     about: "Über uns",
     contact: "Kontakt",
+    advertise: "Werbung",
     privacy: "Datenschutz",
     terms: "AGB",
     subscribe_heading: "Briefing abonnieren",
