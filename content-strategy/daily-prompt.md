@@ -46,7 +46,9 @@ Capacity is allocated by cron, not by preference: 7 NEW slots/day and 3 REFRESH 
 ## Pick the next item
 
 1. **Acquire the lane lock first.** `node scripts/lane-lock.mjs acquire <lane-id>`. Non-zero exit means another lane is mid-run — log `ooligo <lane>: lock held by <holder>, exiting` and exit cleanly with no commit. Release it on **every** exit path, including early exits and failures.
-2. **Read `content-strategy/topic-queue.md`.** It is a flat markdown file. An item is any non-empty, non-header line. An item is *available* if it contains none of `→ slug:`, `→ claimed:`, or `→ skip:`.
+2. **Read `content-strategy/topic-queue.md`.** It is a flat markdown file. An item is any non-empty, non-header line. An item is *available* if it contains none of the literal strings `→ slug:`, `→ claimed:`, or `→ skip:`.
+
+   **Match the full marker, never a bare `→`.** Spec prose legitimately contains arrows — `receive → route → resolve`, `clearbit → Breeze Intelligence` — and treating those as consumption makes the item invisible to every lane forever. This has already bitten once: 97 available items were hidden at a moment when the queue read as nearly dry, which is the exact failure that looks like a supply problem and is really a parsing problem. If your available count seems implausibly low, check this before concluding the queue needs a refill.
 3. **Take the first available item belonging to your lane.** `refresh:` items live under `## Refresh queue`; new-content items live under the type headings. Items are tagged `[type:tool|comparison|workflow|learn|stack] [vertical:revops|legal-ops|recruiting|cross]`.
 4. **Content-type rotation.** Your SKILL.md names a preferred type for today's slot. If the first available item doesn't match, scan up to 5 items deep before falling back to the first available one. Never skip more than 5.
 5. **Claim it before doing anything else** — see below. Claiming precedes research, not follows it.

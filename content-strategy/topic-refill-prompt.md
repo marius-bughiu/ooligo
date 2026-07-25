@@ -4,7 +4,11 @@ Keep [topic-queue.md](topic-queue.md) full enough that the authoring lanes don't
 
 ## Step 1 — Check current depth
 
-Count **available** new-content items in `topic-queue.md`. An item is any non-empty, non-header line under a type section header. An item is *available* if it contains none of `→ slug:`, `→ claimed:`, or `→ skip:`. Count `refresh:` items separately — they are the freshness sweep's output, not yours, and they do not count toward your floor.
+Count **available** new-content items in `topic-queue.md`. An item is any non-empty, non-header line under a type section header. An item is *available* if it contains none of the literal strings `→ slug:`, `→ claimed:`, or `→ skip:`. Count `refresh:` items separately — they are the freshness sweep's output, not yours, and they do not count toward your floor.
+
+**Match the full marker, never a bare `→`** — a lone arrow inside a spec's prose is descriptive text, not consumption. Getting this wrong under-counts the queue and triggers refills that aren't needed, which is how a healthy queue gets padded with filler. It has already hidden 97 available items once. When you write new specs, prefer `->` in prose so the ambiguity never arises.
+
+**Reversed-pair check for comparisons.** Before queueing `a-vs-b`, search for `b-vs-a` in both the queue and `content/comparisons/en/`. They are the same page, and exact-slug dedupe does not catch the flip — three such collisions (`glean-vs-dust`/`dust-vs-glean`, `kustomer-vs-gladly`/`gladly-vs-kustomer`, `luminance-vs-kira-systems`/`kira-systems-vs-luminance`) were caught only by a token-set comparison.
 
 **Target floor:** 100 available new-content items. If already at 100 or more, STOP and log `topic-queue still fresh, no refill needed`. Exit cleanly, no commit.
 
