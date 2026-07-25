@@ -61,7 +61,15 @@ import { fileURLToPath } from "node:url";
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const LOCK_PATH = process.env.OOLIGO_LANE_LOCK || join(ROOT, ".tmp", "lane-lock.json");
 
-const STALE_HOURS = 6;
+// Sized against the authoring cadence, not against how long a run "should" take.
+// NEW-lane slots fire every 2h, so a wedged lock costs at most one slot before it
+// ages out. Autonomous runs acquire from a transient shell whose pid dies with the
+// command, so the pid check is advisory at best and this cap is the real mechanism —
+// it has to be short. A run that genuinely exceeds it can lose the lock mid-flight;
+// that is the accepted trade, because the queue item is protected independently by
+// the claim marker and pushes are protected by rebase-retry. A stalled pipeline is
+// the worse failure: the last stale lock in this project sat for 23 days.
+const STALE_HOURS = Number(process.env.OOLIGO_LANE_LOCK_STALE_HOURS || 2);
 const STALE_MS = STALE_HOURS * 60 * 60 * 1000;
 // A fresh unparseable lock file means another lane is mid-claim, not that the file is garbage.
 const TORN_GRACE_MS = 5000;
