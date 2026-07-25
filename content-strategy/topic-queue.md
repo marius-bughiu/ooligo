@@ -1,14 +1,25 @@
 # Topic queue
 
-State file consumed by the daily authoring slots (`ooligo-author-am`, `ooligo-author-pm`) and the `ooligo-evergreen-refresh` weekly slot. Refilled weekly by `ooligo-topic-refill`. Append-only — never reorder, never remove. Items are consumed by appending `→ slug: <canonical-slug>` to the line.
+State file consumed by two authoring lanes: `ooligo-author-new` (7 slots/day, new-content items only) and `ooligo-author-refresh` (3 slots/day, `refresh:` items only). **Neither lane ever takes work from the other lane's pool** — that separation is what keeps new content shipping. Refilled daily by `ooligo-topic-refill`; `refresh:` items are prepended by the weekly `ooligo-freshness-sweep`.
+
+Append-only — never reorder, never remove.
 
 Format per item:
 
 ```
-- [type:tool|comparison|workflow|learn|stack] [vertical:revops|legal-ops|recruiting|cross] <one-line page spec>
+- [type:tool|comparison|workflow|learn|stack] [vertical:revops|legal-ops|recruiting|customer-success|cross] [evidence:gsc|reddit|hn|changelog|comparison-gap|vertical-floor] <one-line page spec>
 ```
 
-`refresh:` items live in the top `## Refresh queue` section, prepended by the weekly freshness sweep. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
+Each line carries at most one lifecycle marker, appended in place:
+
+| Marker | Meaning |
+|---|---|
+| *(none)* | **available** — any lane may claim it |
+| `→ claimed: <lane-id> <ISO8601>` | a run is working on it right now; stale after 6 hours, then re-takeable |
+| `→ slug: <canonical-slug>` | published; kept permanently for dedupe |
+| `→ skip: <reason>` | non-viable and never to be retried — record the reason, it is the only thing stopping the next run from rediscovering the same dead vendor |
+
+`refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
 `last-swept: 2026-07-19`
 
@@ -38,7 +49,7 @@ Format per item:
 - refresh: [type:tool] [vertical:recruiting] holly — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: holly
 - refresh: [type:tool] [vertical:recruiting] juicebox — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: juicebox
 - refresh: [type:tool] [vertical:legal-ops] kira-systems — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: kira-systems
-- refresh: [type:tool] [vertical:legal-ops] lawgeex — pricing 63d stale (last_updated 2026-05-03, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] lawgeex — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → skip: non-viable — enterprise product dismantled 2023 (assets to Robin AI, clients to LegalSifter, founders to Superlegal); the live page is misleading and needs a sunset rewrite, not a pricing refresh
 - refresh: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: lexisnexis-protege
 - refresh: [type:tool] [vertical:legal-ops] luminance — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: luminance
 - refresh: [type:tool] [vertical:revops] lusha — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: lusha
@@ -85,7 +96,7 @@ Format per item:
 - [type:tool] [vertical:revops] new entry: revenuehero — inbound lead-to-meeting routing + scheduling; the lower-cost single-product Chili Piper alternative readers ask about → slug: revenuehero
 - [type:tool] [vertical:revops] new entry: qualified — Salesforce-native pipeline platform with the Piper AI SDR; the SFDC-native inbound-conversion pole → slug: qualified
 - [type:tool] [vertical:recruiting] new entry: seekout — agentic AI recruiting (sourcing + screening + SeekOut Spot slate service); major catalog gap vs hireEZ/Gem → slug: seekout
-- [type:tool] [vertical:recruiting] new entry: tezi — autonomous AI recruiter (agent "Max") for sourcing + first-touch outreach; the point-solution AI-recruiter readers evaluate
+- [type:tool] [vertical:recruiting] new entry: tezi — autonomous AI recruiter (agent "Max") for sourcing + first-touch outreach; the point-solution AI-recruiter readers evaluate → skip: non-viable — Headway acqui-hired the Tezi team Mar 2026, product discontinued
 - [type:tool] [vertical:recruiting] new entry: apriora — AI video interviewer (agent "Alex") for real-time screening with cheat detection; the live/async AI-interview category → slug: apriora
 - [type:tool] [vertical:recruiting] new entry: micro1 — AI technical interviewer (agent "Zara") + vetted global talent marketplace; dev-vetting angle vs CodeSignal/Karat → slug: micro1
 - [type:tool] [vertical:legal-ops] new entry: legora — legal AI assistant for drafting/review/research; Harvey's chief rival after its 2026 mega-raise, anchors harvey-vs-legora → slug: legora
@@ -101,7 +112,7 @@ Format per item:
 - [type:tool] [vertical:revops] new entry: rox — agentic CRM / AI sales-agent platform that acts over CRM data (research, outreach, account plays); $1.2B valuation (General Catalyst), the "agentic CRM" pole buyers weigh vs build-it-yourself Clay → slug: rox
 - [type:tool] [vertical:cross] new entry: sierra — agentic AI customer-experience platform (Bret Taylor / Clay Bavor); $15B valuation 2026, the enterprise AI-support-agent standard CS/Support orgs evaluate vs Decagon → slug: sierra
 - [type:tool] [vertical:legal-ops] new entry: eudia — augmented-intelligence platform for in-house corporate legal teams (AI agents over contracts/research/workflows); $105M Series A (General Catalyst), anchors the enterprise in-house GC-agent cluster → slug: eudia
-- [type:tool] [vertical:legal-ops] new entry: robin-ai — contract negotiation/review AI (drafting, redlining, Q&A over agreements); established European legal-AI player readers weigh vs Spellbook/Legora
+- [type:tool] [vertical:legal-ops] new entry: robin-ai — contract negotiation/review AI (drafting, redlining, Q&A over agreements); established European legal-AI player readers weigh vs Spellbook/Legora → skip: non-viable — Robin AI collapsed late 2025; Scissero took the managed services, Microsoft acqui-hired the engineers Jan 2026
 - [type:tool] [vertical:legal-ops] new entry: supio — AI for plaintiff personal-injury & mass-tort firms (medical-record chronology, case workup, demand prep); $91M raised + Thomson Reuters partnership, the third PI pole alongside EvenUp and Eve Legal → slug: supio
 - [type:tool] [vertical:cross] new entry: lindy — AI-agent builder for always-on assistants over email/calendar/SaaS (judgment-driven multi-step agents); the "AI assistant" pole ops teams weigh vs Dust and Gumloop → slug: lindy
 - [type:tool] [vertical:cross] new entry: gumloop — no-code AI automation canvas (drag-and-drop nodes, document processing, browser extension); the visual AI-workflow pole vs n8n/Make and Lindy → slug: gumloop
@@ -169,7 +180,7 @@ Format per item:
 - [type:comparison] [vertical:cross] pairwise: gumloop-vs-n8n — AI-native no-code automation vs open-source workflow automation; routes on managed AI-first canvas + document processing vs self-hostable flexibility and integration breadth → slug: gumloop-vs-n8n
 - [type:comparison] [vertical:cross] pairwise: sierra-vs-decagon — AI customer-experience/support agents; routes on enterprise omnichannel CX-agent platform (Sierra) vs support-ticket-deflection AI agent (Decagon) → slug: sierra-vs-decagon
 - [type:comparison] [vertical:legal-ops] pairwise: supio-vs-eve-legal — plaintiff personal-injury AI; routes on medical-record-heavy case workup + demand prep (Supio) vs full litigation case-workup breadth (Eve) → slug: supio-vs-eve-legal
-- [type:comparison] [vertical:legal-ops] pairwise: robin-ai-vs-spellbook — contract AI in the lawyer's workflow; routes on negotiation/review + agreement Q&A (Robin) vs Word-native generative drafting and clause generation (Spellbook)
+- [type:comparison] [vertical:legal-ops] pairwise: robin-ai-vs-spellbook — contract AI in the lawyer's workflow; routes on negotiation/review + agreement Q&A (Robin) vs Word-native generative drafting and clause generation (Spellbook) → skip: non-viable — Robin AI collapsed late 2025, so this pair has no live left-hand side
 - [type:comparison] [vertical:revops] pairwise: rox-vs-clay — acting on CRM data; routes on autonomous agentic-CRM that executes account plays (Rox) vs build-it-yourself data enrichment + workflow workbench (Clay) → slug: rox-vs-clay
 - [type:comparison] [vertical:recruiting] pairwise: sapia-ai-vs-hirevue — AI interviewing; routes on chat/text structured async with bias-controlled scoring (Sapia) vs enterprise video-assessment incumbent (HireVue) → slug: sapia-ai-vs-hirevue
 - [type:comparison] [vertical:recruiting] pairwise: fetcher-vs-gem — sourcing + outreach; routes on human-validated AI sourcing with done-for-you outreach (Fetcher) vs all-in-one recruiting CRM + sequencing (Gem) → slug: fetcher-vs-gem

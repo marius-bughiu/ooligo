@@ -6,29 +6,34 @@ Find EN entries past their freshness SLA and prepend `refresh:` items to [topic-
 
 Per CONTENT_PIPELINE.md (re-stated here for reference; the source of truth is the doc):
 
-| Entry type | Field-level SLA | Whole-body SLA |
+| Entry type | Pricing SLA (`pricing_checked`) | Body SLA (`last_updated`) |
 |---|---|---|
-| Tools — pricing fields | 60 days | — |
-| Tools — body | — | 120 days |
+| Tools | 60 days | 180 days |
 | Comparisons | — | 180 days |
-| Workflows | — | 180 days |
-| Stacks | — | 120 days (cascades on constituent tool refresh) |
+| Workflows | — | 365 days, or any artifact-bundle check failure |
+| Stacks | — | 180 days, cascading **only on material constituent change** |
 | Learn — definition / framework / FAQ / glossary | — | 12 months |
 | Learn — how-to | — | 6 months |
 
-Date field: all types use `last_updated` (required frontmatter on every entry). It records when the entry was last re-authored against current sources.
+**Two date fields, two meanings.** `pricing_checked` records the last verification of pricing against the vendor's live page and moves even when nothing changed. `last_updated` records the last **body** re-author and moves only when prose changes. An entry missing `pricing_checked` entirely is treated as never verified — flag it.
 
 ## Step 1 — Walk EN entries
 
-Walk `content/<entity>/en/*.mdx` for every entity type. Read frontmatter only (don't open the body). Extract the relevant date field and compare to today.
+Walk `content/<entity>/en/*.mdx` for every entity type. Read frontmatter only (don't open the body). Extract both date fields and compare to today.
 
 Today: $(date in YYYY-MM-DD per the system clock).
 
-An entry is **stale** if `today - <date field> > SLA`.
+An entry is **stale** if `today - <relevant date field> > SLA`. Emit one item per breach, tier-prefixed per the selector in CONTENT_PIPELINE.md §Freshness SLAs:
 
-For tools, also check pricing-field freshness: if `pricing_starts_at`, `pricing_model`, or `pricing_url` look like they could have changed (heuristic: check if `last_updated` > 60 days ago AND the tool is in a fast-moving category like outbound or AI assistants — these have the most pricing churn). Flag for refresh if any of: SLA exceeded, or vendor changelog (if available from a recent `topic-refill` run via `gsc-candidates.json` notes) mentions pricing.
+- **Pricing SLA breached, nothing else known** → `refresh:A:` — a verification, not an authoring job.
+- **Body SLA breached** → `refresh:C:`.
+- **Known material change** (vendor acquired/sunset/repositioned, or `material_change_at` newer than `last_updated`) → `refresh:C:`, and **sort it above all calendar-triggered items**. Acquisitions arrive in waves; if they queue behind routine churn the budget gets spent on the items that matter least.
 
-For stacks: in addition to the stack's own SLA, flag if any constituent tool was refreshed since this stack's `last_updated` (cascade rule).
+**Flag every pricing breach. Do not suppress any.** This file previously gated the pricing flag on a vague judgement — *"the tool is in a fast-moving category like outbound or AI assistants"* — and the result was that at the 2026-07-05 sweep, 94 tools were past their pricing SLA and only 30 were flagged. Under-reporting made the backlog look manageable while it grew. A Tier A item now costs one frontmatter line, so there is no reason to hide a breach, and the unsuppressed backlog is the only trustworthy capacity gauge the system has.
+
+**Skip entries with `vendor_status: sunset`.** A sunset page is deliberately frozen at its original URL with a `superseded_by` pointer; re-flagging it every week is noise.
+
+For stacks: flag on the stack's own body SLA, **or** if a constituent tool has a `material_change_at` newer than the stack's `last_updated`. A constituent's Tier A verification or Tier B price patch does **not** cascade. The old rule cascaded on *any* constituent refresh, which turned 18 stacks into ~523 demanded re-authors/year — `claude` alone sits in 7 stacks. Emit **one deduped item per stack per month**, listing every trigger in its reason string.
 
 ## Step 2 — Cross-check against existing queue items
 
@@ -44,9 +49,10 @@ For each stale entry:
 ```markdown
 ## Refresh queue
 
-- refresh: [type:tool] [vertical:revops] apollo — body 130d stale (last_updated 2026-01-08, SLA 120d)
-- refresh: [type:comparison] [vertical:legal-ops] ironclad-vs-spellbook — body 195d stale (last_updated 2025-11-03, SLA 180d)
-- refresh: [type:stack] [vertical:recruiting] sourcing-stack-mvp — cascade (gem refreshed 2026-05-12 > stack's last_updated 2026-04-30)
+- refresh:C: [type:tool] [vertical:recruiting] paradox — material (acquired by Workday 2025-10; material_change_at 2026-07-20 > last_updated 2026-05-02)
+- refresh:C: [type:comparison] [vertical:legal-ops] ironclad-vs-spellbook — body 195d stale (last_updated 2025-11-03, SLA 180d)
+- refresh:A: [type:tool] [vertical:revops] apollo — pricing 64d unverified (pricing_checked 2026-05-02, SLA 60d)
+- refresh:C: [type:stack] [vertical:recruiting] sourcing-stack-mvp — cascade (material: gem 2026-05-12, hireez 2026-05-20 > stack's last_updated 2026-04-30)
 - ...
 
 ## Tools
@@ -55,11 +61,16 @@ For each stale entry:
 ```
 
 Each `refresh:` item includes:
+- The tier prefix — `refresh:A:`, `refresh:B:`, or `refresh:C:`
 - The slug (must exist as an EN entry)
 - The `[type:...]` and `[vertical:...]` tags
-- The reason in parentheses: SLA delta or cascade source
+- The reason in parentheses: which field breached, its delta, or the material-change source
 
-If the `## Refresh queue` header doesn't exist, create it as the first section in the file. If items in the refresh block are now stale (i.e. they've been there >2 weeks because no authoring slot has picked them up), don't dedupe them away — leave them as a visible backlog signal. If the backlog grows past ~15 items, log a warning in the commit message and the user will see it.
+**Ordering within the block:** material-change Tier C first, then calendar Tier C, then B, then A. The `ooligo-author-refresh` lane consumes from the top, so this ordering is what guarantees an acquisition gets fixed before a routine price re-verification.
+
+If the `## Refresh queue` header doesn't exist, create it as the first section in the file. Leave un-consumed items in place as a visible backlog signal — don't dedupe them away.
+
+**Backlog alarm.** Tier C is the only tier that consumes an authoring slot, and the budget is 21 slots/week. If unconsumed **Tier C** items exceed 25, say so in the commit message and in the run report: that means refresh demand has outgrown its lane again, which is precisely the condition that drove new content to zero before. Tier A and B counts can be large without concern — they are cheap and drain fast.
 
 ## Step 4 — Pick a sentinel for next run
 
@@ -70,14 +81,16 @@ Append `last-swept: YYYY-MM-DD` near the top of `topic-queue.md` (overwrite the 
 If the sweep found any new stale entries to flag, commit:
 
 ```
-chore: freshness sweep YYYY-MM-DD — N entries past SLA
+chore: freshness sweep YYYY-MM-DD — N entries past SLA (C:<n> B:<n> A:<n>)
 
-Tools body: <count>
-Tools pricing: <count>
-Comparisons: <count>
-Workflows: <count>
-Stacks: <count> (incl. <cascade count> cascades)
-Learn: <count>
+Tier C (consumes an authoring slot): <count>
+  Material change: <count>
+  Body SLA: <count>
+Tier B (pricing patch): <count>
+Tier A (verify only): <count>
+
+Tools: <count> | Comparisons: <count> | Workflows: <count> | Stacks: <count> (<cascades> cascades) | Learn: <count>
+Unconsumed Tier C backlog: <count> / 25 alarm threshold
 ```
 
 Include the `Co-Authored-By` trailer. Push to `origin main`.
@@ -86,8 +99,9 @@ If the sweep found nothing (zero new stale entries), log `freshness: no new stal
 
 ## Guardrails
 
-- Never edit MDX files in this routine — that's the authoring slot's job (via the `refresh:` queue item).
-- Never bump `last_updated` here — it bumps when the entry is actually re-authored.
+- Never edit MDX files in this routine — that's the refresh lane's job (via the `refresh:` queue item). This routine reads frontmatter and writes the queue. Nothing else.
+- Never bump `last_updated` here — it bumps only when the body is actually re-authored.
+- Never bump `pricing_checked` here — this sweep compares dates, it does not visit vendor pages. Only a lane that actually fetched the vendor's live pricing page may write that field. Writing it from a date comparison would make the field a lie and destroy the one signal the tiering depends on.
 - The SLA table is authoritative in CONTENT_PIPELINE.md. If you see a conflict with this file, the contract wins; flag the inconsistency in the commit message.
 
 ## Autonomous mode

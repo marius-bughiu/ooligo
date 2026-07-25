@@ -344,21 +344,63 @@ If a claim doesn't fit any bucket, it doesn't go on the page. "Anecdotally," "we
 
 ### Freshness SLAs
 
-Pricing changes, vendors get acquired, tools sunset. `last_updated` is the contract — when it goes stale beyond these SLAs, the entry is failing the bar regardless of how well it was written originally.
+Pricing changes, vendors get acquired, tools sunset. Staleness beyond these SLAs fails the bar regardless of how well the entry was written originally.
 
-| Entry type | Field-level SLA | Whole-body SLA |
+#### Two clocks
+
+`last_updated` used to be a single field carrying two unrelated meanings, and that is why the freshness system collapsed. A 60-day price drift and a year-old analysis both moved the same date, so verifying a price reset the body clock, the 120-day body SLA became unreachable dead text, and no query could distinguish a genuinely current page from a date-bumped one.
+
+Two fields, two meanings, enforced everywhere:
+
+- **`pricing_checked`** — the last time a human-or-agent compared the entry's pricing fields against the vendor's live pricing page. Moves on every successful verification, **including when nothing changed**.
+- **`last_updated`** — the last time the **body prose** was re-authored. Moves **only when prose changes**. A verification that writes no prose never touches it.
+
+Render both on the page: *"pricing verified 3 days ago · analysis written 2026-05-02."* Splitting the clocks is what makes the cheap verification path a credibility feature rather than a concealment, and it is what keeps the staleness backlog visible instead of laundering it into a date bump.
+
+#### The three refresh tiers
+
+Refresh is no longer one operation. The tier selector asks its questions **in this order** — liveness first, price last:
+
+1. **Is the vendor still independent and operating?** No → **Tier C**.
+2. **Has its category positioning or product line materially changed?** Yes → **Tier C**.
+3. **Has pricing moved?** No → **Tier A**. Yes, under 20% with no tier restructure → **Tier B**. Yes, ≥20% or tiers restructured → **Tier C**.
+
+| Tier | What it does | Locales touched | Moves `pricing_checked` | Moves `last_updated` | Cost |
+|---|---|---|---|---|---|
+| **A — verify** | Write `pricing_checked: <today>` on the EN file. Nothing else. | EN frontmatter only | yes | **no** | ~0 |
+| **B — patch** | Rewrite pricing frontmatter + the `## Pricing` section, then `npm run sync:frontmatter` | 6 | yes | **no** | ~10 min |
+| **C — re-author** | Full 6-locale rewrite from current sources, as before | 6 | yes | yes | full page |
+
+Numerals in a Tier B patch must be **digit-identical across all six locales**. Prices are not translated.
+
+**Why liveness leads and price trails.** Every stale-framing error the catalog has actually shipped — Paradox acquired by Workday, Salesloft merged into Clari, Outreach's agentic rebrand, Regie→RegieOne, Kira's hybrid pivot, Mercor's pivot out of recruiting, BrightHire acquired by Zoom — is a *positional* change, and several came with unchanged pricing. A price-keyed selector optimizes away the cheap error class and leaves the expensive one live on the site. Describing an acquired company as an independent challenger, inside a buying recommendation, is the error that tells a reader nothing here is checked. One wrong tool fact propagates to roughly 5 EN pages and 30 files.
+
+**Material-change items preempt calendar-triggered items in the queue.** Acquisitions arrive in correlated waves; if they queue behind routine churn, the refresh budget gets consumed by exactly the events that matter least.
+
+#### Body SLAs
+
+With two clocks the body clock is finally reachable, so it is set to a period a body genuinely survives:
+
+| Entry type | Pricing SLA (`pricing_checked`) | Body SLA (`last_updated`) |
 |---|---|---|
-| Tools — pricing fields | 60 days | — |
-| Tools — body | — | 120 days |
+| Tools | 60 days | 180 days |
 | Comparisons | — | 180 days |
-| Workflows | — | 180 days |
-| Stacks | — | 120 days (cascades on any constituent tool's refresh) |
+| Workflows | — | 365 days, plus any artifact-bundle check failure |
+| Stacks | — | 180 days, cascading **only on material constituent change** |
 | Learn — definition / framework / FAQ / glossary | — | 12 months |
 | Learn — how-to | — | 6 months (UI screenshots and command syntax drift fastest) |
 
-The freshness check is mechanical: for every entry, `today - last_updated > SLA` fails the bar. Refresh = re-author the EN body and all five translated variants from current sources in the same session, bump `last_updated`.
+Comparisons deliberately stay at 180 days: the verdict *is* the product, and a year-old verdict in this market is a wrong page, not a stale one.
 
-The weekly `ooligo-freshness-sweep` scheduled task surfaces SLA-stale entries by prepending `refresh:` items to `content-strategy/topic-queue.md`. The `ooligo-evergreen-refresh` slot consumes one per week, and authoring slots consume them ahead of new-content items. See `content-strategy/freshness-prompt.md` for the routine details.
+The stack cascade is the change that matters most for capacity. The old rule — flag a stack whenever *any* constituent tool is refreshed — turned 18 stacks into ~523 demanded re-authors/year, an order of magnitude above their own 120-day clock, because `claude` alone sits in 7 stacks and every tool cycled 6×/year. Cascading only on **material** change (Tier C, not Tier A or B) brings that to ~37/year. Cascade items are deduped to one per stack per month, listing all triggers.
+
+#### The arithmetic this is protecting
+
+The SLAs above are a budget, not an aspiration, and the budget has to fit inside authoring capacity or new content stops entirely. It has done exactly that once already: the previous table demanded ~2,465 page-authorings/year against a capacity of 782 — **3.15× insolvent** — which drove new-content output to zero for three consecutive weeks while every slot went to refresh. The revised table demands ~1,069/year (~21/week of Tier C), against 21 weekly REFRESH slots.
+
+**Any future change to this table must be checked against capacity before it ships.** Tightening an SLA is not free; it is a claim on slots that new content would otherwise get.
+
+The weekly `ooligo-freshness-sweep` surfaces stale entries by prepending tier-prefixed `refresh:` items to `content-strategy/topic-queue.md`. The `ooligo-author-refresh` lane consumes them. See `content-strategy/freshness-prompt.md` for the routine.
 
 ### Higher-risk page classes
 
@@ -401,14 +443,19 @@ The correction log is the only mechanism by which the quality bar improves. With
 
 ### Refresh triggers
 
-A refresh is the same operation as authoring (re-write the entry from current sources, bump `last_updated`), and is triggered by:
+A refresh runs the tier selector above and does the least work that tier calls for. It is triggered by:
 
-- A reader opens a GitHub issue with a correction (logged in `CORRECTIONS.md`).
-- A scheduled freshness sweep flags an entry past its SLA.
-- A vendor announces a material change (pricing, sunset, acquisition).
-- A class of recurring error in `CORRECTIONS.md` triggers a re-author against the new bar.
+| Trigger | Usual tier |
+|---|---|
+| A reader opens a GitHub issue with a correction (logged in `CORRECTIONS.md`) | C — a reported error means the prose is wrong |
+| A vendor is acquired, shuts down, or repositions its product line | C |
+| A vendor changes pricing ≥20% or restructures tiers | C |
+| A vendor changes pricing under 20% | B |
+| `pricing_checked` passes 60 days, vendor unchanged | A |
+| A scheduled freshness sweep flags an entry past its **body** SLA | C |
+| A class of recurring error in `CORRECTIONS.md` triggers a re-author against the new bar | C |
 
-After any refresh, the routine re-authors all six locale variants in the same commit. There is no async catch-up step.
+Tier C re-authors all six locale variants in the same commit — no async catch-up step. Tier B patches all six. **Tier A touches one frontmatter field on the EN file and nothing else**; it is not an authoring operation and must never be allowed to grow into one. The moment Tier A starts "just tidying the body while it's open", the capacity it was designed to free is gone.
 
 ## Adding a vertical or locale
 
