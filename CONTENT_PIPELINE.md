@@ -32,8 +32,9 @@ LLM session (Claude Code, scheduled task, claude.ai with repo MCP, etc.)
   ├─ Drafts the EN body per the per-type bar
   ├─ Translates inline into es, pt-BR, de, fr, ja per content-strategy/locale-register.md
   ├─ Writes six MDX files: content/<entity>/{en,es,pt-BR,de,fr,ja}/<slug>.mdx
-  ├─ Runs `npm run validate:config` and `npm run check:vocab`
-  ├─ If anything fails on any locale, ABORTS the slot (no half-state)
+  ├─ Runs `npm run validate:config` and `npm run check:vocab -- <the six files>`
+  ├─ Runs the full build (NODE_OPTIONS=--max-old-space-size=8192) BEFORE pushing
+  ├─ If anything fails on any locale, DISCARDS that page (no half-state), frees its claim
   ├─ Commits all six files together
   └─ Pushes to main
        │
@@ -124,7 +125,7 @@ The author runs this against every workflow draft before committing. If any box 
 - [ ] Artifact bundle exists at `apps/web/public/artifacts/<slug>/` and meets the per-type minimum above
 - [ ] Compares against ≥ 1 specific alternative (DIY, status quo, named off-the-shelf product) with a reason for the choice
 - [ ] Every numerical claim has a source bucket (vendor docs, public earnings, named customer interview, or marked as estimate) per the source rules in **Editorial accountability** below
-- [ ] No banned vocabulary (run `npm run check:vocab` — see `CONTENT_VOICE.md`)
+- [ ] No banned vocabulary (run `npm run check:vocab -- <the six files>`, scoped — see `CONTENT_VOICE.md`)
 - [ ] No padding signals (see anti-pattern list above)
 
 The same shape — concrete signals, per-type minimum, anti-patterns, pre-commit checklist — applies to every other content type on the site. Per-type bars follow.

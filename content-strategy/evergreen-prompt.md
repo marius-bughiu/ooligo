@@ -189,10 +189,12 @@ From `C:\S\ooligo`:
 
 ```
 npm run validate:config
-npm run check:vocab
+npm run check:vocab -- <your six file paths>
 ```
 
-Both must pass for all 6 files. If either fails on any locale, abort the whole slot — do not stage. The queue item stays unconsumed.
+**Pass your six files to `check:vocab` explicitly.** A bare run walks the whole tree and reports ~247 pre-existing findings across ~172 legacy files, so it can never exit clean and is worthless as a gate. Scoped to your own files it is a hard binary gate.
+
+Both must pass for all 6 files. If either fails on any locale, discard that page — all six files — and clear its `→ claimed:` marker so the item returns to the pool. A page is atomic across its locales; a run is not atomic across pages.
 
 ## Step 5 — Mark queue + commit + push
 

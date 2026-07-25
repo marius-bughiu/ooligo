@@ -1,6 +1,6 @@
 # Daily authoring (shared rules)
 
-Every scheduled authoring slot (`ooligo-author-am`, `ooligo-author-pm`, `ooligo-evergreen-refresh`) starts here. This file defines the shared discipline. The per-entity-type bar is in [evergreen-prompt.md](evergreen-prompt.md). The translation rules are in [locale-register.md](locale-register.md). The contract for what "best-in-class" means lives in [../CONTENT_PIPELINE.md](../CONTENT_PIPELINE.md) — don't restate it here.
+Every scheduled authoring slot starts here — `ooligo-author-new` (7 slots/day) and `ooligo-author-refresh` (3 slots/day). This file defines the shared discipline. The per-entity-type bar is in [evergreen-prompt.md](evergreen-prompt.md). The translation rules are in [locale-register.md](locale-register.md). The contract for what "best-in-class" means lives in [../CONTENT_PIPELINE.md](../CONTENT_PIPELINE.md) — don't restate it here.
 
 ## Identity
 
