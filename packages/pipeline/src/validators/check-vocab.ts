@@ -1,7 +1,8 @@
 /**
  * check-vocab — fail CI on banned vocabulary in MDX bodies.
  *
- * Scans every .mdx file under content/ for terms in BANNED_VOCAB.
+ * Scans every .mdx file under content/ for terms in BANNED_VOCAB, or only the
+ * files/directories passed as arguments (so a single page can be gated).
  * Skips: frontmatter, fenced code blocks (```...```), inline code (`...`),
  * blockquotes (`> ...`), and tables (rows starting with `|`).
  *
@@ -14,14 +15,21 @@
  * number or a quantitative qualifier. The script flags them as warnings
  * (not failures) so the author can decide.
  *
- * Run: `npm run check:vocab`
+ * Run: `npm run check:vocab`                        — whole content/ tree
+ *      `npm run check:vocab -- <path> [path...]`    — only those paths
  *   --fix-suggestions (optional flag, future): print rewrite suggestions
  *   --warn-only       (optional flag): exit 0 even on findings (for triage)
  *
+ * Path arguments may be files or directories, use `/` or `\` separators, and
+ * resolve against the cwd or the repo root (npm workspace scripts run from
+ * packages/pipeline). A path that does not exist is a hard error — a scoped
+ * run must never pass by silently scanning nothing.
+ *
  * Exit code: 1 if any HARD-banned term is found in prose. 0 otherwise.
+ *            2 if the content root or a passed path can't be found.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 
 // Categories: hard = fail CI; soft = warn only.
 // Hard bans are confidence theater + corporate-voice tells + filler frames + modal stacking.
@@ -236,24 +244,55 @@ function scan(file: string): Finding[] {
   return findings;
 }
 
-function main(): void {
-  const repoRoot = resolve(process.cwd());
-  // Allow running from repo root or from packages/pipeline
-  const contentRoot = readdirSync(repoRoot).includes("content")
-    ? join(repoRoot, "content")
-    : join(repoRoot, "..", "..", "content");
+/**
+ * Resolve a CLI path argument to an absolute path.
+ *
+ * Accepts `/` and `\` separators, and resolves relative paths against the cwd
+ * first, then the repo root — so `content/tools/foo.mdx` works both from the
+ * repo root and from packages/pipeline (where `npm run` puts the cwd).
+ * Returns null when the path exists under neither base.
+ */
+function resolveArgPath(arg: string, cwd: string, repoRoot: string): string | null {
+  const normalized = arg.split(/[\\/]+/).join(sep);
+  for (const base of [cwd, repoRoot]) {
+    const candidate = resolve(base, normalized);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
 
-  if (!readdirSync(resolve(contentRoot, ".."))) {
-    console.error(`content/ directory not found from cwd ${repoRoot}`);
-    process.exit(2);
+/**
+ * Expand path arguments into a de-duplicated file list. Directories are walked
+ * for .mdx files; explicitly-named files are taken as-is. Args that resolve to
+ * nothing are returned in `missing` so the caller can fail loudly.
+ */
+function collectScopedFiles(
+  args: string[],
+  cwd: string,
+  repoRoot: string,
+): { files: string[]; missing: string[] } {
+  const files: string[] = [];
+  const missing: string[] = [];
+  const seen = new Set<string>();
+
+  for (const arg of args) {
+    const full = resolveArgPath(arg, cwd, repoRoot);
+    if (full === null) {
+      missing.push(arg);
+      continue;
+    }
+    for (const f of statSync(full).isDirectory() ? walk(full) : [full]) {
+      if (seen.has(f)) continue;
+      seen.add(f);
+      files.push(f);
+    }
   }
 
-  const files = walk(contentRoot);
-  const allFindings: Finding[] = [];
-  for (const f of files) {
-    allFindings.push(...scan(f));
-  }
+  return { files, missing };
+}
 
+/** Print findings and exit: 0 when clean, 1 when any hard-banned term hit. */
+function report(allFindings: Finding[], files: string[], base: string): never {
   if (allFindings.length === 0) {
     console.log(`✓ No banned vocabulary in ${files.length} MDX files.`);
     process.exit(0);
@@ -269,7 +308,7 @@ function main(): void {
 
   console.log(`✗ Banned vocabulary found in ${byFile.size} of ${files.length} files:\n`);
   for (const [file, findings] of byFile) {
-    const rel = relative(repoRoot, file);
+    const rel = relative(base, file);
     console.log(`  ${rel}`);
     for (const f of findings) {
       console.log(`    L${f.line}:${f.col}  "${f.term}"  →  ${f.excerpt}`);
@@ -279,6 +318,50 @@ function main(): void {
   console.log(`Total findings: ${allFindings.length}`);
   console.log(`See CONTENT_VOICE.md for the banned-vocabulary rules and replacement patterns.`);
   process.exit(1);
+}
+
+function scanAll(files: string[]): Finding[] {
+  const allFindings: Finding[] = [];
+  for (const f of files) {
+    allFindings.push(...scan(f));
+  }
+  return allFindings;
+}
+
+function main(): void {
+  const cwd = resolve(process.cwd());
+  // Allow running from repo root or from packages/pipeline
+  const repoRoot = readdirSync(cwd).includes("content") ? cwd : resolve(cwd, "..", "..");
+  const contentRoot = join(repoRoot, "content");
+
+  // Only non-flag args are paths; flags (--warn-only, …) stay ignored as before.
+  const pathArgs = process.argv.slice(2).filter((a) => a.trim() !== "" && !a.startsWith("-"));
+
+  // Scoped run: gate exactly the passed files/directories, nothing else.
+  if (pathArgs.length > 0) {
+    const { files, missing } = collectScopedFiles(pathArgs, cwd, repoRoot);
+    if (missing.length > 0) {
+      for (const m of missing) {
+        console.error(`✗ Path not found: ${m}`);
+      }
+      console.error(`  Tried relative to cwd (${cwd}) and repo root (${repoRoot}).`);
+      process.exit(2);
+    }
+    if (files.length === 0) {
+      console.error(`✗ No .mdx files found under: ${pathArgs.join(", ")}`);
+      process.exit(2);
+    }
+    console.log(`Scoped run — ${files.length} file(s) from ${pathArgs.length} path argument(s).`);
+    report(scanAll(files), files, cwd);
+  }
+
+  if (!readdirSync(resolve(contentRoot, ".."))) {
+    console.error(`content/ directory not found from cwd ${cwd}`);
+    process.exit(2);
+  }
+
+  const files = walk(contentRoot);
+  report(scanAll(files), files, cwd);
 }
 
 main();

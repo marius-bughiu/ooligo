@@ -21,6 +21,15 @@ const baseFrontmatter = {
   source_sha256: z.string().optional(),
 };
 
+// Two clocks. `last_updated` is the body re-author date and moves only when the
+// prose changes; cheap verification passes move `pricing_checked` / `en_verified`
+// instead, so a genuinely current entry stays distinguishable from a date-bumped one.
+const freshnessFrontmatter = {
+  material_change_at: z.string().optional(),
+  en_verified: z.string().optional(),
+  superseded_by: SLUG.optional(),
+};
+
 const tools = defineCollection({
   loader: glob({
     pattern: "**/*.mdx",
@@ -50,7 +59,12 @@ const tools = defineCollection({
         integrations: z.number().min(0).max(10).optional(),
       })
       .optional(),
+    // BODY re-author date only: moves only when the prose changes.
+    // A pricing verification moves `pricing_checked` instead.
     last_updated: z.string(),
+    pricing_checked: z.string().optional(),
+    vendor_status: z.enum(["live", "acquired", "sunset"]).optional(),
+    ...freshnessFrontmatter,
     affiliate_link: z.string().url().optional(),
   }),
 });
@@ -69,7 +83,10 @@ const comparisons = defineCollection({
       tool_b: SLUG.optional(),
       tools: z.array(SLUG).optional(),
       verticals: z.array(SLUG).min(1),
+      // BODY re-author date only: moves only when the prose changes.
+      // A verification pass moves `en_verified` (or `pricing_checked` on tools) instead.
       last_updated: z.string(),
+      ...freshnessFrontmatter,
     })
     .superRefine((val, ctx) => {
       if (val.type === "pairwise" && (!val.tool_a || !val.tool_b)) {
@@ -109,7 +126,10 @@ const workflows = defineCollection({
     tools_used: z.array(SLUG).min(1),
     roles: z.array(SLUG).min(1),
     difficulty: z.enum(["beginner", "intermediate", "advanced"]),
+    // BODY re-author date only: moves only when the prose changes.
+    // A verification pass moves `en_verified` (or `pricing_checked` on tools) instead.
     last_updated: z.string(),
+    ...freshnessFrontmatter,
     time_to_setup: z.string().optional(),
     download_url: z.string().optional(),
     preview_lang: z.string().optional(),
@@ -131,7 +151,10 @@ const learn = defineCollection({
     related_tools: z.array(SLUG).optional(),
     related_workflows: z.array(SLUG).optional(),
     target_questions: z.array(z.string()).min(1),
+    // BODY re-author date only: moves only when the prose changes.
+    // A verification pass moves `en_verified` (or `pricing_checked` on tools) instead.
     last_updated: z.string(),
+    ...freshnessFrontmatter,
   }),
 });
 
@@ -148,7 +171,10 @@ const stacks = defineCollection({
     tools: z.array(SLUG).min(2),
     use_case: z.string(),
     difficulty: z.enum(["beginner", "intermediate", "advanced"]),
+    // BODY re-author date only: moves only when the prose changes.
+    // A verification pass moves `en_verified` (or `pricing_checked` on tools) instead.
     last_updated: z.string(),
+    ...freshnessFrontmatter,
     related_workflows: z.array(SLUG).optional(),
   }),
 });
