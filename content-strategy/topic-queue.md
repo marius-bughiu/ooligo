@@ -93,31 +93,31 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] calendly — pricing never verified (no pricing_checked field; SLA 60d) → slug: calendly
 - refresh:A: [type:tool] [vertical:customer-success] canny — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, pricing/positioning moved — superseded by the refresh:C: item below
 - refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field; SLA 60d) → skip: retired by Thomson Reuters 2025-04; tool page already reframed as sunset 2026-07-25 — no live pricing to verify
-- refresh:A: [type:tool] [vertical:customer-success] chameleon — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] chatgpt — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] chili-piper — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] chorus — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] churnzero — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] clari — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] claude — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] clay — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:customer-success] clientsuccess — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:legal-ops] clio — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:recruiting] codesignal — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] cognism — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] common-room — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:legal-ops] concord — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:legal-ops] conga-clm — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:legal-ops] contractpodai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:legal-ops] contractworks — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] crossbeam — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] cursor — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:customer-success] custify — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:customer-success] decagon — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] default — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:legal-ops] definely — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:customer-success] delighted — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
-- refresh:A: [type:tool] [vertical:revops] demandbase — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T17:10:32Z
+- refresh:A: [type:tool] [vertical:customer-success] chameleon — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] chatgpt — pricing never verified (no pricing_checked field; SLA 60d) → slug: chatgpt
+- refresh:A: [type:tool] [vertical:revops] chili-piper — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] chorus — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] churnzero — pricing never verified (no pricing_checked field; SLA 60d) → slug: churnzero
+- refresh:A: [type:tool] [vertical:revops] clari — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] claude — pricing never verified (no pricing_checked field; SLA 60d) → slug: claude
+- refresh:A: [type:tool] [vertical:revops] clay — pricing never verified (no pricing_checked field; SLA 60d) → slug: clay
+- refresh:A: [type:tool] [vertical:customer-success] clientsuccess — pricing never verified (no pricing_checked field; SLA 60d) → slug: clientsuccess
+- refresh:A: [type:tool] [vertical:legal-ops] clio — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, not confirmable — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:recruiting] codesignal — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] cognism — pricing never verified (no pricing_checked field; SLA 60d) → slug: cognism
+- refresh:A: [type:tool] [vertical:revops] common-room — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] concord — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] conga-clm — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] contractpodai — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] contractworks — pricing never verified (no pricing_checked field; SLA 60d) → slug: contractworks
+- refresh:A: [type:tool] [vertical:revops] crossbeam — pricing never verified (no pricing_checked field; SLA 60d) → slug: crossbeam
+- refresh:A: [type:tool] [vertical:revops] cursor — pricing never verified (no pricing_checked field; SLA 60d) → slug: cursor
+- refresh:A: [type:tool] [vertical:customer-success] custify — pricing never verified (no pricing_checked field; SLA 60d) → slug: custify
+- refresh:A: [type:tool] [vertical:customer-success] decagon — pricing never verified (no pricing_checked field; SLA 60d) → slug: decagon
+- refresh:A: [type:tool] [vertical:revops] default — pricing never verified (no pricing_checked field; SLA 60d) → slug: default
+- refresh:A: [type:tool] [vertical:legal-ops] definely — pricing never verified (no pricing_checked field; SLA 60d) → slug: definely
+- refresh:A: [type:tool] [vertical:customer-success] delighted — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] demandbase — pricing never verified (no pricing_checked field; SLA 60d) → slug: demandbase
 - refresh:A: [type:tool] [vertical:legal-ops] disco — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] dock — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing never verified (no pricing_checked field; SLA 60d)
@@ -310,6 +310,17 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:customer-success] canny — material (Pro now $79/mo billed yearly (entry says 19); tiers restructured to Free/Pro/Business; found by tier-A verify 2026-07-26)
 - refresh:C: [type:tool] [vertical:revops] apollo — material (pricing verified unchanged, but Apollo MCP now exists (mcp_available false -> true); found by tier-A verify 2026-07-26)
 - refresh:C: [type:tool] [vertical:legal-ops] brightflag — material (pricing verified unchanged, but Brightflag shipped an MCP connector (mcp_available false -> true); found by tier-A verify 2026-07-26)
+- refresh:C: [type:tool] [vertical:customer-success] chameleon — plans page now publishes list numbers and adds a Pro tier ($279 Startup / $750 Pro / $1,250 Growth) — entry says prices are gated and models a 3-4x Startup-to-Growth cliff that no longer exists
+- refresh:C: [type:tool] [vertical:revops] chili-piper — per-seat $22.50 replaced by platform packages — Routing & Scheduling $1,250/mo (15 seats), Experiences $3,500/mo, ChiliCal standalone $12/user at 200-seat minimum
+- refresh:C: [type:tool] [vertical:revops] chorus — pricing verified unchanged 2026-07-26 (quote-only, still an active ZoomInfo product) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("leverage", L35)
+- refresh:C: [type:tool] [vertical:revops] clari — Clari + Salesloft MCP server shipped 2026-04 for Clari Copilot enterprise customers — mcp_available must flip to true, and the post-merger Clari/Salesloft framing needs the body
+- refresh:B: [type:tool] [vertical:legal-ops] clio — clio.com/pricing 403s to fetch and third-party sources disagree on Advanced/Complete ($119/$149 vs the entry's $129/$159); entry point $49 EasyStart and pricing_model flat both still hold — needs the vendor page
+- refresh:C: [type:tool] [vertical:recruiting] codesignal — no longer quote-only — Hire publishes Build $79/mo and Grow $479/mo (annual), plus a Learn/Cosmo+ line at $24.99/mo; entry says "custom only, mid-five figures" and misses the learning repositioning
+- refresh:C: [type:tool] [vertical:revops] common-room — free tier is gone and the entry price moved from ~$625/mo Starter to Essential $2,500/mo billed annually — pricing_model freemium and pricing_starts_at 0 are both wrong
+- refresh:C: [type:tool] [vertical:legal-ops] concord — tiers renamed and repriced — Essentials/Business/Enterprise at $499/$899/$1,299 per month with a 5-user minimum ($99.80/$179.80/$259.80 per user), vs the entry's Standard $49 / Business $129 per user
+- refresh:C: [type:tool] [vertical:legal-ops] conga-clm — pricing verified unchanged 2026-07-26 (quote-only) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("best-in-class", L35); Conga Advantage Platform repositioning also unreflected
+- refresh:C: [type:tool] [vertical:legal-ops] contractpodai — rebranded to Leah AI — contractpodai.com/pricing now 301s to leahai.com/pricing; product naming and positioning in the entry are stale
+- refresh:C: [type:tool] [vertical:customer-success] delighted — sunset complete — all customer access terminated 2026-06-30 and delighted.com/pricing now redirects to qualtrics.com/delighted ("no longer available"); needs the sunset path: vendor_status sunset, superseded_by qualtrics, drop ooligo_score
 
 ## Tools
 
