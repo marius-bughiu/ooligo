@@ -67,31 +67,31 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:learn] [vertical:legal-ops] legal-ai-vs-legaltech — material (casetext retired by Thomson Reuters 2025-04 [names retired product as live]; lawgeex enterprise product dismantled 2023 [names defunct/absorbed vendor as live])
 - refresh:C: [type:learn] [vertical:legal-ops] nda-playbook — material (lawgeex enterprise product dismantled 2023 [related_tools])
 - refresh:C: [type:learn] [vertical:legal-ops] privilege-review — material (casetext retired by Thomson Reuters 2025-04 [names retired product as live])
-- refresh:A: [type:tool] [vertical:revops] 11x — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] 1mind — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] 6sense — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] agiloft — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] aisdr — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] amplemarket — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] amplitude — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] apollo — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] appcues — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] apriora — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] arrows — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] artisan — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] ashby — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] asknicely — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] attio — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] avature — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] aviso — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] bamboohr — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] beamery — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] blackboiler — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] boostup — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] brightflag — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] bullhorn — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] calendly — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] canny — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] 11x — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] 1mind — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] 6sense — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:legal-ops] agiloft — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] aisdr — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] amplemarket — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] amplitude — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] apollo — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] appcues — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] apriora — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] arrows — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] artisan — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] ashby — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] asknicely — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] attio — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] avature — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] aviso — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] bamboohr — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] beamery — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:legal-ops] blackboiler — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] boostup — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:legal-ops] brightflag — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] bullhorn — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:revops] calendly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] canny — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-26T21:00:00Z
 - refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] chameleon — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] chatgpt — pricing never verified (no pricing_checked field; SLA 60d)
