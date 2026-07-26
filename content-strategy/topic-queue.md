@@ -728,7 +728,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - [type:stack] [vertical:revops] new entry: pls-product-led-sales-stack — Pocus + Koala + Salesforce + Slack; use case: PLG SaaS layering sales motion onto self-serve usage → slug: pls-product-led-sales-stack
 - [type:stack] [vertical:revops] new entry: partner-ecosystem-stack — Crossbeam + Reveal + Salesforce + Common Room; use case: partner-led growth with ecosystem account-mapping → slug: partner-ecosystem-stack
 - [type:stack] [vertical:revops] new entry: ai-sdr-stack — 11x-or-Artisan + Clay + Salesforce/HubSpot + Smartlead; use case: AI-led outbound pipeline with human QA in the loop → slug: ai-sdr-stack
-- [type:stack] [vertical:revops] new entry: cold-email-infrastructure-stack — Smartlead/Instantly + secondary domains + Clay + warmup tooling; use case: deliverability-safe high-volume cold outreach → claimed: new 2026-07-26T18:04:00+03:00
+- [type:stack] [vertical:revops] new entry: cold-email-infrastructure-stack — Smartlead/Instantly + secondary domains + Clay + warmup tooling; use case: deliverability-safe high-volume cold outreach → slug: cold-email-infrastructure-stack
 - [type:stack] [vertical:revops] new entry: inbound-conversion-stack — Default-or-Chili-Piper + Qualified + Salesforce + Slack; use case: instant inbound lead-to-meeting conversion
 - [type:stack] [vertical:recruiting] new entry: ai-sourcing-stack — SeekOut/hireEZ + Gem + LinkedIn + ATS; use case: AI-assisted passive-candidate sourcing at scale
 - [type:stack] [vertical:recruiting] new entry: technical-hiring-stack — CodeSignal/HackerRank + Karat + Greenhouse; use case: standardized technical screening pipeline

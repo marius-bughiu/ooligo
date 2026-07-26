@@ -1,0 +1,112 @@
+---
+slug: cold-email-infrastructure-stack
+canonical_slug: cold-email-infrastructure-stack
+locale: fr
+verticals: [revops]
+title: Stack d'infrastructure cold email — de l'outbound en volume sans brûler la délivrabilité
+tools: [clay, smartlead, instantly, hubspot]
+use_case: Mener de l'outbound à froid en gros volume depuis des domaines d'envoi isolés sans dépenser la réputation du domaine principal — provisionnement des domaines et des boîtes, warmup, vérification des listes, rotation des envois et passage de la réponse au pipeline.
+difficulty: advanced
+related_workflows:
+  - email-deliverability-monitor-n8n
+  - icp-account-list-builder-clay
+last_updated: "2026-07-26"
+---
+
+Le stack pour envoyer des dizaines de milliers d'emails à froid par mois sans y dépenser la réputation de votre domaine principal. Quatre couches : des domaines et boîtes d'envoi isolés, [Clay](/fr/tools/clay/) pour la construction de la liste et le filtre de vérification, [Smartlead](/fr/tools/smartlead/) ou [Instantly](/fr/tools/instantly/) comme moteur d'envoi et de rotation, et [HubSpot](/fr/tools/hubspot/) comme destination de tout ce qui répond.
+
+Une seule contrainte structure ici chaque décision. Depuis février 2024, Gmail et Yahoo appliquent des exigences d'expéditeur à tout domaine qui envoie 5 000 messages par jour ou plus : SPF, DKIM, un enregistrement DMARC aligné, des en-têtes de désabonnement en un clic conformes à la RFC 8058 et un taux de plainte pour spam remonté par Postmaster maintenu sous 0,3 %. Microsoft applique sa propre version depuis le 2025-05-05 au même seuil de 5 000 messages par jour vers outlook.com, hotmail.com et live.com, et les messages non conformes sont rejetés plutôt que filtrés. Un programme qui ignore cela ne se dégrade pas progressivement — il cesse d'arriver, et le domaine qui le portait reste abîmé même après correction de la configuration.
+
+## Comment les pièces s'assemblent
+
+### La couche domaines et boîtes
+
+Cette couche relève d'une décision de provisionnement plus que d'un achat de produit, et c'est elle qui détermine si le reste du stack fonctionne. Le volume à froid ne part jamais du domaine qui porte vos emails transactionnels, vos factures et votre liste marketing. Il part d'un ensemble de domaines similaires enregistrés — `yourcompany-hq.com`, `getyourcompany.com`, `yourcompany.io` — achetés autour de 12 USD par an chacun, chacun authentifié indépendamment avec ses propres enregistrements SPF, DKIM et DMARC, et chacun portant 2 à 4 boîtes.
+
+Deux façons d'acheter les boîtes. Google Workspace Business Starter coûte 7 USD par utilisateur et par mois en engagement annuel et 8,40 USD en facturation mensuelle flexible, et plafonne un utilisateur à 2 000 messages et 3 000 destinataires externes par jour sur une fenêtre glissante de 24 heures. Ces plafonds sont très au-dessus du niveau sûr pour de l'email à froid — le chiffre opérationnel est de 20 à 40 envois par boîte et par jour, ce qui signifie que la limite de la plateforme n'est jamais la contrainte réelle et qu'il ne faut pas la traiter comme un objectif. Les fournisseurs de boîtes dédiées au cold email (Maildoso, Mailscale, ScaledMail) vendent des boîtes préprovisionnées avec le DNS déjà configuré entre 1,90 et 3,00 USD par boîte et par mois, seuil où le calcul bascule à partir d'une trentaine de boîtes.
+
+Le point de vigilance : les conditions d'utilisation de Google Workspace n'envisagent pas les fermes de boîtes provisionnées pour de l'envoi de masse non sollicité, et les comptes achetés en bloc sur la même identité de facturation sont suspendus ensemble. La garde : enregistrez et facturez chaque domaine d'envoi séparément, ou utilisez un fournisseur de boîtes dédié dont le produit entier suppose cet usage.
+
+### Clay — construction de la liste et filtre de vérification
+
+[Clay](/fr/tools/clay/) construit et enrichit la liste et, plus déterminant encore, c'est là que les enregistrements sont éliminés avant d'atteindre la moindre boîte. L'enrichissement en cascade fait passer un enregistrement par plusieurs fournisseurs jusqu'à trouver un email professionnel vérifié ; les colonnes IA notent le compte face à la grille ICP et rédigent la variable de personnalisation que la séquence viendra fusionner. Clay facture sur deux compteurs, les Data Credits pour les requêtes fournisseurs et les Actions pour les exécutions IA et les opérations de table, sur un palier Free (500 Actions, 100 Data Credits, 200 lignes par table), Launch à 185 USD/mois en mensuel ou environ 167 USD/mois en facturation annuelle (15 000 Actions, 2 500 Data Credits), Growth à 495 USD/mois en mensuel ou environ 446 USD/mois en annuel (40 000 Actions, 6 000 Data Credits), et un palier Enterprise sur devis uniquement.
+
+Le filtre de vérification est la partie que les équipes sautent et qu'elles paient ensuite. Un taux de rebond au-dessus de 3 % environ suffit à transformer un domaine chauffé en domaine brûlé en une seule campagne, donc la liste passe par un vérificateur dédié — MillionVerifier autour de 0,0037 USD par adresse (37 USD pour 10 000), ZeroBounce à 8 USD pour 1 000 crédits en prépayé et environ 0,004 USD par adresse au-delà de 250 000 — et tout ce qui revient en catch-all ou en risqué est retenu plutôt qu'envoyé. La vérification est peu coûteuse au regard de ce qu'elle protège : vérifier 50 000 adresses via MillionVerifier coûte moins qu'un mois de plateforme d'envoi.
+
+### Smartlead — envoi, rotation et détection des réponses
+
+[Smartlead](/fr/tools/smartlead/) est le moteur d'envoi et le choix par défaut de ce stack. Son rôle est de prendre une liste vérifiée et enrichie et de répartir l'envoi sur toutes les boîtes connectées pour qu'aucune adresse ne porte de pic de volume — la rotation est le mécanisme qui fait que 40 boîtes à 30 envois par jour ne se comportent pas comme 1 boîte à 1 200. Tous les plans Smartlead incluent des comptes email illimités sans coût par boîte, et c'est la raison précise pour laquelle il est le choix par défaut ici : un stack dont la prémisse entière est la mise à l'échelle horizontale des boîtes ne devrait pas être facturé à la boîte. Les plans vont de 39 USD/mois (Base, 6 000 envois), 94 USD/mois (Pro, 90 000 envois), 174 USD/mois (Unlimited Smart, 150 000 envois) et 379 USD/mois (Unlimited Prime, 500 000 envois), avec 17 % de remise en facturation annuelle — 32,50, 78,30, 144,50 et 314,60 USD respectivement. L'accès API et webhooks ainsi que 3 SmartServers dédiés apparaissent au palier Prime.
+
+Smartlead assure aussi la classification des réponses : il détecte une réponse humaine, sort ce fil de la séquence et le catégorise avant de le transmettre. Cette catégorisation est le déclencheur du passage au CRM décrit plus bas.
+
+### Instantly — le moteur d'envoi alternatif
+
+[Instantly](/fr/tools/instantly/) occupe la même couche que Smartlead et l'on utilise l'un ou l'autre, jamais les deux. Son rôle dans ce stack est le remplacement pour les équipes qui veulent une base de leads et un agent de réponse IA dans le même abonnement plutôt qu'assemblés par morceaux, et pour celles dont le problème de délivrabilité se situe au niveau IP et non au niveau de la boîte. Le plan Growth d'Instantly, outbound seul, coûte 47 USD/mois avec comptes email illimités, warmup illimité et 5 000 envois par mois ; les bundles vont de 94 USD/mois en Starter (85 USD en annuel), 194 USD/mois en Scale (175 USD en annuel, 100 000 envois et 25 000 contacts importés) et 555 USD/mois en Agency (500 USD en annuel, 500 000 envois), le système SISR — des pools d'IP dédiées fragmentés et rotatifs qui isolent une IP signalée du reste — apparaissant au palier Agency.
+
+La règle de choix : prenez Instantly quand vous voulez que sa base B2B de 450 millions d'enregistrements remplace une partie de la dépense data chez Clay, ou quand vous envoyez depuis des pools d'IP dédiées plutôt que depuis une infrastructure partagée. Prenez Smartlead quand vous possédez déjà la couche data, que vous voulez le chemin le moins cher vers des boîtes illimitées et un accès API sans acheter un plan de niveau agence.
+
+### HubSpot — là où une réponse devient du pipeline
+
+[HubSpot](/fr/tools/hubspot/) est le système de référence et le point où le programme outbound cesse d'être un exercice d'envoi. Une réponse positive classée dans Smartlead crée ou met à jour un contact HubSpot, attache le contexte enrichi de Clay à la fiche, ouvre un deal au premier stade et assigne un propriétaire. Tout ce qui précède est de l'infrastructure ; c'est ici que commence la mesure, parce que le taux de réponse n'est pas un chiffre de business alors que le pipeline créé par boîte d'envoi en est un. Le CRM de base de HubSpot est gratuit, Sales Hub Starter coûte 15 USD par siège et par mois en facturation annuelle (environ 20 USD en mensuel) et Sales Hub Professional 90 USD par siège et par mois en annuel avec des frais d'onboarding uniques de 1 500 USD.
+
+### Passages nommés
+
+1. **Liste construite → vérifiée :** la table Clay termine l'enrichissement en cascade → les lignes partent vers le vérificateur → seules les lignes `valid` reviennent dans la liste d'envoi ; les catch-all et les risquées sont retenues.
+2. **Liste vérifiée → séquence :** les lignes vérifiées avec leurs variables de personnalisation passent de Clay à la campagne Smartlead, qui les répartit sur le pool de boîtes au plafond quotidien configuré par boîte.
+3. **Réponse détectée → séquence arrêtée :** Smartlead classe une réponse entrante comme humaine → retire le fil de la séquence → déclenche un webhook.
+4. **Réponse positive → pipeline :** le webhook crée ou met à jour le contact HubSpot avec l'enrichissement Clay attaché, ouvre un deal et assigne le propriétaire.
+5. **Seuil de spam franchi → envoi suspendu :** Postmaster Tools signale un domaine qui franchit le seuil de plaintes → les boîtes de ce domaine sortent du pool de rotation avant que la réputation au niveau plateforme ne suive. Le [workflow de surveillance de la délivrabilité](/fr/workflows/email-deliverability-monitor-n8n/) automatise ce contrôle.
+
+## Pourquoi cette combinaison
+
+La raison porteuse est l'isolation du rayon d'impact. Toute défaillance coûteuse en cold email est une défaillance à destin partagé — une mauvaise liste brûle le domaine, un domaine brûlé entraîne l'IP, une IP partagée entraîne tous les autres expéditeurs qui s'y trouvent. Ce stack est bâti pour que chaque couche échoue seule : les domaines sont indépendants, donc un domaine brûlé se remplace pour 12 USD et deux semaines de warmup ; les boîtes tournent, donc aucune adresse n'accumule l'historique de plaintes ; le filtre de vérification arrête la mauvaise liste chez Clay et non sur le bouton spam du destinataire ; et le CRM se situe entièrement hors de l'infrastructure d'envoi, si bien que remplacer toute la couche d'envoi ne vous coûte rien en données de pipeline.
+
+L'alternative consiste à faire passer le volume à froid par la plateforme de marketing automation que vous possédez déjà, et elle échoue de façon précise, pas vague. Le domaine d'envoi de HubSpot est partagé avec vos emails de nurturing et de cycle de vie, donc un pic de plaintes venu d'une liste froide dégrade les emails que reçoivent vos clients existants ; il n'existe pas de primitive de rotation des boîtes ; et le seuil Postmaster de 0,3 % se calcule par domaine, ce qui veut dire que les deux programmes partagent un budget unique de plaintes. Les réunir n'est pas une économie — c'est la décision de dépenser la délivrabilité de votre marketing en prospection.
+
+L'asymétrie de coût va dans le même sens. La couche d'envoi coûte ici 2 000 USD par an ou moins. L'infrastructure qu'elle protège — un domaine principal doté d'années de réputation d'expéditeur accumulée — n'a pas de prix d'achat et un coût de remplacement qui se compte en trimestres.
+
+## Réalité des coûts
+
+Fourchettes annuelles pour un programme de 40 boîtes réparties sur 12 domaines, entre 30 000 et 50 000 envois par mois :
+
+- **Domaines :** ~150 USD/an (12 domaines à ~12 USD pièce). Achetez-en un ou deux de réserve.
+- **Boîtes :** ~900 à 1 450 USD/an chez un fournisseur de boîtes dédié à 1,90-3,00 USD par boîte et par mois, ou ~3 400 USD/an sur Google Workspace Business Starter à 7 USD par utilisateur et par mois en annuel. L'écart se creuse à chaque boîte ajoutée.
+- **Plateforme d'envoi :** ~1 750 USD/an (Smartlead Unlimited Smart à 144,50 USD/mois en facturation annuelle) ou ~2 100 USD/an (Instantly Scale à 175 USD/mois en annuel). Smartlead Base à 32,50 USD/mois en annuel ne couvre que 6 000 envois et ne convient pas à ce volume.
+- **Clay :** ~2 000 à 5 400 USD/an (Launch à ~167 USD/mois en annuel, Growth à ~446 USD/mois en annuel). C'est le volume d'enrichissement qui décide du palier, pas le nombre de sièges.
+- **Vérification :** ~150 à 250 USD/an pour 50 000 adresses par mois via MillionVerifier.
+- **HubSpot :** 0 USD sur le CRM gratuit, ou ~540 USD/an pour 3 sièges Sales Hub Starter à 15 USD par siège et par mois en annuel.
+
+**Fourchette annuelle totale : ~5 000 à 10 000 USD** pour un programme de 40 boîtes, Clay étant la ligne la plus élevée et la plus sensible au volume.
+
+Les coûts cachés sont ceux qui décident si le programme fonctionne. Le warmup de domaine prend 2 à 4 semaines par nouveau domaine avant qu'il ne porte du volume de campagne, et c'est du temps calendaire que vous ne pouvez pas racheter. L'exploitation courante représente 5 à 10 heures par semaine d'attention d'une personne réelle — répondre aux fils que le classificateur a mal routés, retirer les domaines dont le taux de plaintes a dérivé et reconstruire les listes à mesure que la définition d'ICP s'affine. Le développement du copy et de l'offre se situe entièrement hors de ce budget et c'est la variable qui fait réellement bouger le taux de réponse.
+
+## Règles d'adéquation
+
+**Utilisez ce stack quand :**
+
+- L'email outbound est une source primaire de pipeline et non un complément, et que vous envoyez au moins 10 000 messages par mois. En dessous, le surcoût d'infrastructure dépasse ce que la rotation apporte.
+- Vous vendez à un ICP défini dont le format d'email professionnel est vérifiable. L'enrichissement et le scoring de Clay ne valent que la grille contre laquelle ils s'exécutent.
+- Quelqu'un porte la délivrabilité comme responsabilité nommée — lire Postmaster Tools chaque semaine, faire tourner les domaines, surveiller les taux de rebond et de plaintes. Sans cette personne, ce stack se dégrade en silence.
+- Votre position juridique sur l'email B2B non sollicité est tranchée pour les zones que vous adressez, et la séquence porte une adresse postale et un opt-out fonctionnel sur chaque message.
+
+**N'utilisez pas ce stack quand :**
+
+- Vous envoyez principalement vers l'UE ou le Royaume-Uni, où le RGPD et la PECR font de l'email B2B non sollicité vers des adresses nominatives une question de consentement et non d'opt-out. L'infrastructure fonctionne ; la motion peut ne pas être licite pour votre liste. Tranchez cela avant de provisionner, pas après.
+- Votre marché adressable total est inférieur à quelques milliers de comptes. À cette taille, la rotation de boîtes est une machinerie pour un problème que vous n'avez pas, et une liste travaillée de 200 comptes envoyée depuis votre vrai domaine fait mieux.
+- Vous n'avez pas d'offre différenciée. Ce stack augmente le volume délivrable ; il ne fait pas convertir un message indifférencié, et du volume face à une offre faible produit des plaintes plus vite que des rendez-vous.
+- Votre motion est inbound ou partenaires et l'outbound est une expérimentation. Menez l'expérimentation depuis une seule boîte d'abord.
+
+## Variantes courantes
+
+- **Remplacer Smartlead par Instantly.** Le bon échange quand vous voulez la base de leads et l'agent de réponse IA inclus plutôt que d'acheter la data séparément via Clay, ou quand votre problème de délivrabilité est au niveau IP et que vous avez besoin des pools dédiés fragmentés de SISR. Attendez-vous à une hausse de coût modérée à volume équivalent, et attendez-vous à conserver Clay malgré tout si votre ICP exige une profondeur d'enrichissement supérieure à une base unique.
+- **Ajouter [n8n](/fr/tools/n8n/) entre la plateforme d'envoi et le CRM.** Les intégrations natives couvrent le cas de la réponse positive ; elles ne couvrent pas les cas intéressants — router une absence du bureau vers une file de renvoi datée après le retour, sortir un domaine de la rotation sur dépassement du taux de plaintes, ou supprimer un compte entier dès qu'un de ses contacts répond négativement. Ajoutez n8n quand votre logique de passage dépasse ce qu'un webhook unique encaisse, pour environ 300-800 USD/an en cloud ou un VPS à 20-40 USD/mois en auto-hébergement.
+- **Remplacer HubSpot par Salesforce.** Correct quand Salesforce est déjà le système de référence. Cela ne change rien aux couches d'envoi et ajoute du travail d'intégration au passage, puisque le chemin de la réponse vers la fiche devient une écriture API au lieu d'un connecteur natif.
+- **Abandonner le fournisseur de boîtes dédié et rester sur Google Workspace.** Raisonnable en dessous d'une quinzaine de boîtes, où le surcoût par boîte est faible et où vous préférez garder les boîtes dans une console d'administration que votre équipe IT opère déjà.
+
+## Ce que ce stack NE remplace PAS
+
+- Un message qui mérite d'être lu. Rien dans ce stack n'améliore le taux de réponse ; chaque couche ici protège la capacité même à envoyer.
+- La revue juridique de votre motion outbound. Le CAN-SPAM aux États-Unis est un régime d'opt-out ; le RGPD et la PECR en Europe ne le sont pas, et la CASL au Canada est plus stricte que les deux. Le stack n'applique rien de tout cela à votre place.
+- Une stratégie de liste. Clay exécute une définition d'ICP et construira une liste chère et bien enrichie des mauvais comptes aussi fidèlement que des bons.
+- L'intelligence conversationnelle et le processus commercial en aval. Dès qu'une réponse devient un rendez-vous, ce stack a terminé ; [Gong](/fr/tools/gong/) et le workflow de deals du CRM prennent tout le reste en charge.
+- Les fondamentaux de délivrabilité eux-mêmes — enregistrements d'authentification, discipline de warmup, surveillance des plaintes. L'outillage automatise l'exécution, pas la compréhension. Commencez par [comment garder le cold email hors du spam](/fr/learn/email-deliverability-for-cold-outreach/) avant de provisionner quoi que ce soit.
