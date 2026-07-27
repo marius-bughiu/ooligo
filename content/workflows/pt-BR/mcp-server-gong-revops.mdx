@@ -1,0 +1,92 @@
+---
+slug: mcp-server-gong-revops
+canonical_slug: mcp-server-gong-revops
+locale: pt-BR
+verticals: [revops]
+title: Servidor MCP do Gong para perguntas de conversas e risco de deals
+artifact_type: mcp-server
+tools_used: [gong, claude]
+roles: [revops, gtm-engineer, sales-enablement]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-07-27"
+---
+
+Um servidor Model Context Protocol somente-leitura que dá ao Claude acesso delimitado à sua conta do [Gong](/pt-BR/tools/gong/): descoberta de calls, definições de trackers, sinais analisados por call, estatísticas de interação por rep e uma ferramenta derivada que reporta quais trackers de risco dispararam em quais calls — separando se foi o cliente que disse ou o seu próprio rep. O scaffold está no bundle de artefatos em `apps/web/public/artifacts/mcp-server-gong-revops/`, que inclui `README.md`, `pyproject.toml` e `src/gong_revops_mcp/server.py`, instalável com `pip install -e .`.
+
+Comece pelo que a API não tem, porque isso determina o formato de todo o resto. **A API pública do Gong não expõe nenhum endpoint de leitura para os dados do deal board.** Os endpoints de CRM (`GET /v2/crm/entities`) retornam apenas objetos que você subiu antes por uma integração de CRM genérica registrada, e a documentação do Gong marca esse endpoint como verificação em fase de desenvolvimento. Então um servidor que promete "pergunte ao Claude sobre seus deals do Gong" está fazendo uma de três coisas: envolvendo a UI, lendo seu CRM no lugar, ou adivinhando. Este deriva o risco do deal das conversas e diz isso: `deal_risk_digest` retorna os hits de trackers com uma nota mandando você juntar `call_id` ao seu CRM para stage, valor e data de fechamento.
+
+## Quando usar
+
+Recorra a ele quando uma pergunta recorrente de RevOps custa dez minutos de cliques para uma pessoa: quais contas reclamaram de preço na semana passada, em quais calls um concorrente foi citado, se os reps de um segmento em dificuldade estão monologando. Esses são joins entre os próprios dados do Gong que a UI te obriga a fazer no olho. Dois papéis extraem mais valor. O líder de RevOps que roda um pipeline review semanal pergunta em linguagem natural e cola uma resposta estruturada no deck. O GTM engineer que escreve um script descartável contra `/v2/calls/extensive` a cada nova pergunta já tem o `contentSelector`, a paginação por cursor, o rate limiter e a atribuição de falante prontos.
+
+É também o padrão certo se você já roda o [servidor MCP do Salesforce para RevOps](/pt-BR/workflows/mcp-server-salesforce-revops/) ou o [do Clari](/pt-BR/workflows/mcp-server-clari-revops/) e quer a camada de conversa na mesma superfície de chat, para que uma pergunta atravesse de "o que o cliente disse" para "em qual stage está" sem trocar de aba. Essa travessia é o ganho real — nenhum dos dois sistemas responde isso sozinho.
+
+## Quando NÃO usar
+
+- **O Gong já publica um servidor MCP oficial.** O Gong anunciou suporte a MCP em 2026 e documenta um servidor MCP hospedado pelo próprio Gong, disponível em qualquer plano do Gong, configurado por um administrador técnico e com acesso governado pelo nível de assento. Ele permite que Claude, ChatGPT e Microsoft Copilot perguntem sobre contas e deals e puxem os insights gerados pela IA do Gong. **Teste primeiro.** É de primeira parte, não exige hospedar processo nenhum e respeita as permissões por nível de assento do Gong, o que este scaffold não faz. Construa a versão auto-hospedada quando você precisar de uma superfície de ferramentas fixa e auditável — um `contentSelector` que você controla, um kill-switch de transcrições, um limite de páginas, saída de trackers com atribuição de falante — ou quando seu administrador não habilitar o servidor hospedado.
+- **Você não consegue um administrador para gerar uma API key.** As credenciais saem de Company Settings → Ecosystem → API e só um administrador técnico pode criá-las. Não existe key por usuário.
+- **Visibilidade de calls por usuário é determinante para você.** Uma única key no nível da conta vê todas as calls dos workspaces que ela cobre, não importa qual pessoa esteja conversando. Se sua instância do Gong restringe quem pode ouvir as calls de quem, este servidor contorna isso. Rode um por analista com keys de escopo estreito, ou não rode.
+- **Você quer transcrições literais no modelo por padrão.** Aqui elas estão desligadas, e o design assume que isso é o certo. Se seu workflow é transcrição-primeiro, você vai brigar com o scaffold.
+- **Uma ou duas perguntas por mês.** Os filtros da própria UI do Gong são mais rápidos que um setup que você precisa manter.
+
+## O que ele expõe
+
+Seis ferramentas de leitura, nenhuma de escrita. A superfície de escrita da API pública é upload de calls e upload de objetos de CRM genérico; nenhuma das duas cabe atrás de um prompt de chat, e somente-leitura elimina toda a classe de falha do tipo "o modelo me entendeu errado e mudou o sistema de registro".
+
+- **`find_calls`** — `GET /v2/calls`. Só metadata: id, título, início, duração, direção, URL do Gong. Delimite a pergunta aqui primeiro.
+- **`list_trackers`** — `GET /v2/settings/trackers`. **Apenas definições** de trackers. O Gong não retorna contagens de correspondência por esse endpoint, o que surpreende as pessoas; as contagens de ocorrências vêm do endpoint extensive de calls.
+- **`call_signals`** — `POST /v2/calls/extensive`. O cavalo de batalha: participantes, correspondências de trackers, ocorrências de trackers, brief do Spotlight, key points, resultado automático da call, tópicos, tempo de fala, estatísticas de interação por pessoa, comentários públicos.
+- **`call_transcript`** — `POST /v2/calls/transcript`. Desligado a menos que `GONG_ALLOW_TRANSCRIPTS=true`, limitado a 3 calls, exige uma justificativa.
+- **`rep_interaction_stats`** — `POST /v2/stats/interaction`. Monólogo mais longo, história de cliente mais longa, interatividade, paciência, taxa de perguntas.
+- **`deal_risk_digest`** — derivada. Junta definições de trackers às ocorrências em um intervalo de datas e classifica cada hit como `customer`, `internal` ou `unattributed`.
+
+## Postura de engenharia
+
+**A atribuição de falante é o sentido inteiro do digest.** "Pricing Pushback" dito pelo seu próprio rep é um sinal de comportamento do rep. Dito pelo cliente, é um sinal do deal. Uma contagem de trackers que soma os dois se move pelos motivos errados e produz um número de risco no qual ninguém consegue agir. `deal_risk_digest` lê `content.trackerOccurrences`, procura cada `speakerId` no array `parties` da call e separa por afiliação da parte. É por isso que o servidor pede ocorrências e não só contagens, e é a única coisa que um wrapper genérico do Gong não vai fazer para você.
+
+**Mídia nunca é solicitada.** O `contentSelector` em `server.py` é fixo, não controlado por quem chama, e omite `media`. A key não carrega `api:calls:read:media-url`. Assim o servidor nunca gera os links assinados de áudio/vídeo de 8 horas do Gong — um link que sobrevive à conversa em que apareceu é um vazamento esperando um print.
+
+**Transcrições são um kill-switch, não um prompt.** `call_transcript` checa uma variável de ambiente antes de rodar e limita a três calls. Confiar só numa string de justificativa deixa a fala literal do cliente a uma leitura errada confiante da janela de contexto. A flag transforma "a gente permite isso, afinal?" em uma decisão de deploy em vez de uma decisão por pergunta.
+
+**A paginação é limitada e o limite é reportado.** `GONG_MAX_PAGES` vem em 5 por padrão, então uma chamada de ferramenta lê no máximo 500 registros e retorna `truncated: true` quando parou antes. Um modelo que vê metade dos dados em silêncio responde com confiança a pergunta errada.
+
+**As requisições são serializadas, não retentadas.** O Gong limita a 3 requisições por segundo e 10.000 requisições por dia por padrão, retornando 429 com um header `Retry-After`. O scaffold espera 0,34s entre requisições em vez de disparar em paralelo e reagir aos 429, porque uma tempestade de retries reativos gasta cota diária em requisições que iam falhar de qualquer jeito.
+
+## Realidade de custos
+
+Três linhas, mais uma que não é linha.
+
+- **Assinatura do Claude.** O que você já paga — Pro a $20/usuário/mês, Max a $100–200/usuário/mês, ou consumo de API. O servidor não muda nada aqui.
+- **Auto-hospedagem.** Um processo Python local por usuário do Claude Desktop: custo zero de infraestrutura. Como serviço compartilhado, uma VM pequena a uns $20–50/mês em qualquer cloud.
+- **Cota da API do Gong.** Grátis com seu contrato do Gong, não medida em dólares, mas finita: 3 requisições por segundo e 10.000 requisições por dia por empresa por padrão, ampliáveis falando com o suporte do Gong. Faça o orçamento. Um `deal_risk_digest` sobre 90 dias em um workspace com 4.000 calls são 40 páginas de 100 = 40 requisições. Dez perguntas assim por dia são 400 requisições, confortavelmente dentro do teto. O que estoura o orçamento é um loop de cursor sem limite, que é exatamente o que `GONG_MAX_PAGES` existe para evitar.
+- **Assentos do Gong.** O Gong não publica preço de tabela; é cotado por assento com uma taxa de plataforma. O que você paga não muda com este servidor — ele não adiciona assentos.
+
+O custo em tokens é dominado pelo payload das respostas, e é por isso que `server.py` enxuga cada resposta antes de devolvê-la. `call_signals` sobre 20 calls retorna briefs e key points em vez de conteúdo completo e cai nas dezenas baixas de milhares de tokens. Um `call_transcript` de uma call de 45 minutos é comparável por si só, e esse é o argumento real para deixar as transcrições desligadas.
+
+## Frente às alternativas
+
+- **O servidor MCP oficial do Gong.** Coberto acima: teste primeiro. De primeira parte, qualquer plano, permissões por nível de assento, nada para hospedar. Escolha o scaffold auto-hospedado quando você precisar de uma superfície de ferramentas que caiba em um arquivo e possa ser fixada, ou quando o servidor hospedado não estiver habilitado para você.
+- **Um servidor MCP do Gong da comunidade.** Existem vários no GitHub e em diretórios de MCP, a maioria envolvendo calls e transcrições. Mais rápido de instalar do que ler este scaffold. O contraponto é que "envolve calls e transcrições" costuma significar transcrições ligadas por padrão, sem limite de páginas e contagens de trackers sem atribuição de falante — as três decisões que este scaffold toma diferente de propósito.
+- **Um script descartável contra `/v2/calls/extensive`.** Controle máximo, e cada time reconstrói na mão a autenticação Basic, a base URL específica da conta, a paginação por cursor, o rate limiter e o join com parties. Este scaffold são umas 450 linhas com tudo isso já conectado.
+- **A própria UI do Gong e o Spotlight.** Mais rápido para uma call só e os dados já estão lá. Não consegue juntar dados do Gong ao resto do seu contexto no Claude, que é a única razão para rodar qualquer uma dessas coisas. Se você não tem certeza se um servidor MCP ou um Skill é o formato certo para o seu problema, leia [Claude Skill frente a servidor MCP](/pt-BR/learn/claude-skill-vs-mcp-server/).
+
+## Pontos de atenção
+
+O README documenta os sete; os cinco determinantes:
+
+- **Uma base URL errada retorna 401, não 404.** A base URL da API do Gong é específica da conta e `https://api.gong.io` é um padrão comum, não universal. Times perdem uma tarde depurando credenciais que estavam corretas. Guarda: `_raise_for_gong` intercepta o 401 e nomeia a base URL que realmente usou, listando o desencontro de base URL como primeira causa antes das credenciais.
+- **Um tracker renomeado se lê como boa notícia.** `deal_risk_digest` compara nomes de trackers exatamente, então um tracker renomeado no Gong para de corresponder e o digest reporta risco zero. Guarda: parcial — rode `list_trackers` primeiro e cole os nomes reais em `GONG_RISK_TRACKERS`; os padrões que vêm são placeholders que não correspondem a nada na maioria dos workspaces. Emitir um aviso quando um nome configurado não corresponde a nenhum tracker vivo é o TODO #3 do README.
+- **As estatísticas de interação punem baixo volume de calls.** As estatísticas do Gong derivam apenas de calls com Whisper habilitado, então um rep com três calls gravadas é estatisticamente indistinguível de um rep com um problema real. Guarda: `rep_interaction_stats` devolve esse alerta embutido em cada resposta, para o modelo repetir em vez de dar coaching sobre ruído; junte as contagens de `find_calls` antes de mostrar os números a um gestor.
+- **Truncamento silencioso.** Um loop de cursor interrompido no limite de páginas parece idêntico a uma resposta completa. Guarda: toda ferramenta paginada retorna `truncated: true` quando parou antes, e `find_calls` é o jeito barato de checar volume antes de fazer uma pergunta cara.
+- **Deriva de consentimento.** Um cliente que consentiu ser gravado não consentiu com isso ser resumido por um modelo de terceiros. Guarda: transcrições ficam desligadas por padrão e URLs de mídia nunca são geradas; revise seu DPA antes de ligar `GONG_ALLOW_TRANSCRIPTS`.
+
+## Stack
+
+- **Gong** — conversation intelligence, trackers, briefs do Spotlight, estatísticas de interação
+- **MCP Python SDK** — `mcp>=1.2.0`; fornece `Server`, `stdio_server` e os decoradores do registro de ferramentas
+- **httpx** — cliente REST async contra o host da API do Gong da sua conta, autenticação Basic com `base64("key:secret")`
+- **Claude Desktop ou Claude Code** — interface de linguagem natural e chamador de ferramentas
+- **`GONG_ALLOW_TRANSCRIPTS`** — a trava no nível de ambiente que decide se a fala literal do cliente chega ao modelo
+- **`GONG_MAX_PAGES`** — a guarda de cota que também deixa visível ao modelo que a resposta está incompleta
