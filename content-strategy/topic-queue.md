@@ -27,7 +27,7 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:C: [type:tool] [vertical:recruiting] brighthire — material (brighthire acquired by Zoom 2025-12) → claimed: refresh 2026-07-27T21:00:00Z
+- refresh:C: [type:tool] [vertical:recruiting] brighthire — material (brighthire acquired by Zoom 2025-12) → slug: brighthire
 - refresh:C: [type:tool] [vertical:revops] catalyst — material (catalyst merged into Totango)
 - refresh:C: [type:tool] [vertical:legal-ops] lawgeex — material (enterprise product dismantled 2023: assets to Robin AI, clients to LegalSifter, founders to Superlegal; the earlier → skip: marker refused a *pricing* refresh and called for exactly this sunset rewrite — keep the URL, past-tense body, drop ooligo_score)
 - refresh:C: [type:comparison] [vertical:legal-ops] alternatives-to-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject])
