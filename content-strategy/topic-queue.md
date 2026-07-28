@@ -32,7 +32,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:legal-ops] lawgeex — material (enterprise product dismantled 2023: assets to Robin AI, clients to LegalSifter, founders to Superlegal; the earlier → skip: marker refused a *pricing* refresh and called for exactly this sunset rewrite — keep the URL, past-tense body, drop ooligo_score) → slug: lawgeex
 - refresh:C: [type:comparison] [vertical:legal-ops] alternatives-to-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject]) → slug: alternatives-to-casetext
 - refresh:C: [type:comparison] [vertical:revops] alternatives-to-chatgpt — material (perplexity Max tier + official MCP server [roundup option]) → slug: alternatives-to-chatgpt
-- refresh:C: [type:comparison] [vertical:revops] alternatives-to-claude — material (perplexity Max tier + official MCP server [roundup option]) → claimed: refresh 2026-07-28T05:12:00Z
+- refresh:C: [type:comparison] [vertical:revops] alternatives-to-claude — material (perplexity Max tier + official MCP server [roundup option]) → slug: alternatives-to-claude
 - refresh:C: [type:comparison] [vertical:revops] alternatives-to-outreach — material (salesloft merged into Clari 2025-12, Drift sunset [roundup option]; outreach agentic relaunch + outreach.ai rebrand [subject])
 - refresh:C: [type:comparison] [vertical:recruiting] alternatives-to-paradox — material (sense published pricing + AI Recruiter SKU [roundup option]; paradox acquired by Workday 2025-10 [subject])
 - refresh:C: [type:comparison] [vertical:revops] apollo-vs-outreach — material (outreach agentic relaunch + outreach.ai rebrand [subject])
@@ -321,6 +321,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:legal-ops] conga-clm — pricing verified unchanged 2026-07-26 (quote-only) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("best-in-class", L35); Conga Advantage Platform repositioning also unreflected
 - refresh:C: [type:tool] [vertical:legal-ops] contractpodai — rebranded to Leah AI — contractpodai.com/pricing now 301s to leahai.com/pricing; product naming and positioning in the entry are stale
 - refresh:C: [type:tool] [vertical:customer-success] delighted — sunset complete — all customer access terminated 2026-06-30 and delighted.com/pricing now redirects to qualtrics.com/delighted ("no longer available"); needs the sunset path: vendor_status sunset, superseded_by qualtrics, drop ooligo_score
+- refresh:B: [type:comparison] [vertical:revops] alternatives-to-chatgpt — two factual corrections found while authoring alternatives-to-claude 2026-07-28, both in all 6 locales: (1) the page says Claude Team has a "5-seat minimum" but support.claude.com/en/articles/9266767 states "Team plans require a minimum of two members"; (2) the fourth Perplexity MCP tool is named `perplexity_reasoning`, not `perplexity_reason`. Patch in place, do not bump last_updated
 
 ## Tools
 
