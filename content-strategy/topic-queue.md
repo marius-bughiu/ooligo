@@ -747,7 +747,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - [type:stack] [vertical:revops] new entry: ai-sdr-stack — 11x-or-Artisan + Clay + Salesforce/HubSpot + Smartlead; use case: AI-led outbound pipeline with human QA in the loop → slug: ai-sdr-stack
 - [type:stack] [vertical:revops] new entry: cold-email-infrastructure-stack — Smartlead/Instantly + secondary domains + Clay + warmup tooling; use case: deliverability-safe high-volume cold outreach → slug: cold-email-infrastructure-stack
 - [type:stack] [vertical:revops] new entry: inbound-conversion-stack — Default-or-Chili-Piper + Qualified + Salesforce + Slack; use case: instant inbound lead-to-meeting conversion → slug: inbound-conversion-stack
-- [type:stack] [vertical:recruiting] new entry: ai-sourcing-stack — SeekOut/hireEZ + Gem + LinkedIn + ATS; use case: AI-assisted passive-candidate sourcing at scale
+- [type:stack] [vertical:recruiting] new entry: ai-sourcing-stack — SeekOut/hireEZ + Gem + LinkedIn + ATS; use case: AI-assisted passive-candidate sourcing at scale → claimed: new 2026-07-29T18:05:00+03:00
 - [type:stack] [vertical:recruiting] new entry: technical-hiring-stack — CodeSignal/HackerRank + Karat + Greenhouse; use case: standardized technical screening pipeline
 - [type:stack] [vertical:recruiting] new entry: interview-intelligence-stack — BrightHire/Pillar + Greenhouse + Zoom; use case: structured-interview recording, scoring, and debrief pipeline
 - [type:stack] [vertical:legal-ops] new entry: in-house-legal-ai-stack — GC AI-or-Ivo + Ironclad + DocuSign IAM + Notion; use case: lean in-house team layering an AI copilot + review onto a CLM
