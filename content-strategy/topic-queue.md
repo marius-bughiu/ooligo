@@ -118,30 +118,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:legal-ops] definely — pricing never verified (no pricing_checked field; SLA 60d) → slug: definely
 - refresh:A: [type:tool] [vertical:customer-success] delighted — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:revops] demandbase — pricing never verified (no pricing_checked field; SLA 60d) → slug: demandbase
-- refresh:A: [type:tool] [vertical:legal-ops] disco — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:customer-success] dock — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:recruiting] dover — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:legal-ops] draftwise — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:revops] drift — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:revops] dust — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:recruiting] eightfold — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:legal-ops] eudia — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:legal-ops] eve-legal — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:legal-ops] evenup — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:legal-ops] everlaw — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:revops] fathom — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:recruiting] fetcher — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:legal-ops] filevine — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:recruiting] findem — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:customer-success] forethought — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:recruiting] fountain — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:customer-success] freshdesk — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:customer-success] front — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:revops] gainsight — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:legal-ops] gc-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:recruiting] gem — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
-- refresh:A: [type:tool] [vertical:customer-success] gladly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] disco — pricing never verified (no pricing_checked field; SLA 60d) → slug: disco
+- refresh:A: [type:tool] [vertical:customer-success] dock — pricing never verified (no pricing_checked field; SLA 60d) → slug: dock
+- refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-29, pricing unchanged but stamp blocked by legacy banned vocab in body — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] dover — pricing never verified (no pricing_checked field; SLA 60d) → slug: dover
+- refresh:A: [type:tool] [vertical:legal-ops] draftwise — pricing never verified (no pricing_checked field; SLA 60d) → slug: draftwise
+- refresh:A: [type:tool] [vertical:revops] drift — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-29, sunset — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] dust — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-29, not confirmable — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:recruiting] eightfold — pricing never verified (no pricing_checked field; SLA 60d) → slug: eightfold
+- refresh:A: [type:tool] [vertical:legal-ops] eudia — pricing never verified (no pricing_checked field; SLA 60d) → slug: eudia
+- refresh:A: [type:tool] [vertical:legal-ops] eve-legal — pricing never verified (no pricing_checked field; SLA 60d) → slug: eve-legal
+- refresh:A: [type:tool] [vertical:legal-ops] evenup — pricing never verified (no pricing_checked field; SLA 60d) → slug: evenup
+- refresh:A: [type:tool] [vertical:legal-ops] everlaw — pricing never verified (no pricing_checked field; SLA 60d) → slug: everlaw
+- refresh:A: [type:tool] [vertical:revops] fathom — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-29, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] fetcher — pricing never verified (no pricing_checked field; SLA 60d) → slug: fetcher
+- refresh:A: [type:tool] [vertical:legal-ops] filevine — pricing never verified (no pricing_checked field; SLA 60d) → slug: filevine
+- refresh:A: [type:tool] [vertical:recruiting] findem — pricing never verified (no pricing_checked field; SLA 60d) → slug: findem
+- refresh:A: [type:tool] [vertical:customer-success] forethought — pricing never verified (no pricing_checked field; SLA 60d) → slug: forethought
+- refresh:A: [type:tool] [vertical:recruiting] fountain — pricing never verified (no pricing_checked field; SLA 60d) → slug: fountain
+- refresh:A: [type:tool] [vertical:customer-success] freshdesk — pricing never verified (no pricing_checked field; SLA 60d) → slug: freshdesk
+- refresh:A: [type:tool] [vertical:customer-success] front — pricing never verified (no pricing_checked field; SLA 60d) → slug: front
+- refresh:A: [type:tool] [vertical:revops] gainsight — pricing never verified (no pricing_checked field; SLA 60d) → slug: gainsight
+- refresh:A: [type:tool] [vertical:legal-ops] gc-ai — pricing never verified (no pricing_checked field; SLA 60d) → slug: gc-ai
+- refresh:A: [type:tool] [vertical:recruiting] gem — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-29, moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:customer-success] gladly — pricing never verified (no pricing_checked field; SLA 60d) → slug: gladly
 - refresh:A: [type:tool] [vertical:revops] glean — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] gloat — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] gong — pricing never verified (no pricing_checked field; SLA 60d)
@@ -322,6 +322,11 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:legal-ops] contractpodai — rebranded to Leah AI — contractpodai.com/pricing now 301s to leahai.com/pricing; product naming and positioning in the entry are stale
 - refresh:C: [type:tool] [vertical:customer-success] delighted — sunset complete — all customer access terminated 2026-06-30 and delighted.com/pricing now redirects to qualtrics.com/delighted ("no longer available"); needs the sunset path: vendor_status sunset, superseded_by qualtrics, drop ooligo_score
 - refresh:B: [type:comparison] [vertical:revops] alternatives-to-chatgpt — two factual corrections found while authoring alternatives-to-claude 2026-07-28, both in all 6 locales: (1) the page says Claude Team has a "5-seat minimum" but support.claude.com/en/articles/9266767 states "Team plans require a minimum of two members"; (2) the fourth Perplexity MCP tool is named `perplexity_reasoning`, not `perplexity_reason`. Patch in place, do not bump last_updated
+- refresh:C: [type:tool] [vertical:revops] drift — material (drift sunset by Clari + Salesloft announced 2026-03-06, existing clients referred to 1mind as successor; drift.com now redirects to salesloft.com/platform/drift — use the sunset path: keep the URL, past-tense body, vendor_status: sunset, superseded_by, drop ooligo_score)
+- refresh:C: [type:tool] [vertical:revops] fathom — material (tiers restructured: Premium $20/mo ($16 annual), Team $19/mo ($15 annual), Business $34/mo ($25 annual), Enterprise custom — the page still lists Premium $19 / Team Edition $29 / Team Edition Pro $39 and has no Enterprise tier; domain also rebranded fathom.video -> fathom.ai)
+- refresh:C: [type:tool] [vertical:recruiting] gem — material (gem now publishes a Startup tier at $130/mo yearly, list $270/mo, for 1-10 FTE, plus free platform for under-30-employee companies; packaging renamed to "Gem + Your ATS" and "Gem All-in-One" — the page still says "Public pricing is not listed" and carries pricing_model: custom / pricing_starts_at: null)
+- refresh:C: [type:tool] [vertical:legal-ops] docusign-iam — pricing verified unchanged 2026-07-29 (IAM still quote-only; eSignature Personal $11, Standard $30, Business Pro $45 per user/mo) but the tier-A stamp is blocked by banned vocab in the existing body at L54 ("leverage"), which a frontmatter-only commit cannot fix — re-author to clear it and stamp pricing_checked
+- refresh:B: [type:tool] [vertical:revops] dust — pricing not confirmable 2026-07-29 (dust.tt/pricing returned no fetchable content on three attempts; third-party trackers report a move from flat EUR 29/user/mo to a credits-metered USD 30/seat/mo, USD 24 annual, with an 8,000-credit monthly allowance, which would change pricing_model from flat — needs a primary-source read before the frontmatter and the six Pricing sections are rewritten)
 
 ## Tools
 
