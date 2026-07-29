@@ -118,30 +118,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:legal-ops] definely — pricing never verified (no pricing_checked field; SLA 60d) → slug: definely
 - refresh:A: [type:tool] [vertical:customer-success] delighted — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-26, moved — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:revops] demandbase — pricing never verified (no pricing_checked field; SLA 60d) → slug: demandbase
-- refresh:A: [type:tool] [vertical:legal-ops] disco — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] dock — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] dover — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] draftwise — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] drift — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] dust — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] eightfold — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] eudia — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] eve-legal — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] evenup — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] everlaw — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] fathom — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] fetcher — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] filevine — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] findem — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] forethought — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] fountain — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] freshdesk — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] front — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] gainsight — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] gc-ai — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] gem — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] gladly — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] disco — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:customer-success] dock — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:recruiting] dover — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] draftwise — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:revops] drift — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:revops] dust — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:recruiting] eightfold — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] eudia — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] eve-legal — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] evenup — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] everlaw — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:revops] fathom — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:recruiting] fetcher — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] filevine — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:recruiting] findem — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:customer-success] forethought — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:recruiting] fountain — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:customer-success] freshdesk — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:customer-success] front — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:revops] gainsight — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:legal-ops] gc-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:recruiting] gem — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
+- refresh:A: [type:tool] [vertical:customer-success] gladly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-29T00:10:41Z
 - refresh:A: [type:tool] [vertical:revops] glean — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] gloat — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] gong — pricing never verified (no pricing_checked field; SLA 60d)
