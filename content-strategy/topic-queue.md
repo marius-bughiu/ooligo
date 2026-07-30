@@ -35,7 +35,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:revops] alternatives-to-claude — material (perplexity Max tier + official MCP server [roundup option]) → slug: alternatives-to-claude
 - refresh:C: [type:comparison] [vertical:revops] alternatives-to-outreach — material (salesloft merged into Clari 2025-12, Drift sunset [roundup option]; outreach agentic relaunch + outreach.ai rebrand [subject]) → slug: alternatives-to-outreach
 - refresh:C: [type:comparison] [vertical:recruiting] alternatives-to-paradox — material (sense published pricing + AI Recruiter SKU [roundup option]; paradox acquired by Workday 2025-10 [subject]) → slug: alternatives-to-paradox
-- refresh:C: [type:comparison] [vertical:revops] apollo-vs-outreach — material (outreach agentic relaunch + outreach.ai rebrand [subject])
+- refresh:C: [type:comparison] [vertical:revops] apollo-vs-outreach — material (outreach agentic relaunch + outreach.ai rebrand [subject]) → claimed: refresh 2026-07-30T00:09:32Z
 - refresh:C: [type:comparison] [vertical:revops] apollo-vs-salesloft — material (salesloft merged into Clari 2025-12, Drift sunset [subject])
 - refresh:C: [type:comparison] [vertical:revops] best-ai-search-engines — material (perplexity Max tier + official MCP server [roundup option])
 - refresh:C: [type:comparison] [vertical:legal-ops] best-ai-tools-for-legal-ops — material (casetext retired by Thomson Reuters 2025-04 [roundup option])
