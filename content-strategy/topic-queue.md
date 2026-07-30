@@ -166,30 +166,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] instantly — pricing never verified (no pricing_checked field; SLA 60d) → slug: instantly
 - refresh:A: [type:tool] [vertical:revops] intercom — pricing never verified (no pricing_checked field; SLA 60d) → slug: intercom
 - refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing never verified (no pricing_checked field; SLA 60d) → slug: ironclad
-- refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] juicebox — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] juro — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] karat — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] kira-systems — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] koala — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] kustomer — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] lavender — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] leandata — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] legora — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] lever — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] lindy — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] linear — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] linksquares — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] litera — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] logikcull — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] loxo — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] luminance — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] lusha — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] make — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:recruiting] juicebox — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] juro — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:recruiting] karat — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] kira-systems — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:revops] koala — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:customer-success] kustomer — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:revops] lavender — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:revops] leandata — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] legora — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:recruiting] lever — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:revops] lindy — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:revops] linear — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] linksquares — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] litera — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] logikcull — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:recruiting] loxo — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] luminance — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:revops] lusha — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:revops] make — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
+- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T19:10:31Z
 - refresh:A: [type:tool] [vertical:recruiting] mercor — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] metaview — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing never verified (no pricing_checked field; SLA 60d)
