@@ -142,30 +142,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:legal-ops] gc-ai — pricing never verified (no pricing_checked field; SLA 60d) → slug: gc-ai
 - refresh:A: [type:tool] [vertical:recruiting] gem — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-29, moved — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:customer-success] gladly — pricing never verified (no pricing_checked field; SLA 60d) → slug: gladly
-- refresh:A: [type:tool] [vertical:revops] glean — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] gloat — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] gong — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] goodtime — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] goperfect — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] greenhouse — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] gumloop — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] hackerrank — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] harver — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] harvey — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] heap — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] hebbia — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] help-scout — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] hireez — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] hireflix — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] hirevue — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] holly — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] hubspot — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] icertis — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] icims — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] influ2 — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] instantly — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] intercom — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] glean — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] gloat — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:revops] gong — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] goodtime — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] goperfect — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] greenhouse — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:revops] gumloop — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] hackerrank — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] harver — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:legal-ops] harvey — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:customer-success] heap — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:legal-ops] hebbia — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:customer-success] help-scout — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] hireez — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] hireflix — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] hirevue — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] holly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:revops] hubspot — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:legal-ops] icertis — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:recruiting] icims — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:revops] influ2 — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:revops] instantly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:revops] intercom — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
 - refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] juicebox — pricing never verified (no pricing_checked field; SLA 60d)
