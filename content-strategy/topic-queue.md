@@ -142,30 +142,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:legal-ops] gc-ai — pricing never verified (no pricing_checked field; SLA 60d) → slug: gc-ai
 - refresh:A: [type:tool] [vertical:recruiting] gem — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-29, moved — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:customer-success] gladly — pricing never verified (no pricing_checked field; SLA 60d) → slug: gladly
-- refresh:A: [type:tool] [vertical:revops] glean — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] gloat — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:revops] gong — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] goodtime — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] goperfect — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] greenhouse — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:revops] gumloop — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] hackerrank — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] harver — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:legal-ops] harvey — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:customer-success] heap — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:legal-ops] hebbia — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:customer-success] help-scout — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] hireez — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] hireflix — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] hirevue — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] holly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:revops] hubspot — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:legal-ops] icertis — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:recruiting] icims — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:revops] influ2 — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:revops] instantly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:revops] intercom — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
-- refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-30T17:11:10Z
+- refresh:A: [type:tool] [vertical:revops] glean — pricing never verified (no pricing_checked field; SLA 60d) → slug: glean
+- refresh:A: [type:tool] [vertical:recruiting] gloat — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, pricing unchanged (quote-only) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("deliver value", L50) — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] gong — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, pricing unchanged (quote-only) but mcp_available is stale — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] goodtime — pricing never verified (no pricing_checked field; SLA 60d) → slug: goodtime
+- refresh:A: [type:tool] [vertical:recruiting] goperfect — pricing never verified (no pricing_checked field; SLA 60d) → slug: goperfect
+- refresh:A: [type:tool] [vertical:recruiting] greenhouse — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, tiers renamed — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] gumloop — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, free tier removed — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] hackerrank — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, entry says quote-only but the vendor now appears to publish plan prices — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] harver — pricing never verified (no pricing_checked field; SLA 60d) → slug: harver
+- refresh:A: [type:tool] [vertical:legal-ops] harvey — pricing never verified (no pricing_checked field; SLA 60d) → slug: harvey
+- refresh:A: [type:tool] [vertical:customer-success] heap — pricing never verified (no pricing_checked field; SLA 60d) → slug: heap
+- refresh:A: [type:tool] [vertical:legal-ops] hebbia — pricing never verified (no pricing_checked field; SLA 60d) → slug: hebbia
+- refresh:A: [type:tool] [vertical:customer-success] help-scout — pricing never verified (no pricing_checked field; SLA 60d) → slug: help-scout
+- refresh:A: [type:tool] [vertical:recruiting] hireez — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, entry price now published — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] hireflix — pricing never verified (no pricing_checked field; SLA 60d) → slug: hireflix
+- refresh:A: [type:tool] [vertical:recruiting] hirevue — pricing never verified (no pricing_checked field; SLA 60d) → slug: hirevue
+- refresh:A: [type:tool] [vertical:recruiting] holly — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, not confirmable (vendor pricing page renders client-side) — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:revops] hubspot — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, pricing unchanged but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("leverage" L28, "best-of-breed" L50) — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] icertis — pricing never verified (no pricing_checked field; SLA 60d) → slug: icertis
+- refresh:A: [type:tool] [vertical:recruiting] icims — pricing never verified (no pricing_checked field; SLA 60d) → slug: icims
+- refresh:A: [type:tool] [vertical:revops] influ2 — pricing never verified (no pricing_checked field; SLA 60d) → slug: influ2
+- refresh:A: [type:tool] [vertical:revops] instantly — pricing never verified (no pricing_checked field; SLA 60d) → slug: instantly
+- refresh:A: [type:tool] [vertical:revops] intercom — pricing never verified (no pricing_checked field; SLA 60d) → slug: intercom
+- refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing never verified (no pricing_checked field; SLA 60d) → slug: ironclad
 - refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] juicebox — pricing never verified (no pricing_checked field; SLA 60d)
@@ -327,6 +327,14 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:recruiting] gem — material (gem now publishes a Startup tier at $130/mo yearly, list $270/mo, for 1-10 FTE, plus free platform for under-30-employee companies; packaging renamed to "Gem + Your ATS" and "Gem All-in-One" — the page still says "Public pricing is not listed" and carries pricing_model: custom / pricing_starts_at: null)
 - refresh:C: [type:tool] [vertical:legal-ops] docusign-iam — pricing verified unchanged 2026-07-29 (IAM still quote-only; eSignature Personal $11, Standard $30, Business Pro $45 per user/mo) but the tier-A stamp is blocked by banned vocab in the existing body at L54 ("leverage"), which a frontmatter-only commit cannot fix — re-author to clear it and stamp pricing_checked
 - refresh:B: [type:tool] [vertical:revops] dust — pricing not confirmable 2026-07-29 (dust.tt/pricing returned no fetchable content on three attempts; third-party trackers report a move from flat EUR 29/user/mo to a credits-metered USD 30/seat/mo, USD 24 annual, with an 8,000-credit monthly allowance, which would change pricing_model from flat — needs a primary-source read before the frontmatter and the six Pricing sections are rewritten)
+- refresh:C: [type:tool] [vertical:revops] gong — pricing verified unchanged 2026-07-30 (still quote-only, no figures on gong.io/pricing) but Gong now ships an official MCP server, so mcp_available must flip false -> true and the body needs the agent-access framing
+- refresh:C: [type:tool] [vertical:recruiting] greenhouse — tiers renamed and reduced: greenhouse.com/pricing now lists Core / Plus / Pro, while the entry’s Pricing section still names Essential / Core / Advanced / Expert; pricing stays quote-only ("customized based on your company’s hiring needs")
+- refresh:C: [type:tool] [vertical:revops] gumloop — the Free plan is gone: gumloop.com/pricing now lists only Pro (starts at $37/month, 20k+ credits) and Enterprise (custom), so pricing_model freemium is wrong and the body’s "Free — $0; 5,000 credits/month" bullet no longer exists; the $37 Pro price itself is unchanged
+- refresh:C: [type:tool] [vertical:recruiting] hackerrank — entry says "custom only, effective entry point in the low-to-mid five figures annually" with pricing_starts_at null, but hackerrank.com/work/pricing now advertises self-serve monthly/annual plans (multiple 2026 trackers put Starter at $165/mo or $1,990/yr and Pro at $375/mo or $4,490/yr); the vendor page renders client-side and returns no figures to a plain fetch, so the re-author must confirm against the live rendered page before publishing any number
+- refresh:C: [type:tool] [vertical:recruiting] hireez — no longer quote-only: hireez.com/pricing publishes a $494/mo solo-recruiter entry point with a 7-day free trial (entry has pricing_model custom / pricing_starts_at null); enterprise stays custom, priced against the stack hireEZ replaces rather than per seat
+- refresh:C: [type:tool] [vertical:recruiting] gloat — pricing verified unchanged 2026-07-30 (still quote-only via gloat.com/talk-to-us) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("deliver value", L50), which a frontmatter-only commit cannot fix — re-author to clear it and stamp pricing_checked
+- refresh:C: [type:tool] [vertical:revops] hubspot — pricing verified unchanged 2026-07-30 (Free for 2 users; Sales Hub Starter $20/seat/mo monthly, $7 annual; Professional $100/seat/mo monthly, $90 annual; Enterprise starts at $150/seat/mo) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("leverage" L28, "best-of-breed" L50) — re-author to clear it and stamp pricing_checked
+- refresh:B: [type:tool] [vertical:recruiting] holly — pricing not confirmable 2026-07-30: hiringagents.ai/pricing is a client-rendered SPA that returns no pricing text to a fetch, and no primary corroboration was found for the entry’s Free / Starter $199-per-credit / Growth $149-per-credit / Business-custom ladder (authored 2026-07-18); needs a rendered read of the vendor page before the frontmatter and the six Pricing sections are touched
 
 ## Tools
 
