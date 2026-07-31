@@ -787,7 +787,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - [type:stack] [vertical:revops] new entry: inbound-conversion-stack — Default-or-Chili-Piper + Qualified + Salesforce + Slack; use case: instant inbound lead-to-meeting conversion → slug: inbound-conversion-stack
 - [type:stack] [vertical:recruiting] new entry: ai-sourcing-stack — SeekOut/hireEZ + Gem + LinkedIn + ATS; use case: AI-assisted passive-candidate sourcing at scale → slug: ai-sourcing-stack
 - [type:stack] [vertical:recruiting] new entry: technical-hiring-stack — CodeSignal/HackerRank + Karat + Greenhouse; use case: standardized technical screening pipeline → slug: technical-hiring-stack
-- [type:stack] [vertical:recruiting] new entry: interview-intelligence-stack — BrightHire/Pillar + Greenhouse + Zoom; use case: structured-interview recording, scoring, and debrief pipeline
+- [type:stack] [vertical:recruiting] new entry: interview-intelligence-stack — BrightHire/Pillar + Greenhouse + Zoom; use case: structured-interview recording, scoring, and debrief pipeline → claimed: new 2026-07-31T18:04:00+03:00
 - [type:stack] [vertical:legal-ops] new entry: in-house-legal-ai-stack — GC AI-or-Ivo + Ironclad + DocuSign IAM + Notion; use case: lean in-house team layering an AI copilot + review onto a CLM
 - [type:stack] [vertical:legal-ops] new entry: personal-injury-ai-stack — Supio-or-EvenUp + Eve Legal + Filevine + Clio; use case: plaintiff PI firm running intake → case workup → demand with AI in the loop
 - [type:stack] [vertical:cross] new entry: ai-agent-ops-stack — Lindy-or-Gumloop + n8n + Clay + Slack; use case: lean ops team building always-on AI agents over their SaaS without engineering
