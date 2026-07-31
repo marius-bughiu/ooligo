@@ -190,34 +190,34 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] make — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, billing unit renamed and mcp_available is stale — requeued as refresh:B: below
 - refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, repositioned around named credit-based agents — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:recruiting] manatal — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, new top tier added and entry price moved — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:recruiting] mercor — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] metaview — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] mixpanel — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] modernloop — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] mutiny — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] mycase — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] n8n — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] nooks — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] notion — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] onit — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] orum — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] outreach — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] pandadoc — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] paradox — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] pendo — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] perplexity — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] personio — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] phenom — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] pillar — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] pinpoint — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] pipedrive — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] planhat — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] plum — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] pocus — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] productboard — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] pylon — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] qualified — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] mercor — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] metaview — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:customer-success] mixpanel — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] modernloop — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] mutiny — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:legal-ops] mycase — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] n8n — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] nooks — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] notion — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:legal-ops] onit — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] orum — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] outreach — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:legal-ops] pandadoc — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] paradox — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] pendo — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] perplexity — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] personio — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] phenom — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] pillar — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] pinpoint — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] pipedrive — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:customer-success] planhat — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:recruiting] plum — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] pocus — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:customer-success] productboard — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:customer-success] pylon — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
+- refresh:A: [type:tool] [vertical:revops] qualified — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-07-31T00:10:38Z
 - refresh:A: [type:tool] [vertical:revops] rattle — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] rb2b — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] recall-ai — pricing never verified (no pricing_checked field; SLA 60d)
