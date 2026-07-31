@@ -1,0 +1,100 @@
+---
+slug: mcp-server-attio-revops
+canonical_slug: mcp-server-attio-revops
+locale: pt-BR
+verticals: [revops]
+title: MCP server exposing Attio records and lists to Claude
+artifact_type: mcp-server
+tools_used: [attio, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-07-31"
+---
+
+Um servidor Model Context Protocol que dá ao [Claude](/pt-BR/tools/claude/) uma janela deliberadamente pequena para o seu workspace do [Attio](/pt-BR/tools/attio/): descoberta de objetos, consulta de registros, leitura de um registro individual e consulta de entradas de lista como operações de leitura, mais exatamente uma escrita que fica desligada até você ligar e restrita por atributo quando você liga. Seu time pergunta "quais empresas da lista de pipeline do Q3 estão sem owner?" no chat e recebe uma resposta estruturada, sem que um agente segure um botão capaz de reescrever o CRM. O scaffold fica no bundle de artefatos em `apps/web/public/artifacts/mcp-server-attio-revops/` — um `README.md`, um `pyproject.toml` e `src/attio_revops_mcp/server.py`, instalável com `pip install -e .`.
+
+Leia a próxima seção antes de construir qualquer coisa, porque o Attio já publica um desses.
+
+## Quando usar
+
+O Attio hospeda o próprio MCP server em `https://mcp.attio.com/mcp`. Ele autentica via OAuth sem nenhuma chave para guardar ou rotacionar, expõe mais de 30 ferramentas entre registros, listas, comentários, notas, tarefas, reuniões, emails, workspace e reporting — mais uma ferramenta SQL —, aprova leituras automaticamente e pede confirmação antes de escrever. **Para a maioria dos times essa é a resposta certa e este scaffold é trabalho jogado fora.** Instale o servidor hospedado, conecte e siga em frente.
+
+Construa o seu quando uma destas quatro condições for verdadeira.
+
+**Você precisa de uma identidade de service account em vez de identidade de usuário.** O servidor hospedado roda com as permissões de Attio da pessoa logada. Se um agente compartilhado — plugado num bot do Slack, num job de reporting, num workflow que o time inteiro dispara — deve enxergar estritamente menos do que qualquer humano individual, não existe como expressar isso com uma concessão OAuth por usuário. Uma API key de workspace com um conjunto de scopes que você escolhe, existe.
+
+**Você precisa estreitar a superfície de ferramentas.** Mais de 30 ferramentas, incluindo SQL e busca semântica de emails, é uma concessão ampla para um agente cujo trabalho real é responder perguntas de pipeline. Este scaffold dá cinco ferramentas ao Claude, e `ATTIO_ALLOWED_OBJECTS` limita até as leituras aos objetos que você nomear.
+
+**Você precisa de escritas restritas por atributo, não confirmadas por um humano.** Um prompt de confirmação vale exatamente o quanto vale a atenção de quem lê às 16h de uma sexta-feira. `ATTIO_WRITABLE_ATTRIBUTES` recusa tudo que não estiver na lista, independentemente de quem clicou no quê.
+
+**Você precisa do log de chamadas na sua própria infraestrutura.** Um processo local escreve onde você apontar.
+
+Os dois papéis que extraem valor aqui são o líder de RevOps que quer responder perguntas de pipeline no mesmo chat onde acontece o resto da análise, e o GTM engineer que já subiu os servidores de [Apollo](/pt-BR/workflows/mcp-server-apollo-revops/) e [Salesforce](/pt-BR/workflows/mcp-server-salesforce-revops/) desta série e quer a mesma postura majoritariamente-de-leitura em todo sistema de registro, para que os prompts continuem portáveis entre eles.
+
+## Quando NÃO usar
+
+- **Você não tem motivo para recusar o servidor hospedado.** Já está coberto acima, e vale repetir: o default é o servidor do próprio Attio. Este aqui é para os quatro casos em que uma concessão OAuth por usuário tem o formato errado.
+- **Você está no Attio Free.** O tier gratuito cobre até 3 usuários. Um workspace desse tamanho não tem problema de permissão de agente compartilhado — o servidor hospedado e seu fluxo OAuth encaixam perfeitamente.
+- **Compliance proíbe registros do CRM num LLM de terceiros.** Todo campo que uma consulta devolve entra na conversa: nomes, emails corporativos, valores de negócios, o que quer que seu time guarde como atributo. A lista de objetos permitidos encolhe esse conjunto; não o elimina. Se dados de contato não podem chegar a um LLM de jeito nenhum, nenhum MCP server sobre o seu CRM é o projeto certo.
+- **O trabalho é uma limpeza em massa.** Reatribuir 40 owners são 40 chamadas de ferramenta aqui, por design. Escreva um script contra a API do Attio, revise o diff e rode. O chat é a interface errada para um lote.
+
+## O que expõe
+
+Cinco ferramentas, divididas pelo que podem alterar.
+
+- **Descoberta:** `list_objects` chama `GET /v2/objects` e devolve o `api_slug` de cada objeto, seus substantivos no singular e no plural, e se ele está dentro da sua allowlist. Slugs de objetos e atributos do Attio são específicos de cada workspace, então esta é a primeira chamada, não um chute.
+- **Leituras de registros:** `query_records` chama `POST /v2/objects/{object}/records/query` com um filtro do Attio e sorts opcionais; `get_record` chama `GET /v2/objects/{object}/records/{record_id}` e devolve a `web_url` do registro para um humano abrir.
+- **Leituras de pipeline:** `query_list_entries` chama `POST /v2/lists/{list}/entries/query`. As listas são onde o Attio guarda o estado do pipeline, então perguntas sobre estágio vão para lá e não para o objeto pai.
+- **A única escrita:** `update_record_attribute` chama `PATCH /v2/objects/{object}/records/{record_id}`. Um atributo, um registro, por chamada — condicionada a `ATTIO_ALLOW_WRITES`, a uma entrada `{object}.{attribute}` em `ATTIO_WRITABLE_ATTRIBUTES`, e a uma justificativa de pelo menos 10 caracteres.
+
+Sem ferramenta de delete, sem update em massa, sem SQL e sem rota `PUT`.
+
+## Postura de engenharia
+
+Quatro escolhas que vale entender antes de adotar o scaffold.
+
+**`PATCH`, nunca `PUT`.** O Attio divide as atualizações de registro entre dois verbos: `PATCH` prepende valores em atributos multiselect, `PUT` sobrescreve e remove. Só o `PATCH` está ligado. A consequência é estrutural, não procedimental — este servidor não tem nenhum caminho de código capaz de apagar um valor multiselect existente, então o pior resultado de uma instrução mal interpretada é uma tag a mais, não uma tag deletada.
+
+**A resposta é enxugada antes de o modelo ver.** O Attio devolve cada atributo como um array de objetos de valor carregando `active_from`, `active_until` e `created_by_actor` — o histórico completo daquele campo, não o estado atual. Entregar o formato bruto ao modelo multiplica várias vezes o custo em tokens para responder uma pergunta sobre hoje. `_slim_record` mantém as entradas em que `active_until` é null e reduz cada uma ao seu conteúdo.
+
+**O tamanho de página padrão é 25 contra os 500 do Attio.** Os endpoints de consulta usam `limit` 500 por padrão. Esse é o default certo para um pipeline de dados e o errado para uma pergunta que quer dez linhas — 500 registros de dados pessoais aterrissam na janela de contexto e ficam lá pelo resto da conversa. Este scaffold usa 25 por padrão e recusa qualquer valor acima de 100.
+
+**As escritas são três comportas, e a justificativa não é uma delas.** A flag de ambiente e a allowlist de atributos são o que de fato barra uma escrita; o texto de justificativa existe para o log. Confiar só na justificativa deixa a escrita a uma leitura equivocada e confiante de distância.
+
+## A realidade de custo
+
+Três linhas, e o assento do CRM é a única grande.
+
+- **Assentos do Attio.** Free cobre até 3 usuários. Plus custa $35/usuário/mês na cobrança anual ($44 mensal), Pro custa $79/usuário/mês anual ($99 mensal), e Enterprise é só sob cotação — verificado na página de preços do Attio em 2026-07-31. O acesso à API não é um SKU separado.
+- **Hospedar o servidor você mesmo.** Um processo Python local por usuário do Claude Desktop não custa nada num notebook. Rodar como serviço compartilhado é uma VM pequena, $20-50/mês em qualquer nuvem (estimativa).
+- **Tokens do Claude.** O que você já paga — Claude Pro a $20/usuário/mês, tiers Max a $100-200/usuário/mês, ou consumo de API. Uma consulta enxugada de 25 registros fica na casa dos poucos milhares de tokens; aos $5 por milhão de tokens de entrada publicados do Claude Opus 5, um líder de RevOps fazendo 20-30 perguntas por semana soma bem menos de $1/usuário/mês em custo de API (estimativa — meça seus próprios payloads antes de orçar).
+
+Throughput não é a restrição. A API REST do Attio permite 100 requisições de leitura e 25 de escrita por segundo, e o MCP server hospedado publica os mesmos tiers de leitura e escrita mais 300 buscas por minuto e 2 por segundo para busca semântica, reporting e SQL. Uma carga conversacional roda três ordens de grandeza abaixo disso. O limite que você vai encontrar de verdade é o baseado em pontuação dos endpoints de consulta, descrito nos pontos de atenção.
+
+## Como é o sucesso
+
+O sinal mensurável em um mês: responder "o que mudou no pipeline esta semana e quem é dono dos buracos?" deixa de ser uma sequência de dez minutos abrindo o Attio, reconstruindo uma view, exportando e colando, e vira uma pergunta com resposta estruturada. O segundo sinal, mais difícil, é o que não acontece — ninguém concede ao agente um token mais amplo "só por enquanto", porque as perguntas que as pessoas realmente fazem cabem em três objetos e quatro ferramentas de leitura.
+
+## Contra as alternativas
+
+- **O MCP server hospedado do Attio.** Mais ferramentas, sem infraestrutura, OAuth em vez de chave e confirmações antes de escrever. Você abre mão do scoping de service account, do controle de escrita por atributo e do seu próprio destino de auditoria. Este é o default; o scaffold é a exceção.
+- **Um script descartável contra a API REST do Attio.** Controle total, e cada time reconstrói do zero a autenticação bearer, a paginação, o achatamento do histórico de valores e o tratamento de 429. O scaffold são cerca de 400 linhas com as quatro coisas já resolvidas.
+- **Uma plataforma no-code ([Clay](/pt-BR/tools/clay/), n8n).** O formato certo para pipelines agendados de enriquecimento e routing que você definiu de antemão. Problema diferente de uma pergunta pontual para a qual ninguém pré-construiu um flow. Use os dois: a plataforma para a cascata recorrente, isto para a conversa. Se o problema de fundo é que os próprios registros não são confiáveis, comece pela [higiene de CRM](/pt-BR/learn/crm-hygiene/) em vez de uma ferramenta de consulta.
+
+## Pontos de atenção
+
+- **Leituras amplas demais.** Um `query_records` sem filtro contra `people` arrasta centenas de registros de contato para a conversa. Guarda: `limit` vem em 25 por padrão e é limitado a 100, `ATTIO_ALLOWED_OBJECTS` bloqueia os objetos que você não nomeou, e o parâmetro `attributes` descarta as colunas que você não pediu.
+- **429 baseados em pontuação nas consultas.** O Attio precifica cada consulta pela complexidade — sorts, filtros e o total de registros do objeto elevam a pontuação, e as pontuações somam numa janela deslizante de 10 segundos, então uma única consulta pesada pode ser recusada sozinha. Guarda: o scaffold captura o `429`, expõe o `Retry-After` e devolve o conselho específico (estreite o filtro, tire o sort) em vez de um stack trace. Nada tenta de novo automaticamente; esse é o TODO #1 do README.
+- **Excesso de scopes na criação da chave.** O Attio fixa os scopes de uma integração quando a chave é criada e não deixa editar depois, o que empurra os times a conceder tudo de uma vez. Guarda: o README mapeia cada ferramenta aos seus scopes mínimos, e deixar as escritas desligadas significa nunca conceder `record_permission:read-write`.
+- **Slugs de atributos desatualizados.** Slugs de atributos são específicos de cada workspace e mudam quando alguém renomeia um campo, e aí todo prompt hardcoded quebra em silêncio. Guarda: `list_objects` é a primeira chamada documentada, e os erros nomeiam o slug do objeto que falhou.
+- **Ativação silenciosa de escritas.** Alguém liga o `ATTIO_ALLOW_WRITES` e esquece a allowlist. Guarda: um `ATTIO_WRITABLE_ATTRIBUTES` vazio recusa toda escrita independentemente da flag, então a direção da falha é "nada acontece", não "qualquer coisa acontece".
+
+## Stack
+
+- **Attio** — CRM: objetos, registros, listas, atributos
+- **MCP Python SDK** — o pacote `mcp>=1.2.0`; fornece `Server`, `stdio_server` e os decoradores do registro de ferramentas
+- **httpx** — cliente REST assíncrono contra `api.attio.com/v2`, autenticado com `Authorization: Bearer`
+- **Claude Desktop ou Claude Code** — interface em linguagem natural, chamador de ferramentas
+- **`ATTIO_ALLOWED_OBJECTS` e `ATTIO_WRITABLE_ATTRIBUTES`** — as duas listas que decidem o que o agente pode ler e o que pode alterar
