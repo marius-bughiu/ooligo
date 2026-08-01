@@ -38,7 +38,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:revops] apollo-vs-outreach — material (outreach agentic relaunch + outreach.ai rebrand [subject]) → slug: apollo-vs-outreach
 - refresh:C: [type:comparison] [vertical:revops] apollo-vs-salesloft — material (salesloft merged into Clari 2025-12, Drift sunset [subject]) → slug: apollo-vs-salesloft
 - refresh:C: [type:comparison] [vertical:revops] best-ai-search-engines — material (perplexity Max tier + official MCP server [roundup option]) → slug: best-ai-search-engines
-- refresh:C: [type:comparison] [vertical:legal-ops] best-ai-tools-for-legal-ops — material (casetext retired by Thomson Reuters 2025-04 [roundup option]) → claimed: refresh 2026-08-01T05:04:00Z
+- refresh:C: [type:comparison] [vertical:legal-ops] best-ai-tools-for-legal-ops — material (casetext retired by Thomson Reuters 2025-04 [roundup option]) → slug: best-ai-tools-for-legal-ops
 - refresh:C: [type:comparison] [vertical:recruiting] best-ai-tools-for-recruiting — material (paradox acquired by Workday 2025-10 [roundup option])
 - refresh:C: [type:comparison] [vertical:legal-ops] best-legal-ai-research-tools — material (casetext retired by Thomson Reuters 2025-04 [roundup option])
 - refresh:C: [type:comparison] [vertical:revops] best-sales-engagement-platforms-2026 — material (salesloft merged into Clari 2025-12, Drift sunset [roundup option]; regie-ai consolidated into RegieOne AI SEP [roundup option]; outreach agentic relaunch + outreach.ai rebrand [roundup option])
