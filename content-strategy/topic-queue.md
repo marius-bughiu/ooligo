@@ -23,7 +23,7 @@ Each line carries at most one lifecycle marker, appended in place:
 
 `refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-07-26`
+`last-swept: 2026-08-02`
 
 ## Refresh queue
 
@@ -365,6 +365,10 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:B: [type:tool] [vertical:revops] notion — plan prices are effectively unchanged (Free, Plus EUR 9.50/seat/month, Business EUR 19.50, Enterprise custom) but notion.com/pricing now bundles Notion AI into every paid plan rather than selling it as the $8-10/user/month add-on the entry describes, and meters Custom Agents on credits at $10 per 1,000 monthly Notion credits. Patch the AI add-on bullet across all 6 locales, digit-identical. Note notion.so/pricing 301s to notion.com/pricing, so pricing_url needs the new host.
 - refresh:B: [type:tool] [vertical:revops] pendo — pendo.io/pricing publishes a perpetual Free tier (up to 500 monthly active users, with product analytics, in-app guides and Pendo-branded feedback) plus named Base / Core / Ultimate plans and a free-beta AI product called Novus, while the entry says flatly "custom-quoted; no public pricing". pricing_model custom -> freemium and pricing_starts_at null -> 0; the Pricing section needs the free tier, the MAU-plus-functionality quote basis, and the tier names, keeping the $30K-$150K mid-market band as triangulation.
 - refresh:B: [type:tool] [vertical:recruiting] pinpoint — pinpointhq.com no longer publishes the $600 / $1,000 per-month job-slot tiers the entry lists: /pricing/ 404s and /request-pricing is a consultation form with no named plans. pricing_model flat -> custom and pricing_starts_at 600 -> null unless a current third-party figure triangulates; the per-job-versus-per-employee contrast with iCIMS and SmartRecruiters can stay if it is restated as a model difference rather than a price.
+- refresh:A: [type:tool] [vertical:customer-success] ada — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] day-ai — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] parloa — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] salesforce-agentforce — pricing never verified (no pricing_checked field; SLA 60d)
 
 ## Tools
 
