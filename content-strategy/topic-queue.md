@@ -41,7 +41,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:legal-ops] best-ai-tools-for-legal-ops — material (casetext retired by Thomson Reuters 2025-04 [roundup option]) → slug: best-ai-tools-for-legal-ops
 - refresh:C: [type:comparison] [vertical:recruiting] best-ai-tools-for-recruiting — material (paradox acquired by Workday 2025-10 [roundup option]) → slug: best-ai-tools-for-recruiting
 - refresh:C: [type:comparison] [vertical:legal-ops] best-legal-ai-research-tools — material (casetext retired by Thomson Reuters 2025-04 [roundup option]) → slug: best-legal-ai-research-tools
-- refresh:C: [type:comparison] [vertical:revops] best-sales-engagement-platforms-2026 — material (salesloft merged into Clari 2025-12, Drift sunset [roundup option]; regie-ai consolidated into RegieOne AI SEP [roundup option]; outreach agentic relaunch + outreach.ai rebrand [roundup option]) → claimed: refresh 2026-08-02T21:05:00Z
+- refresh:C: [type:comparison] [vertical:revops] best-sales-engagement-platforms-2026 — material (salesloft merged into Clari 2025-12, Drift sunset [roundup option]; regie-ai consolidated into RegieOne AI SEP [roundup option]; outreach agentic relaunch + outreach.ai rebrand [roundup option]) → slug: best-sales-engagement-platforms-2026
 - refresh:C: [type:comparison] [vertical:recruiting] brighthire-vs-metaview — material (brighthire acquired by Zoom 2025-12 [subject])
 - refresh:C: [type:comparison] [vertical:legal-ops] casetext-vs-lexisnexis-protege — material (casetext retired by Thomson Reuters 2025-04 [subject])
 - refresh:C: [type:comparison] [vertical:revops] catalyst-vs-vitally — material (catalyst merged into Totango [subject])
