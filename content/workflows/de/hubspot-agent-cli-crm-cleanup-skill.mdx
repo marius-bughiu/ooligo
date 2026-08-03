@@ -1,0 +1,101 @@
+---
+slug: hubspot-agent-cli-crm-cleanup-skill
+canonical_slug: hubspot-agent-cli-crm-cleanup-skill
+locale: de
+verticals: [revops]
+title: Run governed CRM hygiene through the HubSpot Agent CLI
+artifact_type: claude-skill
+tools_used: [claude, hubspot]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60-90 min
+human_tested: false
+last_updated: "2026-08-03"
+---
+
+Ein Claude Skill, der das HubSpot Agent CLI durch die Massenbereinigung des CRM führt — Deduplizierung, Property-Backfill und Schließen liegengebliebener Deals — unter einer schriftlichen Policy, und dabei ein prüfbares Änderungs-Ledger sowie einen Snapshot des Vorzustands vor jedem irreversiblen Schreibvorgang erzeugt. Das Bundle liegt unter `apps/web/public/artifacts/hubspot-agent-cli-crm-cleanup-skill/` und enthält `SKILL.md` sowie drei Referenzdateien, die Sie vor dem ersten Lauf ausfüllen.
+
+Beginnen wir mit dem Punkt, den die meisten Seiten verstecken würden: **HubSpot liefert bereits kostenlose Skills aus, die hier die mechanische Arbeit erledigen.** `npx skills add hubspot/agent-cli-skills` installiert 15 Skills, darunter `bulk-operations` (JSONL-Pipes, Batch-Reads, Pagination, Dry-Run- und Bestätigungsmuster, Wiederherstellung über `hubspot history`), `crm-data-quality` (unvollständige Datensätze finden, Werte normalisieren, per `objects merge` deduplizieren) und `deal-management` (liegengebliebene Deals finden und schließen). Installieren Sie diese zuerst. Dieser Skill ersetzt sie nicht und implementiert sie nicht neu.
+
+Was das Bundle des Anbieters nicht mitliefert, ist die Policy. Es gibt Ihnen die Idiome zum Zusammenführen von Datensätzen; es entscheidet nicht, welches Duplikat Feld für Feld gewinnt, woher ein nachgetragener Wert stammt, wann ein stiller Deal tot statt nur langsam ist, und welcher Nachweis des Laufs danach übrig bleibt. Diese Lücke ist der ganze Daseinsgrund dieses Skills, und sie zählt in dem Moment, in dem ein Bereinigungslauf headless und geplant gegen ein Portal läuft, das Sie nicht selbst verwalten.
+
+## Wann Sie ihn einsetzen
+
+Setzen Sie ihn ein, wenn ein HubSpot-Bereinigungslauf mindestens eine von vier Bedingungen erfüllen muss: Er läuft geplant, ohne dass jemand jede Mutation beobachtet; jemand anderes als der Bedienende prüft, was sich geändert hat; die berührten Properties speisen Routing, Scoring, Reporting oder Vergütung, sodass ein falscher Schreibvorgang nachgelagerte Kosten hat; oder die Arbeitsmenge übersteigt rund 200 Datensätze, ab wo eine paarweise Prüfung unrealistisch wird.
+
+Das Agent CLI von [HubSpot](/de/tools/hubspot/) ging am 2026-06-23 als eigenständige Binary getrennt vom Entwickler-CLI `hs` in die Public Beta. Installieren Sie es unter POSIX mit `curl -fsSL https://api.hubapi.com/hub/cli/backend/hub-cli/latest/install.sh | sh` oder unter Windows mit dem PowerShell-Äquivalent, und authentifizieren Sie sich mit `hubspot auth login`. Die Befehle folgen der Form `hubspot <noun> <verb>`, geben standardmäßig JSONL aus und akzeptieren ein globales `--dry-run`, das Änderungen anzeigt, ohne sie anzuwenden.
+
+## Wann Sie ihn NICHT einsetzen
+
+- **Eine einmalige Bereinigung in einem Portal, das Sie selbst verwalten.** Der Skill `crm-data-quality` des Anbieters erledigt das mit deutlich weniger Einrichtung. Policy-Dateien sind Overhead, wenn der Bedienende zugleich der Prüfende ist und der Lauf einmalig stattfindet.
+- **Sie können keinen Snapshot auf Platte schreiben.** Merges lassen sich nicht rückgängig machen. Ohne Vorzustand gibt es keinen Rekonstruktionsweg, und der Skill bricht ab, statt weiterzulaufen.
+- **Die Survivorship-Regel steht nicht fest.** Der Skill wendet eine Regel an, die Sie liefern, und weigert sich, eine zu erfinden. Eine unausgefüllte `references/1-survivorship-policy.md` ist ein Stopp, kein Standardwert.
+- **Weniger als 50 Datensätze.** Die Duplikatverwaltung in HubSpot plus manuelle Prüfung schlägt in dieser Größenordnung die Einrichtungskosten.
+- **Sie wollen alle drei Aufgaben in einem Lauf.** Deduplizierung, Backfill und Disposition liegengebliebener Deals brauchen jeweils einen eigenen Lauf gegen eine eigene Policy-Datei. Kombiniert entsteht ein Ledger, das kein Prüfender lesen kann.
+
+## Einrichtung
+
+Planen Sie 60-90 Minuten ein, überwiegend für das Ausfüllen der Policy-Dateien statt für Installationen. Die Survivorship-Diskussion — welcher Datensatz gewinnt und welche Felder vom Verlierer überleben — dauert länger und findet vor der Einrichtung statt.
+
+1. **Installieren Sie das CLI und die Anbieter-Skills.** Führen Sie das Installationsskript aus, dann `hubspot auth login`, dann `hubspot whoami`, um das Portal zu bestätigen. Ergänzen Sie `npx skills add hubspot/agent-cli-skills`. Bei Claude Cowork in Team- oder Enterprise-Accounts muss ein Administrator zuvor `api.hubapi.com` freigeben.
+2. **Installieren Sie diesen Skill.** Kopieren Sie `SKILL.md` und den Ordner `references/` nach `.claude/skills/hubspot-crm-hygiene/`. `name` und `description` im Frontmatter lösen ihn bei einem passenden Prompt aus.
+3. **Legen Sie die beiden Provenance-Properties an.** `hygiene_source` und `hygiene_run_id`, einzeiliger Text, auf jedem Objekttyp, den Sie befüllen wollen. Die Definitionen stehen in `references/2-backfill-provenance.md`. Der Skill stoppt, wenn sie fehlen.
+4. **Füllen Sie `references/1-survivorship-policy.md` aus.** Match-Regeln in Teil A, Auswahl des primären Datensatzes in Teil B, die feldweise Gewinnertabelle in Teil C und die Sperrliste in Teil D. Attributions- und Einwilligungsfelder gehören in Teil D — die First-Touch-Attribution während einer Bereinigung zu überschreiben, schreibt die Marketing-Historie unsichtbar um.
+5. **Füllen Sie `references/3-stale-deal-disposition.md` gemeinsam mit dem Pipeline-Verantwortlichen aus.** Setzen Sie jeden Stage-Schwellwert auf etwa das Doppelte der Mediandauer dieser Stage aus Ihrer eigenen Closed-Won-Historie.
+6. **Prüfen Sie die Enrollment-Trigger der Workflows.** Listen Sie aktive Workflows auf, deren Trigger eine der Ziel-Properties referenzieren. Dieser Schritt ist nicht optional; siehe den vierten Fehlermodus.
+7. **Fahren Sie einen Dry-Run gegen einen Scope von 200 Datensätzen.** Lesen Sie `ledger/digest.md` vollständig und prüfen Sie, ob die Ambiguous-Liste nach echten Ermessensfällen aussieht statt nach einer fehlkalibrierten Match-Regel.
+
+## Was der Skill tatsächlich tut
+
+Sechs Phasen, feste Reihenfolge, kein Vorspringen.
+
+**Phase 1 fixiert die Umgebung.** Sie schreibt `hubspot --version` und die authentifizierte Identität nach `ledger/run-meta.json`. HubSpot erklärt, dass sich Befehle, Flags und Verhalten der Beta ohne Ankündigung ändern können — also gehört die Version, die ein Ledger erzeugt hat, zum Ledger. Die Discovery läuft unter OAuth statt unter einem Service Key, weil OAuth auf die Berechtigungen des Bedienenden begrenzt ist und ein Scoping-Fehler damit geschlossen scheitert.
+
+**Phase 2 erstellt den Snapshot.** Jeder Datensatz im Scope wird nach `pre-image/<object_type>.jsonl` geschrieben, bevor irgendetwas anderes passiert. Der Grund ist konkret: `--dry-run` zeigt einen Schreibvorgang, den Sie noch nicht ausgeführt haben, und `hubspot history` stellt Property-Werte auf einem Datensatz wieder her, den es noch gibt. Beides hilft nach einem Merge nicht, denn HubSpot dokumentiert keinen Weg zurück und der unterlegene Datensatz existiert nicht mehr. Phase 5 verweigert den Start, wenn der Snapshot fehlt oder seine Zeilenzahl nicht zur Arbeitsmenge passt.
+
+**Phase 3 erzeugt Kandidaten deterministisch.** Normalisierung und Match-Regeln laufen als Code, ohne Modellurteil. Ein Modell, das dieselbe Duplikatmenge zweimal gruppieren soll, liefert nicht zweimal dieselbe Gruppierung — damit wird das Diff zwischen zwei Läufen unprüfbar und die Freigabe eines Prüfenden bedeutungslos. Modellurteil erscheint an genau einer Stelle, im Ambiguous-Band, wo seine Ausgabe beratend ist und nie automatisch angewendet wird.
+
+**Phase 4 löst nach Policy auf, feldweise statt datensatzweise.** Diese Phase existiert wegen eines konkreten HubSpot-Verhaltens: `objects merge` behält den Wert des primären Datensatzes überall dort, wo beide Datensätze einen Wert haben. Die Wahl eines primären Datensatzes verwirft damit gute Daten auf dem sekundären — die neuere Telefonnummer, den korrigierten Titel, die gefüllte Lifecycle-Stage. Deshalb dreht der Skill die Reihenfolge um. Er schreibt die gewinnenden Feldwerte mit `objects update` vorab auf den primären Datensatz und führt erst dann den Merge aus, sodass der Merge nur noch Assoziationen und Aktivitätshistorie zusammenlegt. Gruppen, die die Policy nicht auflösen kann, landen in `ambiguous.jsonl` und bleiben von der Anwendung ausgeschlossen.
+
+**Phase 5 baut das Ledger.** Jede geplante Mutation wird mit `--dry-run --format json` ausgeführt und in `ledger/changes.jsonl` gefaltet — eine Zeile pro Datensatz mit Vorher-/Nachher-Werten und der Regel, die die Änderung autorisiert hat — dazu ein menschenlesbares `ledger/digest.md`. Überschreitet eine Mutationsklasse `max_mutations` (Standard 250), bricht der Lauf hier ab und schreibt nichts. Er kürzt nicht auf den Grenzwert, denn ein halb angewendeter Bereinigungslauf hinterlässt das Portal in einem schlechteren Zustand als beide Endpunkte.
+
+**Phase 6 wendet an, mit Gate.** Die Mutationen werden aus dem Ledger abgespielt statt aus einem neu berechneten Plan — ausgeführt wird also genau das geprüfte Artefakt. Fehlschläge wandern in Quarantäne nach `failed.jsonl` und werden nie blind wiederholt. Danach wird jeder berührte Datensatz erneut gelesen und nach `ledger/verified.jsonl` geschrieben.
+
+## Kosten und Durchsatz in der Praxis
+
+Die bindende Grenze sind die API-Limits von HubSpot, nicht die Tokens.
+
+Die Discovery läuft gegen die CRM Search API. Die ist auf 5 Requests pro Sekunde je Account begrenzt, liefert höchstens 200 Objekte pro Seite und hat ein hartes Limit von 10.000 Ergebnissen pro Query — weiter zu paginieren liefert einen `400`. Eine Arbeitsmenge von 12.000 Kontakten muss daher über `createdate` in mindestens zwei Queries zerlegt werden. Bei 200 Datensätzen pro Seite und 5 Requests pro Sekunde liest die Discovery rund 1.000 Datensätze pro Sekunde, ein Scope von 50.000 Datensätzen dauert also etwa eine Minute.
+
+Schreibvorgänge begrenzt die Burst-Obergrenze: 190 Requests pro 10 Sekunden für private Apps in Professional und Enterprise, 100 für Free und Starter, 250 mit dem Add-on API Limit Increase. Die Tagesobergrenzen liegen bei 625.000 Calls in Professional und 1.000.000 in Enterprise. Ein Dedupe-Lauf über 600 Gruppen kostet rund 1.850 Schreib-Calls — ein Survivorship-Vorabschreiben je betroffenem Datensatz plus ein Merge je Gruppe — also etwa 100 Sekunden reine API-Zeit in Professional und rund 0,3% des Tageskontingents.
+
+Die Token-Kosten sind konstruktionsbedingt niedrig, weil das Matching deterministisch ist. Nur das Ambiguous-Band erreicht das Modell, und bei 30-60 Gruppen je 10.000 Datensätzen mit rund 800 Input-Tokens pro Gruppe kostet ein voller Lauf deutlich unter einem Dollar an Claude-Tokens. Der echte Aufwand ist die 60-90-minütige Policy-Sitzung, und die fällt einmal an und verteilt sich über alle späteren Läufe.
+
+## Erfolgsmetrik
+
+Verfolgen Sie die **Entstehungsrate von Duplikaten**, nicht die Zahl entfernter Duplikate. Entfernte Duplikate messen, wie schmutzig das Portal war; die Entstehungsrate misst, ob der Eingangsweg repariert wurde, der sie erzeugt hat. Fahren Sie den Dedupe-Lauf monatlich und tragen Sie neue Duplikatgruppen je 1.000 neu angelegter Datensätze auf. Eine flache oder steigende Linie bedeutet, dass Formular-Dedupe-Einstellungen, Listenimporte oder eine Integration weiterhin Kollisionen erzeugen — dagegen kommt keine Bereinigung an.
+
+Die sekundäre Metrik ist die **Größe des Ambiguous-Bands**. Sie sollte schrumpfen, während die Match-Regeln nachgezogen werden. Bleibt das Band über 10% der Kandidatengruppen, ist eine Regel aus Teil A fehlkalibriert.
+
+Bei liegengebliebenen Deals ist die Kalibrierungsgröße die Wiedereröffnungsrate während der Benachrichtigungsfrist. Über 15% heißt, die Schwellwerte sind zu aggressiv; heben Sie sie an, statt einzelne Deals zu diskutieren.
+
+## Fehlermodi
+
+- **Ein Merge ist irreversibel, und `--dry-run` ändert daran nichts.** Die Vorschau zeigt das beabsichtigte Ergebnis, ohne einen Wiederherstellungspunkt anzulegen. HubSpot bietet kein Rückgängigmachen. **Guard:** Der Vorzustand aus Phase 2 ist verpflichtend, und Phase 5 scheitert hart ohne ihn. Bewahren Sie `run_dir` mindestens einen Renewal-Zyklus auf — es ist der einzige Rückweg für einen Datensatz, den es nicht mehr gibt.
+- **Merges scheitern an der Grenze von 250 Merges pro Lebensdauer.** HubSpot blockiert einen Merge, sobald zwei Datensätze zusammen an 250 oder mehr Merges beteiligt waren, und ein Merge scheitert ebenso, wenn das Ergebnis konfigurierte Assoziationslimits überschreiten würde. In einem Portal mit jahrelanger Bereinigungshistorie häufen sich diese Fehlschläge mitten im Lauf. **Guard:** Fehlschläge wandern mit angehängtem API-Fehler nach `failed.jsonl` und stoppen nur diese Gruppe. Kein blinder Retry — derselbe Call scheitert identisch, und ein Retry gegen einen teilweise angewendeten Merge ist der Weg von der Bereinigung zum Incident.
+- **Property-Schreibvorgänge lösen Workflow-Enrollments aus.** Ein Lifecycle-Stage-Backfill über 4.000 Kontakte kann alle 4.000 in eine Nurture-Sequenz einschreiben und 4.000 E-Mails an Bestandskunden senden. Das ist der größte Wirkungsradius auf dieser Seite, und er entsteht vollständig außerhalb des CLI. **Guard:** Listen Sie aktive Workflows auf, deren Enrollment-Trigger die Ziel-Properties referenzieren, und pausieren Sie diese oder schließen Sie die Arbeitsmenge für die Dauer des Laufs aus. Der Skill gibt in Phase 4 die Liste der Ziel-Properties aus und verlangt eine ausdrückliche Bestätigung, dass diese Prüfung stattgefunden hat.
+- **Ein nachgetragener Wert ist von einem handgetippten nicht zu unterscheiden.** Monate später weiß niemand mehr, welche Datensätze der Lauf berührt hat, also kann niemand ihn zurückrollen oder aus einer Auswertung ausschließen. **Guard:** Jeder Backfill-Schreibvorgang setzt `hygiene_source` und `hygiene_run_id` im selben `objects update`-Call — nicht in einem zweiten Durchlauf, der ein Absturzfenster mit gestempelten, aber nicht geschriebenen Datensätzen hinterlässt. Die Rollback-Prozedur in `references/2-backfill-provenance.md` greift auf die Run-ID zu und stellt nur die Properties wieder her, die das Ledger benennt, sodass zwischenzeitliche menschliche Änderungen erhalten bleiben.
+- **Der Admin-Modus reicht über Ihre eigenen Berechtigungen hinaus.** HubSpot verlangt einen `HUBSPOT_ACCESS_TOKEN`-Service-Key für Schema-Operationen und die meisten Löschvorgänge, und dieser Key gilt accountweit. In eine langlebige Shell exportiert, bleibt er für jeden weiteren Befehl aktiv. **Guard:** Fahren Sie Discovery und Dry-Run unter OAuth, und exportieren Sie den Service Key in einer Subshell, die auf den einen Befehl begrenzt ist, der ihn braucht.
+- **Beta-Drift bricht einen fixierten Lauf lautlos.** Das CLI aktualisiert sich standardmäßig selbst, und HubSpot warnt, dass sich Flags ohne Ankündigung ändern können — ein Flag, das zwischen zwei geplanten Läufen verschwindet, macht aus einem kontrollierten Lauf einen unkontrollierten. **Guard:** Setzen Sie `HUBSPOT_NO_AUTO_UPGRADE=1` für geplante Läufe, fixieren Sie die Version in `run-meta.json` und behandeln Sie eine Versionsdifferenz als Anlass zur Prüfung.
+
+## vs Alternativen
+
+**vs die offiziellen HubSpot-Skills allein.** Sie sind kostenlos, werden vom Anbieter gepflegt und ziehen mit dem CLI mit — echte Vorteile, die dieses Bundle nicht hat. Nutzen Sie sie allein, wenn der CRM-Verantwortliche eine einmalige Bereinigung fährt und die Ergebnisse direkt prüft. Ergänzen Sie diese Schicht, wenn der Lauf sich wiederholt, wenn der Prüfende nicht der Bedienende ist, oder wenn in sechs Monaten jemand fragen wird, welcher Lauf einen Wert geschrieben hat. Die ehrliche Aufteilung: Der Anbieter liefert die Verben, dies liefert die Policy und den Beleg.
+
+**vs Insycle und ähnliche Dedupe-SaaS.** Zweckgebaute Werkzeuge haben hier einen echten Vorsprung — ein nicht-technischer Ops-Verantwortlicher kann vorlagenbasierte Massen-Merges über eine Oberfläche fahren, und Insycle dokumentiert einen Weg zum Rückgängigmachen von Merges, den HubSpot selbst nicht anbietet. Kaufen Sie das, wenn die Person, die die Bereinigung fährt, sich im Terminal nicht wohlfühlt und Budget vorhanden ist. Dieser Skill gewinnt, wenn die Bereinigung headless und geplant innerhalb eines Agenten läuft und wenn die Policy neben dem Rest Ihrer Ops-Konfiguration in der Versionsverwaltung liegen soll, wo ein Diff zeigt, wer die Survivorship-Regel geändert hat.
+
+**vs die Duplikatverwaltung in HubSpot.** Sie ist kostenlos, braucht keine Einrichtung und legt vorgeschlagene Duplikate paarweise zur Prüfung vor. Unter 50 Datensätzen ist das die richtige Wahl. Sie hat keine feldweise Survivorship-Steuerung, sodass die Werte des primären Datensatzes überall gewinnen, wo beide einen Wert haben, und sie erzeugt kein Artefakt, das ein Prüfender danach lesen kann.
+
+**vs die REST-API direkt zu skripten.** Sie schreiben Pagination, Retry, Backoff und die Sharding-Logik für die 10.000-Ergebnis-Grenze selbst — eine Arbeitswoche, die das CLI bereits mitbringt. Skripten Sie direkt, wenn Sie ein Objekt oder einen Endpunkt brauchen, den das Agent CLI noch nicht abdeckt; sonst ist das Beta-CLI plus eine Policy-Schicht der kürzere Weg.
+
+Verwandt: [mcp-server-hubspot-cs](/de/workflows/mcp-server-hubspot-cs/) für lesenden HubSpot-Zugriff aus Claude und [weekly-pipeline-report-skill](/de/workflows/weekly-pipeline-report-skill/) für den Reporting-Lauf, den die Disposition liegengebliebener Deals speist.

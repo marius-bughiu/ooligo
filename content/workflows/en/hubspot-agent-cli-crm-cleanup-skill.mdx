@@ -1,0 +1,101 @@
+---
+slug: hubspot-agent-cli-crm-cleanup-skill
+canonical_slug: hubspot-agent-cli-crm-cleanup-skill
+locale: en
+verticals: [revops]
+title: Run governed CRM hygiene through the HubSpot Agent CLI
+artifact_type: claude-skill
+tools_used: [claude, hubspot]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60-90 min
+human_tested: false
+last_updated: "2026-08-03"
+---
+
+A Claude Skill that drives the HubSpot Agent CLI through bulk CRM hygiene — deduplication, property backfill, and stale-deal closure — under a written policy, producing a reviewable change ledger and a pre-image snapshot before any irreversible write. The bundle ships at `apps/web/public/artifacts/hubspot-agent-cli-crm-cleanup-skill/` and contains `SKILL.md` plus three reference files you fill in before the first run.
+
+Start with the part most pages would bury: **HubSpot already ships free skills that do the mechanical work here.** `npx skills add hubspot/agent-cli-skills` installs 15 skills, including `bulk-operations` (JSONL pipes, batch reads, pagination, dry-run/confirm patterns, `hubspot history` recovery), `crm-data-quality` (find incomplete records, normalize values, dedupe via `objects merge`), and `deal-management` (find stalled deals, close them). Install those first. This Skill does not replace them and does not reimplement them.
+
+What the vendor bundle does not ship is policy. It gives you the idioms for merging records; it does not decide which duplicate wins field by field, where a backfilled value came from, when a quiet deal is dead rather than slow, or what evidence of the run survives afterward. That gap is the whole reason this Skill exists, and it is the gap that matters the moment a hygiene job runs headless on a schedule against a portal you do not personally own.
+
+## When to use
+
+Use this when a HubSpot hygiene job has to satisfy at least one of four conditions: it runs on a schedule with nobody watching each mutation; somebody other than the operator reviews what changed; the touched properties feed routing, scoring, reporting, or comp, so a bad write has downstream cost; or the working set exceeds roughly 200 records, where pair-by-pair review stops being realistic.
+
+The [HubSpot](/en/tools/hubspot/) Agent CLI entered public beta on 2026-06-23 as a binary separate from the `hs` developer CLI. Install it with `curl -fsSL https://api.hubapi.com/hub/cli/backend/hub-cli/latest/install.sh | sh` on POSIX, or the PowerShell equivalent on Windows, then authenticate with `hubspot auth login`. Commands follow a `hubspot <noun> <verb>` shape, output JSONL by default, and accept a global `--dry-run` that previews changes without applying them.
+
+## When NOT to use
+
+- **A one-off cleanup in a portal you own.** The vendor's `crm-data-quality` skill does it with far less setup. Policy files are overhead when the operator is also the reviewer and the run happens once.
+- **You cannot write a snapshot to disk.** Merges cannot be undone. Without a pre-image there is no reconstruction path, and the Skill hard-stops rather than proceed.
+- **The survivorship rule has not been decided.** The Skill applies a rule you supply and refuses to invent one. An unfilled `references/1-survivorship-policy.md` is a stop, not a default.
+- **Fewer than 50 records.** HubSpot's in-app duplicate manager plus manual review beats the setup cost at that size.
+- **You want one run to do all three jobs.** Dedupe, backfill, and stale-deal disposition each take a separate run against a separate policy file. Combining them produces a ledger no reviewer can read.
+
+## Setup
+
+Budget 60-90 minutes, most of it spent filling policy files rather than installing anything. The survivorship argument — which record wins, and which fields survive from the loser — takes longer and happens before setup.
+
+1. **Install the CLI and the vendor skills.** Run the install script, then `hubspot auth login`, then `hubspot whoami` to confirm the portal. Add `npx skills add hubspot/agent-cli-skills`. Claude Cowork users on Team or Enterprise accounts need an admin to allowlist `api.hubapi.com` first.
+2. **Install this Skill.** Copy `SKILL.md` and the `references/` folder into `.claude/skills/hubspot-crm-hygiene/`. The frontmatter `name` and `description` are what trigger it on a relevant prompt.
+3. **Create the two provenance properties.** `hygiene_source` and `hygiene_run_id`, single-line text, on every object type you plan to backfill. Definitions are in `references/2-backfill-provenance.md`. The Skill stops if they do not exist.
+4. **Fill `references/1-survivorship-policy.md`.** Match rules in Part A, primary selection in Part B, the field-level winner table in Part C, and the never-touch list in Part D. Attribution and consent fields belong in Part D — rewriting first-touch attribution during a cleanup rewrites marketing history invisibly.
+5. **Fill `references/3-stale-deal-disposition.md` with the pipeline owner in the room.** Set each stage threshold at roughly twice that stage's median duration from your own closed-won history.
+6. **Audit workflow enrollment triggers.** List active workflows whose triggers reference any target property. This step is not optional; see the fourth failure mode.
+7. **Dry-run against a 200-record scope.** Read `ledger/digest.md` end to end and confirm the ambiguous list looks like genuine judgment calls rather than a miscalibrated match rule.
+
+## What the skill actually does
+
+Six phases, fixed order, no skipping forward.
+
+**Phase 1 pins the environment.** It records `hubspot --version` and the authenticated identity into `ledger/run-meta.json`. HubSpot states that the beta's commands, flags, and behavior can change without notice, so the version that produced a ledger is part of the ledger. Discovery runs under OAuth rather than a service key, because OAuth is scoped to the operator's own permissions and a scoping mistake fails closed.
+
+**Phase 2 snapshots.** Every record in scope is written to `pre-image/<object_type>.jsonl` before anything else happens. The reason is specific: `--dry-run` previews a write you have not made, and `hubspot history` restores property values on a record that still exists. Neither helps after a merge, because HubSpot documents no unmerge path and the losing record stops existing. Phase 5 refuses to run if the snapshot is missing or its line count does not match the working set.
+
+**Phase 3 generates candidates deterministically.** Normalization and match rules run as code — no model judgment. A model asked to re-group the same duplicate set twice will not return the same grouping twice, which makes the diff between runs unreviewable and a reviewer's sign-off meaningless. Model judgment appears in exactly one place, the ambiguous band, where its output is advisory and never auto-applied.
+
+**Phase 4 resolves under policy, per field rather than per record.** This phase exists because of one HubSpot behavior: `objects merge` keeps the primary's value wherever both records hold one. Picking a primary therefore discards good data on the secondary — the newer phone number, the corrected title, the populated lifecycle stage. So the Skill inverts the order. It pre-writes winning field values onto the primary with `objects update`, then merges, so the merge only folds associations and activity history. Groups the policy cannot resolve go to `ambiguous.jsonl` and are excluded from apply.
+
+**Phase 5 builds the ledger.** Every planned mutation is issued with `--dry-run --format json` and folded into `ledger/changes.jsonl` — one line per record with before/after values and the rule that authorized the change — plus a human-readable `ledger/digest.md`. If any mutation class exceeds `max_mutations` (default 250) the run aborts and writes nothing. It does not truncate to the cap, because a half-applied hygiene run leaves the portal in a state worse than either endpoint.
+
+**Phase 6 applies, gated.** Mutations replay from the ledger rather than from a freshly recomputed plan, so what executes is the artifact that was reviewed. Failures quarantine to `failed.jsonl` and are never blind-retried. Afterward every touched record is re-read into `ledger/verified.jsonl`.
+
+## Cost and throughput reality
+
+The binding constraint is HubSpot's API limits, not tokens.
+
+Discovery runs against the CRM Search API, which is capped at 5 requests per second per account, returns at most 200 objects per page, and hard-caps at 10,000 total results per query — paging past that returns a `400`. A 12,000-contact working set therefore has to be sharded by `createdate` into at least two queries. At 200 records per page and 5 requests per second, discovery reads about 1,000 records per second, so a 50,000-record scope takes roughly a minute of wall time.
+
+Writes are bounded by the burst ceiling: 190 requests per 10 seconds for Professional and Enterprise private apps, 100 for Free and Starter, 250 with the API Limit Increase add-on. Daily ceilings are 625,000 calls on Professional and 1,000,000 on Enterprise. A 600-group dedupe run costs roughly 1,850 write calls — one survivorship pre-write per affected record plus one merge per group — which lands near 100 seconds of pure API time on Professional and consumes about 0.3% of the daily allowance.
+
+Token cost is small by design, because matching is deterministic. Only the ambiguous band reaches the model, and at 30-60 groups per 10,000 records with roughly 800 input tokens per group, a full run costs well under a dollar in Claude tokens. The real cost is the 60-90 minute policy session, and it is a one-time cost amortized across every later run.
+
+## Success metric
+
+Track **duplicate creation rate**, not duplicates removed. Removed duplicates measure how dirty the portal was; creation rate measures whether the intake path that made them has been fixed. Run the dedupe job monthly and chart new duplicate groups per 1,000 records created. A flat or rising line means form dedupe settings, list imports, or an integration are still producing collisions, and no amount of cleanup will outrun that.
+
+The secondary metric is **ambiguous-band size**. It should shrink as the match rules get tuned. A band that stays above 10% of candidate groups means a rule in Part A is miscalibrated.
+
+For stale deals, the calibration signal is the reopen rate during the notification hold. Above 15% means thresholds are too aggressive; raise them rather than arguing individual deals.
+
+## Failure modes
+
+- **A merge is irreversible, and `--dry-run` does not change that.** The preview shows the intended result without creating a restore point. HubSpot provides no unmerge. **Guard:** the Phase 2 pre-image is mandatory and Phase 5 hard-fails without it. Retain `run_dir` for at least a renewal cycle — it is the only path back for a record that no longer exists.
+- **Merges fail at the 250-merge lifetime cap.** HubSpot blocks a merge once two records have been involved in 250 or more merges combined, and a merge also fails when the result would exceed configured association limits. On a portal with years of cleanup history these failures cluster mid-run. **Guard:** failures quarantine to `failed.jsonl` with the API error attached and stop that group only. No blind retry — the same call fails identically, and retrying against a partially applied merge is how a cleanup becomes an incident.
+- **Property writes fire workflow enrollment triggers.** A lifecycle-stage backfill across 4,000 contacts can enroll all 4,000 in a nurture sequence and send 4,000 emails to existing customers. This is the largest blast radius on the page and it originates outside the CLI entirely. **Guard:** enumerate active workflows whose enrollment triggers reference the target properties, then pause them or exclude the working set for the run. The Skill prints the target property list at Phase 4 and requires explicit confirmation that the audit happened.
+- **A backfilled value is indistinguishable from a human-entered one.** Months later nobody can tell which records the job touched, so nobody can roll it back or exclude it from an analysis. **Guard:** every backfill write sets `hygiene_source` and `hygiene_run_id` on the same `objects update` call — not in a second pass, which leaves a crash window of stamped-but-unwritten records. The rollback procedure in `references/2-backfill-provenance.md` keys on the run id and restores only the properties the ledger names, so human edits made since the run survive.
+- **Admin mode reaches past your own permissions.** HubSpot requires a `HUBSPOT_ACCESS_TOKEN` service key for schema operations and most deletes, and that key is account-level. Exported into a long-lived shell it stays live for every later command. **Guard:** run discovery and dry-run under OAuth, and export the service key inside a subshell scoped to the single command that needs it.
+- **Beta drift breaks a pinned run silently.** The CLI auto-upgrades by default and HubSpot warns that flags can change without notice, so a flag that disappears between two scheduled runs turns a governed run into an ungoverned one. **Guard:** set `HUBSPOT_NO_AUTO_UPGRADE=1` for scheduled runs, pin the version in `run-meta.json`, and treat a version delta as a review trigger.
+
+## vs alternatives
+
+**vs HubSpot's official skills alone.** They are free, vendor-maintained, and track the CLI as it changes — real advantages this bundle does not have. Use them alone when the CRM owner is running a one-time cleanup and reviewing results directly. Add this layer when the run repeats, when a reviewer is not the operator, or when someone will ask in six months which job wrote a value. The honest split: the vendor gives you the verbs, this gives you the policy and the receipt.
+
+**vs Insycle and similar dedupe SaaS.** Purpose-built tooling has a real edge here — a non-technical ops owner can drive template-based bulk merges from a UI, and Insycle documents a merge-revert path that HubSpot itself does not offer. Buy that when the person running hygiene is not comfortable in a terminal and the budget exists. This Skill wins when hygiene runs headless on a schedule inside an agent, and when the policy needs to live in version control beside the rest of your ops configuration where a diff shows who changed the survivorship rule.
+
+**vs HubSpot's in-app duplicate management.** It is free and needs no setup, and it surfaces suggested duplicates for review one pair at a time. That is the right tool below 50 records. It has no field-level survivorship control, so the primary's values win wherever both records hold one, and it produces no artifact a reviewer can read afterward.
+
+**vs scripting the REST API directly.** You end up writing pagination, retry, backoff, and the 10,000-result sharding logic yourself, which is a week of work that the CLI already ships. Script directly when you need an object or endpoint the Agent CLI does not cover yet; otherwise the beta CLI plus a policy layer is the shorter path.
+
+Related: [mcp-server-hubspot-cs](/en/workflows/mcp-server-hubspot-cs/) for read-oriented HubSpot access from Claude, and [weekly-pipeline-report-skill](/en/workflows/weekly-pipeline-report-skill/) for the reporting job that stale-deal disposition feeds.

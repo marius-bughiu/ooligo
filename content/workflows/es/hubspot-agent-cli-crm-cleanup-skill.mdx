@@ -1,0 +1,101 @@
+---
+slug: hubspot-agent-cli-crm-cleanup-skill
+canonical_slug: hubspot-agent-cli-crm-cleanup-skill
+locale: es
+verticals: [revops]
+title: Run governed CRM hygiene through the HubSpot Agent CLI
+artifact_type: claude-skill
+tools_used: [claude, hubspot]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60-90 min
+human_tested: false
+last_updated: "2026-08-03"
+---
+
+Un Claude Skill que conduce el HubSpot Agent CLI a través de la higiene masiva del CRM — deduplicación, relleno de propiedades y cierre de deals estancados — bajo una política escrita, y que produce un registro de cambios revisable y una instantánea previa antes de cualquier escritura irreversible. El bundle se publica en `apps/web/public/artifacts/hubspot-agent-cli-crm-cleanup-skill/` y contiene `SKILL.md` más tres archivos de referencia que completas antes de la primera ejecución.
+
+Empecemos por la parte que casi cualquier página escondería: **HubSpot ya publica skills gratuitos que hacen el trabajo mecánico de aquí.** `npx skills add hubspot/agent-cli-skills` instala 15 skills, entre ellos `bulk-operations` (pipes JSONL, lecturas por lote, paginación, patrones de dry-run/confirmación, recuperación con `hubspot history`), `crm-data-quality` (encontrar registros incompletos, normalizar valores, deduplicar con `objects merge`) y `deal-management` (encontrar deals estancados y cerrarlos). Instálalos primero. Este Skill no los reemplaza ni los reimplementa.
+
+Lo que el bundle del proveedor no incluye es la política. Te da los modismos para fusionar registros; no decide qué duplicado gana campo por campo, de dónde salió un valor rellenado, cuándo un deal callado está muerto en lugar de lento, ni qué evidencia de la ejecución sobrevive después. Esa brecha es toda la razón de existir de este Skill, y es la que importa en el momento en que un trabajo de higiene corre sin supervisión, de forma programada, contra un portal que no administras personalmente.
+
+## Cuándo usarlo
+
+Úsalo cuando un trabajo de higiene en HubSpot deba cumplir al menos una de cuatro condiciones: corre programado sin nadie mirando cada mutación; alguien distinto del operador revisa lo que cambió; las propiedades tocadas alimentan enrutamiento, scoring, reportes o compensación, de modo que una escritura mala tiene costo aguas abajo; o el conjunto de trabajo supera unos 200 registros, donde la revisión par por par deja de ser realista.
+
+El Agent CLI de [HubSpot](/es/tools/hubspot/) entró en beta pública el 2026-06-23 como un binario separado del CLI de desarrollo `hs`. Instálalo con `curl -fsSL https://api.hubapi.com/hub/cli/backend/hub-cli/latest/install.sh | sh` en POSIX, o el equivalente en PowerShell en Windows, y luego autentícate con `hubspot auth login`. Los comandos siguen la forma `hubspot <noun> <verb>`, emiten JSONL por defecto y aceptan un `--dry-run` global que previsualiza los cambios sin aplicarlos.
+
+## Cuándo NO usarlo
+
+- **Una limpieza puntual en un portal que administras.** El skill `crm-data-quality` del proveedor lo hace con mucha menos configuración. Los archivos de política son sobrecarga cuando el operador también es el revisor y la ejecución ocurre una sola vez.
+- **No puedes escribir una instantánea en disco.** Las fusiones no se pueden deshacer. Sin una imagen previa no hay ruta de reconstrucción, y el Skill se detiene en seco en lugar de continuar.
+- **La regla de supervivencia no está decidida.** El Skill aplica una regla que tú aportas y se niega a inventarla. Un `references/1-survivorship-policy.md` sin completar es una parada, no un valor por defecto.
+- **Menos de 50 registros.** El gestor de duplicados dentro de HubSpot más la revisión manual supera el costo de configuración a ese tamaño.
+- **Quieres que una ejecución haga los tres trabajos.** Deduplicación, relleno y disposición de deals estancados requieren cada uno una ejecución separada contra un archivo de política separado. Combinarlos produce un registro que ningún revisor puede leer.
+
+## Configuración
+
+Presupuesta 60-90 minutos, la mayor parte completando archivos de política más que instalando algo. La discusión sobre supervivencia — qué registro gana y qué campos sobreviven del perdedor — toma más tiempo y ocurre antes de la configuración.
+
+1. **Instala el CLI y los skills del proveedor.** Ejecuta el script de instalación, luego `hubspot auth login` y después `hubspot whoami` para confirmar el portal. Agrega `npx skills add hubspot/agent-cli-skills`. Los usuarios de Claude Cowork en cuentas Team o Enterprise necesitan que un administrador ponga `api.hubapi.com` en la lista de permitidos primero.
+2. **Instala este Skill.** Copia `SKILL.md` y la carpeta `references/` en `.claude/skills/hubspot-crm-hygiene/`. El `name` y la `description` del frontmatter son lo que lo activa ante un prompt relevante.
+3. **Crea las dos propiedades de procedencia.** `hygiene_source` y `hygiene_run_id`, texto de una línea, en cada tipo de objeto que planees rellenar. Las definiciones están en `references/2-backfill-provenance.md`. El Skill se detiene si no existen.
+4. **Completa `references/1-survivorship-policy.md`.** Reglas de coincidencia en la Parte A, selección del primario en la Parte B, la tabla de ganadores por campo en la Parte C y la lista de intocables en la Parte D. Los campos de atribución y consentimiento pertenecen a la Parte D: reescribir la atribución de primer contacto durante una limpieza reescribe la historia de marketing de forma invisible.
+5. **Completa `references/3-stale-deal-disposition.md` con el dueño del pipeline presente.** Fija cada umbral de etapa en aproximadamente el doble de la duración mediana de esa etapa según tu propio historial de closed-won.
+6. **Audita los disparadores de inscripción de los workflows.** Lista los workflows activos cuyos disparadores referencian alguna propiedad objetivo. Este paso no es opcional; mira el cuarto modo de fallo.
+7. **Haz un dry-run contra un alcance de 200 registros.** Lee `ledger/digest.md` de principio a fin y confirma que la lista de ambiguos parece de juicios genuinos y no de una regla de coincidencia mal calibrada.
+
+## Qué hace realmente el skill
+
+Seis fases, orden fijo, sin saltar hacia adelante.
+
+**La Fase 1 fija el entorno.** Registra `hubspot --version` y la identidad autenticada en `ledger/run-meta.json`. HubSpot indica que los comandos, flags y comportamiento de la beta pueden cambiar sin aviso, así que la versión que produjo un registro es parte del registro. El descubrimiento corre bajo OAuth y no bajo una service key, porque OAuth está acotado a los permisos del propio operador y un error de alcance falla en cerrado.
+
+**La Fase 2 toma la instantánea.** Cada registro dentro del alcance se escribe en `pre-image/<object_type>.jsonl` antes de que ocurra cualquier otra cosa. La razón es concreta: `--dry-run` previsualiza una escritura que aún no hiciste, y `hubspot history` restaura valores de propiedades en un registro que todavía existe. Ninguno ayuda después de una fusión, porque HubSpot no documenta ninguna ruta de deshacer y el registro perdedor deja de existir. La Fase 5 se niega a correr si falta la instantánea o si su conteo de líneas no coincide con el conjunto de trabajo.
+
+**La Fase 3 genera candidatos de forma determinista.** La normalización y las reglas de coincidencia corren como código, sin juicio del modelo. Un modelo al que se le pide reagrupar dos veces el mismo conjunto de duplicados no devolverá la misma agrupación dos veces, lo que vuelve irrevisable el diff entre ejecuciones y deja sin sentido la aprobación de un revisor. El juicio del modelo aparece en exactamente un lugar, la banda de ambiguos, donde su salida es consultiva y nunca se aplica automáticamente.
+
+**La Fase 4 resuelve bajo política, por campo y no por registro.** Esta fase existe por un comportamiento concreto de HubSpot: `objects merge` conserva el valor del primario dondequiera que ambos registros tengan uno. Elegir un primario descarta entonces buenos datos del secundario: el teléfono más nuevo, el cargo corregido, la etapa de ciclo de vida ya poblada. Por eso el Skill invierte el orden. Preescribe los valores ganadores sobre el primario con `objects update` y luego fusiona, de modo que la fusión solo pliega asociaciones e historial de actividad. Los grupos que la política no puede resolver van a `ambiguous.jsonl` y quedan excluidos de la aplicación.
+
+**La Fase 5 construye el registro de cambios.** Cada mutación planificada se emite con `--dry-run --format json` y se pliega en `ledger/changes.jsonl` — una línea por registro con valores antes/después y la regla que autorizó el cambio — más un `ledger/digest.md` legible por humanos. Si alguna clase de mutación supera `max_mutations` (250 por defecto) la ejecución aborta y no escribe nada. No trunca al tope, porque una higiene aplicada a medias deja el portal en un estado peor que cualquiera de los dos extremos.
+
+**La Fase 6 aplica, con compuerta.** Las mutaciones se reproducen desde el registro y no desde un plan recalculado, así que lo que se ejecuta es el artefacto que se revisó. Los fallos se ponen en cuarentena en `failed.jsonl` y nunca se reintentan a ciegas. Después, cada registro tocado se vuelve a leer en `ledger/verified.jsonl`.
+
+## Costo y rendimiento reales
+
+La restricción vinculante son los límites de la API de HubSpot, no los tokens.
+
+El descubrimiento corre contra la CRM Search API, que está limitada a 5 solicitudes por segundo por cuenta, devuelve como máximo 200 objetos por página y tiene un tope duro de 10.000 resultados totales por consulta: paginar más allá devuelve un `400`. Un conjunto de trabajo de 12.000 contactos debe entonces fragmentarse por `createdate` en al menos dos consultas. A 200 registros por página y 5 solicitudes por segundo, el descubrimiento lee unos 1.000 registros por segundo, así que un alcance de 50.000 registros toma alrededor de un minuto de tiempo real.
+
+Las escrituras están acotadas por el techo de ráfaga: 190 solicitudes cada 10 segundos para apps privadas Professional y Enterprise, 100 para Free y Starter, 250 con el complemento API Limit Increase. Los techos diarios son 625.000 llamadas en Professional y 1.000.000 en Enterprise. Una deduplicación de 600 grupos cuesta unas 1.850 llamadas de escritura — una preescritura de supervivencia por registro afectado más una fusión por grupo — lo que ronda los 100 segundos de tiempo puro de API en Professional y consume cerca del 0,3% de la asignación diaria.
+
+El costo en tokens es bajo por diseño, porque la coincidencia es determinista. Solo la banda de ambiguos llega al modelo, y a 30-60 grupos por cada 10.000 registros con unos 800 tokens de entrada por grupo, una ejecución completa cuesta bastante menos de un dólar en tokens de Claude. El costo real es la sesión de política de 60-90 minutos, y es un costo único que se amortiza entre todas las ejecuciones posteriores.
+
+## Métrica de éxito
+
+Sigue la **tasa de creación de duplicados**, no los duplicados eliminados. Los duplicados eliminados miden qué tan sucio estaba el portal; la tasa de creación mide si se arregló la vía de entrada que los produjo. Corre el trabajo de deduplicación cada mes y grafica los grupos de duplicados nuevos por cada 1.000 registros creados. Una línea plana o en ascenso significa que la configuración de deduplicación de formularios, las importaciones de listas o una integración siguen produciendo colisiones, y ninguna cantidad de limpieza le ganará a eso.
+
+La métrica secundaria es el **tamaño de la banda de ambiguos**. Debería encogerse a medida que se afinan las reglas de coincidencia. Una banda que se mantiene por encima del 10% de los grupos candidatos significa que una regla de la Parte A está mal calibrada.
+
+Para los deals estancados, la señal de calibración es la tasa de reapertura durante la retención de notificación. Por encima del 15% significa que los umbrales son demasiado agresivos; súbelos en lugar de discutir deals individuales.
+
+## Modos de fallo
+
+- **Una fusión es irreversible, y `--dry-run` no cambia eso.** La previsualización muestra el resultado buscado sin crear un punto de restauración. HubSpot no ofrece deshacer una fusión. **Guarda:** la imagen previa de la Fase 2 es obligatoria y la Fase 5 falla en seco sin ella. Conserva `run_dir` al menos un ciclo de renovación: es el único camino de vuelta para un registro que ya no existe.
+- **Las fusiones fallan en el tope de 250 fusiones de por vida.** HubSpot bloquea una fusión cuando dos registros han participado en 250 o más fusiones combinadas, y una fusión también falla cuando el resultado excedería los límites de asociación configurados. En un portal con años de historial de limpieza, estos fallos se agrupan a mitad de ejecución. **Guarda:** los fallos se ponen en cuarentena en `failed.jsonl` con el error de la API adjunto y detienen solo ese grupo. Sin reintento ciego: la misma llamada falla idénticamente, y reintentar contra una fusión aplicada parcialmente es cómo una limpieza se vuelve un incidente.
+- **Las escrituras de propiedades disparan inscripciones de workflows.** Un relleno de etapa de ciclo de vida sobre 4.000 contactos puede inscribir a los 4.000 en una secuencia de nurture y enviar 4.000 emails a clientes existentes. Este es el radio de impacto más grande de la página y se origina completamente fuera del CLI. **Guarda:** enumera los workflows activos cuyos disparadores de inscripción referencian las propiedades objetivo, y luego pausalos o excluye el conjunto de trabajo durante la ejecución. El Skill imprime la lista de propiedades objetivo en la Fase 4 y exige confirmación explícita de que la auditoría ocurrió.
+- **Un valor rellenado es indistinguible de uno ingresado por una persona.** Meses después nadie puede decir qué registros tocó el trabajo, así que nadie puede revertirlo ni excluirlo de un análisis. **Guarda:** cada escritura de relleno fija `hygiene_source` y `hygiene_run_id` en la misma llamada `objects update` — no en una segunda pasada, que deja una ventana de caída con registros sellados pero no escritos. El procedimiento de reversión en `references/2-backfill-provenance.md` se basa en el id de ejecución y restaura solo las propiedades que el registro nombra, de modo que las ediciones humanas hechas desde entonces sobreviven.
+- **El modo admin alcanza más allá de tus propios permisos.** HubSpot exige una service key `HUBSPOT_ACCESS_TOKEN` para operaciones de esquema y la mayoría de los borrados, y esa key es a nivel de cuenta. Exportada a un shell de larga vida, queda viva para todos los comandos posteriores. **Guarda:** corre el descubrimiento y el dry-run bajo OAuth, y exporta la service key dentro de un subshell acotado al único comando que la necesita.
+- **La deriva de la beta rompe una ejecución fijada en silencio.** El CLI se autoactualiza por defecto y HubSpot advierte que los flags pueden cambiar sin aviso, así que un flag que desaparece entre dos ejecuciones programadas convierte una ejecución gobernada en una sin gobierno. **Guarda:** fija `HUBSPOT_NO_AUTO_UPGRADE=1` para las ejecuciones programadas, ancla la versión en `run-meta.json` y trata una diferencia de versión como un disparador de revisión.
+
+## vs alternativas
+
+**vs los skills oficiales de HubSpot por sí solos.** Son gratuitos, los mantiene el proveedor y siguen al CLI a medida que cambia: ventajas reales que este bundle no tiene. Úsalos solos cuando el dueño del CRM corre una limpieza única y revisa los resultados directamente. Agrega esta capa cuando la ejecución se repite, cuando el revisor no es el operador, o cuando alguien preguntará en seis meses qué trabajo escribió un valor. La división honesta: el proveedor te da los verbos, esto te da la política y el comprobante.
+
+**vs Insycle y SaaS de deduplicación similares.** Las herramientas hechas a propósito tienen una ventaja real aquí: un dueño de ops no técnico puede manejar fusiones masivas basadas en plantillas desde una interfaz, e Insycle documenta una ruta de reversión de fusiones que el propio HubSpot no ofrece. Cómpralo cuando quien corre la higiene no está cómodo en una terminal y existe el presupuesto. Este Skill gana cuando la higiene corre sin supervisión, de forma programada, dentro de un agente, y cuando la política necesita vivir en control de versiones junto al resto de tu configuración de ops, donde un diff muestra quién cambió la regla de supervivencia.
+
+**vs la gestión de duplicados dentro de HubSpot.** Es gratuita y no requiere configuración, y presenta duplicados sugeridos para revisar de a un par por vez. Esa es la herramienta correcta por debajo de 50 registros. No tiene control de supervivencia por campo, así que los valores del primario ganan dondequiera que ambos registros tengan uno, y no produce ningún artefacto que un revisor pueda leer después.
+
+**vs programar la API REST directamente.** Terminas escribiendo tú mismo la paginación, los reintentos, el backoff y la lógica de fragmentación de los 10.000 resultados, que es una semana de trabajo que el CLI ya trae. Programa directo cuando necesites un objeto o endpoint que el Agent CLI aún no cubre; si no, el CLI en beta más una capa de política es el camino más corto.
+
+Relacionado: [mcp-server-hubspot-cs](/es/workflows/mcp-server-hubspot-cs/) para acceso de lectura a HubSpot desde Claude, y [weekly-pipeline-report-skill](/es/workflows/weekly-pipeline-report-skill/) para el trabajo de reportes que alimenta la disposición de deals estancados.
