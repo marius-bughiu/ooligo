@@ -46,7 +46,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:legal-ops] casetext-vs-lexisnexis-protege — material (casetext retired by Thomson Reuters 2025-04 [subject]) → slug: casetext-vs-lexisnexis-protege
 - refresh:C: [type:comparison] [vertical:revops] catalyst-vs-vitally — material (catalyst merged into Totango [subject]) → slug: catalyst-vs-vitally
 - refresh:C: [type:comparison] [vertical:revops] chatgpt-vs-perplexity — material (perplexity Max tier + official MCP server [subject]) → slug: chatgpt-vs-perplexity
-- refresh:C: [type:comparison] [vertical:revops] claude-vs-perplexity — material (perplexity Max tier + official MCP server [subject])
+- refresh:C: [type:comparison] [vertical:revops] claude-vs-perplexity — material (perplexity Max tier + official MCP server [subject]) → claimed: refresh 2026-08-03T21:05:00Z
 - refresh:C: [type:comparison] [vertical:revops] gainsight-vs-catalyst — material (catalyst merged into Totango [subject])
 - refresh:C: [type:comparison] [vertical:legal-ops] harvey-vs-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject])
 - refresh:C: [type:comparison] [vertical:recruiting] holly-vs-hireez — material (holly rebranded to HiringAgents.ai [subject])
