@@ -1,0 +1,88 @@
+---
+slug: ai-agent-ops-stack
+canonical_slug: ai-agent-ops-stack
+locale: en
+verticals: [revops, legal-ops, recruiting]
+title: AI agent ops stack — always-on agents without engineering
+tools: [gumloop, n8n, clay, slack]
+use_case: A 3-10 person ops team running always-on AI agents over its existing SaaS, with enrichment, an approval gate, and no engineer on the org chart.
+difficulty: intermediate
+related_workflows:
+  - inbound-lead-triage-n8n
+  - nda-intake-triage-n8n
+  - lead-enrichment-clay-claude
+last_updated: "2026-08-03"
+---
+
+The stack a lean ops team runs when it wants agents that fire on events instead of a chat window somebody has to remember to open. [Gumloop](/en/tools/gumloop/) builds and hosts the agents, [n8n](/en/tools/n8n/) moves work between systems and enforces the approval gate, [Clay](/en/tools/clay/) supplies the outside data an agent needs before it can decide anything, and [Slack](/en/tools/slack/) is where a human says yes or no. Four tools, roughly $4K-$12K a year, no engineer on the org chart.
+
+The distinction that decides whether you need this at all: it is not a stack for automating known, fixed steps. If the steps never change — copy field A to field B when a form fires — n8n alone does that cheaper and more reliably. This stack earns its cost when the input is unstructured and the decision needs judgment applied case by case: an inbound email that may or may not be a real demand, a CV against a scorecard, an NDA with a non-standard indemnity clause, a support thread that might be a churn signal.
+
+## How the pieces fit
+
+- **[Gumloop](/en/tools/gumloop/) is the agent layer.** Agents and workflows are built on a visual canvas: a trigger node fires, data flows through extraction and model nodes, action nodes write back. Model choice is per node, so one agent can call Claude for clause extraction and a cheaper model for classification in the same run. Gumloop is where unstructured input becomes a structured decision with a reason attached. It does not hold state and it is not your system of record — it reads, reasons, and emits.
+
+- **[n8n](/en/tools/n8n/) is the orchestration and guardrail layer.** Every handoff between Gumloop and the rest of your SaaS is an n8n workflow: it receives the agent's output, checks it against thresholds you set, decides whether the action can execute unattended or needs a human, writes to the system of record, and catches the failures. It is also where the audit trail lives — n8n's execution log is the record of what an agent did and why, which matters the first time someone asks.
+
+- **[Clay](/en/tools/clay/) is the outside-data layer.** An agent reasoning about an inbound lead, a candidate, or a counterparty needs facts the trigger event does not contain: headcount, funding, tech stack, whether this domain is already a customer. Clay waterfalls each lookup across data providers and charges on a hit. Without it, agents make confident decisions on the strength of an email signature.
+
+- **[Slack](/en/tools/slack/) is the approval and audit surface.** Any agent action above the authority threshold posts to a channel as an approve/reject message before it executes. This is the component teams skip, and skipping it is why unattended agent projects get switched off in month two — nobody could see what the thing was doing.
+
+### Named handoffs
+
+1. **Event → triage.** An email lands in a shared inbox, a form is submitted, or a file drops in a folder → Gumloop agent extracts the entities, classifies the request, and emits structured JSON with a confidence value.
+2. **Unknown entity → enrichment.** Gumloop's output names a company or person not already in your CRM → n8n triggers the Clay table run → enriched row returns to the agent's context before it recommends an action.
+3. **Recommendation → gate.** Gumloop returns a recommended action → n8n evaluates it against the threshold (confidence above the bar and value below the cap executes unattended; anything else routes to Slack as an approval card with the agent's stated reasoning attached).
+4. **Approval → write.** A human clicks approve in Slack → n8n writes to the system of record (CRM, ATS, or CLM) and posts the receipt back into the same thread, so the decision and its consequence sit in one place.
+5. **Failure → owner.** An agent run errors, a Clay lookup returns nothing, or monthly credit consumption crosses a ceiling → n8n's error workflow alerts the named ops owner in Slack rather than failing silently.
+
+## Why this combination
+
+Each tool sits in one layer and the layers do not overlap: Gumloop reasons, Clay supplies facts, n8n routes and gates, Slack holds the human. That separation is what makes the stack debuggable by a non-engineer — when something goes wrong there is exactly one place it went wrong.
+
+Two collapses are worth naming, because both are sometimes right. **n8n alone** can do everything Gumloop does; its AI Agent node connects any model to tools and memory, and self-hosted it is free. What you pay instead is build hours and the requirement that somebody can debug a failed webhook at 6pm. **Gumloop alone** can call APIs directly and skip n8n. What you lose is the gate — approval logic, thresholds, retries, and error routing scatter inside individual agents instead of sitting in one enforced layer, which is fine for two agents and unmanageable at ten.
+
+Gumloop is the default agent layer here rather than a per-seat assistant product because its plan includes unlimited seats and bills on credits: letting the whole ops team build against the same agents costs nothing extra, and a shared queue is what this stack exists to serve.
+
+## Cost reality
+
+Annual bands for a 3-10 person ops team, from vendor pricing pages checked 2026-08-03:
+
+- **Gumloop:** ~$450-$3,000/year. One Pro plan starting at $37/month billed annually at the 20,000-credit floor, with unlimited seats, 5 concurrent workflow runs, 25 concurrent agent chats, and one hosted MCP server. Credits scale on a slider to 1.5M/month; a team running several agents daily lands well above the floor. The permanent free plan was discontinued on 2026-07-30 in favor of a 14-day Pro trial, so there is no longer a $0 way to pilot beyond two weeks. Enterprise (RBAC, SCIM/SAML, audit logs, VPC) is quote-only.
+- **n8n:** ~$0-$800/year. The self-hosted Community Edition is free; budget $20-40/month for a VPS. On cloud, Starter is €20/month billed annually for 2,500 executions and Pro is €50/month for 10,000. Billing is per workflow execution regardless of step count, and users are unlimited on every plan. Business, at €667/month billed annually, adds SSO/SAML and Git-backed version control — most teams this size self-host long before that.
+- **Clay:** ~$2,000-$5,400/year. Launch is $185/month ($167 billed annually) and Growth is $495/month ($446 billed annually). Since the March 2026 overhaul, billing runs on two meters — Data Credits for provider lookups and Actions for AI runs and integrations — so an agent stack that calls Clay on every trigger burns both.
+- **Slack:** ~$450-$1,800/year. Pro is $7.25/user/month billed annually ($8.75 monthly); Business+ is $15/user/month billed annually. Only the people who approve things need a paid seat.
+
+**Total: ~$4K-$12K/year.** The hidden costs are the ones that bite: 2-4 weeks of an ops person's time to get the first three agents to a state you would leave unattended, ongoing credit drift as agents get chattier, and the maintenance tax of a Gumloop canvas that grows past about 30 nodes and stops being readable.
+
+## What this stack does not replace
+
+- **Your system of record.** Nothing here stores customer, candidate, or contract state. The agents act on your CRM, ATS, or CLM; they do not become one.
+- **Engineering, for anything transactional.** Money movement, provisioning, anything needing a real transaction boundary or an uptime commitment belongs in code with tests, not on a hosted canvas.
+- **A data warehouse.** Clay enriches records in flight. Historical analysis, attribution, and reporting still need somewhere to land.
+- **Accountability for the decision.** The approval gate does not transfer responsibility to the agent. Whoever clicked approve owns the outcome, which is exactly why the reasoning has to be in the Slack message and not buried in a run log.
+
+## Match rules
+
+**Use this stack when:**
+
+- Your highest-volume ops work starts as unstructured text — inboxes, applications, tickets, contracts — and someone is currently reading all of it.
+- You have an ops person who is comfortable on a visual canvas and can read JSON, but you do not have and will not get engineering time.
+- Volume is high enough that per-item human triage is a real cost (roughly 100+ items a month) but low enough that an error is recoverable rather than a compliance event.
+- You can name the threshold. If you cannot say what an agent is allowed to do unattended, you are not ready to run one unattended.
+
+**Do not use this stack when:**
+
+- The steps are fixed and known. Use n8n on its own and put the savings somewhere else.
+- The decision is regulated — adverse action on a candidate, a legal position, anything with a statutory notice attached. Agents can draft and route; a human decides, and the audit trail has to show it.
+- Nobody owns it. An agent stack with no named owner degrades quietly: credits climb, an integration's auth expires, and the failure surfaces as a customer complaint months later.
+- You are still figuring out what the process is. Agents operationalize a decision rule; they do not discover one. Write it down manually for a month first.
+
+## Common variations
+
+- **Swap Gumloop for [Lindy](/en/tools/lindy/) when the job is one person's inbox, not a team's queue.** Lindy's current packaging is per-person — Plus at $49.99/month, Pro at $99.99, Max at $199.99, capped at 2, 3, and 5 connected inboxes respectively, with computer use unlocked at Pro. Its own pricing page benchmarks against a human executive assistant at $8,000/month, which tells you the intended buyer. The rule: one executive's email, calendar, and follow-ups → Lindy; a shared queue several people build against → Gumloop.
+- **Drop Clay when the agents only touch data you already own.** Support ticket triage, contract review, and internal-document work need no external enrichment, and Clay is the largest removable line in the stack. Add it back the day an agent starts making decisions about companies or people that are not yet in your CRM.
+- **Collapse to n8n alone when you gain a builder.** If a technical hire lands, the AI Agent node absorbs the Gumloop layer and the recurring cost drops to a VPS. This is a real downgrade in who can maintain it — do it when the person is on the team, not when they are on the hiring plan.
+- **Swap Slack for Microsoft Teams.** The approval surface is the same shape and n8n has a first-class Teams node. Nothing else in the stack changes.
+
+For the concrete agent patterns this stack runs, see [inbound lead triage](/en/workflows/inbound-lead-triage-n8n/), [NDA intake triage](/en/workflows/nda-intake-triage-n8n/), and [lead enrichment with Clay and Claude](/en/workflows/lead-enrichment-clay-claude/). For the underlying concept, [AI agents for ops](/en/learn/ai-agent-for-ops/) covers what separates an agent from a scheduled script.
