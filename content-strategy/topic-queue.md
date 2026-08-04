@@ -48,7 +48,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:revops] chatgpt-vs-perplexity — material (perplexity Max tier + official MCP server [subject]) → slug: chatgpt-vs-perplexity
 - refresh:C: [type:comparison] [vertical:revops] claude-vs-perplexity — material (perplexity Max tier + official MCP server [subject]) → slug: claude-vs-perplexity
 - refresh:C: [type:comparison] [vertical:revops] gainsight-vs-catalyst — material (catalyst merged into Totango [subject]) → slug: gainsight-vs-catalyst
-- refresh:C: [type:comparison] [vertical:legal-ops] harvey-vs-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject]) → claimed: refresh 2026-08-04T05:02:00Z
+- refresh:C: [type:comparison] [vertical:legal-ops] harvey-vs-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject]) → slug: harvey-vs-casetext
 - refresh:C: [type:comparison] [vertical:recruiting] holly-vs-hireez — material (holly rebranded to HiringAgents.ai [subject])
 - refresh:C: [type:comparison] [vertical:revops] lavender-vs-regie-ai — material (regie-ai consolidated into RegieOne AI SEP [subject])
 - refresh:C: [type:comparison] [vertical:revops] outreach-vs-default — material (outreach agentic relaunch + outreach.ai rebrand [subject])
