@@ -1,0 +1,108 @@
+---
+slug: crm-agent-access-audit-skill
+canonical_slug: crm-agent-access-audit-skill
+locale: de
+verticals: [revops]
+title: Audit which agents and MCP servers can write to your CRM
+artifact_type: claude-skill
+tools_used: [salesforce, hubspot, claude]
+roles: [revops, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 45-90 min
+human_tested: false
+last_updated: "2026-08-04"
+---
+
+Ein Claude Skill, der jede nicht-menschliche Identität inventarisiert, die CRM-Daten ändern kann — OAuth Connected Apps, Private-App-Tokens, MCP-Server, Agent-Integrationen — und abgleicht, was das CRM autorisiert hat gegen das, wozu Agent-Clients tatsächlich konfiguriert sind. Das Bundle liegt unter `apps/web/public/artifacts/crm-agent-access-audit-skill/` und enthält `SKILL.md` sowie drei Referenzdateien, von denen Sie eine vor dem ersten Lauf ausfüllen.
+
+Der Skill arbeitet ausschließlich lesend. Er widerruft nichts und blockiert nichts, denn die Maßnahmen, die er vorschlägt, wirken sofort und org-weit — und eine davon auszulösen gehört einer namentlich benannten Person, nicht einem Agent-Lauf.
+
+## Die Lücke, die er schließt
+
+Access Reviews für Agent-Integrationen laufen gegen das falsche Artefakt, und es gibt zwei Standardvarianten des Fehlers.
+
+Die erste ist, die MCP-Tool-Annotation zu prüfen. Ein Server deklariert `readOnlyHint: true` auf seinen Tools, der Prüfer notiert „nur lesende Integration" und der Review geht weiter. Diese Annotation ist die Selbstauskunft des Servers. Die MCP-Spezifikation sagt, Annotationen „beschreiben das Tool-Verhalten nicht garantiert wahrheitsgemäß, und Clients **müssen** sie als nicht vertrauenswürdig behandeln, sofern sie nicht von einem vertrauenswürdigen Server stammen". Was die Integration tatsächlich kann, legen die OAuth-Scopes ihres Tokens fest, und die liegen im CRM.
+
+Die zweite ist, nur die Liste der Connected Apps zu prüfen. Die Seite Connected Apps OAuth Usage in Salesforce ist maßgeblich dafür, was die Organisation autorisiert hat, und blind dafür, welcher Agent auf welchem Rechner diese Autorisierung nutzt. Vier MCP-Server, die sich einen Service-Credential teilen, erscheinen dort als eine einzige Berechtigung.
+
+Keine der beiden Sichten ist falsch. Die Befunde leben im Delta dazwischen, und deshalb erhebt dieser Skill beide Ebenen plus eine dritte und meldet, wo sie sich widersprechen.
+
+## Wann Sie ihn einsetzen
+
+Setzen Sie ihn ein, wenn ein Access Review, ein SOC-2-User-Access-Review-Zyklus oder ein Sicherheitsfragebogen CRM-Integrationen abdeckt; wenn ein Anbieter mit CRM-Integration einen Vorfall meldet und die Frage nach der Exposition heute beantwortet sein muss; wenn Entwickler MCP-Server selbst hinzufügen und niemand den aktuellen Bestand kennt; oder wenn jemand vorschlägt, Agent-Schreibzugriff auszuweiten, und fragt, was bereits existiert.
+
+Das Muster, gegen das dies kalibriert ist, ist öffentlich. Zwischen dem 8. und 18. August 2025 nutzte ein Angreifer kompromittierte OAuth-Tokens der Anwendung Salesloft Drift, um Account-, Contact-, Case- und Opportunity-Datensätze aus Salesforce-Instanzen von Kunden zu exportieren, und durchsuchte die Ergebnisse anschließend nach Zugangsdaten. Berichte beziffern die Zahl betroffener Organisationen auf über 700. Salesloft widerrief alle aktiven Drift-Tokens, und die Integration wurde aus dem AppExchange entfernt. Kein Salesforce-Passwort eines Kunden versagte, und es war keine Salesforce-Schwachstelle beteiligt. Das Token eines Dritten, mit Scopes, die niemand erneut geprüft hatte, war die gesamte Angriffsfläche.
+
+## Wann Sie ihn NICHT einsetzen
+
+- **Eine Organisation mit einem einzigen Admin und weniger als 10 Connected Apps.** Lesen Sie die OAuth-Usage-Seite direkt. Normalisierung und Scoring sind bei dieser Größe Overhead.
+- **Sie haben nur auf eine Ebene Lesezugriff.** Ohne CRM-Setup-Zugriff *und* die Möglichkeit, Agent-Client-Konfigurationen zu lesen, liefert die Abgleichphase nichts, und der Lauf degradiert zu einer Liste, die Sie schon hatten.
+- **Sie wollen Remediation.** Das hier liefert Befunde. `references/3-finding-dispositions.md` benennt, was jede Maßnahme kaputt macht, und jede braucht einen Menschen.
+- **Der eigentliche Bedarf ist kontinuierliches Monitoring.** Dies ist eine Momentaufnahme. Wenn es um Alarmierung bei neuen Berechtigungen geht, kaufen Sie SSPM.
+- **Niemand wird das Owner-Register ausfüllen.** Eine Berechtigung ohne benannten Owner lässt sich nicht zuweisen, und ein Bericht mit 90 ownerlosen Berechtigungen ist ein Dokument, keine Entscheidung.
+
+## Setup
+
+Planen Sie 45-90 Minuten ein. Der größte Teil entfällt auf Teil C von `references/1-grant-inventory-sources.md` — die Integrationen aufzuschreiben, die Sie bereits kennen, jeweils mit einer echten einzeiligen Begründung. Diese Datei ist der Unterschied zwischen Befunden, die zugewiesen werden, und Befunden, die liegen bleiben.
+
+1. **Installieren Sie den Skill.** Kopieren Sie `SKILL.md` und `references/` nach `.claude/skills/crm-agent-access-audit/`.
+2. **Stellen Sie einen nur lesenden Audit-Credential bereit.** Phase 0 prüft, dass der Credential des Audits selbst keine Schreib-Scopes trägt, und hält das Ergebnis im Berichtskopf fest. Ein Audit, das unter `full` läuft, kann nicht behaupten, nur zu lesen.
+3. **Füllen Sie Teil C aus.** Eine CSV-Zeile pro bekannter Integration: Bezeichner, Owner-E-Mail, Begründung, Freigabedatum, Review-Intervall pro Berechtigung. Alles, was die Erhebung findet und was dort fehlt, wird als ownerlos gemeldet — genau so ist es gedacht.
+4. **Setzen Sie `stale_days` in Teil D von `references/2-blast-radius-rubric.md`** auf Ihr tatsächliches Access-Review-Intervall. Der Standard von 90 Tagen entspricht einem quartalsweisen Review; ihn zu übernehmen, wenn Sie jährlich prüfen, erzeugt Rauschen.
+5. **Prüfen Sie, ob die Scope-Tabellen zu Ihrer Organisation passen.** Teil A und Teil B der Rubrik sind meinungsstark — `crm.schemas.*.write` steht auf der obersten Stufe, weil eine geänderte Property-Definition alle nachgelagerten Konsumenten auf einmal bricht und nicht zeilenweise reversibel ist. Widersprechen Sie in der Tabelle, nicht im Code.
+6. **Fahren Sie die Erhebung zuerst gegen eine einzige Ebene** und lesen Sie die Rohausgabe, bevor Sie irgendetwas bewerten.
+
+## Was der Skill tatsächlich tut
+
+Sechs Phasen, feste Reihenfolge. Phase 5 verweigert den Lauf bei weniger als drei Ebenen.
+
+**Phase 0 fixiert die Haltung des Audits selbst** in `run_dir/run-meta.json` — die Identität, ihre Berechtigungen und ob sie Schreib-Scopes trägt.
+
+**Phase 1 erhebt die vom CRM autorisierten Berechtigungen.** Für Salesforce ist das eine SOQL-Abfrage, `SELECT Id, AppName, UserId, CreatedDate, LastUsedDate, UseCount, AppMenuItemId FROM OauthToken`, verknüpft über `AppName` mit einem Setup-Export der Connected-App-Scopes. Der Join ist nicht optional und ist der Teil, den die meisten Implementierungen überspringen: **`OauthToken`-Zeilen tragen Nutzung, nicht Fähigkeit.** Es gibt keine Scope-Spalte. Ein Lauf, der Scopes ohne den Connected-App-Export meldet, meldet erfundene Daten. Bei HubSpot wird jedes Private-App-Token gegen `POST /oauth/v2/private-apps/get/access-token-info` introspiziert; installierte öffentliche Apps stammen aus einem manuellen Portal-Export, als manuell gekennzeichnet, weil eine handerhobene Ebene anders altert als eine per API erhobene.
+
+**Phase 2 erhebt die Client-seitige Konfiguration.** `claude mcp list` plus die drei Scopes von Claude Code, die getrennte Dateien sind — `local` und `user` in `~/.claude.json`, `project` in der `.mcp.json` des Repositories — plus die eigene Konfiguration von Claude Desktop. Server mit Status „Freigabe ausstehend" werden ebenfalls erhoben; die Freigabe ist hier nicht das entscheidende Tor, denn der Credential im Eintrag existiert ohnehin bereits. Der Collector erfasst die **Namen** der Umgebungsvariablen und schreibt `[redacted]` für jeden Wert zum Parse-Zeitpunkt, nicht zum Berichtszeitpunkt.
+
+**Phase 3 erhebt die deklarierte Fähigkeit** — die Tools jedes CRM-berührenden Servers und ihre vier Annotation-Hints, erfasst als Behauptungen. Abwesenheit wiegt schwerer als Anwesenheit, wegen der Standardwerte der Spezifikation: `readOnlyHint` ist standardmäßig `false`, `destructiveHint` ist `true`, `idempotentHint` ist `false` und `openWorldHint` ist `true`. Ein nicht annotiertes Tool gilt damit als schreibfähig und destruktiv, also ist ein nicht annotierter CRM-Server ein mutmaßlicher Schreiber und keine Unbekannte.
+
+**Phase 4 normalisiert und bewertet** gegen die Rubrik-Tabellen, als Code. Ein Access Review wird quartalsweise wiederholt, und sein Wert ist das Diff; ein Modell, das dieselben 90 Berechtigungen zweimal sortieren soll, liefert zwei unterschiedliche Reihenfolgen, was das Diff unlesbar macht. Das Modellurteil schreibt den Begründungsabsatz je Befund und setzt nie eine Stufe.
+
+**Phase 5 gleicht ab.** Es entstehen fünf Delta-Klassen: `orphan-grant` (lebende Autorisierung, keine Konfiguration, kein Owner — das Drift-Muster), `unattributed-write` (ein Credential hinter mehreren Servern, sodass Audit-Zeilen belegen, dass ein Schreibvorgang stattfand, aber nicht feststellen können, welcher Agent ihn ausführte), `annotation-mismatch` (deklariert nur lesend, hat Schreibrechte), `stale-grant` (ungenutzt über die Schwelle hinaus bei lebendem Refresh-Token) und `scope-excess`.
+
+**Phase 6 berichtet**, sortiert nach Stufe und dann nach Alter, jeder Befund mit seinem Evidenzpfad, damit ein Prüfer die Rohzeile liest statt mit einer Zusammenfassung zu streiten.
+
+## Kosten und Durchsatz
+
+Die API-Kosten sind nahe null, und die menschlichen Kosten sind das gesamte Budget.
+
+Ebene A bei Salesforce ist eine SOQL-Abfrage, unabhängig von der Org-Größe, plus Paging bei großen Ergebnismengen. HubSpot kostet einen Introspection-Call je Private-App-Token — 25 Tokens, 25 Calls. Ebene B sind Dateisystem-Lesevorgänge und lokale CLI-Aufrufe zu null API-Kosten. Eine mittelgroße Organisation landet insgesamt unter 100 API-Calls, und die Erhebung dauert Minuten.
+
+Die Token-Kosten bleiben niedrig, weil das Scoring deterministisch ist. Nur die Begründungsabsätze erreichen das Modell, mit rund 300-400 Ausgabe-Tokens je Befund; ein erster Lauf mit 90 Befunden kostet deutlich unter einem Dollar. Die 45-90 Minuten Setup fallen einmalig an und amortisieren sich über jeden späteren Lauf, weil Teil C bestehen bleibt.
+
+Die Zahl, mit der Sie wirklich planen müssen, ist die Owner-Suche. Bei einem ersten Lauf gegen eine Organisation, die nie ein Register geführt hat, wird die Zahl ownerloser Berechtigungen den Bericht dominieren, und diese Owner aufzuspüren kostet Kalendertage, nicht Rechenminuten. Diese Arbeit ist kein Overhead — sie ist das Audit.
+
+## Erfolgsmetrik
+
+Messen Sie die **Zeit bis zur Zuordnung**: Wie lange dauert es ab einem Berechtigungsbezeichner, bis ein benannter Mensch Eigentümerschaft und Begründung bestätigt. Sie startet in Tagen und sollte in Minuten enden, sobald Teil C gefüllt ist, und sie sagt voraus, wie die Organisation in einem echten Vorfall abschneidet, wenn die Frage lautet, welche von 90 Integrationen ein kompromittiertes Token trug.
+
+Die sekundäre Metrik ist die **Zahl ownerloser Berechtigungen im Quartalsvergleich**. Ein Wert, der jedes Quartal wieder steigt, bedeutet, dass Berechtigungen schneller entstehen als sie registriert werden, und die Korrektur ist ein Registrierungsschritt bei der Vergabe, kein größeres Audit.
+
+## Fehlermodi
+
+- **`OauthToken` hat keine Scope-Spalte, und ein Lauf, der trotzdem Scopes meldet, erfindet sie.** **Absicherung:** Phase 4 bricht hart bei jeder Salesforce-Berechtigung ab, deren `scope_source` nicht `connected-app-export` ist. Fehlende Scopes erscheinen als `unknown` und bewerten bis zur Klärung auf oberster Stufe, damit die Lücke laut ist.
+- **Ein sauberer Bericht und eine kaputte Abfrage sehen identisch aus.** Null Befunde liest sich als Sicherheit. **Absicherung:** Phase 5 verweigert den Lauf bei weniger als drei Ebenen, und der Berichtskopf druckt Datensatzzahlen je Ebene. Eine Ebene mit null Zeilen druckt `COLLECTION FAILED`, nicht null Befunde.
+- **Das Audit liest Konfigurationsdateien voller lebender Geheimnisse und schreibt sie auf die Platte.** Ein Bericht, der einen Konfigurationsblock wörtlich zitiert, trägt den Credential in ein Dokument, das danach per E-Mail an Prüfer geht. **Absicherung:** Die Schwärzung erfolgt zum Parse-Zeitpunkt, bevor irgendetwas `run_dir` erreicht. Eine erst im Bericht geschwärzte Datei ist bereits ins Rohverzeichnis geleakt.
+- **Eine Connected App zu blockieren wirkt sofort und org-weit.** Es gibt kein Block pro Benutzer und keinen gestaffelten Rollout; die Autorisierung jedes Benutzers stirbt im selben Aufruf. **Absicherung:** Dispositionen sind Vorschläge mit benannten Freigebern und Benachrichtigungsfenstern. Disposition R2 verlangt, vorher `UseCount` und `LastUsedDate` zu prüfen — 14.000 Nutzungen ohne registrierten Owner heißt, dass die Owner-Suche unvollständig war, nicht dass die Integration verwaist ist.
+- **Offboarding lässt lebende Berechtigungen zurück.** Einen Salesforce-Benutzer zu deaktivieren widerruft dessen OAuth-Autorisierungen nicht, also hinterlässt jeder ausgeschiedene Mitarbeiter, der je eine Integration autorisiert hat, eine offene. **Absicherung:** Disposition R3 läuft je Austritt über die vollständige App-Liste, nicht nur über die Apps, an die sich jemand erinnert.
+- **`Use Any API Client` umgeht API Access Control.** Eine Organisation, die den Support-Case eröffnet, die Allowlist aktiviert und das Thema als erledigt betrachtet hat, hat weiterhin einen Bypass überall dort, wo diese Berechtigung zugewiesen ist. **Absicherung:** Teil D erhebt die Inhaber dieser Berechtigung als eigenständige Berechtigungsdatensätze, eingestuft als schreibfähig, unabhängig von der Allowlist.
+
+## vs Alternativen
+
+**vs ein SSPM-Produkt (AppOmni, Obsidian, Valence).** Diese überwachen kontinuierlich, decken weit mehr SaaS ab als zwei CRMs und pflegen eigene Anbieter-Risikoinformationen — Vorteile, die dieses Bundle nicht hat und nicht beansprucht. Kaufen Sie eines, wenn die Anforderung Alarmierung bei neuen Berechtigungen über einen großen SaaS-Bestand ist und Budget vorhanden ist. Dieser Skill gewinnt auf der Ebene, die jene Produkte am schlechtesten abdecken: der Agent-Client-Seite, wo MCP-Server in Konfigurationsdateien auf Entwickler-Laptops liegen und nicht in einem IdP oder einer SaaS-Admin-Konsole.
+
+**vs die nativen Salesforce-Kontrollen allein.** Die OAuth-Usage-Seite plus API Access Control ist kostenlos und maßgeblich für Ebene A, und API Access Control ist die stärkste Einzelkontrolle hier — sie beschränkt API-Reichweite auf eine Allowlist. Zwei Grenzen: Die Aktivierung erfordert einen Support-Case, ist also keine Antwort am selben Tag, und sie sagt nichts darüber, welcher Agent eine freigegebene App nutzt oder was ein MCP-Server über sich selbst behauptet. Nutzen Sie beides. Teil D dieses Skills existiert genau dafür, den Bypass der Allowlist zu erheben.
+
+**vs ein jährliches Access Review per Tabellenkalkulation.** Der ehrliche Vergleich, denn das ist, was die meisten Teams tatsächlich tun. Eine Tabelle ist kostenlos und braucht kein Setup. Sie ist auch eine Momentaufnahme ohne Evidenzspur, sie erfasst, woran der Prüfer zu fragen dachte, und sie hat keinen Mechanismus, um die Berechtigung zu bemerken, die niemand aufgelistet hat. Das `grants.jsonl` des Bundles existiert, damit das nächste Review ein Diff wird statt einer neuen Erhebung.
+
+**vs es direkt zu skripten.** Ebene A lässt sich wirklich leicht skripten — eine Abfrage und ein Export. Was sich nicht zu schreiben lohnt, sind die Scope-zu-Stufe-Tabellen, die Modifikator-Arithmetik und der Dispositionskatalog mit seinen Bruchstellen-Notizen, denn dort steckt das Urteil. Skripten Sie direkt, wenn Sie nur Ebene A brauchen; nehmen Sie das Bundle für den Abgleich.
+
+Verwandt: [hubspot-agent-cli-crm-cleanup-skill](/de/workflows/hubspot-agent-cli-crm-cleanup-skill/) für den geregelten Schreibpfad, den dieses Audit finden soll, und [mcp-server-gong-revops](/de/workflows/mcp-server-gong-revops/) als Beispiel für die Art Server, die auf Ebene B landet.

@@ -1,0 +1,108 @@
+---
+slug: crm-agent-access-audit-skill
+canonical_slug: crm-agent-access-audit-skill
+locale: en
+verticals: [revops]
+title: Audit which agents and MCP servers can write to your CRM
+artifact_type: claude-skill
+tools_used: [salesforce, hubspot, claude]
+roles: [revops, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 45-90 min
+human_tested: false
+last_updated: "2026-08-04"
+---
+
+A Claude Skill that inventories every non-human identity able to change CRM data — OAuth connected apps, private-app tokens, MCP servers, agent integrations — and reconciles what the CRM has authorized against what agent clients are actually configured to reach. The bundle ships at `apps/web/public/artifacts/crm-agent-access-audit-skill/` and contains `SKILL.md` plus three reference files, one of which you fill in before the first run.
+
+The Skill is read-only. It revokes nothing and blocks nothing, because the remediations it proposes are org-wide and instant, and firing one belongs to a named person rather than to an agent run.
+
+## The gap it closes
+
+Access reviews for agent integrations get run against the wrong artifact, and there are two standard versions of the mistake.
+
+The first is auditing the MCP tool annotation. A server declares `readOnlyHint: true` on its tools, the reviewer writes down "read-only integration," and the review moves on. That annotation is the server's own account of itself. The MCP specification says annotations "are not guaranteed to faithfully describe tool behavior, and clients **must** treat them as untrusted unless they come from a trusted server." What the integration can actually do is set by the OAuth scopes on its token, and those live in the CRM.
+
+The second is auditing the connected-app list alone. Salesforce's Connected Apps OAuth Usage page is authoritative for what the org authorized and blind to which agent, running where, is driving that authorization. Four MCP servers sharing one service credential appear there as one grant.
+
+Neither view is wrong. The findings live in the delta between them, which is why this Skill collects both planes plus a third and reports where they disagree.
+
+## When to use
+
+Use it when an access review, SOC 2 user-access-review cycle, or security questionnaire covers CRM integrations; when a vendor with a CRM integration discloses an incident and the exposure answer is needed today; when engineers add MCP servers themselves so no one person knows the current set; or when someone proposes expanding agent write access and asks what already exists.
+
+The shape this is calibrated against is public. Between August 8 and 18, 2025, a threat actor used compromised OAuth tokens belonging to the Salesloft Drift application to export Account, Contact, Case, and Opportunity records from customer Salesforce instances, then scanned the results for credentials. Reporting put the affected organization count above 700. Salesloft revoked all active Drift tokens and the integration was pulled from AppExchange. No customer's Salesforce password failed, and no Salesforce vulnerability was involved. A third party's token, holding scopes nobody had re-examined, was the whole attack surface.
+
+## When NOT to use
+
+- **A single-admin org with under 10 connected apps.** Read the OAuth Usage page directly. Normalization and scoring are overhead at that size.
+- **You hold read access to only one plane.** Without CRM setup access *and* the ability to read agent client configs, the reconciliation phase produces nothing and the run degrades into a list you already had.
+- **You want remediation.** This produces findings. `references/3-finding-dispositions.md` states what each remediation breaks, and every one of them needs a human.
+- **Continuous monitoring is the real requirement.** This is point-in-time. If the need is alerting on new grants, buy SSPM.
+- **Nobody will fill in the owner registry.** A grant with no named owner cannot be routed, and a report of 90 unowned grants is a document, not a decision.
+
+## Setup
+
+Budget 45-90 minutes. Most of it is Part C of `references/1-grant-inventory-sources.md` — writing down the integrations you already know about, with a real one-line justification for each. That file is the difference between findings that route and findings that sit.
+
+1. **Install the Skill.** Copy `SKILL.md` and `references/` into `.claude/skills/crm-agent-access-audit/`.
+2. **Provision a read-only audit credential.** Phase 0 asserts the audit's own credential carries no write scopes and records the result in the report header. An audit running under `full` cannot claim to be read-only.
+3. **Fill Part C.** One CSV row per known integration: identifier, owner email, justification, approval date, per-grant review interval. Anything found in collection that is absent here reports as unowned, which is the intended behavior.
+4. **Set `stale_days` in `references/2-blast-radius-rubric.md` Part D** to your actual access-review interval. The default of 90 days matches a quarterly review; inheriting it when you review annually generates noise.
+5. **Confirm the scope tables match your org.** Part A and Part B of the rubric are opinionated — `crm.schemas.*.write` sits at the top tier because a property-definition change breaks every downstream consumer at once and is not row-level reversible. Disagree in the table, not in the code.
+6. **Run collection against one plane first** and read the raw output before scoring anything.
+
+## What the skill actually does
+
+Six phases, fixed order. Phase 5 refuses to run on fewer than three planes.
+
+**Phase 0 pins the audit's own posture** into `run_dir/run-meta.json` — the identity, its permissions, and whether it holds write scopes.
+
+**Phase 1 collects CRM-authorized grants.** For Salesforce that is one SOQL query, `SELECT Id, AppName, UserId, CreatedDate, LastUsedDate, UseCount, AppMenuItemId FROM OauthToken`, joined on `AppName` to a Setup export of connected-app scopes. The join is not optional and it is the part most implementations skip: **`OauthToken` rows carry usage, not capability.** There is no scope column. A run that reports scopes without the connected-app export is reporting invented data. For HubSpot, each private-app token introspects against `POST /oauth/v2/private-apps/get/access-token-info`; installed public apps come from a manual portal export, stamped as manual because a hand-collected plane ages differently than an API-collected one.
+
+**Phase 2 collects client-side configuration.** `claude mcp list` plus the three Claude Code scopes, which are separate files — `local` and `user` in `~/.claude.json`, `project` in the repository's `.mcp.json` — plus Claude Desktop's own config. Servers marked pending approval are collected too; approval is not the gate that matters here, because the credential in the entry already exists either way. The collector records environment variable **names** and writes `[redacted]` for every value at parse time rather than at report time.
+
+**Phase 3 collects declared capability** — each CRM-touching server's tools and their four annotation hints, recorded as claims. Absence carries more weight than presence, because of the specification's defaults: `readOnlyHint` defaults to `false`, `destructiveHint` to `true`, `idempotentHint` to `false`, `openWorldHint` to `true`. An unannotated tool is specified as write-capable and destructive, so an unannotated CRM server is a presumed writer rather than an unknown.
+
+**Phase 4 normalizes and scores** against the rubric tables, as code. An access review is re-run quarterly and its value is the diff; a model asked to rank the same 90 grants twice returns two different orders, which makes the diff unreadable. Model judgment writes the justification paragraph for each finding and never sets a tier.
+
+**Phase 5 reconciles.** Five delta classes come out: `orphan-grant` (live authorization, no config, no owner — the Drift shape), `unattributed-write` (one credential behind several servers, so audit rows prove a write happened and cannot establish which agent made it), `annotation-mismatch` (declared read-only, granted write), `stale-grant` (unused past threshold with a live refresh token), and `scope-excess`.
+
+**Phase 6 reports**, sorted by tier then staleness, each finding carrying the evidence path so a reviewer can read the raw row instead of arguing with a summary.
+
+## Cost and throughput
+
+The API cost is close to nothing and the human cost is the whole budget.
+
+Salesforce plane A is one SOQL query regardless of org size, plus paging on large result sets. HubSpot costs one introspection call per private-app token — 25 tokens, 25 calls. Plane B is filesystem reads and local CLI invocations at zero API cost. A mid-size org lands under 100 API calls total, and collection wall time is minutes.
+
+Token cost stays low because scoring is deterministic. Only the justification paragraphs reach the model, at roughly 300-400 output tokens per finding; a first run producing 90 findings costs well under a dollar. The 45-90 minute setup is one-time and amortizes across every later run, since Part C persists.
+
+The real number to plan around is the ownership search. On a first run against an org that has never kept a registry, expect the unowned count to dominate the report and expect chasing those owners to take days of calendar time rather than minutes of compute. That work is not overhead — it is the audit.
+
+## Success metric
+
+Track **time-to-attribution**: given a grant identifier, how long until a named human confirms ownership and justification. It starts in days and should end in minutes once Part C is populated, and it is the number that predicts how the org performs during an actual incident, when the question is which of 90 integrations held a compromised token.
+
+The secondary metric is **unowned-grant count quarter over quarter**. A count that resets upward each quarter means grants are being created faster than they are registered, and the fix is a registration step at grant creation rather than a bigger audit.
+
+## Failure modes
+
+- **`OauthToken` has no scope column, and a run that reports scopes anyway is fabricating them.** **Guard:** Phase 4 hard-fails any Salesforce grant whose `scope_source` is not `connected-app-export`. Missing scopes render as `unknown` and score at the top tier until resolved, so the gap is loud.
+- **A clean report and a broken query look identical.** Zero findings reads as safety. **Guard:** Phase 5 refuses to run on fewer than three planes, and the report header prints per-plane record counts. A plane with zero rows prints `COLLECTION FAILED`, not zero findings.
+- **The audit reads config files full of live secrets and writes them to disk.** A report quoting a config block verbatim leaks the credential into a document that then gets emailed to auditors. **Guard:** redaction happens at parse time, before anything reaches `run_dir`. A file redacted at report time has already leaked into the raw directory.
+- **Blocking a connected app is org-wide and immediate.** There is no per-user Block and no staged rollout; every user's authorization dies on the same call. **Guard:** dispositions are proposals with named approvers and notification windows. Disposition R2 requires checking `UseCount` and `LastUsedDate` first — 14,000 uses with no registered owner means the owner search was incomplete, not that the integration is abandoned.
+- **Offboarding leaves live grants behind.** Deactivating a Salesforce user does not revoke that user's OAuth authorizations, so every departed employee who ever authorized an integration leaves one open. **Guard:** disposition R3 runs across the full app list per departure, not just the apps anyone remembers them using.
+- **`Use Any API Client` bypasses API Access Control.** An org that logged the support case, enabled the allowlist, and considers the problem closed still has a bypass wherever that permission is assigned. **Guard:** Part D collects assignees of that permission as grant records in their own right, tiered as write-capable regardless of the allowlist.
+
+## vs alternatives
+
+**vs an SSPM product (AppOmni, Obsidian, Valence).** These monitor continuously, cover far more SaaS than two CRMs, and maintain their own vendor risk intelligence — advantages this bundle does not have and does not try to claim. Buy one when the requirement is alerting on new grants across a large SaaS estate and the budget exists. This Skill wins on the plane those products cover least well: the agent client side, where MCP servers live in developer laptop config files rather than in an IdP or a SaaS admin console.
+
+**vs Salesforce's native controls alone.** The OAuth Usage page plus API Access Control is free and authoritative for plane A, and API Access Control is the strongest single control available here — it locks API reach to an allowlist. Two limits: it takes a support case to enable, so it is not a same-day answer, and it says nothing about which agent uses an approved app or what an MCP server declares about itself. Use both. This Skill's Part D exists specifically to collect the allowlist's bypass.
+
+**vs a spreadsheet-driven annual access review.** The honest comparison, since it is what most teams actually do. A spreadsheet is free and needs no setup. It is also a point-in-time snapshot with no evidence trail, it captures whatever the reviewer remembered to ask about, and it has no mechanism for noticing the grant nobody listed. The bundle's `grants.jsonl` exists to make the next review a diff instead of a re-survey.
+
+**vs scripting it directly.** Plane A is genuinely easy to script — it is one query and one export. The parts worth not rewriting are the scope-to-tier tables, the modifier arithmetic, and the disposition catalogue with its breakage notes, which is where the judgment lives. Script it directly if you only need plane A; take the bundle for the reconciliation.
+
+Related: [hubspot-agent-cli-crm-cleanup-skill](/en/workflows/hubspot-agent-cli-crm-cleanup-skill/) for the governed write path this audit is designed to find, and [mcp-server-gong-revops](/en/workflows/mcp-server-gong-revops/) as an example of the kind of server that lands in plane B.

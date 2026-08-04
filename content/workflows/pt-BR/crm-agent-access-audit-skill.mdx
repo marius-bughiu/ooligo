@@ -1,0 +1,108 @@
+---
+slug: crm-agent-access-audit-skill
+canonical_slug: crm-agent-access-audit-skill
+locale: pt-BR
+verticals: [revops]
+title: Audit which agents and MCP servers can write to your CRM
+artifact_type: claude-skill
+tools_used: [salesforce, hubspot, claude]
+roles: [revops, gtm-engineer]
+difficulty: intermediate
+time_to_setup: 45-90 min
+human_tested: false
+last_updated: "2026-08-04"
+---
+
+Um Claude Skill que inventaria toda identidade não humana capaz de alterar dados do CRM — apps conectados por OAuth, tokens de private apps, servidores MCP, integrações de agentes — e reconcilia o que o CRM autorizou contra o que os clientes de agentes estão de fato configurados para alcançar. O bundle fica em `apps/web/public/artifacts/crm-agent-access-audit-skill/` e contém `SKILL.md` mais três arquivos de referência, um dos quais você preenche antes da primeira execução.
+
+O Skill é somente leitura. Ele não revoga nem bloqueia nada, porque as remediações que propõe valem para a organização inteira e são imediatas, e disparar uma cabe a uma pessoa com nome, não a uma execução de agente.
+
+## A lacuna que ele fecha
+
+Revisões de acesso para integrações de agentes são executadas contra o artefato errado, e existem duas versões padrão do erro.
+
+A primeira é auditar a anotação de tool do MCP. Um servidor declara `readOnlyHint: true` nos seus tools, quem revisa anota "integração somente leitura" e a revisão segue. Essa anotação é o relato que o servidor faz de si mesmo. A especificação do MCP diz que anotações "não garantem descrever fielmente o comportamento do tool, e os clientes **devem** tratá-las como não confiáveis a menos que venham de um servidor confiável". O que a integração realmente consegue fazer é definido pelos scopes OAuth do token dela, e esses ficam no CRM.
+
+A segunda é auditar apenas a lista de apps conectados. A página Connected Apps OAuth Usage do Salesforce é autoritativa sobre o que a organização autorizou, e cega quanto a qual agente, rodando onde, está por trás daquela autorização. Quatro servidores MCP compartilhando uma credencial de serviço aparecem ali como uma única concessão.
+
+Nenhuma das duas visões está errada. Os achados vivem no delta entre elas, e é por isso que este Skill coleta os dois planos mais um terceiro, e reporta onde eles discordam.
+
+## Quando usar
+
+Use quando uma revisão de acesso, um ciclo de user access review de SOC 2 ou um questionário de segurança cobrir integrações do CRM; quando um fornecedor com integração ao CRM divulgar um incidente e a resposta de exposição for necessária hoje; quando os engenheiros adicionarem servidores MCP por conta própria e ninguém souber o conjunto atual; ou quando alguém propuser ampliar o acesso de escrita de agentes e perguntar o que já existe.
+
+O formato contra o qual isso está calibrado é público. Entre 8 e 18 de agosto de 2025, um agente de ameaça usou tokens OAuth comprometidos do aplicativo Salesloft Drift para exportar registros de Account, Contact, Case e Opportunity de instâncias Salesforce de clientes, e depois varreu os resultados em busca de credenciais. As reportagens colocaram o número de organizações afetadas acima de 700. A Salesloft revogou todos os tokens ativos do Drift e a integração foi retirada do AppExchange. Nenhuma senha de Salesforce de nenhum cliente falhou, e não houve vulnerabilidade do Salesforce envolvida. O token de um terceiro, carregando scopes que ninguém havia reexaminado, era toda a superfície de ataque.
+
+## Quando NÃO usar
+
+- **Uma organização com um único admin e menos de 10 apps conectados.** Leia a página de OAuth Usage direto. Normalizar e pontuar é overhead nesse tamanho.
+- **Você tem acesso de leitura a apenas um plano.** Sem acesso de setup ao CRM *e* capacidade de ler as configurações dos clientes de agentes, a fase de reconciliação não produz nada e a execução degrada para uma lista que você já tinha.
+- **Você quer remediação.** Isto produz achados. `references/3-finding-dispositions.md` diz o que cada remediação quebra, e todas precisam de um humano.
+- **O requisito real é monitoramento contínuo.** Isto é pontual no tempo. Se a necessidade é alertar sobre concessões novas, compre SSPM.
+- **Ninguém vai preencher o registro de donos.** Uma concessão sem dono nomeado não tem como ser roteada, e um relatório com 90 concessões sem dono é um documento, não uma decisão.
+
+## Setup
+
+Reserve 45-90 minutos. A maior parte é a Parte C de `references/1-grant-inventory-sources.md` — anotar as integrações que você já conhece, com uma justificativa real de uma linha para cada uma. Esse arquivo é a diferença entre achados que são roteados e achados que ficam parados.
+
+1. **Instale o Skill.** Copie `SKILL.md` e `references/` para `.claude/skills/crm-agent-access-audit/`.
+2. **Provisione uma credencial de auditoria somente leitura.** A Fase 0 verifica que a credencial da própria auditoria não carrega scopes de escrita e registra o resultado no cabeçalho do relatório. Uma auditoria rodando sob `full` não pode alegar que é somente leitura.
+3. **Preencha a Parte C.** Uma linha CSV por integração conhecida: identificador, email do dono, justificativa, data de aprovação, intervalo de revisão por concessão. Qualquer coisa encontrada na coleta e ausente ali é reportada como sem dono, que é o comportamento pretendido.
+4. **Defina `stale_days` na Parte D de `references/2-blast-radius-rubric.md`** conforme seu intervalo real de revisão de acessos. O default de 90 dias corresponde a uma revisão trimestral; herdá-lo quando você revisa anualmente gera ruído.
+5. **Confirme que as tabelas de scopes batem com sua organização.** As Partes A e B do rubrica têm opinião — `crm.schemas.*.write` fica no nível mais alto porque mudar a definição de uma propriedade quebra todos os consumidores a jusante de uma vez e não é reversível por linha. Discorde na tabela, não no código.
+6. **Rode a coleta contra um plano só primeiro** e leia a saída bruta antes de pontuar qualquer coisa.
+
+## O que o skill faz de fato
+
+Seis fases, ordem fixa. A Fase 5 se recusa a rodar com menos de três planos.
+
+**A Fase 0 fixa a postura da própria auditoria** em `run_dir/run-meta.json` — a identidade, suas permissões e se ela carrega scopes de escrita.
+
+**A Fase 1 coleta as concessões autorizadas pelo CRM.** Para Salesforce é uma consulta SOQL, `SELECT Id, AppName, UserId, CreatedDate, LastUsedDate, UseCount, AppMenuItemId FROM OauthToken`, unida por `AppName` a uma exportação de setup com os scopes dos apps conectados. A junção não é opcional e é a parte que mais implementações pulam: **as linhas de `OauthToken` carregam uso, não capacidade.** Não há coluna de scopes. Uma execução que reporta scopes sem a exportação dos apps conectados está reportando dados inventados. No HubSpot, cada token de private app é introspectado contra `POST /oauth/v2/private-apps/get/access-token-info`; os apps públicos instalados vêm de uma exportação manual do portal, marcada como manual porque um plano coletado à mão envelhece diferente de um coletado por API.
+
+**A Fase 2 coleta a configuração do lado cliente.** `claude mcp list` mais os três scopes do Claude Code, que são arquivos separados — `local` e `user` em `~/.claude.json`, `project` no `.mcp.json` do repositório — mais a configuração própria do Claude Desktop. Servidores marcados como pendentes de aprovação também são coletados; a aprovação não é o portão que importa aqui, porque a credencial da entrada já existe de qualquer forma. O coletor registra os **nomes** das variáveis de ambiente e escreve `[redacted]` para cada valor em tempo de parse, não em tempo de relatório.
+
+**A Fase 3 coleta a capacidade declarada** — os tools de cada servidor que toca o CRM e seus quatro hints de anotação, registrados como alegações. A ausência pesa mais que a presença, por causa dos defaults da especificação: `readOnlyHint` é `false` por padrão, `destructiveHint` é `true`, `idempotentHint` é `false` e `openWorldHint` é `true`. Um tool sem anotação fica especificado como capaz de escrever e destrutivo, então um servidor de CRM sem anotação é um escritor presumido, não uma incógnita.
+
+**A Fase 4 normaliza e pontua** contra as tabelas da rubrica, como código. Uma revisão de acesso é refeita a cada trimestre e o valor dela é o diff; um modelo a quem se pede ordenar as mesmas 90 concessões duas vezes devolve duas ordens diferentes, o que torna o diff ilegível. O julgamento do modelo escreve o parágrafo de justificativa de cada achado e nunca define um nível.
+
+**A Fase 5 reconcilia.** Saem cinco classes de delta: `orphan-grant` (autorização viva, sem configuração, sem dono — o formato Drift), `unattributed-write` (uma credencial atrás de vários servidores, de modo que as linhas de auditoria provam que houve uma escrita e não conseguem estabelecer qual agente a fez), `annotation-mismatch` (declara somente leitura, tem escrita concedida), `stale-grant` (sem uso além do limiar e com refresh token vivo) e `scope-excess`.
+
+**A Fase 6 reporta**, ordenado por nível e depois por antiguidade, cada achado carregando seu caminho de evidência para que quem revisa leia a linha bruta em vez de discutir com um resumo.
+
+## Custo e throughput
+
+O custo de API é quase nulo e o custo humano é o orçamento inteiro.
+
+O plano A do Salesforce é uma consulta SOQL independentemente do tamanho da organização, mais paginação em resultados grandes. HubSpot custa uma chamada de introspecção por token de private app — 25 tokens, 25 chamadas. O plano B são leituras de sistema de arquivos e invocações locais de CLI, com custo de API zero. Uma organização de porte médio fica abaixo de 100 chamadas de API no total, e o tempo de coleta é de minutos.
+
+O custo em tokens fica baixo porque a pontuação é determinística. Só os parágrafos de justificativa chegam ao modelo, a cerca de 300-400 tokens de saída por achado; uma primeira execução com 90 achados custa bem menos de um dólar. Os 45-90 minutos de setup são únicos e se amortizam em cada execução posterior, porque a Parte C persiste.
+
+O número real a planejar é a busca por donos. Numa primeira execução contra uma organização que nunca manteve um registro, espere que a contagem sem dono domine o relatório e que caçar esses donos leve dias de calendário, não minutos de computação. Esse trabalho não é overhead — ele é a auditoria.
+
+## Métrica de sucesso
+
+Acompanhe o **tempo até a atribuição**: dado um identificador de concessão, quanto tempo até um humano nomeado confirmar propriedade e justificativa. Começa em dias e deve terminar em minutos quando a Parte C estiver populada, e é o número que prevê como a organização se sai durante um incidente real, quando a pergunta é qual das 90 integrações carregava um token comprometido.
+
+A métrica secundária é a **contagem de concessões sem dono trimestre a trimestre**. Uma contagem que volta a subir a cada trimestre significa que concessões são criadas mais rápido do que são registradas, e a correção é um passo de registro no momento da criação, não uma auditoria maior.
+
+## Modos de falha
+
+- **`OauthToken` não tem coluna de scopes, e uma execução que reporta scopes mesmo assim está fabricando-os.** **Proteção:** a Fase 4 falha duro em qualquer concessão do Salesforce cujo `scope_source` não seja `connected-app-export`. Scopes ausentes são renderizados como `unknown` e pontuam no nível mais alto até serem resolvidos, então a lacuna fica barulhenta.
+- **Um relatório limpo e uma consulta quebrada são idênticos.** Zero achados se lê como segurança. **Proteção:** a Fase 5 se recusa a rodar com menos de três planos, e o cabeçalho do relatório imprime contagens de registros por plano. Um plano com zero linhas imprime `COLLECTION FAILED`, não zero achados.
+- **A auditoria lê arquivos de configuração cheios de segredos vivos e os escreve em disco.** Um relatório que cita um bloco de configuração literalmente vaza a credencial para um documento que depois é enviado por email aos auditores. **Proteção:** a redação acontece em tempo de parse, antes de qualquer coisa chegar a `run_dir`. Um arquivo redigido em tempo de relatório já vazou para o diretório bruto.
+- **Bloquear um app conectado é imediato e vale para a organização inteira.** Não há Block por usuário nem rollout escalonado; a autorização de cada usuário morre na mesma chamada. **Proteção:** as disposições são propostas com aprovadores nomeados e janelas de notificação. A disposição R2 exige checar antes `UseCount` e `LastUsedDate` — 14.000 usos sem dono registrado significa que a busca por dono ficou incompleta, não que a integração está abandonada.
+- **O offboarding deixa concessões vivas.** Desativar um usuário do Salesforce não revoga as autorizações OAuth daquele usuário, então cada funcionário que saiu e um dia autorizou uma integração deixa uma aberta. **Proteção:** a disposição R3 roda sobre a lista completa de apps a cada saída, não só sobre os apps que alguém lembra.
+- **`Use Any API Client` contorna o API Access Control.** Uma organização que abriu o caso de suporte, habilitou a allowlist e considera o problema resolvido continua com um bypass onde essa permissão estiver atribuída. **Proteção:** a Parte D coleta os atribuídos dessa permissão como registros de concessão por direito próprio, classificados como capazes de escrever independentemente da allowlist.
+
+## vs alternativas
+
+**vs um produto SSPM (AppOmni, Obsidian, Valence).** Eles monitoram continuamente, cobrem muito mais SaaS do que dois CRMs e mantêm inteligência própria de risco de fornecedores — vantagens que este bundle não tem e não tenta alegar. Compre um quando o requisito for alertar sobre concessões novas num parque grande de SaaS e houver orçamento. Este Skill ganha no plano que esses produtos cobrem pior: o lado cliente dos agentes, onde servidores MCP vivem em arquivos de configuração de laptops de desenvolvimento e não num IdP ou num console de administração SaaS.
+
+**vs os controles nativos do Salesforce sozinhos.** A página de OAuth Usage mais o API Access Control é grátis e autoritativa para o plano A, e o API Access Control é o controle isolado mais forte disponível aqui — ele trava o alcance da API a uma allowlist. Dois limites: exige um caso de suporte para ser habilitado, então não é resposta no mesmo dia, e não diz nada sobre qual agente usa um app aprovado nem sobre o que um servidor MCP declara de si. Use os dois. A Parte D deste Skill existe exatamente para coletar o bypass dessa allowlist.
+
+**vs uma revisão de acessos anual em planilha.** A comparação honesta, porque é o que a maioria dos times faz. Uma planilha é grátis e não exige setup. Também é uma foto pontual sem trilha de evidência, captura o que quem revisa lembrou de perguntar e não tem mecanismo para notar a concessão que ninguém listou. O `grants.jsonl` do bundle existe para que a próxima revisão seja um diff e não um novo levantamento.
+
+**vs escrever o script direto.** O plano A é realmente fácil de scriptar — é uma consulta e uma exportação. O que vale não reescrever são as tabelas de scope para nível, a aritmética de modificadores e o catálogo de disposições com suas notas de quebra, que é onde mora o julgamento. Escreva o script direto se você só precisa do plano A; pegue o bundle pela reconciliação.
+
+Relacionado: [hubspot-agent-cli-crm-cleanup-skill](/pt-BR/workflows/hubspot-agent-cli-crm-cleanup-skill/) para o caminho de escrita governado que esta auditoria foi desenhada para encontrar, e [mcp-server-gong-revops](/pt-BR/workflows/mcp-server-gong-revops/) como exemplo do tipo de servidor que cai no plano B.
