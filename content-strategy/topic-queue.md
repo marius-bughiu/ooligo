@@ -67,6 +67,12 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:learn] [vertical:legal-ops] legal-ai-vs-legaltech — material (casetext retired by Thomson Reuters 2025-04 [names retired product as live]; lawgeex enterprise product dismantled 2023 [names defunct/absorbed vendor as live])
 - refresh:C: [type:learn] [vertical:legal-ops] nda-playbook — material (lawgeex enterprise product dismantled 2023 [related_tools])
 - refresh:C: [type:learn] [vertical:legal-ops] privilege-review — material (casetext retired by Thomson Reuters 2025-04 [names retired product as live])
+- refresh:C: [type:tool] [vertical:revops] salesforce — material (body carries banned vocab at L36 and stale Agentforce/Einstein 1 pricing refs; pricing frontmatter itself verified unchanged 2026-08-04)
+- refresh:C: [type:tool] [vertical:recruiting] recruitee — material (rebranded Tellent Recruitee and withdrew published pricing (entry says flat/$224, all three plans now demo-gated))
+- refresh:C: [type:tool] [vertical:revops] relevance-ai — material (self-serve tiers withdrawn, pricing page is Enterprise quote-only (entry says usage-based/$19))
+- refresh:C: [type:tool] [vertical:revops] rollworks — material (rollworks.com 301s to adroll.com, brand folded into AdRoll ABM)
+- refresh:C: [type:tool] [vertical:recruiting] seekout — material (now publishes $149/mo self-serve Recruit Core (entry says custom / no public price))
+- refresh:C: [type:tool] [vertical:legal-ops] sirionlabs — material (sirionlabs.com 301s to sirion.ai; acquisition by Haveli Investments Jan 2026 to confirm)
 - refresh:A: [type:tool] [vertical:revops] 11x — pricing never verified (no pricing_checked field; SLA 60d) → slug: 11x
 - refresh:A: [type:tool] [vertical:revops] 1mind — pricing never verified (no pricing_checked field; SLA 60d) → slug: 1mind
 - refresh:A: [type:tool] [vertical:revops] 6sense — pricing never verified (no pricing_checked field; SLA 60d) → slug: 6sense
@@ -218,26 +224,26 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:customer-success] productboard — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-31, Spark replaced by a four-plan ladder with a free entry — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:customer-success] pylon — pricing never verified (no pricing_checked field; SLA 60d) → slug: pylon
 - refresh:A: [type:tool] [vertical:revops] qualified — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-31, Salesforce deal described as pending after it closed — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:revops] rattle — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] rb2b — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] recall-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:recruiting] recruitee — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] regie-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:legal-ops] relativity — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] relevance-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:legal-ops] reveal — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] revenuehero — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:customer-success] rocketlane — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] rollworks — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] rox — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] sales-navigator — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] salesforce — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] salesloft — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:recruiting] sapia-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:recruiting] seekout — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:recruiting] sense — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:revops] sierra — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
-- refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] rattle — pricing never verified (no pricing_checked field; SLA 60d) → slug: rattle
+- refresh:A: [type:tool] [vertical:revops] rb2b — pricing never verified (no pricing_checked field; SLA 60d) → slug: rb2b
+- refresh:A: [type:tool] [vertical:revops] recall-ai — pricing never verified (no pricing_checked field; SLA 60d) → slug: recall-ai
+- refresh:A: [type:tool] [vertical:recruiting] recruitee — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-04, material — rebranded Tellent Recruitee and withdrew published pricing (entry says flat/$224, all three plans now demo-gated) — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] regie-ai — pricing never verified (no pricing_checked field; SLA 60d) → slug: regie-ai
+- refresh:A: [type:tool] [vertical:legal-ops] relativity — pricing never verified (no pricing_checked field; SLA 60d) → slug: relativity
+- refresh:A: [type:tool] [vertical:revops] relevance-ai — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-04, material — self-serve tiers withdrawn, pricing page is Enterprise quote-only (entry says usage-based/$19) — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] reveal — pricing never verified (no pricing_checked field; SLA 60d) → slug: reveal
+- refresh:A: [type:tool] [vertical:revops] revenuehero — pricing never verified (no pricing_checked field; SLA 60d) → slug: revenuehero
+- refresh:A: [type:tool] [vertical:customer-success] rocketlane — pricing never verified (no pricing_checked field; SLA 60d) → slug: rocketlane
+- refresh:A: [type:tool] [vertical:revops] rollworks — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-04, material — rollworks.com 301s to adroll.com, brand folded into AdRoll ABM — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] rox — pricing never verified (no pricing_checked field; SLA 60d) → slug: rox
+- refresh:A: [type:tool] [vertical:revops] sales-navigator — pricing never verified (no pricing_checked field; SLA 60d) → slug: sales-navigator
+- refresh:A: [type:tool] [vertical:revops] salesforce — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-04, pricing unchanged ($25 Starter Suite) but check:vocab fails on legacy body prose (L36 banned term), blocking a frontmatter-only commit — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] salesloft — pricing never verified (no pricing_checked field; SLA 60d) → slug: salesloft
+- refresh:A: [type:tool] [vertical:recruiting] sapia-ai — pricing never verified (no pricing_checked field; SLA 60d) → slug: sapia-ai
+- refresh:A: [type:tool] [vertical:recruiting] seekout — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-04, material — now publishes $149/mo self-serve Recruit Core (entry says custom / no public price) — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] sense — pricing never verified (no pricing_checked field; SLA 60d) → slug: sense
+- refresh:A: [type:tool] [vertical:revops] sierra — pricing never verified (no pricing_checked field; SLA 60d) → slug: sierra
+- refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-04, material — sirionlabs.com 301s to sirion.ai; acquisition by Haveli Investments Jan 2026 to confirm — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:revops] slack — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] smartkarrot — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] smartlead — pricing never verified (no pricing_checked field; SLA 60d)
