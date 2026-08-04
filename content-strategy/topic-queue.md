@@ -49,7 +49,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:revops] claude-vs-perplexity — material (perplexity Max tier + official MCP server [subject]) → slug: claude-vs-perplexity
 - refresh:C: [type:comparison] [vertical:revops] gainsight-vs-catalyst — material (catalyst merged into Totango [subject]) → slug: gainsight-vs-catalyst
 - refresh:C: [type:comparison] [vertical:legal-ops] harvey-vs-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject]) → slug: harvey-vs-casetext
-- refresh:C: [type:comparison] [vertical:recruiting] holly-vs-hireez — material (holly rebranded to HiringAgents.ai [subject])
+- refresh:C: [type:comparison] [vertical:recruiting] holly-vs-hireez — material (holly rebranded to HiringAgents.ai [subject]) → claimed: refresh 2026-08-04T21:05:00Z
 - refresh:C: [type:comparison] [vertical:revops] lavender-vs-regie-ai — material (regie-ai consolidated into RegieOne AI SEP [subject])
 - refresh:C: [type:comparison] [vertical:revops] outreach-vs-default — material (outreach agentic relaunch + outreach.ai rebrand [subject])
 - refresh:C: [type:comparison] [vertical:revops] outreach-vs-salesloft — material (salesloft merged into Clari 2025-12, Drift sunset [subject]; outreach agentic relaunch + outreach.ai rebrand [subject])
@@ -172,30 +172,54 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] instantly — pricing never verified (no pricing_checked field; SLA 60d) → slug: instantly
 - refresh:A: [type:tool] [vertical:revops] intercom — pricing never verified (no pricing_checked field; SLA 60d) → slug: intercom
 - refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing never verified (no pricing_checked field; SLA 60d) → slug: ironclad
-- refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing never verified (no pricing_checked field; SLA 60d) → slug: ivo
-- refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, pricing unchanged (quote-only, Employ Inc. "Get My Quote") but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("sophisticated" L34) — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:recruiting] juicebox — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, Growth annual rate moved — requeued as refresh:B: below
-- refresh:A: [type:tool] [vertical:legal-ops] juro — pricing never verified (no pricing_checked field; SLA 60d) → slug: juro
-- refresh:A: [type:tool] [vertical:recruiting] karat — pricing never verified (no pricing_checked field; SLA 60d) → slug: karat
-- refresh:A: [type:tool] [vertical:legal-ops] kira-systems — pricing never verified (no pricing_checked field; SLA 60d) → slug: kira-systems
-- refresh:A: [type:tool] [vertical:revops] koala — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, product is shutting down — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:customer-success] kustomer — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, published entry price withdrawn — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:revops] lavender — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, Teams tier repriced +51% and a new product line launched — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:revops] leandata — pricing never verified (no pricing_checked field; SLA 60d) → slug: leandata
-- refresh:A: [type:tool] [vertical:legal-ops] legora — pricing never verified (no pricing_checked field; SLA 60d) → slug: legora
-- refresh:A: [type:tool] [vertical:recruiting] lever — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, pricing unchanged (quote-only, Employ Inc.) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("leverage" L43) — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing never verified (no pricing_checked field; SLA 60d) → slug: lexisnexis-protege
-- refresh:A: [type:tool] [vertical:revops] lindy — pricing never verified (no pricing_checked field; SLA 60d) → slug: lindy
-- refresh:A: [type:tool] [vertical:revops] linear — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, tiers renamed and entry price up 25% — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:legal-ops] linksquares — pricing never verified (no pricing_checked field; SLA 60d) → slug: linksquares
-- refresh:A: [type:tool] [vertical:legal-ops] litera — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, company relaunched around a single-agent platform — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:legal-ops] logikcull — pricing never verified (no pricing_checked field; SLA 60d) → slug: logikcull
-- refresh:A: [type:tool] [vertical:recruiting] loxo — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, vendor now publishes a free tier and a per-seat price — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:legal-ops] luminance — pricing never verified (no pricing_checked field; SLA 60d) → slug: luminance
-- refresh:A: [type:tool] [vertical:revops] lusha — pricing never verified (no pricing_checked field; SLA 60d) → slug: lusha
-- refresh:A: [type:tool] [vertical:revops] make — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, billing unit renamed and mcp_available is stale — requeued as refresh:B: below
-- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, repositioned around named credit-based agents — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-30, new top tier added and entry price moved — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: ivo
+- refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, pricing unchanged (quote-only, Employ Inc. "Get My Quote") but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("sophisticated" L34) — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] juicebox — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, Growth annual rate moved — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:legal-ops] juro — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: juro
+- refresh:A: [type:tool] [vertical:recruiting] karat — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: karat
+- refresh:A: [type:tool] [vertical:legal-ops] kira-systems — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: kira-systems
+- refresh:A: [type:tool] [vertical:revops] koala — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, product is shutting down — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:customer-success] kustomer — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, published entry price withdrawn — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] lavender — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, Teams tier repriced +51% and a new product line launched — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:revops] leandata — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: leandata
+- refresh:A: [type:tool] [vertical:legal-ops] legora — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: legora
+- refresh:A: [type:tool] [vertical:recruiting] lever — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, pricing unchanged (quote-only, Employ Inc.) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("leverage" L43) — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: lexisnexis-protege
+- refresh:A: [type:tool] [vertical:revops] lindy — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: lindy
+- refresh:A: [type:tool] [vertical:revops] linear — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, tiers renamed and entry price up 25% — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] linksquares — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: linksquares
+- refresh:A: [type:tool] [vertical:legal-ops] litera — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, company relaunched around a single-agent platform — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] logikcull — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: logikcull
+- refresh:A: [type:tool] [vertical:recruiting] loxo — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, vendor now publishes a free tier and a per-seat price — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:legal-ops] luminance — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: luminance
+- refresh:A: [type:tool] [vertical:revops] lusha — pricing never verified (no pricing_checked field; SLA 60d)
+ → slug: lusha
+- refresh:A: [type:tool] [vertical:revops] make — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, billing unit renamed and mcp_available is stale — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, repositioned around named credit-based agents — requeued as refresh:C: below
+- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing never verified (no pricing_checked field; SLA 60d)
+ → skip: verified 2026-07-30, new top tier added and entry price moved — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:recruiting] mercor — pricing never verified (no pricing_checked field; SLA 60d) → slug: mercor
 - refresh:A: [type:tool] [vertical:recruiting] metaview — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-31, repositioned as an agentic sourcing platform and every tier renamed — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-31, pivoted out of recruiting into AI data research — requeued as refresh:C: below
@@ -446,9 +470,11 @@ Each line carries at most one lifecycle marker, appended in place:
 - [type:tool] [vertical:customer-success] [evidence:changelog] new entry: ada — enterprise AI customer-service agent platform; its Reasoning Engine launched Feb-2026 and it has publicly moved *off* per-resolution billing toward conversation-based pricing, making it the counter-pole to Fin/Zendesk/Sierra outcome meters in any AI-support shortlist → slug: ada
 - [type:tool] [vertical:customer-success] [evidence:changelog] new entry: parloa — voice-first AI agent management platform for contact centers; $350M Series D Jan-2026 at $3B, SAP/Microsoft/OpenAI partnerships, ISO 27001 + HIPAA + DORA; the voice/telephony pole buyers weigh against chat-first Sierra and Decagon → slug: parloa
 - [type:tool] [vertical:customer-success] [evidence:changelog] new entry: lorikeet — AI support agent built for complex and regulated support (fintech, healthtech) where the agent must take real-world actions rather than answer from a knowledge base; the complex-workflow pole against deflection-first agents in a shortlist that otherwise reads Fin/Decagon/Sierra → slug: lorikeet
-- [type:tool] [vertical:cross] [evidence:changelog] new entry: gemini — Gemini Enterprise, Google's ops-facing agent + enterprise-search platform with agent governance controls; the catalog has ChatGPT, Claude, and Perplexity but no Google pole, and Gemini Enterprise is the one buyers put on the same shortlist as Glean and Copilot → slug: gemini
+- [type:tool] [vertical:cross] [evidence:changelog] new entry: gemini — Gemini Enterprise, Google's ops-facing agent + enterprise-search platform with agent governance controls; the catalog has ChatGPT, Claude, and Perplexity but no Google pole, and Gemini Enterprise is the one buyers put on the same shortlist as Glean and Copilot
+ → slug: gemini
 - [type:tool] [vertical:cross] [evidence:changelog] new entry: granola — AI meeting notepad that augments your own notes instead of joining as a bot; expanded from single-user notetaker to team "Spaces", org controls, and an API for piping meeting context into downstream AI workflows — the no-bot-in-the-room pole ops teams weigh against Fathom/Gong → slug: granola
-- [type:tool] [vertical:cross] [evidence:hn] new entry: openclaw — open-source self-hosted personal AI agent that runs locally against your own API key; the bring-your-own-key, data-never-leaves pole ops teams in regulated orgs weigh against Lindy/Dust → slug: openclaw
+- [type:tool] [vertical:cross] [evidence:hn] new entry: openclaw — open-source self-hosted personal AI agent that runs locally against your own API key; the bring-your-own-key, data-never-leaves pole ops teams in regulated orgs weigh against Lindy/Dust
+ → slug: openclaw
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: clearbit — absorbed into HubSpot Breeze Intelligence (subscription-gated credits, ~$45/mo per 100 on annual); a "where did it go and what do I run instead" page that resolves the dangling /en/tools/clearbit/ link in mutiny.mdx:57 and the 11 EN files that name it → skip: absorbed vendor — HubSpot shut the standalone Clearbit products down and folded them into Breeze Intelligence; a tool page would be a buying recommendation for a product you cannot buy. The "what do I run instead" job belongs to the queued hubspot-breeze entry plus a redirect, not a new tool entry.
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: lemlist — multichannel personalization-first cold outreach (email + LinkedIn steps, per-seat, no unlimited-mailbox tier); the third pole named as "fastest-growing entrant" in smartlead.mdx:52 and instantly.mdx:51 with no destination page; verified independent, bootstrapped to $53M ARR / ~160 staff, acquired Claap Oct 2025 → slug: lemlist
 - [type:tool] [vertical:revops] [evidence:changelog] new entry: day-ai — CRMx, an AI-built CRM that ingests email and meetings instead of asking reps to log; the "replace the system of record" pole against Rox/Agentforce/Breeze, named in rox.mdx:54 with no page; verified $20M Series A led by Sequoia (Pat Grady to board), CRMx launched, ~120 early customers → slug: day-ai
@@ -693,7 +719,8 @@ Each line carries at most one lifecycle marker, appended in place:
 - [type:learn] [vertical:cross] concept: ai-agent-vs-rpa — how AI agents differ from RPA / workflow automation for ops, and the diagnostic questions to ask vendors → primary target_question: AI agent vs RPA — what's the difference? → slug: ai-agent-vs-rpa
 - [type:learn] [vertical:cross] concept: retrieval-augmented-generation-rag — RAG explained for non-engineer ops buyers evaluating vendors that claim "grounded" answers → primary target_question: what is RAG and why does it matter for AI tools? → slug: retrieval-augmented-generation-rag
 - [type:learn] [vertical:legal-ops] concept: legal-ai-grounding-vs-hallucination — why "grounded" legal AI (Westlaw/Lexis-backed) matters and how to evaluate citation fidelity → primary target_question: how do I know a legal AI tool won't hallucinate citations? → slug: legal-ai-grounding-vs-hallucination
-- [type:learn] [vertical:legal-ops] definition: in-house-legal-ai-copilot — what an in-house GC copilot does (review/research/drafting), how it differs from outside-counsel and CLM tools, and the buying criteria → primary target_question: what is an in-house legal AI copilot and do we need one? → slug: in-house-legal-ai-copilot
+- [type:learn] [vertical:legal-ops] definition: in-house-legal-ai-copilot — what an in-house GC copilot does (review/research/drafting), how it differs from outside-counsel and CLM tools, and the buying criteria → primary target_question: what is an in-house legal AI copilot and do we need one?
+ → slug: in-house-legal-ai-copilot
 - [type:learn] [vertical:recruiting] concept: autonomous-ai-recruiter — what an "autonomous" AI recruiter automates end-to-end (source → outreach → schedule → shortlist) vs a sourcing tool, and where humans must stay in the loop → primary target_question: what is an autonomous AI recruiter? → slug: autonomous-ai-recruiter
 - [type:learn] [vertical:revops] concept: parallel-dialing — how parallel dialers work (connect rates, simultaneous lines), TCPA/compliance considerations, and where Nooks/Orum fit → primary target_question: what is parallel dialing and is it compliant? → slug: parallel-dialing
 - [type:learn] [vertical:legal-ops] concept: ai-contract-review-accuracy — how to evaluate vendor "95% accuracy" claims for AI contract review (precision/recall, benchmark sets, playbook fidelity) → primary target_question: how accurate is AI contract review, really? → slug: ai-contract-review-accuracy
