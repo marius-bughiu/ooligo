@@ -218,26 +218,26 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:customer-success] productboard — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-31, Spark replaced by a four-plan ladder with a free entry — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:customer-success] pylon — pricing never verified (no pricing_checked field; SLA 60d) → slug: pylon
 - refresh:A: [type:tool] [vertical:revops] qualified — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-31, Salesforce deal described as pending after it closed — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:revops] rattle — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] rb2b — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] recall-ai — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] recruitee — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] regie-ai — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] relativity — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] relevance-ai — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] reveal — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] revenuehero — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] rocketlane — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] rollworks — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] rox — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] sales-navigator — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] salesforce — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] salesloft — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] sapia-ai — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] seekout — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] sense — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] sierra — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] rattle — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] rb2b — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] recall-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:recruiting] recruitee — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] regie-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:legal-ops] relativity — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] relevance-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:legal-ops] reveal — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] revenuehero — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:customer-success] rocketlane — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] rollworks — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] rox — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] sales-navigator — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] salesforce — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] salesloft — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:recruiting] sapia-ai — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:recruiting] seekout — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:recruiting] sense — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] sierra — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
+- refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-04T05:40:00Z
 - refresh:A: [type:tool] [vertical:revops] slack — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] smartkarrot — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] smartlead — pricing never verified (no pricing_checked field; SLA 60d)
