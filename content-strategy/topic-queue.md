@@ -52,7 +52,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:recruiting] holly-vs-hireez — material (holly rebranded to HiringAgents.ai [subject]) → slug: holly-vs-hireez
 - refresh:C: [type:comparison] [vertical:revops] lavender-vs-regie-ai — material (regie-ai consolidated into RegieOne AI SEP [subject]) → slug: lavender-vs-regie-ai
 - refresh:C: [type:comparison] [vertical:revops] outreach-vs-default — material (outreach agentic relaunch + outreach.ai rebrand [subject]) → slug: outreach-vs-default
-- refresh:C: [type:comparison] [vertical:revops] outreach-vs-salesloft — material (salesloft merged into Clari 2025-12, Drift sunset [subject]; outreach agentic relaunch + outreach.ai rebrand [subject]) → claimed: refresh 2026-08-05T05:04:00Z
+- refresh:C: [type:comparison] [vertical:revops] outreach-vs-salesloft — material (salesloft merged into Clari 2025-12, Drift sunset [subject]; outreach agentic relaunch + outreach.ai rebrand [subject]) → slug: outreach-vs-salesloft
 - refresh:C: [type:comparison] [vertical:recruiting] paradox-vs-sense — material (sense published pricing + AI Recruiter SKU [subject]; paradox acquired by Workday 2025-10 [subject])
 - refresh:C: [type:comparison] [vertical:recruiting] pillar-vs-brighthire — material (brighthire acquired by Zoom 2025-12 [subject])
 - refresh:C: [type:comparison] [vertical:revops] regie-ai-vs-outreach — material (regie-ai consolidated into RegieOne AI SEP [subject]; outreach agentic relaunch + outreach.ai rebrand [subject])
