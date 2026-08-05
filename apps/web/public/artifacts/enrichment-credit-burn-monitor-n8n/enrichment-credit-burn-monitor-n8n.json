@@ -1,0 +1,564 @@
+{
+  "name": "Enrichment credit burn monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "sched-hourly",
+      "name": "Schedule — Hourly Usage Sweep",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -620,
+        -160
+      ],
+      "notes": "Timezone comes from workflow Settings → Timezone (America/New_York in this export). Change both together."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "sched-daily",
+      "name": "Schedule — Daily Reconcile 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -620,
+        220
+      ],
+      "notes": "Fires 07:00 in the workflow timezone (America/New_York). Runs the Clay CSV ingest, the cost-per-verified-record drift check and the expiry forecast."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clay-credit-event",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "webhook-clay",
+      "name": "Webhook — Clay Row Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        520
+      ],
+      "webhookId": "PLACEHOLDER_WEBHOOK_ID_CLAY_ROW_EVENT",
+      "notes": "Clay HTTP API column POSTs one event per enriched row. Each POST costs 1 Clay Action — see _README.md §What the monitor itself costs."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 202,
+        "responseBody": "={{ JSON.stringify({ accepted: true, ledgerKey: $json.ledgerKey ?? null }) }}",
+        "options": {}
+      },
+      "id": "respond-202",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        140,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.zoominfo.com/gtm/data/v1/users/usage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "http-zi-usage",
+      "name": "HTTP — ZoomInfo Usage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -360,
+        -280
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "PLACEHOLDER_ZOOMINFO_OAUTH2_CRED_ID",
+          "name": "ZoomInfo GTM Data API (OAuth2)"
+        }
+      },
+      "notes": "fullResponse + neverError so a 401/429 reaches the parser as data instead of failing the execution silently to zero."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ZoomInfo GTM Data API: GET /gtm/data/v1/users/usage.\n// Documented response: UsageResponse -> data[] -> attributes.usage[] with\n// limitType, description, totalLimit, currentUsage, usageRemaining.\n// limitType values: request, record, uniqueID, webSightsApiRequest, webSightsApiRecord.\n// The schema carries NO reset date, so the contract-period end has to come from an env var.\n\nconst out = [];\nconst now = new Date().toISOString();\n\nfor (const item of $input.all()) {\n  const res = item.json;\n  const status = res.statusCode ?? 200;\n\n  if (status === 401 || status === 403) {\n    // Never emit a zero-usage record on an auth failure: a zero looks like\n    // \"nothing was spent\" downstream and would suppress every drift alert.\n    out.push({ json: { vendor: 'zoominfo', ok: false, reason: `auth_${status}`, checkedAt: now } });\n    continue;\n  }\n  if (status === 429) {\n    out.push({ json: { vendor: 'zoominfo', ok: false, reason: 'rate_limited', retryAfter: res.headers?.['retry-after'] ?? null, checkedAt: now } });\n    continue;\n  }\n  if (status >= 400) {\n    out.push({ json: { vendor: 'zoominfo', ok: false, reason: `http_${status}`, checkedAt: now } });\n    continue;\n  }\n\n  const body = res.body ?? res;\n  const resources = body.data ?? body.UsageResponse?.data ?? [];\n  const rows = [];\n  for (const r of Array.isArray(resources) ? resources : [resources]) {\n    const usage = r?.attributes?.usage ?? [];\n    for (const u of usage) rows.push(u);\n  }\n\n  if (rows.length === 0) {\n    out.push({ json: { vendor: 'zoominfo', ok: false, reason: 'empty_usage_array', checkedAt: now } });\n    continue;\n  }\n\n  for (const u of rows) {\n    const total = Number(u.totalLimit ?? 0);\n    const used = Number(u.currentUsage ?? 0);\n    const remaining = u.usageRemaining === undefined || u.usageRemaining === null\n      ? (total - used)\n      : Number(u.usageRemaining);\n    out.push({\n      json: {\n        vendor: 'zoominfo',\n        ok: true,\n        unit: u.limitType,              // request | record | uniqueID | webSights*\n        description: u.description ?? null,\n        allowance: total,\n        used,\n        remaining,\n        // Only the record limit maps to what ZoomInfo bills as a credit; request\n        // limits are throughput, not spend. Downstream cost maths keys off this flag.\n        billable: u.limitType === 'record' || u.limitType === 'uniqueID',\n        checkedAt: now,\n      },\n    });\n  }\n}\n\nreturn out;"
+      },
+      "id": "parse-zoominfo-usage",
+      "name": "Parse ZoomInfo Usage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/api/v1/usage_stats/api_usage_stats",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-cache"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.APOLLO_MASTER_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "http-apollo-usage",
+      "name": "HTTP — Apollo Usage Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -360,
+        -60
+      ],
+      "notes": "Requires a MASTER API key (scope api_usage_stats_read). Endpoint itself costs 0 credits and returns rate-limit counters, not credits."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Apollo publishes no credit-balance endpoint. usage_stats returns, per endpoint,\n// { day|hour|minute: { limit, consumed, left_over } } — those are REQUESTS.\n// Credits are derived from Apollo's documented per-call cost, which is why this\n// node emits a floor and a ceiling instead of one number:\n//   * people match: 1 credit for demographics/email, +8 if a mobile phone is returned (1-9)\n//   * people bulk_match: up to 10 people per request -> 1..90 credits per request\n//   * organization enrich: 1 credit per organization\n//   * search endpoints: 1 credit per page\n//   * create/update/list/manage endpoints: 0 credits\n// A single request therefore cannot be converted to an exact credit count. The\n// authoritative number is the call-site ledger; this bracket is the reconciliation bound.\n\nconst COST = {\n  'api/v1/people/match':              { min: 0, max: 9,  note: '1 email/demographics, +8 mobile' },\n  'api/v1/people/bulk_match':         { min: 0, max: 90, note: 'up to 10 people/request x 1-9' },\n  'api/v1/organizations/enrich':      { min: 0, max: 1,  note: '1 per organization' },\n  'api/v1/organizations/bulk_enrich': { min: 0, max: 10, note: 'up to 10 orgs/request' },\n  'api/v1/mixed_companies/search':    { min: 0, max: 1,  note: '1 per page' },\n  'api/v1/organizations/job_postings':{ min: 0, max: 1,  note: '1 per page' },\n  'api/v1/news_articles/search':      { min: 0, max: 1,  note: '1 per page' },\n};\n\nconst now = new Date().toISOString();\nconst item = $input.first().json;\nconst status = item.statusCode ?? 200;\n\nif (status >= 400) {\n  return [{ json: { vendor: 'apollo', ok: false, reason: `http_${status}`, checkedAt: now } }];\n}\n\nconst body = item.body ?? item;\nlet floor = 0, ceiling = 0, requests = 0;\nconst perEndpoint = [];\n\nfor (const [endpoint, windows] of Object.entries(body)) {\n  const day = windows?.day;\n  if (!day) continue;\n  const consumed = Number(day.consumed ?? 0);\n  requests += consumed;\n  const key = endpoint.replace(/^\\/+/, '');\n  const cost = COST[key];\n  if (!cost) continue;                       // non-billable endpoint\n  floor += consumed > 0 ? consumed : 0;      // >=1 credit only if the call returned billable data\n  ceiling += consumed * cost.max;\n  perEndpoint.push({ endpoint: key, requestsToday: consumed, creditCeiling: consumed * cost.max, note: cost.note });\n}\n\nreturn [{\n  json: {\n    vendor: 'apollo',\n    ok: true,\n    unit: 'credit',\n    requestsToday: requests,\n    derivedCreditFloor: floor,\n    derivedCreditCeiling: ceiling,\n    perEndpoint,\n    // Apollo grants credits per billing cycle and they do not roll over; the cycle\n    // anchor is not exposed by the API, so it comes from an env var.\n    cycleEnd: $env.APOLLO_CYCLE_END || null,\n    allowance: Number($env.APOLLO_CREDIT_ALLOWANCE || 0) || null,\n    checkedAt: now,\n  },\n}];"
+      },
+      "id": "derive-apollo-credits",
+      "name": "Derive Apollo Credits",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CLAY_USAGE_EXPORT_URL }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "http-clay-csv",
+      "name": "HTTP — Clay Usage Export",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -360,
+        220
+      ],
+      "notes": "Clay has no public credit-balance endpoint. This pulls the CSV you export from Settings → Usage to a signed URL or object-store path."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clay exposes usage through Settings → Usage (breakdowns by workbook/table,\n// integration and signal, plus separate API and MCP tabs) with CSV export.\n// There is no public balance endpoint, so this branch reads the export.\n// Required headers are asserted: if Clay renames a column the node throws rather\n// than emitting zeros, because a silent zero reads downstream as \"spend stopped\".\n\nconst REQUIRED = ['date', 'credits'];\nconst now = new Date().toISOString();\nconst res = $input.first().json;\nconst status = res.statusCode ?? 200;\n\nif (status >= 400) {\n  return [{ json: { vendor: 'clay', ok: false, reason: `http_${status}`, checkedAt: now } }];\n}\n\nconst text = String(res.body ?? '').trim();\nif (!text) {\n  return [{ json: { vendor: 'clay', ok: false, reason: 'empty_export', checkedAt: now } }];\n}\n\nconst lines = text.split(/\\r?\\n/).filter((l) => l.trim().length > 0);\nconst split = (line) => {\n  const cells = [];\n  let cur = '', quoted = false;\n  for (let i = 0; i < line.length; i++) {\n    const ch = line[i];\n    if (ch === '\"') { quoted = !quoted; continue; }\n    if (ch === ',' && !quoted) { cells.push(cur); cur = ''; continue; }\n    cur += ch;\n  }\n  cells.push(cur);\n  return cells.map((c) => c.trim());\n};\n\nconst header = split(lines[0]).map((h) => h.toLowerCase());\nconst idx = (want) => header.findIndex((h) => h === want || h.includes(want));\nfor (const req of REQUIRED) {\n  if (idx(req) === -1) {\n    throw new Error(`Clay export is missing a \"${req}\" column. Headers seen: ${header.join(' | ')}. Fix the export or update the header map in this node.`);\n  }\n}\n\nconst iDate = idx('date');\nconst iCredits = idx('credits');\nconst iActions = idx('action');\nconst iTable = idx('table');\nconst iIntegration = idx('integration');\n\nconst byDay = {};\nfor (const line of lines.slice(1)) {\n  const cells = split(line);\n  const day = (cells[iDate] || '').slice(0, 10);\n  if (!day) continue;\n  const credits = Number((cells[iCredits] || '0').replace(/[^0-9.\\-]/g, '')) || 0;\n  const actions = iActions === -1 ? 0 : Number((cells[iActions] || '0').replace(/[^0-9.\\-]/g, '')) || 0;\n  byDay[day] = byDay[day] || { dataCredits: 0, actions: 0, tables: new Set(), integrations: new Set() };\n  byDay[day].dataCredits += credits;\n  byDay[day].actions += actions;\n  if (iTable !== -1 && cells[iTable]) byDay[day].tables.add(cells[iTable]);\n  if (iIntegration !== -1 && cells[iIntegration]) byDay[day].integrations.add(cells[iIntegration]);\n}\n\nconst days = Object.keys(byDay).sort();\nconst newest = days[days.length - 1];\nconst ageHours = newest ? (Date.now() - Date.parse(`${newest}T23:59:59Z`)) / 3600000 : 9999;\nconst staleAfter = Number($env.CLAY_EXPORT_STALE_HOURS || 36);\n\nreturn days.map((day) => ({\n  json: {\n    vendor: 'clay',\n    ok: true,\n    day,\n    dataCredits: byDay[day].dataCredits,\n    actions: byDay[day].actions,\n    tables: [...byDay[day].tables],\n    integrations: [...byDay[day].integrations],\n    // A stale export makes burn look flat, which is indistinguishable from a\n    // genuine drop in spend. Tag it and let the alert node route it separately.\n    stale: ageHours > staleAfter,\n    exportAgeHours: Math.round(ageHours),\n    checkedAt: now,\n  },\n}));"
+      },
+      "id": "parse-clay-usage-csv",
+      "name": "Parse Clay Usage CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Per-row events posted by a Clay HTTP API column while a table runs.\n// This is the only real-time view of Clay spend available, and it is also the\n// only place a \"verified\" flag exists — the CSV export does not carry one, so\n// cost-per-verified-record cannot be computed from the export alone.\n\nconst store = $getWorkflowStaticData('global');\nstore.clayLedger = store.clayLedger || [];\n\nconst now = new Date();\nconst out = [];\n\nfor (const item of $input.all()) {\n  const b = item.json.body ?? item.json;\n  const rowId = b.rowId || b.row_id;\n  if (!rowId) {\n    out.push({ json: { accepted: false, reason: 'missing rowId', ledgerKey: null } });\n    continue;\n  }\n\n  const key = `${b.table || 'unknown'}::${rowId}`;\n  // Clay retries a failed HTTP column, so the same row can arrive twice.\n  if (store.clayLedger.some((e) => e.key === key)) {\n    out.push({ json: { accepted: true, duplicate: true, ledgerKey: key } });\n    continue;\n  }\n\n  const entry = {\n    key,\n    day: now.toISOString().slice(0, 10),\n    ts: now.getTime(),\n    table: b.table || 'unknown',\n    workbook: b.workbook || null,\n    integration: b.integration || b.provider || 'unknown',\n    dataCredits: Number(b.dataCredits ?? b.credits ?? 0) || 0,\n    actions: Number(b.actions ?? 1) || 1,   // the HTTP column itself consumes 1 Action\n    verified: b.verified === true || b.verified === 'true',\n  };\n\n  store.clayLedger.push(entry);\n  out.push({ json: { accepted: true, duplicate: false, ledgerKey: key } });\n}\n\n// Ring-buffer at 45 days so static data cannot grow without bound.\nconst cutoff = now.getTime() - 45 * 86400000;\nstore.clayLedger = store.clayLedger.filter((e) => e.ts >= cutoff);\n\nreturn out;"
+      },
+      "id": "clay-ledger-append",
+      "name": "Clay Ledger Append",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "merge-usage",
+      "name": "Merge — Usage Inputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        120,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One record per (vendor, unit, day) with a dollar figure attached.\n//\n// Pricing note: Clay's plan fee buys Data Credits AND Actions together, so\n// attributing dollars to one unit is a modelling choice, not a vendor number.\n// The default split is 70/30 to Data Credits and is overridable. Published plan\n// anchors (clay.com/pricing, checked 2026-08-05): Launch $185/mo = 2,500 Data\n// Credits + 15,000 Actions; Growth $495/mo = 6,000 + 40,000; annual billing is\n// 10% lower ($167 / $446 per month).\n// Apollo and ZoomInfo unit prices are contract-specific and MUST come from env.\n// If a unit price is missing the record still flows with usdSpend = null — the\n// unit-burn and expiry branches work without dollars; only drift needs them.\n\nconst num = (v, d) => (v === undefined || v === null || v === '' ? d : Number(v));\n\nconst CLAY_PLAN_USD   = num($env.CLAY_PLAN_MONTHLY_USD, 495);\nconst CLAY_DC_ALLOW   = num($env.CLAY_DATA_CREDIT_ALLOWANCE, 6000);\nconst CLAY_ACT_ALLOW  = num($env.CLAY_ACTION_ALLOWANCE, 40000);\nconst CLAY_DC_SHARE   = num($env.CLAY_DATA_CREDIT_COST_SHARE, 0.7);\n\nconst clayDcUsd  = CLAY_DC_ALLOW  > 0 ? (CLAY_PLAN_USD * CLAY_DC_SHARE) / CLAY_DC_ALLOW : null;\nconst clayActUsd = CLAY_ACT_ALLOW > 0 ? (CLAY_PLAN_USD * (1 - CLAY_DC_SHARE)) / CLAY_ACT_ALLOW : null;\n\nconst apolloUsd = $env.APOLLO_CREDIT_USD ? Number($env.APOLLO_CREDIT_USD) : null;\nconst ziUsd     = $env.ZOOMINFO_RECORD_USD ? Number($env.ZOOMINFO_RECORD_USD) : null;\n\nconst today = new Date().toISOString().slice(0, 10);\nconst out = [];\n\nfor (const item of $input.all()) {\n  const r = item.json;\n  if (r.ok === false) { out.push({ json: { ...r, kind: 'health' } }); continue; }\n\n  if (r.vendor === 'clay') {\n    out.push({ json: { kind: 'usage', vendor: 'clay', unit: 'data_credit', day: r.day, used: r.dataCredits,\n      allowance: CLAY_DC_ALLOW, unitUsd: clayDcUsd, usdSpend: clayDcUsd === null ? null : r.dataCredits * clayDcUsd,\n      stale: !!r.stale, integrations: r.integrations ?? [] } });\n    out.push({ json: { kind: 'usage', vendor: 'clay', unit: 'action', day: r.day, used: r.actions,\n      allowance: CLAY_ACT_ALLOW, unitUsd: clayActUsd, usdSpend: clayActUsd === null ? null : r.actions * clayActUsd,\n      stale: !!r.stale, integrations: r.integrations ?? [] } });\n    continue;\n  }\n\n  if (r.vendor === 'apollo') {\n    // Ledger-first: the bracket is the bound, not the number. Midpoint is used\n    // only when no call-site ledger figure is available for the day.\n    const mid = Math.round((r.derivedCreditFloor + r.derivedCreditCeiling) / 2);\n    out.push({ json: { kind: 'usage', vendor: 'apollo', unit: 'credit', day: today, used: mid,\n      usedFloor: r.derivedCreditFloor, usedCeiling: r.derivedCreditCeiling, estimated: true,\n      allowance: r.allowance, cycleEnd: r.cycleEnd, unitUsd: apolloUsd,\n      usdSpend: apolloUsd === null ? null : mid * apolloUsd, requestsToday: r.requestsToday } });\n    continue;\n  }\n\n  if (r.vendor === 'zoominfo') {\n    if (!r.billable) { out.push({ json: { kind: 'throughput', vendor: 'zoominfo', unit: r.unit, used: r.used,\n      allowance: r.allowance, remaining: r.remaining, day: today } }); continue; }\n    out.push({ json: { kind: 'usage', vendor: 'zoominfo', unit: r.unit, day: today, used: r.used,\n      allowance: r.allowance, remaining: r.remaining, cycleEnd: $env.ZOOMINFO_CONTRACT_END || null,\n      unitUsd: ziUsd, usdSpend: ziUsd === null ? null : r.used * ziUsd } });\n  }\n}\n\nreturn out;"
+      },
+      "id": "normalize-+-price-units",
+      "name": "Normalize + Price Units",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cost per verified record (CPVR) = dollars spent / records that passed verification.\n// \"Verified\" comes from the Clay ledger's verified flag — the enrichment is only\n// worth what survives verification, so an unverified-row denominator would hide\n// exactly the regression this flow exists to catch.\n//\n// Drift fires when the trailing 7-day CPVR exceeds the trailing 28-day baseline\n// by more than CPVR_DRIFT_PCT. A 28-day baseline is long enough to survive one\n// bad week and short enough to move when a provider is genuinely repriced.\n\nconst store = $getWorkflowStaticData('global');\nconst ledger = store.clayLedger || [];\nconst items = $input.all().map((i) => i.json);\n\nconst driftPct = Number($env.CPVR_DRIFT_PCT || 25);\nconst minDenom = Number($env.CPVR_MIN_VERIFIED || 250);\n\nconst dayMs = 86400000;\nconst now = Date.now();\nconst inWindow = (ts, days) => ts >= now - days * dayMs;\n\nconst verified7  = ledger.filter((e) => inWindow(e.ts, 7)  && e.verified).length;\nconst verified28 = ledger.filter((e) => inWindow(e.ts, 28) && e.verified).length;\n\nconst spendInWindow = (days) => {\n  const cutoff = new Date(now - days * dayMs).toISOString().slice(0, 10);\n  return items\n    .filter((r) => r.kind === 'usage' && r.usdSpend !== null && r.usdSpend !== undefined && (r.day || '') >= cutoff)\n    .reduce((sum, r) => sum + r.usdSpend, 0);\n};\n\nconst spend7 = spendInWindow(7);\nconst spend28 = spendInWindow(28);\n\n// Small denominators make CPVR explode: 12 verified rows on a quiet Sunday\n// produces a number that is arithmetically correct and operationally meaningless.\nif (verified7 < minDenom || verified28 < minDenom) {\n  return [{ json: { kind: 'cpvr', status: 'insufficient_data', verified7, verified28, minDenom,\n    note: `Need ${minDenom} verified records in both windows before drift can fire.` } }];\n}\n\nconst cpvr7 = spend7 / verified7;\nconst cpvr28 = spend28 / verified28;\nconst deltaPct = cpvr28 === 0 ? 0 : ((cpvr7 - cpvr28) / cpvr28) * 100;\n\nconst worst = items\n  .filter((r) => r.kind === 'usage' && Array.isArray(r.integrations) && r.integrations.length > 0)\n  .flatMap((r) => r.integrations.map((p) => ({ provider: p, usd: r.usdSpend ?? 0 })))\n  .reduce((acc, e) => { acc[e.provider] = (acc[e.provider] || 0) + e.usd; return acc; }, {});\n\nreturn [{\n  json: {\n    kind: 'cpvr',\n    status: deltaPct > driftPct ? 'drift' : 'ok',\n    cpvr7: Number(cpvr7.toFixed(4)),\n    cpvr28: Number(cpvr28.toFixed(4)),\n    deltaPct: Number(deltaPct.toFixed(1)),\n    thresholdPct: driftPct,\n    spend7: Number(spend7.toFixed(2)),\n    spend28: Number(spend28.toFixed(2)),\n    verified7,\n    verified28,\n    topProviders: Object.entries(worst).sort((a, b) => b[1] - a[1]).slice(0, 3)\n      .map(([provider, usd]) => ({ provider, usd: Number(usd.toFixed(2)) })),\n  },\n}];"
+      },
+      "id": "cost-per-verified-record-+-drift",
+      "name": "Cost Per Verified Record + Drift",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Two failure directions, one node:\n//   overrun  — run rate exhausts the allowance before the cycle ends\n//   forfeit  — allowance goes unused and expires\n//\n// Rollover rules differ per vendor and they are the whole point of the alert:\n//   Clay Actions      — no rollover, unused Actions expire at cycle end\n//   Clay Data Credits — roll over up to 2x the monthly allowance (monthly plans);\n//                       annual plans roll 15% when renewing at the same tier or higher\n//   Apollo            — credits do not roll over; they expire at the billing anniversary\n//   ZoomInfo          — contract-period limits; usageRemaining at contract end is lost\n\nconst items = $input.all().map((i) => i.json).filter((r) => r.kind === 'usage');\nconst forfeitPct = Number($env.FORFEIT_ALERT_PCT || 15);\nconst warnDays = Number($env.CYCLE_WARN_DAYS || 7);\n\nconst cycleEnds = {\n  clay: $env.CLAY_CYCLE_END || null,\n  apollo: $env.APOLLO_CYCLE_END || null,\n  zoominfo: $env.ZOOMINFO_CONTRACT_END || null,\n};\n\nconst rollover = {\n  'clay:action': { rolls: false, capMultiple: 0 },\n  'clay:data_credit': { rolls: true, capMultiple: Number($env.CLAY_DC_ROLLOVER_MULTIPLE || 2) },\n  'apollo:credit': { rolls: false, capMultiple: 0 },\n  'zoominfo:record': { rolls: false, capMultiple: 0 },\n  'zoominfo:uniqueID': { rolls: false, capMultiple: 0 },\n};\n\nconst byKey = {};\nfor (const r of items) {\n  const k = `${r.vendor}:${r.unit}`;\n  byKey[k] = byKey[k] || { vendor: r.vendor, unit: r.unit, used: 0, allowance: r.allowance ?? null, unitUsd: r.unitUsd ?? null, days: new Set() };\n  byKey[k].used += r.used || 0;\n  if (r.day) byKey[k].days.add(r.day);\n  if (r.allowance) byKey[k].allowance = r.allowance;\n}\n\nconst out = [];\nfor (const [key, v] of Object.entries(byKey)) {\n  const end = cycleEnds[v.vendor];\n  if (!end) {\n    // Guessing a cycle boundary would produce confident nonsense. Skip instead.\n    out.push({ json: { kind: 'expiry', status: 'no_cycle_configured', vendor: v.vendor, unit: v.unit,\n      note: `Set ${v.vendor.toUpperCase()}_CYCLE_END (YYYY-MM-DD) to enable the expiry forecast.` } });\n    continue;\n  }\n  if (!v.allowance) {\n    out.push({ json: { kind: 'expiry', status: 'no_allowance_configured', vendor: v.vendor, unit: v.unit } });\n    continue;\n  }\n\n  const daysObserved = Math.max(v.days.size, 1);\n  const runRate = v.used / daysObserved;\n  const daysLeft = Math.ceil((Date.parse(`${end}T23:59:59Z`) - Date.now()) / 86400000);\n  const projectedUse = v.used + runRate * Math.max(daysLeft, 0);\n  const projectedUnused = Math.max(v.allowance - projectedUse, 0);\n  const roll = rollover[key] || { rolls: false, capMultiple: 0 };\n  const carried = roll.rolls ? Math.min(projectedUnused, v.allowance * roll.capMultiple) : 0;\n  const forfeit = Math.max(projectedUnused - carried, 0);\n  const forfeitShare = (forfeit / v.allowance) * 100;\n\n  let status = 'ok';\n  if (projectedUse > v.allowance) status = 'overrun';\n  else if (daysLeft <= warnDays && forfeitShare >= forfeitPct) status = 'forfeit';\n\n  out.push({\n    json: {\n      kind: 'expiry', status, vendor: v.vendor, unit: v.unit,\n      used: Math.round(v.used), allowance: v.allowance, daysLeft,\n      runRatePerDay: Number(runRate.toFixed(1)),\n      projectedUse: Math.round(projectedUse),\n      projectedForfeit: Math.round(forfeit),\n      forfeitSharePct: Number(forfeitShare.toFixed(1)),\n      forfeitUsd: v.unitUsd === null ? null : Number((forfeit * v.unitUsd).toFixed(2)),\n      rollsOver: roll.rolls, rolloverCapMultiple: roll.capMultiple,\n      cycleEnd: end,\n    },\n  });\n}\n\nreturn out;"
+      },
+      "id": "expiry-+-overrun-forecast",
+      "name": "Expiry + Overrun Forecast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One alert per (kind, vendor, unit, status) per bucket. Without this the hourly\n// sweep re-posts the same forfeit warning 24 times a day and the channel gets muted,\n// which is the failure mode that kills every monitoring flow.\n//\n// Static data persists on production executions only — never on manual runs — so\n// verify this gate with an activated schedule, not the Execute Workflow button.\n\nconst store = $getWorkflowStaticData('global');\nstore.alerted = store.alerted || {};\n\nconst bucketHours = Number($env.ALERT_DEDUP_HOURS || 12);\nconst bucket = Math.floor(Date.now() / (bucketHours * 3600000));\nconst out = [];\n\nfor (const item of $input.all()) {\n  const r = item.json;\n  const status = r.status ?? (r.ok === false ? 'health' : 'ok');\n  if (['ok', 'insufficient_data', 'no_cycle_configured', 'no_allowance_configured'].includes(status)) continue;\n\n  const key = `${r.kind}:${r.vendor ?? 'all'}:${r.unit ?? 'all'}:${status}:${bucket}`;\n  if (store.alerted[key]) continue;\n  store.alerted[key] = Date.now();\n\n  const severity = status === 'overrun' || status === 'drift' ? 'critical' : 'warning';\n  out.push({ json: { ...r, alertKey: key, severity, status } });\n}\n\n// Drop dedup keys older than 3 days.\nconst cutoff = Date.now() - 3 * 86400000;\nfor (const [k, ts] of Object.entries(store.alerted)) if (ts < cutoff) delete store.alerted[k];\n\nreturn out;"
+      },
+      "id": "alert-gate-+-dedup",
+      "name": "Alert Gate + Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const blocks = [];\nconst r = $json;\n\nconst titles = {\n  drift: `Cost per verified record up ${r.deltaPct}% vs the 28-day baseline`,\n  overrun: `${r.vendor} ${r.unit} allowance will be exhausted before ${r.cycleEnd}`,\n  forfeit: `${r.vendor} ${r.unit}: ${r.projectedForfeit} units expire ${r.cycleEnd}`,\n  health: `${r.vendor} usage poll failed: ${r.reason}`,\n};\nconst title = titles[r.status] ?? `Enrichment credit alert: ${r.status}`;\nconst emoji = r.severity === 'critical' ? ':rotating_light:' : ':warning:';\n\nblocks.push({ type: 'header', text: { type: 'plain_text', text: `${emoji} ${title}`.slice(0, 150), emoji: true } });\n\nconst fields = [];\nconst push = (label, value) => { if (value !== null && value !== undefined && value !== '') fields.push({ type: 'mrkdwn', text: `*${label}*\\n${value}` }); };\n\nif (r.kind === 'cpvr') {\n  push('CPVR (7d)', `$${r.cpvr7}`);\n  push('CPVR (28d baseline)', `$${r.cpvr28}`);\n  push('Verified records (7d)', r.verified7);\n  push('Spend (7d)', `$${r.spend7}`);\n  if (r.topProviders?.length) push('Top spend', r.topProviders.map((p) => `${p.provider} $${p.usd}`).join('\\n'));\n} else if (r.kind === 'expiry') {\n  push('Used / allowance', `${r.used} / ${r.allowance}`);\n  push('Run rate', `${r.runRatePerDay}/day`);\n  push('Days left in cycle', r.daysLeft);\n  push('Projected at cycle end', r.projectedUse);\n  if (r.status === 'forfeit') push('Forfeit', `${r.projectedForfeit} (${r.forfeitSharePct}%)${r.forfeitUsd ? ` ≈ $${r.forfeitUsd}` : ''}`);\n  push('Rolls over', r.rollsOver ? `yes, cap ${r.rolloverCapMultiple}x allowance` : 'no — use it or lose it');\n}\n\nif (fields.length) blocks.push({ type: 'section', fields: fields.slice(0, 10) });\n\nconst actions = {\n  drift: 'Open the Clay table credit-usage dashboard, sort columns by spend, and check whether a waterfall added a paid step or a provider changed its per-row price.',\n  overrun: 'Pause the lowest-value table or cap the enrichment columns before the allowance runs out; an overrun means paying overage rates or stopping mid-cycle.',\n  forfeit: 'Move a queued list forward or run the backlog table now — these units do not roll over and are gone at cycle end.',\n  health: 'The poll failed, so this vendor is not being measured. Check credentials before trusting any number in this channel.',\n};\nblocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Do this:* ${actions[r.status] ?? 'Investigate the source dashboard.'}` } });\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `alertKey \\`${r.alertKey}\\` · severity ${r.severity} · dedup window ${$env.ALERT_DEDUP_HOURS || 12}h` }] });\n\nreturn [{ json: { channel: r.severity === 'critical' ? ($env.SLACK_CHANNEL_CRITICAL || '#revops-alerts') : ($env.SLACK_CHANNEL_WARNING || '#revops-costs'), text: title, blocks } }];"
+      },
+      "id": "compose-slack-block-kit",
+      "name": "Compose Slack Block Kit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: $json.text, blocks: $json.blocks }) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "slack-notify",
+      "name": "Slack — Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        -60
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — RevOps alerts bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule — Hourly Usage Sweep": {
+      "main": [
+        [
+          {
+            "node": "HTTP — ZoomInfo Usage",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP — Apollo Usage Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule — Daily Reconcile 07:00": {
+      "main": [
+        [
+          {
+            "node": "HTTP — Clay Usage Export",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook — Clay Row Event": {
+      "main": [
+        [
+          {
+            "node": "Clay Ledger Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clay Ledger Append": {
+      "main": [
+        [
+          {
+            "node": "Respond 202 Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP — ZoomInfo Usage": {
+      "main": [
+        [
+          {
+            "node": "Parse ZoomInfo Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP — Apollo Usage Stats": {
+      "main": [
+        [
+          {
+            "node": "Derive Apollo Credits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP — Clay Usage Export": {
+      "main": [
+        [
+          {
+            "node": "Parse Clay Usage CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse ZoomInfo Usage": {
+      "main": [
+        [
+          {
+            "node": "Merge — Usage Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Derive Apollo Credits": {
+      "main": [
+        [
+          {
+            "node": "Merge — Usage Inputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Parse Clay Usage CSV": {
+      "main": [
+        [
+          {
+            "node": "Merge — Usage Inputs",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge — Usage Inputs": {
+      "main": [
+        [
+          {
+            "node": "Normalize + Price Units",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize + Price Units": {
+      "main": [
+        [
+          {
+            "node": "Cost Per Verified Record + Drift",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Expiry + Overrun Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cost Per Verified Record + Drift": {
+      "main": [
+        [
+          {
+            "node": "Alert Gate + Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expiry + Overrun Forecast": {
+      "main": [
+        [
+          {
+            "node": "Alert Gate + Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Gate + Dedup": {
+      "main": [
+        [
+          {
+            "node": "Compose Slack Block Kit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Slack Block Kit": {
+      "main": [
+        [
+          {
+            "node": "Slack — Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": ""
+  },
+  "active": false,
+  "version": 1,
+  "id": "enrichment-credit-burn-monitor-n8n",
+  "meta": {
+    "instanceId": "PLACEHOLDER_N8N_INSTANCE_ID",
+    "templateCredsSetupCompleted": false
+  }
+}

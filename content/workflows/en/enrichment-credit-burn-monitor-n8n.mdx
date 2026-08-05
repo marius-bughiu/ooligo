@@ -1,0 +1,80 @@
+---
+slug: enrichment-credit-burn-monitor-n8n
+canonical_slug: enrichment-credit-burn-monitor-n8n
+locale: en
+verticals: [revops]
+title: Track enrichment credit burn across Clay, Apollo, and ZoomInfo before the allowance expires
+artifact_type: n8n-flow
+tools_used: [clay, apollo, zoominfo, n8n, slack]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 2-3 hours
+human_tested: false
+last_updated: "2026-08-05"
+---
+
+An [n8n](/en/tools/n8n/) flow that pulls credit consumption from [Clay](/en/tools/clay/), [Apollo](/en/tools/apollo/), and [ZoomInfo](/en/tools/zoominfo/), converts it into a cost per verified record, and posts to [Slack](/en/tools/slack/) when either of the two expensive things happens: spend per useful record drifting up, or allowance going unused into an expiry date. The bundle at `apps/web/public/artifacts/enrichment-credit-burn-monitor-n8n/` ships the complete n8n export plus a `_README.md` covering import, credential setup, the environment variable table, per-branch verification, and what the monitoring itself costs.
+
+## When to use this
+
+Use it when enrichment spend across two or more data vendors has passed the point where anyone can hold it in their head — in practice, once the combined annual commitment crosses roughly $30,000 and at least one vendor bills on a cycle you can overrun. At that size the two failure modes stop being theoretical. A waterfall column quietly adds a paid provider and cost per verified record climbs 40% without any change in output quality. Or Q4 hiring slips, outbound volume drops, and 9,000 Clay Actions expire at the cycle boundary because nobody was watching the run rate against the calendar.
+
+It fits teams that already run enrichment through automation rather than by hand — a [Clay-driven enrichment pipeline](/en/workflows/lead-enrichment-clay-claude/) or an [ICP list build](/en/workflows/icp-account-list-builder-clay/) — because those pipelines are where the credit goes and where a per-row event can be emitted without extra plumbing.
+
+The denominator is the point. Total credits burned is a number your vendor already shows you. Credits burned per record that survived verification is the number that tells you whether a provider change made you poorer, and no vendor dashboard computes it because no vendor knows which of your rows passed your verification step.
+
+## When NOT to use this
+
+Skip it if you run a single vendor on a flat plan with no overage. One dashboard, checked monthly, answers the same question at zero build cost.
+
+Skip it if you have no verification step. Cost per verified record needs a verified flag on each row — a deliverability check, a catch-all filter, a QA column. Without one the flow computes cost per *enriched* record, which the vendors already report, and the drift alert loses its meaning.
+
+Skip the Clay row-event branch specifically if your volume is high and your attribution needs are low. Each row event costs 1 Clay Action, because HTTP requests consume Actions under Clay's March 2026 pricing model. On a 20,000-row month against the Growth allowance of 40,000 Actions, instrumenting every row spends half the allowance to measure the other half. Instrument the two or three tables whose spend you need attributed and let the CSV export cover the rest.
+
+## Why each vendor is wired differently
+
+This is the part that determines whether the flow reports numbers or fiction, and it comes down to what each vendor actually exposes.
+
+**ZoomInfo** is the only one with a real usage endpoint. `GET /gtm/data/v1/users/usage` returns rows carrying `limitType`, `totalLimit`, `currentUsage`, and `usageRemaining`, where `limitType` separates `request` (throughput) from `record` and `uniqueID` (what gets billed). `Parse ZoomInfo Usage` preserves that split and prices only the billable rows. The response has no reset date, so the contract end is configuration, not discovery.
+
+**Apollo** exposes `POST /api/v1/usage_stats/api_usage_stats`, which costs 0 credits and returns per-endpoint counters of `limit`, `consumed`, and `left_over` across day, hour, and minute windows. Those count requests, not credits. Apollo's own documentation makes the conversion lossy in both directions: people enrichment charges 1 credit for demographics or email plus 8 more when a mobile phone comes back, and `/people/bulk_match` accepts up to ten people per request. One request is worth between 0 and 90 credits. So `Derive Apollo Credits` emits `derivedCreditFloor` and `derivedCreditCeiling` and marks the midpoint `estimated: true`, rather than publishing a single confident wrong number.
+
+**Clay** publishes no credit-balance endpoint. Usage lives in Settings → Usage with breakdowns by workbook and table, by integration, and by signal, plus CSV export. The flow reads that export from a URL you control and keeps a parallel per-row ledger fed by a Clay HTTP API column — the ledger being the only place a `verified` flag exists.
+
+One number in the flow is a modelling choice rather than a vendor fact, and the page will not pretend otherwise: a Clay plan fee buys Data Credits and Actions together and Clay prices neither separately. `CLAY_DATA_CREDIT_COST_SHARE` splits the fee, defaulting to 70/30. At Growth ($495 per month for 6,000 Data Credits and 40,000 Actions, per Clay's pricing page checked 2026-08-05) that puts a Data Credit at $0.0578 and an Action at $0.0037. Change the share and every dollar figure downstream moves with it.
+
+## Setup
+
+1. **Import the bundle.** `apps/web/public/artifacts/enrichment-credit-burn-monitor-n8n/enrichment-credit-burn-monitor-n8n.json` into n8n via **Workflows → Import from File**. Three entry points: an hourly schedule for the two API-pollable vendors, a 07:00 daily reconcile for the Clay export and both forecasts, and a webhook at `/webhook/clay-credit-event` for row events.
+
+2. **Set the workflow timezone.** Settings → Timezone (the export ships `America/New_York`) with `Execution Order` at `v1`. Both cron expressions read this zone, and the 07:00 firing decides which calendar day a cycle boundary lands on.
+
+3. **Fill in the cycle dates.** `CLAY_CYCLE_END`, `APOLLO_CYCLE_END`, and `ZOOMINFO_CONTRACT_END`, each `YYYY-MM-DD`. No vendor here returns its own reset date. Leaving one unset disables that vendor's expiry forecast and says so in the item — the flow does not assume a calendar month.
+
+4. **Set unit prices where you have them.** `APOLLO_CREDIT_USD` and `ZOOMINFO_RECORD_USD` come from your contract; neither vendor publishes a per-unit list price. Unset, the unit-burn and expiry branches still work and only the drift branch goes quiet.
+
+5. **Wire two credentials.** A ZoomInfo OAuth2 credential (`PLACEHOLDER_ZOOMINFO_OAUTH2_CRED_ID`) and a Slack app credential (`PLACEHOLDER_SLACK_CRED_ID`) with `chat:write`. The Apollo master key lives in `APOLLO_MASTER_API_KEY` — the usage-stats endpoint rejects non-master keys.
+
+6. **Run the five-step verification in `_README.md` before activating either schedule.** Step 1 is the one that matters most: break the ZoomInfo credential on purpose and confirm the parser emits `ok: false, reason: 'auth_401'` instead of `used: 0`.
+
+## Failure modes and guards
+
+**An expired credential reads as zero spend.** A 401 that gets parsed into a usage record of 0 is worse than an outage, because every downstream threshold reads it as "spend stopped" and goes quiet. Guard: the HTTP nodes run with `neverError` and `fullResponse` so status codes reach the parser as data, and `Parse ZoomInfo Usage` emits a health record on 401, 403, and 429 and no usage record at all.
+
+**A stale Clay export is indistinguishable from a spend freeze.** Both look like flat daily numbers. Guard: `Parse Clay Usage CSV` stamps export age and tags anything past `CLAY_EXPORT_STALE_HOURS` (36 by default) as `stale`, which routes to the warning channel as a poll-health message instead of feeding the 28-day baseline.
+
+**A renamed export column silently zeroes the Clay branch.** Vendors rename CSV headers without notice. Guard: the parser asserts its required columns and throws with the header row it actually saw, rather than defaulting missing columns to 0.
+
+**Small denominators make cost per verified record explode.** Twelve verified rows on a quiet Sunday produce a number that is arithmetically correct and operationally useless. Guard: `CPVR_MIN_VERIFIED` (250 by default) must be met in both the 7-day and 28-day windows before drift can fire; below it the node returns `status: 'insufficient_data'`.
+
+**Hourly polling turns one problem into 24 alerts.** Guard: `Alert Gate + Dedup` keys on `(kind, vendor, unit, status)` inside a 12-hour bucket in workflow static data. Static data persists on production executions only, which is why the verification step for this gate uses an activated schedule rather than the manual run button.
+
+**Clay retries a failed HTTP column and double-counts the row.** Guard: `Clay Ledger Append` dedups on `table::rowId` and returns `duplicate: true` on the second delivery.
+
+## What this replaces
+
+The status quo is three dashboards checked at three different cadences by whoever remembers. That catches an overrun eventually and almost never catches a forfeit, because nothing in a vendor dashboard counts down to your cycle boundary against your run rate.
+
+A SaaS spend-management tool (Vertice, Zylo, Cledara) is the wrong instrument here rather than a worse one. It tracks the invoice — contract value, renewal date, seat count. It has no view of Data Credits against Actions, no view of which provider inside a waterfall got expensive, and no denominator of verified records. It answers "what did we pay Clay" and this flow answers "what did a usable record cost us and is the allowance going to be wasted."
+
+Building the same thing as scheduled SQL over a warehouse is a legitimate alternative and is the better pick once enrichment events already land in the warehouse through your pipeline. The n8n version wins when they do not, because the row-event webhook and the CSV ingest give you an event stream and a reconciliation source without standing up ingestion first.

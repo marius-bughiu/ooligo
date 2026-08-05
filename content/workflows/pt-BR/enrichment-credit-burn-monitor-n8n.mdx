@@ -1,0 +1,80 @@
+---
+slug: enrichment-credit-burn-monitor-n8n
+canonical_slug: enrichment-credit-burn-monitor-n8n
+locale: pt-BR
+verticals: [revops]
+title: Track enrichment credit burn across Clay, Apollo, and ZoomInfo before the allowance expires
+artifact_type: n8n-flow
+tools_used: [clay, apollo, zoominfo, n8n, slack]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 2-3 hours
+human_tested: false
+last_updated: "2026-08-05"
+---
+
+Um fluxo do [n8n](/pt-BR/tools/n8n/) que puxa o consumo de créditos do [Clay](/pt-BR/tools/clay/), do [Apollo](/pt-BR/tools/apollo/) e do [ZoomInfo](/pt-BR/tools/zoominfo/), converte isso em custo por registro verificado e posta no [Slack](/pt-BR/tools/slack/) quando acontece qualquer uma das duas coisas caras: o gasto por registro útil subindo, ou o saldo indo sem uso até uma data de expiração. O bundle em `apps/web/public/artifacts/enrichment-credit-burn-monitor-n8n/` traz o export completo do n8n mais um `_README.md` cobrindo import, configuração de credenciais, a tabela de variáveis de ambiente, a verificação por branch e quanto o próprio monitoramento custa.
+
+## Quando usar
+
+Use quando o gasto com enriquecimento entre dois ou mais fornecedores de dados já passou do ponto em que alguém consegue guardar na cabeça — na prática, quando o compromisso anual combinado passa dos US$ 30.000 e pelo menos um fornecedor cobra num ciclo que você pode estourar. Nesse tamanho os dois modos de falha deixam de ser teóricos. Uma coluna de waterfall adiciona em silêncio um provider pago e o custo por registro verificado sobe 40% sem nenhuma mudança na qualidade do resultado. Ou o hiring do Q4 atrasa, o volume de outbound cai e 9.000 Clay Actions expiram na virada do ciclo porque ninguém estava olhando o ritmo de consumo contra o calendário.
+
+Serve para times que já rodam enriquecimento por automação e não na mão — um [pipeline de enriquecimento com Clay](/pt-BR/workflows/lead-enrichment-clay-claude/) ou uma [montagem de lista ICP](/pt-BR/workflows/icp-account-list-builder-clay/) — porque é ali que o crédito vai embora e onde dá para emitir um evento por linha sem encanamento extra.
+
+O denominador é o ponto. O total de créditos queimados é um número que seu fornecedor já mostra. Créditos queimados por registro que sobreviveu à verificação é o número que diz se uma troca de provider te deixou mais pobre, e nenhum dashboard de fornecedor calcula isso porque nenhum fornecedor sabe quais das suas linhas passaram na sua etapa de verificação.
+
+## Quando NÃO usar
+
+Pule se você roda um único fornecedor num plano fixo sem excedente. Um dashboard conferido uma vez por mês responde a mesma pergunta com custo de construção zero.
+
+Pule se você não tem etapa de verificação. Custo por registro verificado precisa de uma marca de verificado em cada linha — uma checagem de entregabilidade, um filtro de catch-all, uma coluna de QA. Sem isso o fluxo calcula custo por registro *enriquecido*, que os fornecedores já reportam, e o alerta de desvio perde o sentido.
+
+Pule especificamente a branch de eventos por linha do Clay se o volume é alto e a necessidade de atribuição é baixa. Cada evento de linha custa 1 Clay Action, porque requisições HTTP consomem Actions no modelo de preços do Clay de março de 2026. Num mês de 20.000 linhas contra o allowance de 40.000 Actions do plano Growth, instrumentar cada linha gasta metade do allowance para medir a outra metade. Instrumente as duas ou três tabelas cujo gasto você precisa atribuído e deixe o export CSV cobrir o resto.
+
+## Por que cada fornecedor é ligado de um jeito diferente
+
+Essa é a parte que determina se o fluxo reporta números ou ficção, e depende do que cada fornecedor de fato expõe.
+
+**ZoomInfo** é o único com um endpoint de uso de verdade. `GET /gtm/data/v1/users/usage` devolve linhas com `limitType`, `totalLimit`, `currentUsage` e `usageRemaining`, onde `limitType` separa `request` (throughput) de `record` e `uniqueID` (o que é cobrado). O `Parse ZoomInfo Usage` preserva essa divisão e precifica só as linhas cobráveis. A resposta não tem data de reset, então o fim do contrato é configuração, não descoberta.
+
+**Apollo** expõe `POST /api/v1/usage_stats/api_usage_stats`, que custa 0 créditos e devolve contadores por endpoint de `limit`, `consumed` e `left_over` em janelas de dia, hora e minuto. Esses contam requisições, não créditos. A própria documentação do Apollo torna a conversão imprecisa nos dois sentidos: enriquecimento de pessoas cobra 1 crédito por dados demográficos ou email mais 8 quando volta um telefone celular, e `/people/bulk_match` aceita até dez pessoas por requisição. Uma requisição vale entre 0 e 90 créditos. Por isso o `Derive Apollo Credits` emite `derivedCreditFloor` e `derivedCreditCeiling` e marca o ponto médio como `estimated: true`, em vez de publicar um único número errado com confiança.
+
+**Clay** não publica nenhum endpoint de saldo de créditos. O uso fica em Settings → Usage com quebras por workbook e tabela, por integração e por sinal, mais export CSV. O fluxo lê esse export de uma URL que você controla e mantém um ledger paralelo por linha alimentado por uma coluna HTTP API do Clay — esse ledger é o único lugar onde existe uma marca `verified`.
+
+Um número do fluxo é escolha de modelagem e não fato do fornecedor, e a página não vai fingir o contrário: a mensalidade de um plano do Clay compra Data Credits e Actions juntos, e o Clay não precifica nenhum dos dois separadamente. `CLAY_DATA_CREDIT_COST_SHARE` divide a mensalidade, com 70/30 por padrão. No Growth (US$ 495 por mês por 6.000 Data Credits e 40.000 Actions, segundo a página de preços do Clay conferida em 2026-08-05) isso coloca o Data Credit em US$ 0,0578 e a Action em US$ 0,0037. Mude a divisão e todo valor em dólares abaixo se move junto.
+
+## Setup
+
+1. **Importe o bundle.** `apps/web/public/artifacts/enrichment-credit-burn-monitor-n8n/enrichment-credit-burn-monitor-n8n.json` no n8n via **Workflows → Import from File**. Três pontos de entrada: um schedule de hora em hora para os dois fornecedores consultáveis por API, um reconcile diário às 07:00 para o export do Clay e as duas projeções, e um webhook em `/webhook/clay-credit-event` para os eventos de linha.
+
+2. **Defina o timezone do workflow.** Settings → Timezone (o export vem com `America/New_York`) e `Execution Order` em `v1`. As duas expressões cron leem esse fuso, e o disparo das 07:00 decide em qual dia do calendário cai a virada do ciclo.
+
+3. **Preencha as datas de ciclo.** `CLAY_CYCLE_END`, `APOLLO_CYCLE_END` e `ZOOMINFO_CONTRACT_END`, cada uma em `YYYY-MM-DD`. Nenhum fornecedor aqui devolve a própria data de reset. Deixar uma sem valor desativa a projeção de expiração daquele fornecedor e diz isso no item — o fluxo não assume mês calendário.
+
+4. **Configure os preços unitários que você tiver.** `APOLLO_CREDIT_USD` e `ZOOMINFO_RECORD_USD` vêm do seu contrato; nenhum dos dois fornecedores publica preço de tabela por unidade. Sem valor, as branches de consumo por unidade e de expiração continuam funcionando e só a branch de desvio fica em silêncio.
+
+5. **Conecte duas credenciais.** Uma credencial OAuth2 do ZoomInfo (`PLACEHOLDER_ZOOMINFO_OAUTH2_CRED_ID`) e uma credencial de app do Slack (`PLACEHOLDER_SLACK_CRED_ID`) com `chat:write`. A master key do Apollo fica em `APOLLO_MASTER_API_KEY` — o endpoint de usage-stats rejeita chaves que não são master.
+
+6. **Rode a verificação de cinco passos do `_README.md` antes de ativar qualquer schedule.** O passo 1 é o que mais importa: quebre a credencial do ZoomInfo de propósito e confirme que o parser emite `ok: false, reason: 'auth_401'` em vez de `used: 0`.
+
+## Modos de falha e guardas
+
+**Uma credencial expirada é lida como gasto zero.** Um 401 que vira um registro de uso de 0 é pior que uma queda, porque todo threshold abaixo lê isso como "o gasto parou" e fica quieto. Guarda: os nós HTTP rodam com `neverError` e `fullResponse` para que os status codes cheguem ao parser como dado, e o `Parse ZoomInfo Usage` emite um registro de saúde em 401, 403 e 429 e nenhum registro de uso.
+
+**Um export do Clay desatualizado é indistinguível de um congelamento de gasto.** Os dois parecem números diários planos. Guarda: o `Parse Clay Usage CSV` carimba a idade do export e marca como `stale` tudo que passa de `CLAY_EXPORT_STALE_HOURS` (36 por padrão), o que roteia para o canal de warning como mensagem de saúde do poll em vez de alimentar a linha de base de 28 dias.
+
+**Uma coluna renomeada no export zera a branch do Clay em silêncio.** Fornecedores renomeiam headers de CSV sem aviso. Guarda: o parser confere as colunas de que precisa e lança erro com a linha de headers que realmente viu, em vez de assumir 0 para as colunas ausentes.
+
+**Denominadores pequenos explodem o custo por registro verificado.** Doze linhas verificadas num domingo parado produzem um número aritmeticamente correto e operacionalmente inútil. Guarda: `CPVR_MIN_VERIFIED` (250 por padrão) precisa ser atingido nas janelas de 7 e de 28 dias antes que o desvio possa disparar; abaixo disso o nó devolve `status: 'insufficient_data'`.
+
+**O poll de hora em hora transforma um problema em 24 alertas.** Guarda: o `Alert Gate + Dedup` usa como chave `(kind, vendor, unit, status)` dentro de um bucket de 12 horas na static data do workflow. Static data só persiste em execuções de produção, e por isso o passo de verificação dessa guarda usa um schedule ativado e não o botão de execução manual.
+
+**O Clay repete uma coluna HTTP que falhou e conta a linha duas vezes.** Guarda: o `Clay Ledger Append` deduplica por `table::rowId` e devolve `duplicate: true` na segunda entrega.
+
+## O que isso substitui
+
+O status quo são três dashboards conferidos em três cadências diferentes por quem lembrar. Isso pega um estouro cedo ou tarde e quase nunca pega um desperdício por expiração, porque nada no dashboard de um fornecedor faz contagem regressiva até a sua virada de ciclo contra o seu ritmo de consumo.
+
+Uma ferramenta de gestão de gasto SaaS (Vertice, Zylo, Cledara) é o instrumento errado aqui, mais do que um instrumento pior. Ela rastreia a fatura — valor de contrato, data de renovação, número de assentos. Não enxerga Data Credits contra Actions, não enxerga qual provider dentro de um waterfall ficou caro, e não tem denominador de registros verificados. Ela responde "quanto pagamos ao Clay" e este fluxo responde "quanto custou um registro usável e se o saldo vai ser desperdiçado".
+
+Construir a mesma coisa como SQL agendado sobre um warehouse é uma alternativa legítima e é a melhor escolha quando os eventos de enriquecimento já caem no warehouse pelo seu pipeline. A versão em n8n ganha quando não caem, porque o webhook de eventos de linha e a ingestão do CSV te dão um stream de eventos e uma fonte de reconciliação sem subir a ingestão antes.

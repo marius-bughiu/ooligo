@@ -1,0 +1,80 @@
+---
+slug: enrichment-credit-burn-monitor-n8n
+canonical_slug: enrichment-credit-burn-monitor-n8n
+locale: de
+verticals: [revops]
+title: Track enrichment credit burn across Clay, Apollo, and ZoomInfo before the allowance expires
+artifact_type: n8n-flow
+tools_used: [clay, apollo, zoominfo, n8n, slack]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 2-3 hours
+human_tested: false
+last_updated: "2026-08-05"
+---
+
+Ein [n8n](/de/tools/n8n/)-Workflow, der den Credit-Verbrauch aus [Clay](/de/tools/clay/), [Apollo](/de/tools/apollo/) und [ZoomInfo](/de/tools/zoominfo/) zieht, ihn in Kosten pro verifiziertem Datensatz umrechnet und in [Slack](/de/tools/slack/) meldet, sobald eine der beiden teuren Situationen eintritt: Ausgaben pro nutzbarem Datensatz steigen, oder ein Kontingent läuft ungenutzt in ein Ablaufdatum. Das Bundle unter `apps/web/public/artifacts/enrichment-credit-burn-monitor-n8n/` enthält den vollständigen n8n-Export plus eine `_README.md` zu Import, Credential-Einrichtung, Umgebungsvariablen-Tabelle, Verifikation pro Zweig und den Kosten des Monitorings selbst.
+
+## Wann Sie das einsetzen
+
+Setzen Sie es ein, sobald die Enrichment-Ausgaben über zwei oder mehr Datenanbieter den Punkt überschritten haben, an dem sie noch jemand im Kopf behält — praktisch also, wenn die kombinierte Jahresverpflichtung rund 30.000 US-Dollar übersteigt und mindestens ein Anbieter über einen Zyklus abrechnet, den Sie überziehen können. In dieser Größenordnung sind die beiden Fehlerfälle nicht mehr theoretisch. Eine Waterfall-Spalte nimmt still einen kostenpflichtigen Anbieter auf, und die Kosten pro verifiziertem Datensatz steigen um 40%, ohne dass sich an der Ergebnisqualität etwas ändert. Oder das Hiring in Q4 verschiebt sich, das Outbound-Volumen sinkt, und 9.000 Clay Actions verfallen zum Zyklusende, weil niemand die Verbrauchsrate gegen den Kalender geprüft hat.
+
+Er passt zu Teams, die Enrichment bereits automatisiert fahren statt manuell — eine [Clay-Enrichment-Pipeline](/de/workflows/lead-enrichment-clay-claude/) oder ein [ICP-Listenaufbau](/de/workflows/icp-account-list-builder-clay/) — denn dort geht das Guthaben hin, und dort lässt sich ein Event pro Zeile ohne zusätzliche Infrastruktur auslösen.
+
+Der Nenner ist der Kern. Die Summe verbrauchter Credits zeigt Ihr Anbieter ohnehin an. Credits pro Datensatz, der die Verifikation überstanden hat, ist die Zahl, die Ihnen sagt, ob ein Anbieterwechsel Sie ärmer gemacht hat — und kein Anbieter-Dashboard berechnet sie, weil kein Anbieter weiß, welche Ihrer Zeilen Ihren Verifikationsschritt bestanden haben.
+
+## Wann Sie das NICHT einsetzen
+
+Lassen Sie es, wenn Sie einen einzigen Anbieter auf einem Flat-Tarif ohne Überziehung nutzen. Ein Dashboard, einmal im Monat geprüft, beantwortet dieselbe Frage ohne Bauaufwand.
+
+Lassen Sie es, wenn Sie keinen Verifikationsschritt haben. Kosten pro verifiziertem Datensatz brauchen eine Verifikations-Markierung je Zeile — eine Zustellbarkeitsprüfung, einen Catch-all-Filter, eine QA-Spalte. Ohne die rechnet der Workflow Kosten pro *angereichertem* Datensatz, was die Anbieter bereits melden, und der Drift-Alarm verliert seine Aussage.
+
+Lassen Sie speziell den Clay-Zeilenevent-Zweig weg, wenn Ihr Volumen hoch und Ihr Attributionsbedarf gering ist. Jedes Zeilen-Event kostet 1 Clay Action, weil HTTP-Requests im Clay-Preismodell von März 2026 Actions verbrauchen. In einem Monat mit 20.000 Zeilen gegen das Growth-Kontingent von 40.000 Actions verbraucht die Instrumentierung jeder Zeile die Hälfte des Kontingents, um die andere Hälfte zu messen. Instrumentieren Sie die zwei oder drei Tabellen, deren Ausgaben Sie zuordnen müssen, und überlassen Sie den Rest dem CSV-Export.
+
+## Warum jeder Anbieter anders verdrahtet ist
+
+Das ist der Teil, der darüber entscheidet, ob der Workflow Zahlen oder Fiktion meldet, und er hängt davon ab, was jeder Anbieter tatsächlich offenlegt.
+
+**ZoomInfo** ist der einzige mit einem echten Usage-Endpunkt. `GET /gtm/data/v1/users/usage` liefert Zeilen mit `limitType`, `totalLimit`, `currentUsage` und `usageRemaining`, wobei `limitType` zwischen `request` (Durchsatz) und `record` beziehungsweise `uniqueID` (das Abgerechnete) trennt. `Parse ZoomInfo Usage` erhält diese Trennung und bepreist nur die abrechenbaren Zeilen. Die Antwort enthält kein Reset-Datum, das Vertragsende ist also Konfiguration, keine Entdeckung.
+
+**Apollo** stellt `POST /api/v1/usage_stats/api_usage_stats` bereit, kostet 0 Credits und liefert Zähler pro Endpunkt für `limit`, `consumed` und `left_over` in Tages-, Stunden- und Minutenfenstern. Diese zählen Requests, nicht Credits. Apollos eigene Dokumentation macht die Umrechnung in beide Richtungen verlustbehaftet: Personen-Enrichment kostet 1 Credit für Demografie oder E-Mail plus 8 weitere, wenn eine Mobilnummer zurückkommt, und `/people/bulk_match` nimmt bis zu zehn Personen pro Request. Ein Request ist damit zwischen 0 und 90 Credits wert. Deshalb gibt `Derive Apollo Credits` `derivedCreditFloor` und `derivedCreditCeiling` aus und markiert den Mittelwert als `estimated: true`, statt eine einzelne selbstsichere Falschzahl zu veröffentlichen.
+
+**Clay** veröffentlicht überhaupt keinen Endpunkt für den Credit-Stand. Der Verbrauch liegt in Settings → Usage mit Aufschlüsselung nach Workbook und Tabelle, nach Integration und nach Signal, dazu CSV-Export. Der Workflow liest diesen Export von einer URL, die Sie kontrollieren, und führt ein paralleles Ledger pro Zeile, gespeist aus einer Clay-HTTP-API-Spalte — dieses Ledger ist der einzige Ort, an dem eine `verified`-Markierung existiert.
+
+Eine Zahl im Workflow ist eine Modellierungsentscheidung und keine Anbieterangabe, und die Seite tut nicht so, als wäre es anders: Eine Clay-Plangebühr kauft Data Credits und Actions gemeinsam, und Clay bepreist keines von beiden einzeln. `CLAY_DATA_CREDIT_COST_SHARE` teilt die Gebühr auf, standardmäßig 70/30. Bei Growth (495 US-Dollar pro Monat für 6.000 Data Credits und 40.000 Actions, laut Clay-Preisseite geprüft am 2026-08-05) liegt ein Data Credit damit bei 0,0578 US-Dollar und eine Action bei 0,0037 US-Dollar. Ändern Sie die Aufteilung, verschiebt sich jede nachgelagerte Dollarzahl mit.
+
+## Einrichtung
+
+1. **Bundle importieren.** `apps/web/public/artifacts/enrichment-credit-burn-monitor-n8n/enrichment-credit-burn-monitor-n8n.json` in n8n über **Workflows → Import from File**. Drei Einstiegspunkte: ein stündlicher Schedule für die beiden per API abfragbaren Anbieter, ein täglicher Reconcile um 07:00 für den Clay-Export und beide Prognosen, und ein Webhook unter `/webhook/clay-credit-event` für Zeilen-Events.
+
+2. **Workflow-Zeitzone setzen.** Settings → Timezone (der Export liefert `America/New_York`) mit `Execution Order` auf `v1`. Beide Cron-Ausdrücke lesen diese Zone, und der Auslösezeitpunkt 07:00 entscheidet, auf welchen Kalendertag eine Zyklusgrenze fällt.
+
+3. **Zyklusdaten eintragen.** `CLAY_CYCLE_END`, `APOLLO_CYCLE_END` und `ZOOMINFO_CONTRACT_END`, jeweils als `YYYY-MM-DD`. Kein Anbieter hier gibt sein eigenes Reset-Datum zurück. Bleibt eines leer, schaltet das die Ablaufprognose dieses Anbieters ab und vermerkt das im Item — der Workflow unterstellt keinen Kalendermonat.
+
+4. **Stückpreise setzen, wo Sie sie haben.** `APOLLO_CREDIT_USD` und `ZOOMINFO_RECORD_USD` stammen aus Ihrem Vertrag; keiner der beiden Anbieter veröffentlicht einen Listenpreis pro Einheit. Ohne Wert laufen die Zweige für Einheitenverbrauch und Ablauf weiter, nur der Drift-Zweig bleibt still.
+
+5. **Zwei Credentials verdrahten.** Ein ZoomInfo-OAuth2-Credential (`PLACEHOLDER_ZOOMINFO_OAUTH2_CRED_ID`) und ein Slack-App-Credential (`PLACEHOLDER_SLACK_CRED_ID`) mit `chat:write`. Der Apollo-Master-Key liegt in `APOLLO_MASTER_API_KEY` — der Usage-Stats-Endpunkt weist Nicht-Master-Keys ab.
+
+6. **Die fünfstufige Verifikation aus `_README.md` ausführen, bevor Sie einen Schedule aktivieren.** Schritt 1 wiegt am schwersten: Zerstören Sie das ZoomInfo-Credential absichtlich und prüfen Sie, dass der Parser `ok: false, reason: 'auth_401'` ausgibt statt `used: 0`.
+
+## Fehlerfälle und Absicherungen
+
+**Ein abgelaufenes Credential liest sich als Ausgabe von null.** Ein 401, der zu einem Usage-Datensatz mit 0 geparst wird, ist schlimmer als ein Ausfall, weil jeder nachgelagerte Schwellenwert das als „Ausgaben gestoppt" liest und verstummt. Absicherung: Die HTTP-Nodes laufen mit `neverError` und `fullResponse`, damit Statuscodes als Daten beim Parser ankommen, und `Parse ZoomInfo Usage` gibt bei 401, 403 und 429 einen Health-Datensatz aus und gar keinen Usage-Datensatz.
+
+**Ein veralteter Clay-Export ist von einem Ausgabenstopp nicht zu unterscheiden.** Beides sieht nach flachen Tageszahlen aus. Absicherung: `Parse Clay Usage CSV` stempelt das Alter des Exports und markiert alles jenseits von `CLAY_EXPORT_STALE_HOURS` (Standard 36) als `stale`, was es als Poll-Health-Meldung in den Warning-Channel leitet, statt die 28-Tage-Baseline zu füttern.
+
+**Eine umbenannte Export-Spalte setzt den Clay-Zweig still auf null.** Anbieter benennen CSV-Header ohne Ankündigung um. Absicherung: Der Parser prüft die benötigten Spalten und wirft einen Fehler mit der tatsächlich gelesenen Header-Zeile, statt fehlende Spalten auf 0 zu setzen.
+
+**Kleine Nenner lassen die Kosten pro verifiziertem Datensatz explodieren.** Zwölf verifizierte Zeilen an einem ruhigen Sonntag ergeben eine rechnerisch korrekte und operativ nutzlose Zahl. Absicherung: `CPVR_MIN_VERIFIED` (Standard 250) muss im 7-Tage- und im 28-Tage-Fenster erreicht sein, bevor Drift auslösen kann; darunter gibt der Node `status: 'insufficient_data'` zurück.
+
+**Stündliches Polling macht aus einem Problem 24 Alarme.** Absicherung: `Alert Gate + Dedup` schlüsselt auf `(kind, vendor, unit, status)` innerhalb eines 12-Stunden-Buckets in den Static Data des Workflows. Static Data überlebt nur Produktionsausführungen, weshalb der Verifikationsschritt dafür einen aktivierten Schedule nutzt und nicht den manuellen Ausführen-Button.
+
+**Clay wiederholt eine fehlgeschlagene HTTP-Spalte und zählt die Zeile doppelt.** Absicherung: `Clay Ledger Append` dedupliziert über `table::rowId` und gibt bei der zweiten Zustellung `duplicate: true` zurück.
+
+## Was das ersetzt
+
+Der Status quo sind drei Dashboards, die in drei verschiedenen Takten von dem geprüft werden, der daran denkt. Das fängt eine Überziehung irgendwann ab und einen Verfall fast nie, denn nichts in einem Anbieter-Dashboard zählt gegen Ihre Verbrauchsrate auf Ihre Zyklusgrenze herunter.
+
+Ein SaaS-Spend-Management-Tool (Vertice, Zylo, Cledara) ist hier das falsche Instrument, nicht bloß das schlechtere. Es verfolgt die Rechnung — Vertragswert, Verlängerungsdatum, Seat-Zahl. Es sieht weder Data Credits gegen Actions, noch welcher Anbieter innerhalb eines Waterfalls teuer geworden ist, und es hat keinen Nenner aus verifizierten Datensätzen. Es beantwortet „Was haben wir Clay gezahlt", dieser Workflow beantwortet „Was hat ein brauchbarer Datensatz gekostet, und wird das Kontingent verfallen".
+
+Dasselbe als geplantes SQL über ein Warehouse zu bauen ist eine legitime Alternative und die bessere Wahl, sobald Enrichment-Events über Ihre Pipeline ohnehin im Warehouse landen. Die n8n-Variante gewinnt, wenn sie das nicht tun, weil der Zeilen-Event-Webhook und die CSV-Aufnahme Ihnen einen Event-Stream und eine Abgleichsquelle liefern, ohne zuerst eine Ingestion aufzubauen.
