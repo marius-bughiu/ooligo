@@ -1,0 +1,87 @@
+---
+slug: warehouse-native-gtm-stack
+canonical_slug: warehouse-native-gtm-stack
+locale: es
+verticals: [revops]
+title: Stack GTM warehouse-native — activación sin una segunda copia de la verdad
+use_case: Un equipo de GTM que ya opera Snowflake o BigQuery y quiere que las definiciones de segmento vivan en dbt y no en el constructor de audiencias de un proveedor — con activación por reverse ETL en lugar de un CDP propiedad del proveedor.
+tools: [hightouch, clay, hubspot]
+difficulty: advanced
+related_workflows:
+  - icp-account-list-builder-clay
+  - lead-enrichment-clay-claude
+last_updated: "2026-08-06"
+---
+
+El warehouse ya contiene la definición de una cuenta calificada. Este stack evita que mantengas una segunda copia de esa definición dentro de una herramienta de marketing. Snowflake o BigQuery es dueño de la tabla modelada de clientes, [Hightouch](/es/tools/hightouch/) la sincroniza hacia afuera, [Clay](/es/tools/clay/) aporta los campos que el warehouse no puede producir por su cuenta, y [HubSpot](/es/tools/hubspot/) es donde una persona actúa sobre el resultado.
+
+El argumento para construirlo así no es gusto arquitectónico. Es que cualquier herramienta de GTM con su propio constructor de segmentos termina discrepando con dbt sobre quién cuenta como cliente, y reconciliar esas dos definiciones cada trimestre cuesta más de lo que la capa de activación cuesta al año. Calcula 6-10 semanas para ponerlo en pie, la mayor parte dedicada al modelo de datos y no a ninguna de las tres herramientas.
+
+## Cómo encajan las piezas
+
+- **El warehouse es la fuente de verdad.** Snowflake, BigQuery, Databricks o Redshift — el stack es agnóstico respecto a cuál, con una salvedad en Variaciones más abajo. Tus modelos dbt producen una tabla a nivel de cuenta con los campos sobre los que GTM realmente actúa: tier de ICP, fit score, estado de uso de producto, flag de pipeline abierto. Nada aguas abajo define un segmento. Las herramientas aguas abajo leen uno. Esta es la capa que hace defendible el resto del stack ante un directorio, y también es la capa que nadie te vende.
+
+- **[Hightouch](/es/tools/hightouch/) es el bus de activación.** Escribes SQL contra el warehouse, defines un sync y las filas aterrizan como campos en HubSpot, audiencias en plataformas de anuncios o perfiles en herramientas de ciclo de vida — sin una segunda copia de los datos de cliente en el almacenamiento de un proveedor. El tier gratuito Basic Reverse ETL está limitado a 2 syncs activos pero incluye destinos ilimitados y asientos de usuario ilimitados; el tier pago Composable CDP mide por monthly tracked rows y no por asientos, y por eso un equipo de growth de 40 personas cuesta lo mismo que uno de 4 con igual volumen. Un detalle de aprovisionamiento que conviene resolver durante la prueba: la documentación de Hightouch indica que el servidor MCP propio no está habilitado en todos los workspaces y hay que solicitarlo, aunque no tenga costo adicional.
+
+- **[Clay](/es/tools/clay/) es quien llena los huecos.** El warehouse guarda lo que observaste. Clay aporta lo que nunca viste: firmográficos, cambios de headcount, tecnográficos, cambios de trabajo. Su integración con Snowflake incluye las acciones Insert Row, Lookup Row y Upsert Row, así que una corrida de enriquecimiento escribe de vuelta en una tabla de staging en vez de terminar en una tabla de Clay que nadie más lee. A agosto de 2026, la página de integración de Clay con BigQuery sigue marcada como Coming Soon — esa asimetría decide tu plomería, no tu arquitectura.
+
+- **[HubSpot](/es/tools/hubspot/) es la capa de acción, no la capa de verdad.** Asignación de dueño, enrolamiento en secuencias, etapas de deal, tareas. La disciplina operativa que sostiene este stack: cualquier propiedad de HubSpot escrita por un sync de Hightouch queda fuera del alcance de la edición manual. Si un rep puede sobrescribir `icp_tier` en la UI del CRM, vuelves a tener dos fuentes de verdad y toda la premisa se cae. Bloquea esas propiedades desde el primer día.
+
+### Handoffs con nombre
+
+1. **Del modelo al CRM.** dbt materializa `gtm_accounts` → el sync de Hightouch lo lee → se actualizan las propiedades de compañía en HubSpot (`icp_tier`, `fit_score`, `next_best_action`). Solo las filas que cambiaron deberían facturar contra el medidor de tracked rows, y eso es una propiedad de tu modelo, no de Hightouch.
+2. **Del hueco al enriquecimiento.** Una vista del warehouse con cuentas sin firmográficos → Clay Lookup Row o importación de tabla → corrida de enriquecimiento → Clay Upsert Row escribe en `clay_enrichment_staging` → dbt lo mergea al modelo de cuentas → el siguiente sync de Hightouch lleva los campos nuevos hacia afuera.
+3. **Del cambio de propiedad a la acción comercial.** `icp_tier` pasa a Tier 1 → un workflow de HubSpot asigna dueño e inscribe al contacto en la secuencia correspondiente. Este handoff vive por completo dentro de HubSpot; la responsabilidad de Hightouch terminó en la escritura.
+4. **Del resultado de vuelta al warehouse.** Etapa del deal, resultado de la secuencia y estado closed-won regresan al warehouse para que la siguiente corrida del modelo puntúe contra resultados y no contra suposiciones. Esta es la pata donde la decisión de tier que sigue pega más fuerte.
+
+## Por qué esta combinación
+
+La alternativa obvia es quitar Hightouch y usar el propio sync de warehouse de HubSpot en ambas direcciones. Haz las cuentas antes. La documentación de HubSpot deja el sync de Snowflake detrás de Data Hub o Smart CRM en nivel Enterprise más HubSpot Credits, dice explícitamente que los syncs corren por schedule y no se actualizan en tiempo real, y limita una tabla o vista origen a 10 GB, 200 columnas y 30 millones de registros por corrida. Data Hub Enterprise lista a $2,000/mes. La opción de casa cuesta entonces $24,000 al año, es solo programada y sirve exactamente a un destino — el CRM que ya tienes.
+
+El contrato anual mediano de Hightouch es de $15,000 sobre 170 compras analizadas, según Vendr, con un rango de $9,600 a $75,000 y un descuento promedio de 26% sobre lista. Por menos que la subida de tier de HubSpot obtienes la pata del CRM más todos los destinos de anuncios, ciclo de vida y soporte de un catálogo de más de 300 integraciones. La comparación solo favorece a HubSpot si el CRM es de verdad tu único destino para siempre — y en ese caso no necesitas este stack en absoluto.
+
+La segunda razón es que cada capa hace exactamente un trabajo. El warehouse define, Hightouch mueve, Clay llena, HubSpot actúa. Cuando un número está mal, hay un solo lugar donde mirar. Los stacks que difuminan esas fronteras — un CDP que además modela, un CRM que además enriquece — producen el modo de falla donde tres herramientas sostienen cifras de ingresos levemente distintas y nadie puede decir cuál es la correcta.
+
+## La realidad del costo
+
+Bandas anuales para un equipo B2B mid-market de 10 asientos con volumen moderado:
+
+- **Warehouse (solo el incremento):** BigQuery publica $6.25 por TiB escaneado on-demand en la multirregión de EE. UU. y $0.06 por slot-hora en su edición Enterprise. Snowflake no muestra precio de lista estático en su página de precios — las tarifas varían por plataforma y región — y los rastreadores de terceros ubican Standard cerca de $2.00-$2.50 por crédito y Enterprise cerca de $3.00. Trata la activación GTM como un incremento sobre una factura existente, realistamente $2K-$12K al año, impulsado mucho más por la frecuencia de sync que por el conteo de filas.
+- **Hightouch:** $15,000/año de mediana según Vendr. La misma fuente ubica las bandas cerca de $1,000-$2,500/mes hasta 100,000 monthly tracked rows y $2,500-$8,000/mes de 100,000 a 1 millón. Nada más allá del tier gratuito está publicado, así que toda cifra aquí viene de compradores y no de una cotización del proveedor.
+- **Clay:** Launch es $185/mes ($167 facturado anual), Growth es $495/mes ($446 facturado anual), tras el cambio de precios del 11 de marzo de 2026 que dividió la facturación en Data Credits y Actions. Los equipos self-serve aterrizan en $2,000-$5,400 al año; los contratos Enterprise se han reportado alrededor de una mediana de $30,000 al año.
+- **HubSpot:** Sales Hub Professional cuesta $90/asiento/mes facturado anual ($100 facturado mensual), o sea $10,800 al año por 10 asientos, más una tarifa única de onboarding de $1,500. Enterprise es $150/asiento/mes.
+
+**Total: aproximadamente $30K-$60K al año** para 10 asientos, con Hightouch como la línea más grande. Suma $24,000 si además compras Data Hub Enterprise — cosa que, si estás comprando Hightouch, en general no deberías hacer.
+
+Los costos que no aparecen en ninguna factura: la construcción y el mantenimiento continuo de los modelos dbt, que es el precio real de entrada; el cómputo del warehouse atribuible a schedules de sync fijados por costumbre y no por necesidad del negocio; y los top-ups de Clay, que facturan por encima de tu tarifa de plan una vez que cualquiera de los dos medidores se agota.
+
+## Reglas de match
+
+**Usa este stack cuando:**
+
+- Ya tienes un warehouse en producción con una tabla modelada de cuentas o clientes. La activación no crea datos; comprarla antes de tener un modelo es pagar por un tubo vacío.
+- Alguien es dueño del proyecto dbt y seguirá siéndolo dentro de un año. Este stack tiene un responsable con nombre o se degrada.
+- Tienes dos o más destinos de activación, o los esperas dentro de 12 meses. Un solo destino no justifica un bus de activación.
+- Puedes señalar una definición de segmento que hoy existe tanto en dbt como en la UI de un proveedor, y nombrar la última vez que discreparon. Ese es el dolor específico que este stack elimina.
+
+**No uses este stack cuando:**
+
+- No tienes warehouse. Compra un CDP empaquetado que recoja eventos por sí mismo; necesitas ingesta e identidad antes que activación.
+- HubSpot es tu único destino y seguirá siéndolo. El sync nativo de Snowflake de HubSpot es más lento y está limitado por tier, pero es un proveedor y una factura.
+- Nadie en el equipo escribe SQL. El patrón warehouse-native cambia UI de proveedor por SQL, y ese intercambio solo es bueno si puedes hacerlo.
+- Estás pre-product-market-fit y todavía aprendiendo qué señales predicen conversión. Este stack operativiza una definición de buena cuenta; no la descubre.
+
+## Variaciones comunes
+
+- **BigQuery en lugar de Snowflake.** Todo se mantiene excepto la pata de Clay — el conector nativo de BigQuery aún no está disponible, así que enruta el enriquecimiento por un sync de Hightouch hacia la HTTP API de Clay (plan Growth en adelante) y haz que Clay escriba de vuelta por el mismo camino. Agrega un salto y no cambia nada del modelo de datos. Vuelve a las acciones nativas si y cuando el conector salga.
+- **Salesforce en lugar de HubSpot.** El swap correcto cuando el área de compras del cliente o un org de Salesforce existente lo imponen. El catálogo de destinos de Hightouch lo cubre igual, así que la capa de activación no se altera; lo que cambia es que la propia oferta de data cloud de Salesforce competirá por el mismo presupuesto, y no será más barata.
+- **Sacar Clay.** Si el enriquecimiento firmográfico ya llega al warehouse — un data share de ZoomInfo o Clearbit, o un feed de proveedor que tu equipo de datos ya ingiere — Clay es redundante aquí y es la línea más prescindible del stack. Consérvalo solo si la investigación con AI por cuenta hace un trabajo que un feed masivo no puede.
+- **Fivetran Census en lugar de Hightouch.** Fivetran adquirió Census en mayo de 2025 y lo integró como Fivetran Activations. Elígelo si ya compras Fivetran para ingesta y quieres una sola factura; elige Hightouch si la activación es la mitad más difícil de tu problema, donde el catálogo de destinos y las capas de identidad son más profundos.
+
+## Lo que este stack NO reemplaza
+
+- Los modelos dbt. Hightouch difunde la definición que le entregues, a 300 destinos, con fidelidad y rapidez. Una definición equivocada se equivoca en todas partes.
+- La ingesta. Fivetran, Airbyte o conectores nativos meten los datos al warehouse; este stack empieza después de que aterrizan y no hace nada por traerlos.
+- La resolución de identidad que no hiciste. Si una persona aparece tres veces entre producto, facturación y CRM, la activación sincronizará las tres.
+- Un motor de demanda. Paid, contenido y outbound producen las cuentas que este stack puntúa y enruta; procesa volumen, no lo crea.
+- Conversation intelligence y metodología de ventas. Una vez que la secuencia se dispara y se agenda una reunión, este stack no tiene más opinión — mira [Gong](/es/tools/gong/) para lo que viene después.
