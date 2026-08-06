@@ -1,0 +1,75 @@
+---
+slug: mcp-server-outreach-revops
+canonical_slug: mcp-server-outreach-revops
+locale: fr
+verticals: [revops]
+title: MCP server exposing Outreach sequences and prospects to Claude
+artifact_type: mcp-server
+tools_used: [outreach, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: "45-90 min"
+human_tested: false
+last_updated: "2026-08-06"
+---
+
+Un serveur Model Context Protocol qui donne à [Claude](/fr/tools/claude/) une fenêtre en lecture seule sur votre organisation [Outreach](/fr/tools/outreach/) : performance des séquences, ce qui est bloqué en milieu de séquence, recherche de prospects et historique d'engagement d'un prospect. Votre manager SDR demande dans le chat « qu'est-ce qui est en pause dans la séquence enterprise du T3, et pourquoi ? » et reçoit des lignes accompagnées des motifs de pause, depuis un processus qui ne possède aucun chemin de code capable de modifier quoi que ce soit. Le scaffold se trouve dans `apps/web/public/artifacts/mcp-server-outreach-revops/` — un `README.md`, un `pyproject.toml` et `src/outreach_revops_mcp/server.py`, installable avec `pip install -e .`.
+
+Lisez la section suivante avant de construire quoi que ce soit, car Outreach en livre déjà un.
+
+## Quand l'utiliser
+
+Outreach héberge son propre MCP server sur `https://api.outreach.io/mcp/`. Il authentifie via OAuth 2.1 avec une identité au niveau utilisateur, suit le standard d'autorisation MCP publié le 2025-11-11 et expose des outils dans six catégories : workflow, prospection, comptes, deals, utilisateurs et calendrier. Il exige l'add-on Amplify activé sur le siège plus un interrupteur administrateur dans les paramètres de l'organisation, et il se limite à la lecture, la création et la suppression : Outreach exclut délibérément la mise à jour des enregistrements existants, au motif que le comportement du modèle lors de l'édition d'enregistrements existants est imprévisible (documentation éditeur, portail de support Outreach).
+
+**Pour la plupart des équipes, le serveur hébergé est la bonne réponse et ce scaffold est du travail perdu.** Activez-le, connectez-le, passez à autre chose. Construisez le vôtre quand l'une de ces quatre conditions est vraie.
+
+**L'agent ne doit pas pouvoir supprimer un prospect.** La catégorie prospection du serveur hébergé inclut la création et la suppression. La suppression est la seule opération Outreach sans annulation et sans copie locale — un prospect supprimé emporte son historique de séquences avec lui. Le scaffold n'a ni `POST`, ni `PATCH`, ni `DELETE` nulle part dans sa table de dispatch, donc une instruction qui atteint le modèle via le champ notes du prospect lui-même n'a rien à appeler. C'est une propriété structurelle, pas une règle que quelqu'un doit faire respecter.
+
+**Vous avez besoin d'une identité de compte de service.** Le serveur hébergé tourne sous l'identité de l'humain connecté, avec les permissions de cet humain. Un agent branché sur un canal Slack, sur un job de reporting nocturne ou sur un workflow que toute l'équipe déclenche n'a aucun humain individuel derrière lui, et une autorisation OAuth par utilisateur ne sait pas exprimer « moins que ce que voit n'importe quelle personne ».
+
+**Amplify n'est pas sur tous les sièges.** Le serveur hébergé dépend de l'add-on. Les recherches tarifaires de tiers situent les paliers Amplify 2026 autour de $100, $130 et $160 par utilisateur et par mois pour Core, Plus et Pro — Outreach ne publie pas ces chiffres, traitez-les donc comme des fourchettes rapportées et non comme des devis. Une application OAuth standard contre l'API publique ne connaît pas ce verrou, une organisation de 40 sièges peut donc répondre à des questions sur les séquences dans le chat sans acheter Amplify pour 40 personnes.
+
+**Vous voulez des lectures agrégées.** `get_sequence_performance` répond à « comment se comporte cette séquence ? » en une seule requête, contre des compteurs qu'Outreach maintient lui-même.
+
+## Quand NE PAS l'utiliser
+
+- **Vous n'avez aucune raison d'écarter le serveur hébergé.** Répété parce que c'est l'erreur la plus fréquente ici : la valeur par défaut est le serveur d'Outreach, et quatre cas étroits constituent tout l'argument en faveur d'autre chose.
+- **Les données prospects ne peuvent pas atteindre un LLM.** Chaque ligne renvoyée fait entrer dans la conversation des noms, des emails professionnels, des intitulés de poste et un historique d'engagement. `OUTREACH_ALLOWED_SEQUENCE_IDS` réduit la surface, il ne l'élimine pas. Si votre politique interdit les données de contact dans un modèle tiers, aucun des deux serveurs n'est le bon projet.
+- **Vous voulez que l'agent exécute des séquences.** Ajouter des prospects à des séquences, les mettre en pause, envoyer des mailings : rien de tout cela n'est ici, par conception. Utilisez le serveur hébergé, qui sait créer, ou l'interface Outreach.
+- **La question est un export de masse.** Chaque outil plafonne à 100 lignes et renvoie une page. Une consolidation trimestrielle sur toutes les séquences est un script contre `/api/v2/sequences` avec pagination, relu comme un fichier. Le chat est la mauvaise interface pour 4 000 lignes.
+
+## Ce qu'il expose
+
+Cinq outils, tous en lecture.
+
+- **`list_sequences`** appelle `GET /sequences` trié par `-lastUsedAt` et renvoie les compteurs d'engagement de chaque séquence. C'est l'étape de recherche d'id avant tout le reste.
+- **`get_sequence_performance`** appelle `GET /sequences/{id}` et ajoute un bloc `derived` : taux de réponse par prospect, taux de bounce et taux d'opt-out, avec les compteurs bruts sous `_basis` pour qu'un humain puisse vérifier le calcul contre l'interface Outreach.
+- **`find_stalled_sequence_states`** appelle `GET /sequenceStates` filtré sur `state`, en incluant `prospect` et `sequence`, trié par `-stateChangedAt`. Il fait passer `pauseReason` et `errorReason`, pour que « qu'est-ce qui est bloqué » revienne avec le motif plutôt qu'avec un décompte.
+- **`search_prospects`** appelle `GET /prospects` avec une projection fixe de 15 champs et calcule un `contactable_count` qui exclut les enregistrements en opt-out.
+- **`get_prospect_engagement`** appelle `GET /prospects/{id}` plus `GET /mailings` filtré sur ce prospect, livrant les horodatages de délivrance, ouverture, clic, réponse et bounce des dix derniers envois.
+
+## Posture d'ingénierie
+
+Trois décisions dans `server.py` portent le poids.
+
+**Chaque requête embarque un sparse fieldset explicite.** La ressource prospect d'Outreach définit 230 attributs, dont 150 vont de `custom1` à `custom150` (vérifié contre la définition OpenAPI de l'organisation sur `https://api.outreach.io/api/v2/schema/openapi.json`). La réponse par défaut est majoritairement composée de valeurs nulles, et vous payez des tokens pour toutes, sur chaque ligne. `PROSPECT_FIELDS` projette sur 15. Les champs custom sont écartés délibérément : ces emplacements sont là où les organisations garent des fourchettes de rémunération, des conditions contractuelles et des notes que personne ne comptait publier, et un champ nommé `custom17` ne donne au modèle aucun moyen de savoir ce qu'il lit.
+
+**Les clés de filtre sont vérifiées avant que la requête ne parte.** Outreach marque comme filtrable un sous-ensemble des attributs de chaque ressource — 17 des 230 du prospect. Un filtre non supporté n'est pas rejeté côté éditeur. Le paramètre est ignoré, un 200 revient avec la collection entière, et le modèle rapporte le décompte de toute l'organisation comme s'il s'agissait de la réponse filtrée. `_check_filters()` refuse toute clé hors du jeu vérifié et renvoie la liste autorisée, plus une note sur les erreurs courantes : `company`, `optedOut` et `emailOptedOut` du prospect sont renvoyés mais aucun n'est filtrable. C'est pourquoi `search_prospects` calcule `contactable_count` côté client au lieu de faire semblant qu'un filtre existe.
+
+**Le taux de réponse est calculé par prospect, pas par message.** `_rates()` divise `numRepliedProspects` par `numContactedProspects` au lieu de `replyCount` par `deliverCount`. `replyCount` compte des messages, donc un prospect engagé qui répond quatre fois se lit comme quatre réponses contre quatre envois distincts et gonfle le taux exactement sur les séquences qu'un manager cherche à évaluer.
+
+## Modes de défaillance et garde-fous
+
+**Le refresh token pivoté est perdu, et l'authentification meurt deux heures plus tard.** Les access tokens Outreach durent 2 heures ; chaque rafraîchissement émet un nouveau refresh token et retire celui qui vient de servir. Un serveur qui ne garde le nouveau token qu'en mémoire fonctionne jusqu'au redémarrage puis présente une autorisation morte, qui apparaît comme un 401 ressemblant à un problème de scope. *Garde-fou* : `TokenStore._refresh()` écrit le token pivoté dans `OUTREACH_TOKEN_FILE` via un renommage de fichier temporaire **avant** que le nouvel access token ne soit rendu à un appelant, et `TokenStore.load()` teste l'écriture de ce fichier au démarrage et refuse de tourner s'il n'est pas inscriptible. Les refresh tokens expirent aussi 14 jours après émission, un serveur resté inactif plus longtemps doit donc repasser par le flux authorization code ; le message d'erreur le dit explicitement.
+
+**Une boucle d'agent vide le budget d'API de l'organisation.** Outreach autorise 10 000 requêtes par heure et par utilisateur et renvoie `X-RateLimit-Limit`, `X-RateLimit-Remaining` et `X-RateLimit-Reset` sur chaque réponse (documentation éditeur). Ce budget est partagé avec votre synchronisation CRM et toutes les autres intégrations de l'organisation, un agent qui pagine fort casse donc la synchronisation Salesforce, pas seulement le chat. *Garde-fou* : `_get()` lit `X-RateLimit-Remaining` sur chaque réponse et lève une erreur dès qu'il passe sous `OUTREACH_RATE_LIMIT_FLOOR`, valeur par défaut 250, en nommant l'heure de réinitialisation. Montez-le — 500 ou plus — dans une organisation où la synchronisation compte.
+
+**Les ressources incluses réintroduisent en douce la charge utile que la projection venait de retirer.** `find_stalled_sequence_states` utilise `include=prospect,sequence`, et JSON:API renvoie les ressources incluses en pleine largeur si elles ne sont pas projetées elles aussi. Cinquante lignes bloquées traînent chacune un prospect de 230 attributs. *Garde-fou* : l'argument `extra_fields` pose `fields[prospect]` et `fields[sequence]` à côté de `fields[sequenceState]`, ce qui tient les prospects inclus à cinq attributs.
+
+**Une réponse tronquée se lit comme une réponse complète.** Chaque outil plafonne à `page[limit]=100` et ne renvoie que la première page. *Garde-fou* : partiel — le plafond est appliqué et documenté, mais les outils ne signalent pas encore la troncature. C'est le point 2 de la liste numérotée d'avant-production dans le `README.md`, et la première chose à corriger si quelqu'un commence à faire remonter ces chiffres.
+
+## Plutôt que de construire ceci
+
+Au-delà du serveur hébergé, CData publie un MCP server Outreach en lecture seule bâti sur son driver JDBC, et Zapier comme Pipedream exposent Outreach via leurs couches MCP génériques. Les trois se mettent en place plus vite que ce scaffold. La raison de les écarter est la même que pour le serveur hébergé : l'autorisation et le chemin des données appartiennent à un tiers. La surface d'outils de ce scaffold, son jeu de scopes et son plancher de rate limit sont des valeurs dans un fichier qui vous appartient — ce qui compte quand la réponse à « que pouvait voir cet agent ? » doit être une inspection et non une affirmation d'éditeur.
+
+Si vous construisez la même posture majoritairement en lecture à travers plusieurs systems of record, les serveurs [Apollo](/fr/workflows/mcp-server-apollo-revops/) et [Gong](/fr/workflows/mcp-server-gong-revops/) de cette série partagent la forme projection-et-contrôle-préalable, les prompts restent donc portables entre eux. Pour la différence entre livrer ceci comme serveur ou comme skill empaqueté, voyez [Claude Skill vs MCP server](/fr/learn/claude-skill-vs-mcp-server/).
