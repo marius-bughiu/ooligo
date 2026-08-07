@@ -57,7 +57,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:recruiting] pillar-vs-brighthire — material (brighthire acquired by Zoom 2025-12 [subject]) → slug: pillar-vs-brighthire
 - refresh:C: [type:comparison] [vertical:revops] regie-ai-vs-outreach — material (regie-ai consolidated into RegieOne AI SEP [subject]; outreach agentic relaunch + outreach.ai rebrand [subject]) → slug: regie-ai-vs-outreach
 - refresh:C: [type:comparison] [vertical:revops] salesloft-vs-default — material (salesloft merged into Clari 2025-12, Drift sunset [subject]) → slug: salesloft-vs-default
-- refresh:C: [type:comparison] [vertical:legal-ops] spellbook-vs-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject]) → claimed: refresh 2026-08-07T05:12:00Z
+- refresh:C: [type:comparison] [vertical:legal-ops] spellbook-vs-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject]) → slug: spellbook-vs-casetext
 - refresh:C: [type:stack] [vertical:revops] abm-revenue-stack — material (outreach agentic relaunch + outreach.ai rebrand [constituent])
 - refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — material (brighthire acquired by Zoom 2025-12 [constituent])
 - refresh:C: [type:stack] [vertical:revops] ai-outbound-prospecting-stack — material (outreach agentic relaunch + outreach.ai rebrand [constituent])
