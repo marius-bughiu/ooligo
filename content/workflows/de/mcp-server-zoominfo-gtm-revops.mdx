@@ -1,0 +1,99 @@
+---
+slug: mcp-server-zoominfo-gtm-revops
+canonical_slug: mcp-server-zoominfo-gtm-revops
+locale: de
+verticals: [revops]
+title: MCP server exposing ZoomInfo GTM data to Claude under a credit ceiling
+artifact_type: mcp-server
+tools_used: [zoominfo, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-08-07"
+---
+
+Ein Model-Context-Protocol-Server, der [Claude](/de/tools/claude/) fünf Lese-Tools auf der GTM-API von [ZoomInfo](/de/tools/zoominfo/) gibt — zwei kostenlose Suchen, zwei Anreicherungen und ein Tool für den Kreditstand — mit einer Ausgabenkontrolle zwischen dem Agent und den teuren Aufrufen. Die Anreicherung kostet einen Bulk Data Credit pro zurückgegebenem Datensatz, das Interessante hier ist also nicht die API-Anbindung. Es ist die Obergrenze, die einen unbeaufsichtigten Agent daran hindert, an einem Dienstagnachmittag mehrere hundert Dollar auszugeben. Das Scaffold liegt unter `apps/web/public/artifacts/mcp-server-zoominfo-gtm-revops/` — eine `README.md`, eine `pyproject.toml`, `src/zoominfo_gtm_mcp/server.py` für die Tools und `src/zoominfo_gtm_mcp/budget.py` für Kontobuch und Cache. Installation mit `pip install -e .`.
+
+Lesen Sie zuerst den nächsten Abschnitt, denn ZoomInfo liefert bereits einen solchen Server aus, und zwar kostenlos.
+
+## Wann Sie das einsetzen
+
+ZoomInfo hostet seinen eigenen MCP server unter `https://mcp.zoominfo.com/mcp`. Er authentifiziert über OAuth 2.0 im Browser, ist in jedem Abonnement ohne Aufpreis enthalten und stellt 19 Tools bereit: 16 Daten-Tools für Firmen- und Kontaktsuche und -anreicherung, Intent, Scoops, News, Lookup, Lookalikes, empfohlene Kontakte, Audiences und GTM-Kontext, dazu drei agentische — Account Research, Contact Research und Update GTM Context. Administratoren schalten ihn pro Benutzer im Admin Portal frei. **Für eine Person, die interaktive Account-Recherche betreibt, ist das die richtige Antwort und dieses Scaffold vergeudete Arbeit.** Verbinden Sie ihn mit `claude mcp add --transport http zoominfo https://mcp.zoominfo.com/mcp` und hören Sie auf zu lesen.
+
+Bauen Sie einen eigenen, wenn eine von vier Bedingungen zutrifft.
+
+**Ihr Agent läuft unbeaufsichtigt oder nach Zeitplan.** Das ist ZoomInfos eigene Empfehlung und keine Vorliebe von uns: Der gehostete Server ist ausdrücklich als ungeeignet für Massenexporte, CRM-Rückschreibung und geplante Jobs dokumentiert, geplante Pipelines werden auf die API verwiesen. Ein Agent, der um 06:00 Uhr aufwacht und eine Liste anreichert, ohne dass jemand zusieht, benutzt nach der Beschreibung des Anbieters das falsche Instrument.
+
+**Sie brauchen eine Dienst-Identität statt einer Benutzer-Identität.** Der gehostete Server läuft als die angemeldete Person, mit deren Berechtigungen, pro Benutzer von einem Administrator freigeschaltet. Ein geteilter Agent, der aus Slack oder einem Job-Runner ausgelöst wird, hat keine Person, die er sein könnte. Der Client-Credentials-Flow dieses Scaffolds gibt ihm eine eigene Client-ID und zwei eigene Scopes, `api:data:company` und `api:data:contact`.
+
+**Sie brauchen eine harte Ausgabenobergrenze.** Der gehostete Server hat kein Kreditlimit pro Lauf, und die Rechnung weiter unten zeigt, wie schnell daraus echtes Geld wird. `ZI_DAILY_CREDIT_LIMIT` ist eine Zahl, mit der ein Agent nicht verhandeln kann.
+
+**Ihr Vertrag läuft auf wiederkehrenden Monatskrediten.** Der gehostete MCP server verbraucht Bulk Data Credits und funktioniert nicht mit wiederkehrenden Monatskrediten. Wenn Ihr Vertrag diese Form hat, funktioniert der gehostete Server überhaupt nicht und die API ist der einzige Weg hinein.
+
+Die zwei Rollen, denen das nützt, sind der RevOps-Verantwortliche, der einen Anreicherungs-Agent will, dessen Ausgaben in einem Kontobuch unter eigener Kontrolle auftauchen, und der GTM Engineer, der die [Apollo](/de/workflows/mcp-server-apollo-revops/)- und [Attio](/de/workflows/mcp-server-attio-revops/)-Server dieser Reihe bereits ausgeliefert hat und dieselbe Nur-Lesen-Haltung über jede Datenquelle hinweg will.
+
+## Wann Sie das NICHT einsetzen
+
+- **Ein Mensch sitzt am Steuer.** Oben behandelt und eine Wiederholung wert: Der gehostete Server ist kostenlos, breiter und weniger Arbeit. Dieses Scaffold existiert für den unbeaufsichtigten Fall.
+- **Sie wollen Rückschreibung nach ZoomInfo oder in Ihr CRM.** Hier schreibt nichts irgendwohin. Die angeforderten Scopes enthalten weder `api:gtm-config:manage` noch `api:audience:manage` noch `api:gtm-data-model:manage`, und sie hinzuzufügen hieße, einem Agent einen Knopf zu geben, den dieses Design bewusst zurückhält.
+- **Kontakt-PII darf kein LLM erreichen.** `zi_enrich_contacts` liefert verifizierte Geschäfts-E-Mail und Durchwahl. Jedes Feld gelangt in die Konversation und bleibt im Transkript. `output_fields` einzugrenzen verkleinert diese Menge, beseitigt sie aber nicht. Lautet die Antwort schlicht Nein, ist kein MCP server über einer Kontaktdatenbank das richtige Projekt.
+- **Sie wollen die agentischen Briefings.** Account Research und Contact Research sind Tools des gehosteten Servers, die als AI Actions abgerechnet werden. Dieses Scaffold implementiert sie nicht nach und sollte das auch nicht — sie sind der Teil von ZoomInfos Angebot, der am schwersten nachzubauen und am billigsten einfach zu nutzen ist.
+
+## Was es bereitstellt
+
+Fünf Tools, alle lesend, definiert in `src/zoominfo_gtm_mcp/server.py`:
+
+- `zi_credit_status()` — kostenlos. Verbindet ZoomInfos eigene Abonnement-Zähler aus `GET /data/v1/users/usage` (`limitType`, `totalLimit`, `currentUsage`, `usageRemaining`) mit dem lokalen Kontobuch: heute ausgegeben, Obergrenze, durch laufende Aufrufe reserviert, verfügbar und Ausgaben pro Tool über 7 Tage. Die Tool-Beschreibung weist den Agent an, es vor jeder Batch-Planung aufzurufen. Fällt ZoomInfos Usage-Endpunkt aus, fällt das Tool auf das lokale Kontobuch zurück statt zu scheitern, denn die lokale Obergrenze gilt ohnehin.
+- `zi_search_companies(criteria, page_size, page_number, sort)` — `POST /data/v1/companies/search`. Kostenlos: keine Credits, und zurückgegebene Firmen zählen nicht gegen Datensatzlimits, jeder Request zählt aber gegen die Rate Limits. Page Size auf 100 begrenzt.
+- `zi_search_contacts(criteria, page_size, page_number)` — `POST /data/v1/contacts/search`. Kostenlos, gleiche Bedingungen.
+- `zi_enrich_companies(company_ids, output_fields)` — `POST /data/v1/companies/enrich`. Kostet Credits. Höchstens 25 IDs pro Aufruf, das ist ZoomInfos Grenze, nicht unsere.
+- `zi_enrich_contacts(contact_ids, output_fields)` — `POST /data/v1/contacts/enrich`. Kostet Credits, gleiche Grenze.
+
+Suchergebnisse werden auf IDs plus ein schmales Label eingedampft. Suche ist kostenlos, Anreicherung nicht, also besteht die einzige Aufgabe eines Suchergebnisses darin, den Agent entscheiden zu lassen, welche IDs die Zahlung wert sind. Vollständige Such-Payloads zurückzugeben lädt das Modell dazu ein, unverifizierte Felder wie angereicherte, verifizierte Daten zu behandeln.
+
+## Wie die Kreditkontrolle arbeitet
+
+Die Kosten eines Anreicherungsaufrufs lassen sich vor dem Parsen der Antwort nicht kennen. ZoomInfo berechnet pro zurückgegebenem Datensatz, aber No-Match-Ergebnisse und Fehler werden nicht berechnet, und ein Datensatz, der bereits under management ist, ebenfalls nicht. Deshalb setzt `src/zoominfo_gtm_mcp/budget.py` das Budget in zwei Schritten durch.
+
+**Den schlimmsten Fall reservieren.** Bevor der Request rausgeht, wird ein Credit für jeden angeforderten Datensatz zurückgehalten, der nicht bereits im Cache liegt — jeder Input trifft, jeder Treffer ist neu. Übersteigt dieser schlimmste Fall den Rest der Obergrenze, wird abgelehnt. Die Ablehnung ist bewusst Alles-oder-Nichts: Eine Teilreservierung ließe einen Agent die ersten 8 von 25 Accounts anreichern und Erfolg melden, was sich wie eine vollständige Antwort liest und keine ist.
+
+**Gegen die Realität abrechnen.** Nach der Antwort werden die von ZoomInfo als Treffer zurückgegebenen Datensätze gezählt, diese Zahl ins dauerhafte SQLite-Kontobuch geschrieben und die ungenutzte Reservierung freigegeben.
+
+Die Ablehnung kommt als *Ergebnis* zurück, nicht als Ausnahme — ein JSON-Objekt mit `refused: true`, dem Restguthaben und einem nächsten Schritt. Ein Modell liest das und plant gegen den Rest neu; ein geworfener Protokollfehler beendet den Zug meist einfach.
+
+Der Cache ist auf ZoomInfos eigene Datensatz-ID indiziert, mit einer TTL von 365 Tagen passend zum 12-Monats-Fenster von Records Under Management, in dem erneutes Anreichern kostenlos ist. Ein Treffer kostet weder Credit *noch* HTTP-Request, und genau das zählt, wenn ein Agent dieselbe Frage viermal in einer Sitzung stellt.
+
+## Die Kostenrealität
+
+Die Anreicherung kostet einen Bulk Data Credit pro zurückgegebenem Datensatz, höchstens 25 Datensätze pro Request. Wiederverkäufer notieren Bulk Credits bei kleinen Mengen mit $0,60–$1,00 pro Stück, bei hohem Volumen fallend Richtung etwa $0,20; das sind Drittanbieterzahlen, keine Preisliste von ZoomInfo, und Ihr Vertrag entscheidet.
+
+Ein Agent, der 200 Accounts recherchiert und je vier Kontakte zieht, sind 800 neue Datensätze — 32 Anreicherungsaufrufe und 800 Bulk Data Credits, in der Größenordnung von $480–$800 für einen unbeaufsichtigten Nachmittag in dieser Spanne.
+
+Diese 32 Aufrufe sind gegen die Rate Limits nichts. Das kleinste dokumentierte Paket, Builder, erlaubt 5 Requests/Sekunde, 10.800/Stunde und 129.600/Tag; Standard erlaubt 25/s, 54.000/Stunde und 648.000/Tag; Scaling erlaubt 35/s, 75.600/Stunde und 907.200/Tag. **Die bindende Beschränkung für einen Anreicherungs-Agent ist der Kreditvorrat, nicht der Durchsatz** — deshalb kontrolliert dieses Scaffold Credits und meldet Rate Limits nur, wenn es an sie stößt.
+
+Die Einrichtung dauert etwa eine Stunde, größtenteils für das Anlegen der API-Anwendung und die Bestätigung, welche Scopes sie tatsächlich hält.
+
+## Fehlerfälle und ihre Absicherungen
+
+**Der Agent dreht sich im Kreis und verbraucht die Quartalskredite.** Ein Anreicherungs-Agent mit einer Liste und einem Ziel reichert weiter an. *Absicherung:* `ZI_DAILY_CREDIT_LIMIT` (Standard 250, in der obigen Spanne rund $150–$250), die Worst-Case-Reservierung vor jedem Aufruf und die strukturierte Ablehnung, die dem Agent sagt, wie viele Datensätze er sich noch leisten kann.
+
+**Ihr Abonnement kann den gehosteten Server gar nicht betreiben und niemand merkt es bis zum Starttag.** Der gehostete MCP server verlangt Bulk Data Credits und funktioniert mit wiederkehrenden Monatskrediten stillschweigend nicht. *Absicherung:* Führen Sie `zi_credit_status` am ersten Tag aus. Es meldet ZoomInfos `limitType`-Zähler, die den Kredittyp Ihres Vertrags benennen, bevor jemand einen Workflow auf der falschen Annahme baut.
+
+**Das Modell meldet Suchergebnisse als verifizierte Kontaktdaten.** Die kostenlose Suche liefert Identifikationsfelder, keine verifizierten E-Mails und Durchwahlen — die kommen nur aus der kostenpflichtigen Anreicherung. Ein Modell, dem ein vollständiges Such-Payload gereicht wird, präsentiert es als Antwort. *Absicherung:* `_slim_search` in `server.py` kürzt die Ergebnisse auf IDs und ein schmales Label, damit es nichts falsch zu melden gibt.
+
+**Zwei Agents teilen sich ein Kontobuch und überschreiten die Grenze gemeinsam.** Reservierungen liegen im Prozessspeicher, das Kontobuch auf der Platte, also sehen zwei Server am selben `ZI_STATE_PATH` die abgerechneten Ausgaben des jeweils anderen, nicht aber dessen laufende Reservierungen. *Absicherung:* Geben Sie jedem Agent einen eigenen `ZI_STATE_PATH`, oder verlagern Sie Reservierungen in die Datenbank, bevor Sie mehr als einen betreiben. Das ist Grenze 4 von 7 auf der nummerierten Vorproduktionsliste der README.
+
+**Das Token läuft mitten im Batch ab.** Client-Credentials-Tokens kommen mit einem `expires_in` von etwa 1.000 Sekunden zurück. *Absicherung:* Der Server erneuert bei 80% der angegebenen Lebensdauer statt beim Ablauf, damit ein Token nicht die lokale Prüfung besteht und dann im Flug stirbt.
+
+## Gegenüber den Alternativen
+
+**Der gehostete MCP server von ZoomInfo** gewinnt bei Breite, Kosten und Aufwand — 19 Tools, kein Code, keine Zugangsdaten zum Rotieren, kostenlos im Abonnement. Er verliert in dem Moment, in dem der Aufrufer ein geplanter Job und keine Person ist, denn er hat weder Dienst-Identität noch Ausgabenobergrenze.
+
+**Das ZoomInfo CLI** ist die Antwort des Anbieters für skriptgesteuerten Zugriff und die bessere Wahl, wenn die Aufgabe ein Batch-Export ist, dessen Ergebnis danach ein Mensch liest. Es ist kein MCP server, ein Agent kann also nicht Zug um Zug darüber schließen.
+
+**Die Anreicherung stattdessen in [Clay](/de/tools/clay/) zu machen** ist richtig, wenn Anreicherung eine Tabellenoperation mit einer Wasserfall-Kaskade über mehrere Anbieter ist, und falsch, wenn der Agent mitten im Gespräch entscheiden muss, welche 12 von 200 Accounts eine kostenpflichtige Abfrage verdienen. Die ganze Form dieses Scaffolds setzt voraus, dass diese Entscheidung dem Agent gehört.
+
+## Stack
+
+Passt zu den [Apollo](/de/workflows/mcp-server-apollo-revops/)- und [Attio](/de/workflows/mcp-server-attio-revops/)-Servern für Teams, die Nur-Lesen-MCP-Zugriff über ihre GTM-Datenquellen hinweg standardisieren, und zu [Clay](/de/tools/clay/), wenn massenhafte Wasserfall-Anreicherung in eine Tabelle gehört und nicht in ein Gespräch.

@@ -1,0 +1,99 @@
+---
+slug: mcp-server-zoominfo-gtm-revops
+canonical_slug: mcp-server-zoominfo-gtm-revops
+locale: es
+verticals: [revops]
+title: MCP server exposing ZoomInfo GTM data to Claude under a credit ceiling
+artifact_type: mcp-server
+tools_used: [zoominfo, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-08-07"
+---
+
+Un servidor Model Context Protocol que le da a [Claude](/es/tools/claude/) cinco herramientas de lectura sobre la API GTM de [ZoomInfo](/es/tools/zoominfo/) — dos búsquedas gratuitas, dos enriquecimientos y una herramienta de estado de créditos — con un controlador de gasto ubicado entre el agente y las llamadas caras. El enriquecimiento cobra un bulk data credit por registro devuelto, así que lo interesante aquí no es la integración con la API. Es el techo que impide que un agente sin supervisión gaste varios cientos de dólares un martes por la tarde. El scaffold vive en `apps/web/public/artifacts/mcp-server-zoominfo-gtm-revops/` — un `README.md`, un `pyproject.toml`, `src/zoominfo_gtm_mcp/server.py` para las herramientas y `src/zoominfo_gtm_mcp/budget.py` para el registro contable y la caché. Instálalo con `pip install -e .`.
+
+Lee la siguiente sección primero, porque ZoomInfo ya publica uno de estos y es gratis.
+
+## Cuándo usar esto
+
+ZoomInfo hospeda su propio MCP server en `https://mcp.zoominfo.com/mcp`. Se autentica con OAuth 2.0 en el navegador, está incluido en cada suscripción sin costo adicional y expone 19 herramientas: 16 de datos que cubren búsqueda y enriquecimiento de empresas y contactos, intent, scoops, noticias, lookup, lookalikes, contactos recomendados, audiencias y contexto GTM, más tres agénticas — Account Research, Contact Research y Update GTM Context. Los administradores lo activan por usuario en el Admin Portal. **Para una persona que hace investigación interactiva de cuentas, esa es la respuesta correcta y este scaffold es trabajo desperdiciado.** Conéctalo con `claude mcp add --transport http zoominfo https://mcp.zoominfo.com/mcp` y deja de leer.
+
+Construye el tuyo cuando se cumpla una de cuatro condiciones.
+
+**Tu agente corre sin supervisión o de forma programada.** Esto es la guía de ZoomInfo, no una preferencia nuestra: el servidor hospedado está documentado como inadecuado para exportaciones masivas, escritura de vuelta al CRM y trabajos programados, y los pipelines programados se dirigen a la API. Un agente que despierta a las 06:00 y enriquece una lista sin nadie mirando está usando el instrumento equivocado según la propia descripción del proveedor.
+
+**Necesitas una identidad de servicio en lugar de una identidad de usuario.** El servidor hospedado corre como la persona que inició sesión, con los permisos de esa persona, habilitado por usuario por un administrador. Un agente compartido que se dispara desde Slack o desde un job runner no tiene ninguna persona que ser. El flujo de client credentials que usa este scaffold le da su propio client id y sus propios dos scopes, `api:data:company` y `api:data:contact`.
+
+**Necesitas un techo de gasto rígido.** El servidor hospedado no tiene tope de créditos por ejecución, y la aritmética de abajo muestra qué tan rápido eso se vuelve dinero real. `ZI_DAILY_CREDIT_LIMIT` es un número con el que el agente no puede negociar.
+
+**Tu contrato corre sobre créditos mensuales recurrentes.** El MCP server hospedado consume bulk data credits y no funciona con créditos mensuales recurrentes. Si esa es la forma de tu contrato, el servidor hospedado no funcionará en absoluto y la API es la única vía de entrada.
+
+Los dos roles a los que esto le sirve son el líder de RevOps que quiere un agente de enriquecimiento cuyo gasto aparezca en un registro que él controla, y el GTM engineer que ya publicó los servidores de [Apollo](/es/workflows/mcp-server-apollo-revops/) y [Attio](/es/workflows/mcp-server-attio-revops/) de esta serie y quiere la misma postura de solo lectura en cada fuente de datos.
+
+## Cuándo NO usar esto
+
+- **Hay una persona conduciendo.** Ya lo cubrimos arriba y vale repetirlo: el servidor hospedado es gratis, más amplio y menos trabajo. Este scaffold existe para el caso sin supervisión.
+- **Quieres escritura de vuelta hacia ZoomInfo o tu CRM.** Nada aquí escribe en ningún lado. Los scopes solicitados no incluyen `api:gtm-config:manage`, `api:audience:manage` ni `api:gtm-data-model:manage`, y agregarlos le entregaría al agente un botón que este diseño retiene deliberadamente.
+- **El PII de contactos no puede llegar a un LLM.** `zi_enrich_contacts` devuelve email empresarial verificado y teléfono directo. Cada campo entra en la conversación y vive en la transcripción. Reducir `output_fields` achica ese conjunto; no lo elimina. Si la respuesta es un no rotundo, ningún MCP server sobre una base de contactos es el proyecto correcto.
+- **Quieres los briefings agénticos.** Account Research y Contact Research son herramientas del servidor hospedado facturadas como AI actions. Este scaffold no las reimplementa y no debería — son la parte de la oferta de ZoomInfo más difícil de reconstruir y más barata de simplemente usar.
+
+## Qué expone
+
+Cinco herramientas, todas de lectura, definidas en `src/zoominfo_gtm_mcp/server.py`:
+
+- `zi_credit_status()` — gratis. Combina los contadores de suscripción de ZoomInfo desde `GET /data/v1/users/usage` (`limitType`, `totalLimit`, `currentUsage`, `usageRemaining`) con el registro local: gastado hoy, techo, retenido por llamadas en vuelo, disponible y gasto por herramienta a lo largo de 7 días. La descripción de la herramienta le indica al agente llamarla antes de planear un lote. Si el endpoint de uso de ZoomInfo falla, la herramienta degrada al registro local en vez de fallar, porque el techo local se aplica igual.
+- `zi_search_companies(criteria, page_size, page_number, sort)` — `POST /data/v1/companies/search`. Gratis: no cobra créditos y las empresas devueltas no cuentan contra los límites de registros, aunque cada request sí cuenta contra los rate limits. Page size limitado a 100.
+- `zi_search_contacts(criteria, page_size, page_number)` — `POST /data/v1/contacts/search`. Gratis, mismos términos.
+- `zi_enrich_companies(company_ids, output_fields)` — `POST /data/v1/companies/enrich`. Cuesta créditos. Máximo 25 ids por llamada, que es el tope de ZoomInfo, no el nuestro.
+- `zi_enrich_contacts(contact_ids, output_fields)` — `POST /data/v1/contacts/enrich`. Cuesta créditos, mismo tope.
+
+Los resultados de búsqueda se recortan a ids más una etiqueta delgada. La búsqueda es gratis y el enriquecimiento no, así que el único trabajo de un resultado de búsqueda es dejar que el agente decida qué ids valen el pago. Devolver payloads completos de búsqueda invita al modelo a tratar campos no verificados como si fueran datos enriquecidos y verificados.
+
+## Cómo funciona el controlador de créditos
+
+El costo de una llamada de enriquecimiento no se puede saber antes de parsear la respuesta. ZoomInfo cobra por registro devuelto, pero los resultados sin coincidencia y los errores no se cobran, y tampoco un registro que ya está under management. Por eso `src/zoominfo_gtm_mcp/budget.py` aplica el presupuesto en dos pasos.
+
+**Reservar el peor caso.** Antes de que salga el request, retén un crédito por cada registro solicitado que no esté ya en caché — cada input coincidiendo, cada coincidencia nueva. Si ese peor caso excede lo que queda del techo, rechaza. El rechazo es todo-o-nada a propósito: una reserva parcial dejaría que un agente enriquezca las primeras 8 de 25 cuentas y reporte éxito, lo que se lee como una respuesta completa y no lo es.
+
+**Liquidar contra la realidad.** Después de la respuesta, cuenta los registros que ZoomInfo devolvió como coincidencia, escribe ese número en el registro SQLite durable y libera la reserva no usada.
+
+El rechazo vuelve como un *resultado*, no como una excepción — un objeto JSON con `refused: true`, el saldo restante y un siguiente paso. Un modelo lee eso y replanifica contra lo que queda; un error de protocolo lanzado normalmente solo termina el turno.
+
+La caché se indexa por el id de registro propio de ZoomInfo con un TTL de 365 días, que coincide con la ventana de 12 meses de Records Under Management durante la cual re-enriquecer es gratis. Un acierto no cuesta crédito *ni* request HTTP, que es lo que importa cuando un agente hace la misma pregunta cuatro veces en una sesión.
+
+## La realidad del costo
+
+El enriquecimiento cobra un bulk data credit por registro devuelto, con un máximo de 25 registros por request. Los revendedores cotizan los bulk credits en un rango de $0.60–$1.00 cada uno en volúmenes pequeños, bajando hacia unos $0.20 en volumen alto; esas son cifras de terceros, no una lista de precios de ZoomInfo, y tu contrato manda.
+
+Un agente que investiga 200 cuentas y saca cuatro contactos de cada una son 800 registros nuevos — 32 llamadas de enriquecimiento y 800 bulk data credits, del orden de $480–$800 por una tarde sin supervisión con esa banda.
+
+Esas 32 llamadas no son nada contra los rate limits. El paquete documentado más pequeño, Builder, permite 5 requests/segundo, 10,800/hora y 129,600/día; Standard permite 25/s, 54,000/hora y 648,000/día; Scaling permite 35/s, 75,600/hora y 907,200/día. **La restricción vinculante en un agente de enriquecimiento es la bolsa de créditos, no el throughput** — por eso este scaffold controla créditos y solo reporta rate limits cuando los golpea.
+
+La configuración toma cerca de una hora, la mayor parte creando la aplicación de API y confirmando qué scopes tiene realmente.
+
+## Modos de falla y sus guardas
+
+**El agente entra en bucle y gasta los créditos del trimestre.** Un agente de enriquecimiento al que se le da una lista y un objetivo seguirá enriqueciendo. *Guarda:* `ZI_DAILY_CREDIT_LIMIT` (por defecto 250, unos $150–$250 con la banda de arriba), la reserva del peor caso antes de cada llamada y el rechazo estructurado que le dice al agente cuántos registros todavía puede costear.
+
+**Tu suscripción no puede correr el servidor hospedado y nadie se entera hasta el día del lanzamiento.** El MCP server hospedado requiere bulk data credits y silenciosamente no funciona con créditos mensuales recurrentes. *Guarda:* corre `zi_credit_status` el primer día. Reporta los contadores `limitType` de ZoomInfo, que nombran el tipo de crédito que carga tu contrato, antes de que alguien construya un workflow sobre la suposición equivocada.
+
+**El modelo reporta resultados de búsqueda como datos de contacto verificados.** La búsqueda gratuita devuelve campos identificatorios, no emails verificados ni teléfonos directos — esos vienen solo del enriquecimiento pago. Un modelo al que se le entrega un payload completo de búsqueda lo presentará como respuesta. *Guarda:* `_slim_search` en `server.py` recorta los resultados a ids y una etiqueta delgada, así no hay nada que malinformar.
+
+**Dos agentes comparten un registro y se pasan juntos del techo.** Las reservas viven en la memoria del proceso mientras el registro vive en disco, así que dos servidores apuntando al mismo `ZI_STATE_PATH` ven el gasto liquidado del otro pero no sus retenciones en vuelo. *Guarda:* dale a cada agente su propio `ZI_STATE_PATH`, o mueve las reservas a la base de datos, antes de correr más de uno. Este es el límite 4 de 7 en la lista numerada de pre-producción del README.
+
+**El token expira a mitad del lote.** Los tokens de client credentials vuelven con un `expires_in` de alrededor de 1,000 segundos. *Guarda:* el servidor refresca al 80% de la vida útil declarada en vez de al expirar, así un token no puede pasar el chequeo local y luego morir en vuelo.
+
+## Frente a las alternativas
+
+**El MCP server hospedado de ZoomInfo** gana en amplitud, costo y esfuerzo — 19 herramientas, sin código, sin credenciales que rotar, gratis con la suscripción. Pierde en el momento en que quien llama es un trabajo programado y no una persona, porque no tiene identidad de servicio ni techo de gasto.
+
+**El CLI de ZoomInfo** es la respuesta del proveedor para acceso por scripts y es la mejor opción cuando el trabajo es una exportación por lotes con una persona leyendo el resultado después. No es un MCP server, así que un agente no puede razonar sobre él turno a turno.
+
+**Hacer el enriquecimiento en [Clay](/es/tools/clay/)** es la decisión correcta cuando el enriquecimiento es una operación de tabla con una cascada entre varios proveedores, y la equivocada cuando el agente necesita decidir a mitad de conversación cuáles 12 de 200 cuentas merecen una búsqueda paga. Toda la forma de este scaffold asume que esa decisión le pertenece al agente.
+
+## Stack
+
+Combina con los servidores de [Apollo](/es/workflows/mcp-server-apollo-revops/) y [Attio](/es/workflows/mcp-server-attio-revops/) para equipos que estandarizan acceso MCP de solo lectura en sus fuentes de datos GTM, y con [Clay](/es/tools/clay/) cuando el enriquecimiento masivo en cascada pertenece a una tabla y no a una conversación.
