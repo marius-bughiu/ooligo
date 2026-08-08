@@ -23,7 +23,7 @@ Each line carries at most one lifecycle marker, appended in place:
 
 `refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-08-02`
+`last-swept: 2026-08-09`
 
 ## Refresh queue
 
@@ -399,6 +399,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] day-ai — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] parloa — pricing never verified (no pricing_checked field; SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] salesforce-agentforce — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] sendspark — pricing never verified (no pricing_checked field; SLA 60d)
 
 ## Tools
 
