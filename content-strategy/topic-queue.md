@@ -60,7 +60,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:legal-ops] spellbook-vs-casetext — material (casetext retired by Thomson Reuters 2025-04 [subject]) → slug: spellbook-vs-casetext
 - refresh:C: [type:stack] [vertical:revops] abm-revenue-stack — material (outreach agentic relaunch + outreach.ai rebrand [constituent]) → slug: abm-revenue-stack
 - refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — material (brighthire acquired by Zoom 2025-12 [constituent]) → slug: ai-augmented-recruiting-stack
-- refresh:C: [type:stack] [vertical:revops] ai-outbound-prospecting-stack — material (outreach agentic relaunch + outreach.ai rebrand [constituent]) → claimed: refresh 2026-08-09T21:00:00Z
+- refresh:C: [type:stack] [vertical:revops] ai-outbound-prospecting-stack — material (outreach agentic relaunch + outreach.ai rebrand [constituent]) → slug: ai-outbound-prospecting-stack
 - refresh:C: [type:stack] [vertical:recruiting] high-volume-recruiting-stack — material (paradox acquired by Workday 2025-10 [constituent])
 - refresh:C: [type:learn] [vertical:legal-ops] contract-review-sop — material (lawgeex enterprise product dismantled 2023 [related_tools])
 - refresh:C: [type:learn] [vertical:legal-ops] ediscovery — material (casetext retired by Thomson Reuters 2025-04 [related_tools])
