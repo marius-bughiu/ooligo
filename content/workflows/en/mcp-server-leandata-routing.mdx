@@ -1,0 +1,85 @@
+---
+slug: mcp-server-leandata-routing
+canonical_slug: mcp-server-leandata-routing
+locale: en
+verticals: [revops]
+title: MCP server exposing LeanData routing decisions to Claude, read-only
+artifact_type: mcp-server
+tools_used: [leandata, salesforce, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-08-09"
+---
+
+A Model Context Protocol server that gives [Claude](/en/tools/claude/) five read tools over [LeanData](/en/tools/leandata/)'s routing audit log, so an agent can answer "why did this lead land on this rep?" without anyone opening the LeanData UI. LeanData writes one `LeanData__Log__c` row per record per trip through a deployed routing graph; the server queries that object through the [Salesforce](/en/tools/salesforce/) REST API. It writes nothing, anywhere. The scaffold lives at `apps/web/public/artifacts/mcp-server-leandata-routing/` — a `README.md`, a `pyproject.toml`, and `src/leandata_routing_mcp/server.py` holding the client, the field resolver, and the five tools. Install with `pip install -e .`.
+
+Read the next section first, because LeanData already ships an MCP server and it is not this one.
+
+## When to use this
+
+LeanData's Q2-2026 release shipped **BookIt MCP**, an official server covering scheduling: availability preview, meeting log queries, user and pool lookup, meeting-type lookup, counts and calibrations, and scheduling links on the read side — plus writes for BookIt for Forms routing and booking, cancel, reschedule, reassign, and credit requests. It authenticates through Salesforce OAuth, deriving admin-versus-user scope from the signed-in person's permission set, or through a one-time code for external agents with no Salesforce credentials in your org. **If your question is meeting-shaped, that is the right answer and this scaffold is wasted work.**
+
+The same release also rebuilt Audit Logs on cloud infrastructure with an embedded AI assistant that answers natural-language routing questions and cites node paths and evaluated conditions. For an admin debugging one lead interactively, that assistant is included, needs no code, and beats anything you would build.
+
+So the gap this fills is narrow and specific: **routing forensics your own agent can perform**, in the same conversation as the rest of your GTM stack. Three cases make that worth an hour.
+
+**The question spans systems.** "Which of last week's enterprise leads routed to a rep who was already over capacity, and what did they do with them?" needs the routing log joined to CRM activity. The in-app assistant answers about routing. An agent holding this server plus your CRM tools answers the whole question.
+
+**The caller is a job, not a person.** BookIt MCP's scope comes from a signed-in user's permission set. A watchdog that wakes at 06:00 and checks whether anything failed to route has no person to be. The client-credentials flow here gives the server its own identity, with a Salesforce Run As user carrying the permissions.
+
+**You need the reasoning in a transcript.** An assistant answer inside the LeanData UI is not an artifact. Tool output in a conversation can be pasted into an incident review.
+
+## When NOT to use this
+
+- **Anything meeting-shaped.** Covered above. BookIt MCP does booking, cancellation and reassignment, and enforces BookIt permission sets while doing it. This server has no write path to add and should not grow one.
+- **Interactive single-lead debugging by an admin.** The Audit Logs AI assistant is right there and knows the node path.
+- **Routing-log PII cannot reach an LLM.** Log rows reference Leads and Contacts, and depending on the org's custom fields may carry names, emails and territory attributes. Every field returned enters the conversation and lives in the transcript. Withholding field-level read in Salesforce shrinks that set; it does not eliminate it.
+- **You want to change routing.** Nothing here edits a graph, a pool, or an assignment. Reading why a decision happened and making a different one are separate jobs with different blast radii.
+
+## What it exposes
+
+Five tools, all reads, defined in `src/leandata_routing_mcp/server.py`:
+
+- `describe_routing_log()` — the field inventory this org exposes, grouped by the role each field plays: graph, trigger, outcome, owner, matched record, error, node path. The tool description tells the agent to run it first.
+- `get_routing_history(record_id, limit)` — routing trips for one Salesforce record, newest first. Answers "how did this record get to this owner?"
+- `explain_assignment(log_id)` — every populated field on a single log row. A single row is a bounded context cost, so this one projects everything.
+- `find_routing_errors(since, until, limit)` — rows in a date window whose error-shaped fields are populated. Catches records that entered a graph and did not route cleanly.
+- `get_routing_throughput(since, until)` — row counts grouped by the org's graph field, plus the current depth of LeanData's processing-queue object. Separates "routing is slow" from "routing never ran".
+
+**Field API names are resolved at runtime, never hardcoded.** LeanData ships a managed package and customers stamp their own fields onto the Log object, so the inventory differs per org. Every tool calls Salesforce `describe` and matches names and labels against the role hints in `_ROLE_HINTS`, caching for the process lifetime. A scaffold with a hardcoded field list would work in the org it was written against and nowhere else.
+
+The default projection is bounded to 40 fields rather than selecting everything. Orgs stamp dozens of custom fields onto the Log object and each one costs context on every row returned.
+
+## Cost and throughput
+
+There is no per-call charge here — the cost is Salesforce API allocation, shared with every other integration in the org. Enterprise and Professional editions get 100,000 requests per 24 hours plus 1,000 per Salesforce license; Unlimited and Performance get 100,000 plus 5,000 per license; Developer Edition gets 15,000 (Salesforce platform limits documentation). Each tool call spends one or two requests — one `describe`, cached after the first, and one query.
+
+The binding constraint is not the allocation, it is **retention**. Default audit-log retention is 90 days, configurable in LeanData's Admin → Settings → Reporting, with a daily job deleting past it. The Q2-2026 cloud experience extends storage to 24 months and syncs on a 15-minute schedule. Which of those bounds your answers depends on which experience your org is on, and it silently bounds every historical question you ask.
+
+Setup runs about an hour, most of it in Salesforce creating the Connected App and confirming what the Run As user can actually read.
+
+## Failure modes and guards
+
+**The agent reports "no rows" when the truth is "the log aged out".** A question about a lead routed last quarter returns empty against a 90-day retention window, and empty reads as "this never happened". *Guard:* the empty-result branch in `_get_routing_history` names both possibilities explicitly — never entered a deployed graph, or aged past the configured window — so the model has to carry the ambiguity into its answer instead of resolving it wrongly.
+
+**Role hints miss an org's naming and a tool silently degrades.** `_ROLE_HINTS` matches substrings like `graph`, `outcome`, `error`. An org with unusual field naming gets `(none matched)` for a role. *Guard:* every affected tool returns a message naming what it could not find and pointing at `describe_routing_log`, rather than running a query with a hole in it. This is limit 2 of 8 in the README's numbered pre-production list.
+
+**`find_routing_errors` infers the wrong fields.** It selects error-shaped text fields by name, so a field named for something else containing `error` gets included and a genuine failure field named `LeanData__Disposition__c` does not. *Guard:* the tool prints which fields it checked in its header. An answer you cannot audit is worse than no answer.
+
+**An agent in a loop becomes a noisy neighbour to the whole org.** The Salesforce daily allocation is org-wide, so a runaway agent degrades every other integration before anyone notices. *Guard:* `LD_MAX_ROWS` (default 200) clamps every tool, and `SalesforceClient.query` deliberately does not follow `nextRecordsUrl` — one page per call, always. There is no API-call counter yet; that is limit 7 and belongs in place before unattended use.
+
+**A record ID from the conversation reaches SOQL.** *Guard:* IDs are matched against `^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$` and dates against an ISO-8601 pattern before either enters a query string. Failures raise before the SOQL is built.
+
+## Versus the alternatives
+
+**Native Salesforce reports on `LeanData__Log__c`** are LeanData's own documented answer and the better choice for a standing weekly routing-health dashboard. Reports do not compose with anything else an agent knows, which is the whole argument for this scaffold.
+
+**BookIt MCP** wins on effort, support and scope-correctness for every scheduling question, and it does writes safely because it enforces LeanData's own permission sets. It does not expose routing-decision forensics over the audit log, which is the one thing this server exists to do.
+
+**Chili Piper** is worth naming for teams still choosing: if you are evaluating [routing platforms](/en/vs/leandata-vs-chili-piper/) rather than instrumenting one you already run, build nothing until that decision lands.
+
+## Stack
+
+Pairs with the [Apollo](/en/workflows/mcp-server-apollo-revops/), [Attio](/en/workflows/mcp-server-attio-revops/) and [ZoomInfo](/en/workflows/mcp-server-zoominfo-gtm-revops/) servers for teams standardising on read-only MCP access across GTM systems — routing forensics is most useful in the same conversation as the data that fed the routing decision.

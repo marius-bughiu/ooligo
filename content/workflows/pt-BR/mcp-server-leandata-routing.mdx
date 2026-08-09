@@ -1,0 +1,85 @@
+---
+slug: mcp-server-leandata-routing
+canonical_slug: mcp-server-leandata-routing
+locale: pt-BR
+verticals: [revops]
+title: MCP server exposing LeanData routing decisions to Claude, read-only
+artifact_type: mcp-server
+tools_used: [leandata, salesforce, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-08-09"
+---
+
+Um servidor Model Context Protocol que dá ao [Claude](/pt-BR/tools/claude/) cinco ferramentas de leitura sobre o log de auditoria de roteamento do [LeanData](/pt-BR/tools/leandata/), para que um agente consiga responder "por que esse lead caiu nesse rep?" sem ninguém abrir a interface do LeanData. O LeanData grava uma linha `LeanData__Log__c` por registro a cada passagem por um grafo de roteamento publicado; o servidor consulta esse objeto pela API REST do [Salesforce](/pt-BR/tools/salesforce/). Ele não escreve nada, em lugar nenhum. O scaffold fica em `apps/web/public/artifacts/mcp-server-leandata-routing/` — um `README.md`, um `pyproject.toml` e `src/leandata_routing_mcp/server.py` com o cliente, o resolvedor de campos e as cinco ferramentas. Instale com `pip install -e .`.
+
+Leia a próxima seção primeiro, porque o LeanData já publica um servidor MCP e não é este.
+
+## Quando usar isso
+
+O release Q2-2026 do LeanData lançou o **BookIt MCP**, um servidor oficial que cobre agendamento: preview de disponibilidade, consultas ao log de reuniões, lookup de usuários e pools, lookup de tipos de reunião, contagens e calibrações, e links de agendamento no lado da leitura — mais escritas para roteamento e booking do BookIt for Forms, cancelar, reagendar, reatribuir e pedir créditos. Ele autentica via Salesforce OAuth, derivando o escopo de admin ou usuário do permission set de quem fez login, ou via código de uso único para agentes externos sem credenciais Salesforce na sua org. **Se a sua pergunta tem formato de reunião, essa é a resposta certa e este scaffold é trabalho jogado fora.**
+
+O mesmo release também reconstruiu os Audit Logs sobre infraestrutura cloud com um assistente de IA embarcado que responde perguntas de roteamento em linguagem natural e cita caminhos de nós e condições avaliadas. Para um admin depurando um lead de forma interativa, esse assistente já vem incluso, não exige código e ganha de qualquer coisa que você construísse.
+
+Então a lacuna que isso preenche é estreita e específica: **perícia de roteamento que o seu próprio agente consegue executar**, na mesma conversa que o resto do seu stack de GTM. Três casos fazem valer a hora de trabalho.
+
+**A pergunta atravessa sistemas.** "Quais dos leads enterprise da semana passada foram roteados para um rep que já estava acima da capacidade, e o que fizeram com eles?" exige o log de roteamento cruzado com a atividade do CRM. O assistente in-app responde sobre roteamento. Um agente com este servidor mais suas ferramentas de CRM responde a pergunta inteira.
+
+**Quem chama é um job, não uma pessoa.** O escopo do BookIt MCP vem do permission set de um usuário logado. Um watchdog que acorda às 06:00 e checa se algo falhou no roteamento não tem pessoa para ser. O fluxo client-credentials daqui dá ao servidor identidade própria, com um usuário Run As do Salesforce carregando as permissões.
+
+**Você precisa do raciocínio em um transcript.** A resposta de um assistente dentro da interface do LeanData não é um artefato. A saída de uma ferramenta em uma conversa dá para colar em uma revisão de incidente.
+
+## Quando NÃO usar isso
+
+- **Qualquer coisa com formato de reunião.** Já coberto acima. O BookIt MCP faz booking, cancelamento e reatribuição, e aplica os permission sets do BookIt enquanto faz isso. Este servidor não tem rota de escrita a acrescentar e não deveria criar uma.
+- **Depuração interativa de um único lead por um admin.** O assistente de IA dos Audit Logs está bem ali e conhece o caminho de nós.
+- **A PII do log de roteamento não pode chegar a um LLM.** As linhas do log referenciam Leads e Contacts e, dependendo dos campos customizados da org, podem carregar nomes, emails e atributos de território. Todo campo retornado entra na conversa e vive no transcript. Restringir a leitura em nível de campo no Salesforce diminui esse conjunto; não elimina.
+- **Você quer mudar o roteamento.** Nada aqui edita um grafo, um pool ou uma atribuição. Ler por que uma decisão aconteceu e tomar outra são trabalhos separados, com raios de impacto diferentes.
+
+## O que ele expõe
+
+Cinco ferramentas, todas de leitura, definidas em `src/leandata_routing_mcp/server.py`:
+
+- `describe_routing_log()` — o inventário de campos que esta org expõe, agrupado pelo papel de cada campo: grafo, trigger, resultado, owner, registro casado, erro, caminho de nós. A descrição da ferramenta manda o agente rodar isso primeiro.
+- `get_routing_history(record_id, limit)` — as passagens de roteamento de um registro do Salesforce, da mais recente para a mais antiga. Responde "como esse registro chegou nesse owner?"
+- `explain_assignment(log_id)` — todo campo preenchido de uma única linha do log. Uma linha isolada tem custo de contexto limitado, então esta projeta tudo.
+- `find_routing_errors(since, until, limit)` — linhas em uma janela de datas cujos campos com formato de erro estão preenchidos. Pega registros que entraram em um grafo e não rotearam limpo.
+- `get_routing_throughput(since, until)` — contagens de linhas agrupadas pelo campo de grafo da org, mais a profundidade atual do objeto de fila de processamento do LeanData. Separa "o roteamento está lento" de "o roteamento nunca rodou".
+
+**Os nomes de API dos campos são resolvidos em runtime, nunca hardcoded.** O LeanData distribui um managed package e os clientes carimbam seus próprios campos no objeto Log, então o inventário difere por org. Cada ferramenta chama o `describe` do Salesforce e compara nomes e labels com as pistas de papel em `_ROLE_HINTS`, com cache pela vida do processo. Um scaffold com lista de campos hardcoded funcionaria na org contra a qual foi escrito e em nenhuma outra.
+
+A projeção padrão é limitada a 40 campos em vez de selecionar tudo. As orgs carimbam dezenas de campos customizados no objeto Log e cada um custa contexto em cada linha retornada.
+
+## Custo e throughput
+
+Aqui não existe cobrança por chamada — o custo é a alocação de API do Salesforce, dividida com todas as outras integrações da org. As edições Enterprise e Professional recebem 100.000 requests por 24 horas mais 1.000 por licença Salesforce; Unlimited e Performance recebem 100.000 mais 5.000 por licença; Developer Edition recebe 15.000 (documentação de limites de plataforma do Salesforce). Cada chamada de ferramenta gasta um ou dois requests — um `describe`, cacheado depois do primeiro, e uma query.
+
+A restrição que amarra não é a alocação, é a **retenção**. A retenção padrão do log de auditoria é de 90 dias, configurável em Admin → Settings → Reporting do LeanData, com um job diário apagando o que passa disso. A experiência cloud do Q2-2026 estende o armazenamento para 24 meses e sincroniza a cada 15 minutos. Qual das duas limita suas respostas depende de em qual experiência sua org está, e ela limita silenciosamente toda pergunta histórica que você fizer.
+
+O setup leva cerca de uma hora, a maior parte dela no Salesforce criando o Connected App e confirmando o que o usuário Run As consegue ler de fato.
+
+## Modos de falha e proteções
+
+**O agente reporta "nenhuma linha" quando a verdade é "o log expirou".** Uma pergunta sobre um lead roteado no trimestre passado volta vazia contra uma janela de retenção de 90 dias, e o vazio é lido como "isso nunca aconteceu". *Proteção:* o ramo de resultado vazio em `_get_routing_history` nomeia as duas possibilidades explicitamente — nunca entrou em um grafo publicado, ou passou da janela configurada — então o modelo é obrigado a levar a ambiguidade até a resposta em vez de resolvê-la errado.
+
+**As pistas de papel erram a nomenclatura de uma org e uma ferramenta degrada em silêncio.** `_ROLE_HINTS` casa substrings como `graph`, `outcome`, `error`. Uma org com nomenclatura incomum recebe `(none matched)` para um papel. *Proteção:* toda ferramenta afetada devolve uma mensagem nomeando o que não conseguiu achar e apontando para `describe_routing_log`, em vez de rodar uma query com um buraco. Este é o limite 2 de 8 na lista numerada de pré-produção do README.
+
+**`find_routing_errors` infere os campos errados.** Ele seleciona campos de texto com formato de erro pelo nome, então um campo nomeado para outra coisa que contenha `error` entra e um campo de falha legítimo chamado `LeanData__Disposition__c` não. *Proteção:* a ferramenta imprime quais campos checou no cabeçalho. Uma resposta que você não consegue auditar é pior do que resposta nenhuma.
+
+**Um agente em loop vira vizinho barulhento para a org inteira.** A alocação diária do Salesforce é no nível da org, então um agente desgovernado degrada todas as outras integrações antes de alguém perceber. *Proteção:* `LD_MAX_ROWS` (padrão 200) limita cada ferramenta, e `SalesforceClient.query` deliberadamente não segue `nextRecordsUrl` — uma página por chamada, sempre. Ainda não existe contador de chamadas de API; esse é o limite 7 e precisa estar no lugar antes do uso desassistido.
+
+**Um ID de registro vindo da conversa chega ao SOQL.** *Proteção:* os IDs são comparados com `^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$` e as datas com um padrão ISO-8601 antes de qualquer um entrar em uma string de query. As falhas estouram antes de o SOQL ser montado.
+
+## Contra as alternativas
+
+**Os relatórios nativos do Salesforce sobre `LeanData__Log__c`** são a resposta documentada pelo próprio LeanData e a melhor escolha para um dashboard semanal fixo de saúde do roteamento. Relatórios não compõem com mais nada que um agente saiba, que é o argumento inteiro deste scaffold.
+
+**O BookIt MCP** ganha em esforço, suporte e correção de escopo para toda pergunta de agendamento, e faz escritas com segurança porque aplica os permission sets do próprio LeanData. Ele não expõe a perícia de decisões de roteamento sobre o log de auditoria, que é a única coisa para a qual este servidor existe.
+
+**O Chili Piper** vale ser citado para times que ainda estão escolhendo: se você está avaliando [plataformas de roteamento](/pt-BR/vs/leandata-vs-chili-piper/) em vez de instrumentar uma que já roda, não construa nada até essa decisão aterrissar.
+
+## Stack
+
+Combina com os servidores de [Apollo](/pt-BR/workflows/mcp-server-apollo-revops/), [Attio](/pt-BR/workflows/mcp-server-attio-revops/) e [ZoomInfo](/pt-BR/workflows/mcp-server-zoominfo-gtm-revops/) para times que padronizam acesso MCP somente leitura nos sistemas de GTM — a perícia de roteamento é mais útil na mesma conversa que os dados que alimentaram a decisão de roteamento.

@@ -1,0 +1,85 @@
+---
+slug: mcp-server-leandata-routing
+canonical_slug: mcp-server-leandata-routing
+locale: fr
+verticals: [revops]
+title: MCP server exposing LeanData routing decisions to Claude, read-only
+artifact_type: mcp-server
+tools_used: [leandata, salesforce, claude]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 60min
+human_tested: false
+last_updated: "2026-08-09"
+---
+
+Un serveur Model Context Protocol qui donne à [Claude](/fr/tools/claude/) cinq outils en lecture sur le journal d'audit de routage de [LeanData](/fr/tools/leandata/), pour qu'un agent puisse répondre à « pourquoi ce lead a-t-il atterri chez ce commercial ? » sans que personne n'ouvre l'interface LeanData. LeanData écrit une ligne `LeanData__Log__c` par enregistrement et par passage dans un graphe de routage déployé ; le serveur interroge cet objet via l'API REST de [Salesforce](/fr/tools/salesforce/). Il n'écrit rien, nulle part. Le scaffold se trouve dans `apps/web/public/artifacts/mcp-server-leandata-routing/` — un `README.md`, un `pyproject.toml` et `src/leandata_routing_mcp/server.py` contenant le client, le résolveur de champs et les cinq outils. Installation avec `pip install -e .`.
+
+Lisez d'abord la section suivante, car LeanData publie déjà un serveur MCP, et ce n'est pas celui-ci.
+
+## Quand l'utiliser
+
+La release Q2-2026 de LeanData a livré **BookIt MCP**, un serveur officiel couvrant la prise de rendez-vous : aperçu des disponibilités, requêtes sur le journal des réunions, recherche d'utilisateurs et de pools, recherche de types de réunion, comptages et calibrages, et liens de réservation côté lecture — plus des écritures pour le routage et la réservation via BookIt for Forms, l'annulation, le report, la réattribution et les demandes de crédit. L'authentification passe par Salesforce OAuth, le périmètre admin ou utilisateur étant déduit du permission set de la personne connectée, ou par un code à usage unique pour les agents externes sans identifiants Salesforce dans votre org. **Si votre question a la forme d'une réunion, c'est la bonne réponse et ce scaffold est du travail perdu.**
+
+La même release a aussi reconstruit les Audit Logs sur une infrastructure cloud, avec un assistant IA intégré qui répond aux questions de routage en langage naturel en citant les chemins de nœuds et les conditions évaluées. Pour un admin qui débogue un lead de façon interactive, cet assistant est inclus, ne demande aucun code et bat tout ce que vous construiriez.
+
+Le manque que cela comble est donc étroit et précis : **une analyse forensique du routage que votre propre agent peut mener**, dans la même conversation que le reste de votre stack GTM. Trois cas justifient l'heure de travail.
+
+**La question traverse plusieurs systèmes.** « Lesquels des leads enterprise de la semaine dernière ont été routés vers un commercial déjà au-delà de sa capacité, et qu'en ont-ils fait ? » exige de croiser le journal de routage avec l'activité du CRM. L'assistant intégré répond sur le routage. Un agent disposant de ce serveur et de vos outils CRM répond à la question entière.
+
+**L'appelant est un job, pas une personne.** Le périmètre de BookIt MCP vient du permission set d'un utilisateur connecté. Un watchdog qui se réveille à 06:00 et vérifie si quelque chose a échoué au routage n'a personne à être. Le flux client-credentials employé ici donne au serveur sa propre identité, un utilisateur Run As Salesforce portant les permissions.
+
+**Il vous faut le raisonnement dans un transcript.** La réponse d'un assistant à l'intérieur de l'interface LeanData n'est pas un artefact. La sortie d'un outil dans une conversation se colle dans une revue d'incident.
+
+## Quand NE PAS l'utiliser
+
+- **Tout ce qui a la forme d'une réunion.** Traité plus haut. BookIt MCP fait la réservation, l'annulation et la réattribution, et applique les permission sets de BookIt en le faisant. Ce serveur n'a aucun chemin d'écriture à ajouter et ne devrait pas en développer un.
+- **Le débogage interactif d'un lead unique par un admin.** L'assistant IA des Audit Logs est juste là et connaît le chemin de nœuds.
+- **Les données personnelles du journal de routage ne peuvent pas atteindre un LLM.** Les lignes du journal référencent des Leads et des Contacts et, selon les champs personnalisés de l'org, peuvent porter des noms, des emails et des attributs de territoire. Chaque champ renvoyé entre dans la conversation et vit dans le transcript. Retirer le droit de lecture au niveau champ dans Salesforce réduit cet ensemble ; cela ne l'élimine pas.
+- **Vous voulez modifier le routage.** Rien ici ne modifie un graphe, un pool ou une attribution. Lire pourquoi une décision a eu lieu et en prendre une autre sont deux travaux distincts, aux rayons d'impact différents.
+
+## Ce qu'il expose
+
+Cinq outils, tous en lecture, définis dans `src/leandata_routing_mcp/server.py` :
+
+- `describe_routing_log()` — l'inventaire des champs que cette org expose, groupé par le rôle de chaque champ : graphe, trigger, résultat, owner, enregistrement apparié, erreur, chemin de nœuds. La description de l'outil indique à l'agent de l'exécuter en premier.
+- `get_routing_history(record_id, limit)` — les passages de routage d'un enregistrement Salesforce, du plus récent au plus ancien. Répond à « comment cet enregistrement est-il arrivé chez cet owner ? »
+- `explain_assignment(log_id)` — chaque champ renseigné d'une seule ligne du journal. Une ligne isolée représente un coût de contexte borné, cet outil projette donc tout.
+- `find_routing_errors(since, until, limit)` — les lignes d'une fenêtre de dates dont les champs de type erreur sont renseignés. Attrape les enregistrements entrés dans un graphe qui n'ont pas routé proprement.
+- `get_routing_throughput(since, until)` — les comptages de lignes groupés par le champ de graphe de l'org, plus la profondeur actuelle de l'objet file de traitement de LeanData. Sépare « le routage est lent » de « le routage n'a jamais tourné ».
+
+**Les noms d'API des champs sont résolus à l'exécution, jamais codés en dur.** LeanData distribue un managed package et les clients apposent leurs propres champs sur l'objet Log, si bien que l'inventaire diffère d'une org à l'autre. Chaque outil appelle le `describe` de Salesforce et confronte noms et libellés aux indices de rôle de `_ROLE_HINTS`, avec mise en cache pour la durée de vie du processus. Un scaffold à liste de champs codée en dur fonctionnerait dans l'org contre laquelle il a été écrit, et nulle part ailleurs.
+
+La projection par défaut est bornée à 40 champs plutôt que de tout sélectionner. Les orgs apposent des dizaines de champs personnalisés sur l'objet Log, et chacun coûte du contexte sur chaque ligne renvoyée.
+
+## Coût et débit
+
+Il n'y a ici aucun frais par appel — le coût, c'est le quota d'API Salesforce, partagé avec toutes les autres intégrations de l'org. Les éditions Enterprise et Professional reçoivent 100 000 requêtes par 24 heures plus 1 000 par licence Salesforce ; Unlimited et Performance reçoivent 100 000 plus 5 000 par licence ; Developer Edition reçoit 15 000 (documentation des limites de plateforme Salesforce). Chaque appel d'outil dépense une à deux requêtes — un `describe`, mis en cache après le premier, et une requête.
+
+La contrainte qui mord n'est pas le quota, c'est la **rétention**. La rétention par défaut du journal d'audit est de 90 jours, configurable dans Admin → Settings → Reporting de LeanData, avec un job quotidien qui supprime au-delà. L'expérience cloud du Q2-2026 porte le stockage à 24 mois et synchronise toutes les 15 minutes. Laquelle des deux borne vos réponses dépend de l'expérience sur laquelle tourne votre org, et elle borne silencieusement chaque question historique que vous posez.
+
+L'installation prend environ une heure, l'essentiel passé dans Salesforce à créer la Connected App et à confirmer ce que l'utilisateur Run As peut réellement lire.
+
+## Modes de défaillance et garde-fous
+
+**L'agent rapporte « aucune ligne » alors que la vérité est « le journal a expiré ».** Une question sur un lead routé au trimestre dernier revient vide contre une fenêtre de rétention de 90 jours, et le vide se lit comme « cela n'est jamais arrivé ». *Garde-fou :* la branche de résultat vide de `_get_routing_history` nomme explicitement les deux possibilités — jamais entré dans un graphe déployé, ou vieilli au-delà de la fenêtre configurée — de sorte que le modèle doit porter l'ambiguïté jusque dans sa réponse au lieu de la trancher à tort.
+
+**Les indices de rôle manquent la nomenclature d'une org et un outil se dégrade en silence.** `_ROLE_HINTS` compare des sous-chaînes comme `graph`, `outcome`, `error`. Une org à la nomenclature inhabituelle obtient `(none matched)` pour un rôle. *Garde-fou :* chaque outil concerné renvoie un message nommant ce qu'il n'a pas trouvé et pointant vers `describe_routing_log`, au lieu d'exécuter une requête trouée. C'est la limite 2 sur 8 de la liste numérotée de pré-production du README.
+
+**`find_routing_errors` déduit les mauvais champs.** Il sélectionne les champs texte de type erreur par leur nom, si bien qu'un champ nommé pour autre chose et contenant `error` est inclus, tandis qu'un vrai champ d'échec nommé `LeanData__Disposition__c` ne l'est pas. *Garde-fou :* l'outil imprime dans son en-tête les champs qu'il a vérifiés. Une réponse que vous ne pouvez pas auditer est pire qu'aucune réponse.
+
+**Un agent en boucle devient un voisin bruyant pour toute l'org.** Le quota quotidien Salesforce est au niveau de l'org, donc un agent emballé dégrade toutes les autres intégrations avant que quiconque le remarque. *Garde-fou :* `LD_MAX_ROWS` (200 par défaut) borne chaque outil, et `SalesforceClient.query` ne suit délibérément pas `nextRecordsUrl` — une page par appel, toujours. Il n'existe pas encore de compteur d'appels API ; c'est la limite 7, et elle doit être en place avant tout usage sans surveillance.
+
+**Un identifiant d'enregistrement issu de la conversation atteint le SOQL.** *Garde-fou :* les identifiants sont confrontés à `^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$` et les dates à un motif ISO-8601 avant que l'un ou l'autre n'entre dans une chaîne de requête. Les échecs lèvent avant que le SOQL ne soit construit.
+
+## Face aux alternatives
+
+**Les rapports natifs Salesforce sur `LeanData__Log__c`** sont la réponse documentée par LeanData elle-même et le meilleur choix pour un tableau de bord hebdomadaire fixe de santé du routage. Les rapports ne se composent avec rien d'autre que l'agent connaît, ce qui constitue tout l'argument en faveur de ce scaffold.
+
+**BookIt MCP** l'emporte sur l'effort, le support et la justesse du périmètre pour toute question de prise de rendez-vous, et il écrit sans risque parce qu'il applique les permission sets de LeanData. Il n'expose pas l'analyse forensique des décisions de routage sur le journal d'audit, seule raison d'être de ce serveur.
+
+**Chili Piper** mérite d'être cité pour les équipes qui choisissent encore : si vous évaluez des [plateformes de routage](/fr/vs/leandata-vs-chili-piper/) au lieu d'instrumenter celle que vous exploitez déjà, ne construisez rien tant que cette décision n'a pas atterri.
+
+## Stack
+
+S'associe aux serveurs [Apollo](/fr/workflows/mcp-server-apollo-revops/), [Attio](/fr/workflows/mcp-server-attio-revops/) et [ZoomInfo](/fr/workflows/mcp-server-zoominfo-gtm-revops/) pour les équipes qui standardisent un accès MCP en lecture seule sur leurs systèmes GTM — l'analyse forensique du routage est plus utile dans la même conversation que les données qui ont nourri la décision de routage.
