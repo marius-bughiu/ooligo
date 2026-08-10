@@ -64,7 +64,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:stack] [vertical:recruiting] high-volume-recruiting-stack — material (paradox acquired by Workday 2025-10 [constituent]) → slug: high-volume-recruiting-stack
 - refresh:C: [type:learn] [vertical:legal-ops] contract-review-sop — material (lawgeex enterprise product dismantled 2023 [related_tools]) → slug: contract-review-sop
 - refresh:C: [type:learn] [vertical:legal-ops] ediscovery — material (casetext retired by Thomson Reuters 2025-04 [related_tools]) → slug: ediscovery
-- refresh:C: [type:learn] [vertical:legal-ops] legal-ai-vs-legaltech — material (casetext retired by Thomson Reuters 2025-04 [names retired product as live]; lawgeex enterprise product dismantled 2023 [names defunct/absorbed vendor as live]) → claimed: refresh 2026-08-10T05:04:00Z
+- refresh:C: [type:learn] [vertical:legal-ops] legal-ai-vs-legaltech — material (casetext retired by Thomson Reuters 2025-04 [names retired product as live]; lawgeex enterprise product dismantled 2023 [names defunct/absorbed vendor as live]) → slug: legal-ai-vs-legaltech
 - refresh:C: [type:learn] [vertical:legal-ops] nda-playbook — material (lawgeex enterprise product dismantled 2023 [related_tools])
 - refresh:C: [type:learn] [vertical:legal-ops] privilege-review — material (casetext retired by Thomson Reuters 2025-04 [names retired product as live])
 - refresh:C: [type:tool] [vertical:revops] salesforce — material (body carries banned vocab at L36 and stale Agentforce/Einstein 1 pricing refs; pricing frontmatter itself verified unchanged 2026-08-04)
