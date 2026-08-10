@@ -1,0 +1,79 @@
+---
+slug: territory-carve-impact-simulator-skill
+canonical_slug: territory-carve-impact-simulator-skill
+locale: pt-BR
+verticals: [revops]
+title: Simulador de impacto de recorte de territórios
+artifact_type: claude-skill
+tools_used: [claude, salesforce, fullcast]
+roles: [revops]
+difficulty: advanced
+time_to_setup: "2-3 hours"
+human_tested: false
+last_updated: "2026-08-10"
+en_verified: "2026-08-10"
+---
+
+Um Claude Skill que pega um recorte de territórios já rascunhado e reporta o que ele vai realmente fazer: onde a cobertura quebra, quais territórios carregam mais cota do que seus reps conseguem atingir e quais named accounts trocam de mãos a um preço que vale a pena olhar. Ele roda antes de o recorte chegar aos reps, enquanto as regras ainda são editáveis, e termina em um veredito de `ready`, `revise` ou `blocked`. Ele nunca escreve uma atribuição de volta no CRM.
+
+O bundle fica em `apps/web/public/artifacts/territory-carve-impact-simulator-skill/` e contém o `SKILL.md` mais três templates de referência: `references/1-carve-input-template.md` (o recorte proposto — regras ordenadas, roster de reps, data de vigência), `references/2-coverage-thresholds-template.md` (o modelo de capacidade da organização, a curva de ramp, as tolerâncias de disrupção e as contas protegidas) e `references/3-sample-output-format.md` (o Markdown exato que o Skill emite, com um exemplo trabalhado).
+
+## Quando usar
+
+De duas a quatro semanas antes de um realinhamento de início de ano fiscal ou de meio de ano, sobre um recorte que alguém rascunhou e ninguém testou. Essa janela importa mais do que parece: um recorte fica politicamente caro de mudar no momento em que os reps veem o mapa, e o Skill registra `carve_status` a partir da spec do recorte, então um relatório rodado depois da comunicação abre dizendo que as revisões recomendadas agora custam credibilidade além de esforço. Rodadas de um único segmento também são válidas — um pod se adiantando ao realinhamento geral — assim como uma rodada posterior quando um segmento não bate o plano e ninguém sabe dizer se a culpa é do desenho de cobertura ou da execução.
+
+A parte que se paga é a ponderação. Qualquer ferramenta de planejamento consegue contar quantas contas trocam de dono, e essa contagem é quase inútil: um recorte que move 200 contas dormentes é de graça, um que move doze contas com pipeline em estágio avançado e um rep com três anos de relacionamento não é, e a contagem sem peso ordena os dois ao contrário. O Skill ordena o churn por pipeline aberto material multiplicado por um fator de tempo de relacionamento, o que normalmente reduz uma lista de mudança de 200 contas a quatro ou cinco linhas que concentram quase todo o risco.
+
+## Quando NÃO usar
+
+- **Gerar um recorte.** Isto pontua um recorte que outra pessoa desenhou. Não propõe regras, não rebalanceia contas e não busca uma divisão ótima. Sem rascunho, não há nada para simular.
+- **Escrever de volta no Salesforce.** O Skill é somente leitura em todo objeto que toca. Mudanças de território são executadas no sistema que as governa, depois que uma pessoa aprova o plano; ligar a saída a um job de atribuição automática elimina justamente a decisão que a ferramenta existe para informar.
+- **Insumos de comp.** O relatório de capacidade diz se um território consegue carregar uma cota que alguém já definiu. Se você mandar isso para o cálculo de comp, criou um incentivo direto a discutir os insumos: bandas de produtividade voltam à mesa, curvas de ramp viram negociação e o modelo para de descrever a realidade.
+- **Recortes que só existem como uma planilha de IDs de conta.** Uma lista de pares conta-rep não pode ser simulada contra o que o motor de roteamento vai fazer no go-live. Converta em regras e simule essas; se as regras não reproduzem a planilha, essa discrepância já é o achado.
+- **Books sem histórico de propriedade.** Se o `AccountHistory` não registra mudanças de `OwnerId`, o tempo de relacionamento aparece como zero em todo lugar e qualquer recorte parece barato. O Skill devolve `blocked` abaixo do `history_coverage_floor_pct` em vez de emitir um número de churn que não consegue sustentar.
+
+## Setup
+
+1. **Escreva o recorte como regras ordenadas.** Em `references/1-carve-input-template.md`, troque as regras de exemplo pelas suas, na ordem em que o motor de roteamento vai avaliá-las, usando nomes de campo da API do Salesforce em vez de labels. A ordem é determinante: o Skill avalia first-match-wins para espelhar a execução, então reordenar regras muda o mapa de atribuição.
+2. **Decida sobre a regra coringa.** O template vem com uma regra final que captura tudo. Se você mantiver, `no_rule_matched` será sempre zero e o relatório de cobertura vira uma pergunta sobre o tamanho do pool; se remover, as lacunas reais de regra aparecem com nome. Escolha de propósito, em vez de herdar a decisão do template.
+3. **Preencha o arquivo de thresholds.** Em `references/2-coverage-thresholds-template.md`, derive `productivity_bands` do seu próprio closed-won dos últimos 12 meses por rep totalmente rampado — percentil 75 para `high`, mediana para `mid`, percentil 25 para `low` — em vez de pegar de um benchmark. Defina `max_revenue_churn_pct` de forma explícita: os 25% do template deixam um quarto das relações de receita de um território mudarem antes de algo ser sinalizado, o que serve para mid-market de volume e é frouxo demais para enterprise de alto toque.
+4. **Faça backtest da curva de ramp.** Rode uma vez com `dry_run: true` antes de confiar em qualquer número de capacidade. Ele compara sua curva com o attainment da coorte de novas contratações do ano passado e reporta o delta — a diferença entre o ramp que o financeiro aprovou e o que a coorte de fato produziu costuma ser o maior erro isolado de um modelo de capacidade.
+5. **Instale e restrinja as credenciais.** Coloque o bundle em `~/.claude/skills/territory-carve-impact-simulator/` e configure `SFDC_TOKEN` com leitura em `Account`, `AccountHistory`, `Opportunity`, `OpportunityHistory`, `User` e `UserTerritory2Association`. Somente leitura é o escopo correto, não uma precaução.
+
+## O que o skill realmente faz
+
+Ele roda em duas passadas, e a divisão é proposital. A primeira passada atribui cada conta avaliando as regras do recorte na ordem declarada, parando na primeira correspondência, e registra qual índice de regra bateu. A segunda faz a aritmética de impacto contra esse mapa de atribuição já fechado. Calcular churn e capacidade em linha enquanto as regras ainda estão sendo resolvidas duplica a contagem de qualquer conta que mais de uma regra poderia reivindicar — e como first-match-wins significa que só uma vai reivindicá-la de verdade, esses números em linha descrevem um recorte que nunca vai existir.
+
+Contas sem atribuição se dividem em duas causas em vez de um balde só: `no_rule_matched` é lacuna de cobertura, `null_input_field` é lacuna de dados, e o Skill nomeia o campo responsável. Confundir os dois manda um time de planejamento redesenhar regras quando o conserto é um backfill. No exemplo trabalhado em `references/3-sample-output-format.md`, 387 contas chegam ao mid-market só porque `Account.AnnualRevenue` está null e elas pularam as duas regras de enterprise acima — segmentação acontecendo por acidente, e invisível em uma contagem única de não atribuídas.
+
+Capacidade é capacidade de carregar cota ajustada por ramp, não headcount vezes cota média: cada rep contribui com sua banda de produtividade escalada pelo fator de ramp do mês em que a data de início o coloca na data de vigência. Um território balanceado por contagem de contas que absorve dois reps começando seis semanas antes do go-live mostra um déficit aqui, que é exatamente a falha que um recorte balanceado por contagem de contas foi construído para esconder.
+
+Essa aritmética roda em código, e não pela leitura dos registros pelo modelo. Uma conversa de planejamento desmorona no momento em que duas rodadas do mesmo recorte produzem números diferentes, e um modelo lendo vários milhares de linhas de conta não será reproduzível. O trabalho do modelo é a ordenação, a narrativa e a seção de "o que mudar".
+
+## Realidade de custo
+
+Como o trabalho em nível de registro acontece em código, o custo em tokens escala com o tamanho do resumo, não com o tamanho do book. Um recorte de 5.000 contas e 30 reps custa aproximadamente de 2 a 4 USD por simulação no Claude Sonnet 5, ao preço publicado de API de 3 USD por milhão de tokens de entrada e 15 USD por milhão de tokens de saída — os arquivos de referência, as tabelas agregadas e o próprio relatório, não as 5.000 linhas. Esse número é uma estimativa derivada do preço por token e do tamanho típico do relatório; ele se move com quanta narrativa você pede, não com a quantidade de contas. Um ciclo de planejamento leva de cinco a quinze rodadas conforme o recorte é revisado, então reserve por volta de 50 USD de gasto de API para o ciclo.
+
+A comparação que importa é tempo. Um analista de RevOps produzindo essas três visões na mão — pivotar o book de contas contra as regras propostas, juntar pipeline e histórico de propriedade, montar um modelo de capacidade ponderado por ramp — gasta de três a cinco dias por iteração, e é por isso que a maioria dos times faz isso uma vez só e depois discute em cima da primeira versão. O Skill transforma cada iteração em uma rodada de quinze minutos mais uma hora lendo o relatório, que é o que faz caber cinco revisões dentro de uma janela de planejamento em vez de uma.
+
+## Frente às alternativas
+
+- **Salesforce Sales Planning** — publicado a 75 USD por usuário por mês com cobrança anual (página de preços do fornecedor, verificada em 2026-08-10), cobrindo Hierarchy Management, Segment Design e Territory Planning; incluído no Agentforce 1 Sales Edition a 550 USD por usuário por mês. Para um time comercial de 40 assentos, o add-on avulso sai por volta de 36.000 USD ao ano. Escolha a plataforma quando quiser que o recorte seja um artefato governado, versionado e dentro do CRM, com plano e execução no mesmo sistema; escolha o Skill quando precisar de um pre-mortem sobre um recorte que alguém já rascunhou numa planilha. Não são excludentes: rodar o Skill contra um recorte criado no Sales Planning é uma segunda opinião razoável, porque a plataforma que gerou o plano não é o lugar natural para procurar razões pelas quais ele vai falhar.
+- **[Fullcast](/pt-BR/tools/fullcast/)** — uma plataforma de plano-para-execução cobrindo território, cota, capacidade e roteamento, com preço sob consulta e nada publicado. A escolha certa quando seu recorte é contínuo e não anual: territórios que se ajustam conforme contas e headcount se movem, com plano e regras de roteamento sincronizados. O Skill não tem camada de execução alguma, então perde feio nessa modalidade.
+- **A planilha** — a linha de base real na maioria das empresas, e ela produz o recorte que é lançado e depois revisado no silêncio da semana três. Ela não consegue ponderar disrupção nem modelar ramp, então falha exatamente nas duas perguntas que decidem se o recorte se sustenta.
+- **Lançar e consertar dentro do trimestre** — o default honesto. O custo nunca aparece como linha de orçamento; aparece como um segmento que não bate o plano e dois reps de enterprise pedindo demissão no mês dois, momento em que ninguém atribui nenhuma das duas coisas ao recorte.
+
+## Pontos de atenção
+
+- **Um snapshot do CRM que envelhece antes do go-live.** Guarda: o cabeçalho da saída carrega `snapshot_date` e um prazo de re-execução, por padrão 14 dias a partir de `snapshot_staleness_days`. O prazo fica no cabeçalho, não em nota de rodapé, e o relatório declara que os números ficam nulos depois dele.
+- **Histórico de propriedade não rastreado em `Account.OwnerId`.** O tempo de relacionamento colapsa silenciosamente para zero e todo recorte parece barato. Guarda: o Skill verifica a cobertura desse campo no `AccountHistory` e devolve `blocked` abaixo do piso, em vez de reportar um número que não sustenta.
+- **Uma curva de ramp escrita pelo RH e não amparada pelos dados.** Guarda: `dry_run` faz backtest da curva contra a coorte do ano passado e alerta quando os meses observados até produtividade plena excedem o arquivo em mais de `ramp_tolerance_months`, reportando a curva observada ao lado da configurada.
+- **Uma lista de contas protegidas que só cresce.** Quando toda conta que alguém preza está protegida, a lista deixa de ser sinal e vira veto ao realinhamento. Guarda: cada entrada carrega um motivo datado, e a data `last_reviewed` do arquivo de thresholds dispara um banner de aviso em todo relatório com mais de 180 dias.
+- **Tratar `revise` como veto.** O veredito nomeia territórios e contas, não uma decisão. A liderança pode lançar conscientemente um recorte com déficit de capacidade porque um plano de contratação fecha o buraco no Q2. Guarda: a seção "o que mudar" expressa o conserto em unidades — mover cerca de 1,2M de cota, tirar uma conta do recorte — para que aceitar o risco seja uma escolha explícita com tamanho declarado.
+
+## Stack
+
+- **[Salesforce](/pt-BR/tools/salesforce/)** — contas, histórico de propriedade, pipeline aberto, histórico de estágios de oportunidade, registros de usuário
+- **[Claude](/pt-BR/tools/claude/)** — avaliação de regras, ordenação de impacto, síntese do relatório; a aritmética roda em código, não em contexto
+- **Os arquivos de spec do recorte e de thresholds** — os dois insumos que tornam a saída específica da sua organização em vez de genérica
+- **Um sistema de roteamento ou gestão de territórios** — [Fullcast](/pt-BR/tools/fullcast/), [LeanData](/pt-BR/tools/leandata/) ou Salesforce Territory Management, onde o recorte aprovado de fato executa

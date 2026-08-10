@@ -1,0 +1,79 @@
+---
+slug: territory-carve-impact-simulator-skill
+canonical_slug: territory-carve-impact-simulator-skill
+locale: en
+verticals: [revops]
+title: Territory carve impact simulator
+artifact_type: claude-skill
+tools_used: [claude, salesforce, fullcast]
+roles: [revops]
+difficulty: advanced
+time_to_setup: "2-3 hours"
+human_tested: false
+last_updated: "2026-08-10"
+en_verified: "2026-08-10"
+---
+
+A Claude Skill that takes a drafted territory carve and reports what it will actually do — where coverage breaks, which territories carry more quota than their reps can reach, and which named accounts change hands at a price worth paying attention to. It runs before the carve ships to reps, while the rules are still editable, and it ends in a verdict of `ready`, `revise`, or `blocked`. It never writes an assignment back to the CRM.
+
+The bundle ships at `apps/web/public/artifacts/territory-carve-impact-simulator-skill/` and contains `SKILL.md` plus three reference templates: `references/1-carve-input-template.md` (the proposed carve — ordered rules, rep roster, effective date), `references/2-coverage-thresholds-template.md` (the org's capacity model, ramp curve, disruption tolerances, and protected accounts), and `references/3-sample-output-format.md` (the exact Markdown the Skill emits, with a worked example).
+
+## When to use
+
+Two to four weeks before a fiscal-year or mid-year realignment, on a carve that someone has drafted and nobody has stress-tested. That window matters more than it sounds: a carve becomes politically expensive to change the moment reps see the map, and the Skill records `carve_status` from the carve spec so a report run after socialization opens by saying the revisions it recommends now cost credibility as well as effort. Single-segment runs are also valid — one pod moving ahead of the wider realignment — as is an after-the-fact run when a segment is missing plan and nobody can say whether the coverage design or the execution is at fault.
+
+The part that earns its keep is the weighting. Every planning tool can count how many accounts change owner, and that count is close to useless: a carve that moves 200 dormant accounts is free, one that moves twelve accounts holding late-stage pipeline with a rep of three years' tenure is not, and the unweighted count ranks them the wrong way round. The Skill ranks churn by material open pipeline multiplied by a tenure factor, which typically collapses a 200-account change list into four or five rows carrying most of the risk.
+
+## When NOT to use
+
+- **Generating a carve.** This scores a carve someone else designed. It does not propose rules, rebalance accounts, or search for an optimal split. With no draft, there is nothing to simulate.
+- **Writing back to Salesforce.** The Skill is read-only on every object it touches. Territory changes execute in the system that owns them, after a human approves the plan; wiring the output into an automated assignment job removes the decision the tool exists to inform.
+- **Comp inputs.** The capacity report says whether a territory can carry a quota someone already set. Route it into comp calculations and you have created a direct incentive to argue with the inputs — productivity bands get relitigated, ramp curves get negotiated, and the model stops describing reality.
+- **Carves that exist only as a spreadsheet of account IDs.** A list of account-to-rep pairs cannot be simulated against what the routing engine will do at go-live. Convert it into rules and simulate those; if the rules cannot reproduce the spreadsheet, that discrepancy is itself the finding.
+- **Books without ownership history.** If `AccountHistory` does not record `OwnerId` changes, tenure reads as zero across the board and every carve looks cheap. The Skill returns `blocked` below `history_coverage_floor_pct` rather than emitting a churn number it cannot support.
+
+## Setup
+
+1. **Write the carve as ordered rules.** In `references/1-carve-input-template.md`, replace the example rules with yours, in the order the routing engine will evaluate them, using Salesforce API field names rather than labels. Order is load-bearing: the Skill evaluates first-match-wins to mirror execution, so reordering rules changes the assignment map.
+2. **Decide on the catch-all.** The template ships with a final rule that catches everything. Keep it and `no_rule_matched` is always zero, turning the coverage report into a question about pool size; drop it and genuine rule gaps surface by name. Pick deliberately rather than inheriting the template's choice.
+3. **Populate the thresholds file.** In `references/2-coverage-thresholds-template.md`, derive `productivity_bands` from your own trailing-12-month closed-won per fully ramped rep — 75th percentile for `high`, median for `mid`, 25th for `low` — rather than from a benchmark. Set `max_revenue_churn_pct` explicitly: the template's 25% lets a quarter of a territory's revenue relationships move before anything flags, which fits volume mid-market and is far too loose for high-touch enterprise.
+4. **Backtest the ramp curve.** Run once with `dry_run: true` before trusting any capacity number. It compares your curve against last year's new-hire cohort attainment and reports the delta — the gap between the ramp finance approved and the one the cohort produced is usually the single largest error in a capacity model.
+5. **Install and scope credentials.** Drop the bundle into `~/.claude/skills/territory-carve-impact-simulator/` and set `SFDC_TOKEN` with read on `Account`, `AccountHistory`, `Opportunity`, `OpportunityHistory`, `User`, and `UserTerritory2Association`. Read-only is the correct scope, not a precaution.
+
+## What the skill actually does
+
+It runs in two passes, and the split is deliberate. Pass one assigns every account by evaluating the carve rules in declared order, stopping at the first match, and records which rule index matched. Pass two does the impact arithmetic against that finished assignment map. Computing churn and capacity inline while rules are still resolving double-counts any account that more than one rule could claim — and since first-match-wins means only one rule will actually claim it, the inline numbers describe a carve that will never exist.
+
+Unassigned accounts split into two causes rather than one bucket: `no_rule_matched` is a coverage gap, `null_input_field` is a data gap, and the Skill names the offending field. Conflating them sends a planning team to redesign rules when the fix is a backfill. In the worked example in `references/3-sample-output-format.md`, 387 accounts reach mid-market only because `Account.AnnualRevenue` is null and they skipped the two enterprise rules above it — segmentation happening by accident, and invisible in a single unassigned count.
+
+Capacity is ramp-adjusted quota-carrying capacity, not headcount times average quota: each rep contributes their productivity band scaled by the ramp factor for the month their start date puts them in on the effective date. A territory balanced on account count that absorbs two reps starting six weeks before go-live shows a shortfall here, which is exactly the failure an account-count-balanced carve is built to hide.
+
+That arithmetic runs in code rather than through the model's reading of the records. A planning conversation collapses the moment two runs of the same carve produce different numbers, and a model reading several thousand account rows will not be reproducible. The model's job is the ranking, the narrative, and the "what to change" section.
+
+## Cost reality
+
+Because the record-level work happens in code, token cost scales with the size of the summary, not the size of the book. A 5,000-account, 30-rep carve runs roughly 2 to 4 USD per simulation on Claude Sonnet 5 at published API pricing of 3 USD per million input tokens and 15 USD per million output tokens — the reference files, the aggregated tables, and the report itself, not the 5,000 rows. That figure is an estimate derived from token pricing and typical report length; it moves with how much narrative you ask for, not with account count. A planning cycle takes five to fifteen runs as the carve gets revised, so budget around 50 USD of API spend for the cycle.
+
+The comparison that matters is time. A RevOps analyst producing these three views by hand — pivoting the account book against the proposed rules, joining pipeline and ownership history, building a ramp-weighted capacity model — spends three to five days per iteration, which is why most teams do it once and then argue from the first version. The Skill turns each iteration into a fifteen-minute run plus an hour reading the report, which is what makes five revisions fit inside a planning window instead of one.
+
+## vs alternatives
+
+- **Salesforce Sales Planning** — published at 75 USD per user per month billed annually (vendor pricing page, checked 2026-08-10), covering Hierarchy Management, Segment Design, and Territory Planning; bundled into Agentforce 1 Sales Edition at 550 USD per user per month. For a 40-seat sales org the standalone add-on runs around 36,000 USD a year. Pick the platform when you want the carve to be a governed, versioned, in-CRM artifact with plan and execution in one system; pick the Skill when you need a pre-mortem on a carve someone already drafted in a spreadsheet. They are not mutually exclusive — running the Skill against a carve authored in Sales Planning is a reasonable second opinion, because the platform that generated the plan is not the natural place to look for reasons it will fail.
+- **[Fullcast](/en/tools/fullcast/)** — a plan-to-execution platform covering territory, quota, capacity, and routing, priced on request with nothing published. The right pick when your carve is continuous rather than annual: territories that adjust as accounts and headcount move, with plan and routing rules kept in sync. The Skill has no execution layer at all, so it loses badly on that motion.
+- **The spreadsheet** — the actual baseline at most companies, and it produces the carve that ships and then gets quietly revised in week three. It cannot weight disruption or model ramp, so it fails on the two questions that decide whether the carve holds.
+- **Shipping and fixing in-quarter** — the honest default. The cost never appears as a line item; it shows up as a segment missing plan and two enterprise reps resigning in month two, at which point nobody attributes either to the carve.
+
+## Watch-outs
+
+- **A CRM snapshot that goes stale before go-live.** Guard: the output header carries `snapshot_date` and a re-run deadline, default 14 days from `snapshot_staleness_days`. The deadline is in the header, not a footnote, and the report says the numbers are void past it.
+- **Ownership history not tracked on `Account.OwnerId`.** Tenure silently collapses to zero and every carve reads as cheap. Guard: the Skill checks `AccountHistory` coverage of that field and returns `blocked` below the floor rather than reporting an unsupported number.
+- **A ramp curve HR wrote rather than one the data supports.** Guard: `dry_run` backtests the curve against last year's cohort and warns when observed months-to-full-productivity exceeds the file by more than `ramp_tolerance_months`, reporting the observed curve next to the configured one.
+- **A protected-account list that only grows.** Once every account someone cares about is protected, the list stops being a signal and becomes a veto on realignment. Guard: each entry carries a dated reason, and the thresholds file's `last_reviewed` date drives a warning banner on every report older than 180 days.
+- **Treating `revise` as a veto.** The verdict names territories and accounts, not a decision. Leadership may knowingly ship a carve with a capacity shortfall because a hiring plan closes it in Q2. Guard: the "what to change" section states the fix in units — move roughly 1.2M of quota, carve out one account — so accepting the risk is an explicit choice with a size attached.
+
+## Stack
+
+- **[Salesforce](/en/tools/salesforce/)** — accounts, ownership history, open pipeline, opportunity stage history, user records
+- **[Claude](/en/tools/claude/)** — rule evaluation, impact ranking, report synthesis; arithmetic runs in code, not in context
+- **The carve spec and thresholds files** — the two inputs that make the output specific to your org rather than generic
+- **A routing or territory-management system** — [Fullcast](/en/tools/fullcast/), [LeanData](/en/tools/leandata/), or Salesforce Territory Management, wherever the approved carve actually executes

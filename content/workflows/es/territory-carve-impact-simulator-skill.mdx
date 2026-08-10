@@ -1,0 +1,79 @@
+---
+slug: territory-carve-impact-simulator-skill
+canonical_slug: territory-carve-impact-simulator-skill
+locale: es
+verticals: [revops]
+title: Simulador de impacto de reparto de territorios
+artifact_type: claude-skill
+tools_used: [claude, salesforce, fullcast]
+roles: [revops]
+difficulty: advanced
+time_to_setup: "2-3 hours"
+human_tested: false
+last_updated: "2026-08-10"
+en_verified: "2026-08-10"
+---
+
+Un Claude Skill que toma un reparto de territorios ya redactado y reporta lo que realmente va a hacer: dónde se rompe la cobertura, qué territorios cargan más cuota de la que sus reps pueden alcanzar y qué cuentas nombradas cambian de manos a un precio que conviene mirar. Se ejecuta antes de que el reparto llegue a los reps, mientras las reglas todavía se pueden editar, y termina en un veredicto de `ready`, `revise` o `blocked`. Nunca escribe una asignación de vuelta en el CRM.
+
+El bundle se publica en `apps/web/public/artifacts/territory-carve-impact-simulator-skill/` y contiene `SKILL.md` más tres plantillas de referencia: `references/1-carve-input-template.md` (el reparto propuesto: reglas ordenadas, roster de reps, fecha de entrada en vigor), `references/2-coverage-thresholds-template.md` (el modelo de capacidad de la organización, la curva de ramp, las tolerancias de disrupción y las cuentas protegidas) y `references/3-sample-output-format.md` (el Markdown exacto que emite el Skill, con un ejemplo trabajado).
+
+## Cuándo usarlo
+
+De dos a cuatro semanas antes de una realineación de inicio de año fiscal o de mitad de año, sobre un reparto que alguien redactó y nadie sometió a prueba. Esa ventana importa más de lo que parece: un reparto se vuelve políticamente caro de cambiar en el momento en que los reps ven el mapa, y el Skill registra `carve_status` desde la spec del reparto, de modo que un reporte ejecutado después de la comunicación abre diciendo que las revisiones que recomienda ya cuestan credibilidad además de esfuerzo. Las corridas de un solo segmento también son válidas —un pod que se adelanta a la realineación general— igual que una corrida posterior cuando un segmento no llega a plan y nadie puede decir si la culpa es del diseño de cobertura o de la ejecución.
+
+La parte que justifica su costo es la ponderación. Cualquier herramienta de planificación puede contar cuántas cuentas cambian de dueño, y ese conteo es casi inútil: un reparto que mueve 200 cuentas dormidas es gratis, uno que mueve doce cuentas con pipeline en etapa avanzada y un rep con tres años de relación no lo es, y el conteo sin ponderar los ordena al revés. El Skill ordena la rotación por pipeline abierto material multiplicado por un factor de antigüedad, lo que normalmente reduce una lista de 200 cuentas a cuatro o cinco filas que concentran casi todo el riesgo.
+
+## Cuándo NO usarlo
+
+- **Generar un reparto.** Esto puntúa un reparto que alguien más diseñó. No propone reglas, no rebalancea cuentas ni busca una división óptima. Sin borrador, no hay nada que simular.
+- **Escribir de vuelta en Salesforce.** El Skill es de solo lectura en cada objeto que toca. Los cambios de territorio se ejecutan en el sistema que los gobierna, después de que una persona aprueba el plan; conectar la salida a un job de asignación automática elimina justamente la decisión que la herramienta existe para informar.
+- **Insumos de comp.** El reporte de capacidad dice si un territorio puede cargar una cuota que alguien ya fijó. Si lo enrutas a los cálculos de comp, creas un incentivo directo a discutir los insumos: las bandas de productividad se relitigan, las curvas de ramp se negocian y el modelo deja de describir la realidad.
+- **Repartos que solo existen como una hoja de cálculo de IDs de cuenta.** Una lista de pares cuenta-rep no se puede simular contra lo que el motor de ruteo hará en el go-live. Conviértela en reglas y simula esas; si las reglas no reproducen la hoja de cálculo, esa discrepancia ya es el hallazgo.
+- **Books sin historial de propiedad.** Si `AccountHistory` no registra los cambios de `OwnerId`, la antigüedad se lee como cero en todos lados y cualquier reparto parece barato. El Skill devuelve `blocked` por debajo de `history_coverage_floor_pct` en lugar de emitir un número de rotación que no puede sostener.
+
+## Configuración
+
+1. **Escribe el reparto como reglas ordenadas.** En `references/1-carve-input-template.md`, reemplaza las reglas de ejemplo por las tuyas, en el orden en que el motor de ruteo las evaluará, usando nombres de campo de la API de Salesforce en vez de etiquetas. El orden es determinante: el Skill evalúa first-match-wins para reflejar la ejecución, así que reordenar reglas cambia el mapa de asignación.
+2. **Decide sobre la regla comodín.** La plantilla incluye una regla final que captura todo. Si la dejas, `no_rule_matched` siempre será cero y el reporte de cobertura se convierte en una pregunta sobre el tamaño del pool; si la quitas, los huecos reales de reglas salen con nombre propio. Elige deliberadamente en vez de heredar la decisión de la plantilla.
+3. **Completa el archivo de umbrales.** En `references/2-coverage-thresholds-template.md`, deriva `productivity_bands` de tu propio closed-won de los últimos 12 meses por rep completamente rampado —percentil 75 para `high`, mediana para `mid`, percentil 25 para `low`— en vez de tomarlo de un benchmark. Define `max_revenue_churn_pct` de forma explícita: el 25% de la plantilla deja que un cuarto de las relaciones de ingreso de un territorio se muevan antes de que algo se marque, lo cual encaja en mid-market de volumen y es demasiado laxo para enterprise de alto contacto.
+4. **Haz backtest de la curva de ramp.** Ejecuta una vez con `dry_run: true` antes de confiar en cualquier número de capacidad. Compara tu curva contra la attainment de la cohorte de nuevas contrataciones del año pasado y reporta el delta: la brecha entre el ramp que aprobó finanzas y el que la cohorte realmente produjo suele ser el error más grande de un modelo de capacidad.
+5. **Instala y limita las credenciales.** Coloca el bundle en `~/.claude/skills/territory-carve-impact-simulator/` y configura `SFDC_TOKEN` con lectura sobre `Account`, `AccountHistory`, `Opportunity`, `OpportunityHistory`, `User` y `UserTerritory2Association`. Solo lectura es el scope correcto, no una precaución.
+
+## Qué hace realmente el skill
+
+Corre en dos pasadas, y la división es deliberada. La primera pasada asigna cada cuenta evaluando las reglas del reparto en el orden declarado, deteniéndose en la primera coincidencia, y registra qué índice de regla coincidió. La segunda hace la aritmética de impacto contra ese mapa de asignación ya cerrado. Calcular rotación y capacidad en línea mientras las reglas todavía se están resolviendo duplica el conteo de cualquier cuenta que más de una regla podría reclamar, y como first-match-wins significa que solo una la reclamará de verdad, esos números en línea describen un reparto que nunca va a existir.
+
+Las cuentas sin asignar se dividen en dos causas en vez de un solo bucket: `no_rule_matched` es un hueco de cobertura, `null_input_field` es un hueco de datos, y el Skill nombra el campo culpable. Confundirlos manda a un equipo de planificación a rediseñar reglas cuando el arreglo es un backfill. En el ejemplo trabajado de `references/3-sample-output-format.md`, 387 cuentas llegan a mid-market solo porque `Account.AnnualRevenue` está en null y se saltaron las dos reglas de enterprise que estaban arriba: segmentación ocurriendo por accidente, e invisible en un conteo único de no asignadas.
+
+La capacidad es capacidad de carga de cuota ajustada por ramp, no headcount por cuota promedio: cada rep aporta su banda de productividad escalada por el factor de ramp del mes en que su fecha de inicio lo ubica a la fecha de entrada en vigor. Un territorio balanceado por conteo de cuentas que absorbe dos reps que arrancan seis semanas antes del go-live muestra un déficit aquí, que es exactamente la falla que un reparto balanceado por conteo de cuentas está construido para esconder.
+
+Esa aritmética corre en código y no a través de la lectura de registros por parte del modelo. Una conversación de planificación se derrumba en el momento en que dos corridas del mismo reparto producen números distintos, y un modelo leyendo varios miles de filas de cuentas no será reproducible. El trabajo del modelo es el ordenamiento, la narrativa y la sección de "qué cambiar".
+
+## Realidad de costos
+
+Como el trabajo a nivel de registro ocurre en código, el costo en tokens escala con el tamaño del resumen, no con el tamaño del book. Un reparto de 5.000 cuentas y 30 reps cuesta aproximadamente entre 2 y 4 USD por simulación con Claude Sonnet 5 al precio publicado de la API de 3 USD por millón de tokens de entrada y 15 USD por millón de tokens de salida: los archivos de referencia, las tablas agregadas y el reporte mismo, no las 5.000 filas. Esa cifra es una estimación derivada del precio por token y de la extensión típica del reporte; se mueve con cuánta narrativa pidas, no con el número de cuentas. Un ciclo de planificación toma entre cinco y quince corridas conforme el reparto se revisa, así que presupuesta alrededor de 50 USD de gasto de API para el ciclo.
+
+La comparación que importa es el tiempo. Un analista de RevOps produciendo estas tres vistas a mano —pivotear el book de cuentas contra las reglas propuestas, unir pipeline e historial de propiedad, construir un modelo de capacidad ponderado por ramp— gasta de tres a cinco días por iteración, y por eso la mayoría de los equipos lo hace una sola vez y luego discute a partir de la primera versión. El Skill convierte cada iteración en una corrida de quince minutos más una hora de lectura del reporte, que es lo que hace que quepan cinco revisiones dentro de una ventana de planificación en vez de una.
+
+## Frente a las alternativas
+
+- **Salesforce Sales Planning** — publicado a 75 USD por usuario al mes con facturación anual (página de precios del proveedor, verificada el 2026-08-10), cubriendo Hierarchy Management, Segment Design y Territory Planning; incluido en Agentforce 1 Sales Edition a 550 USD por usuario al mes. Para un equipo comercial de 40 asientos, el add-on por separado sale alrededor de 36.000 USD al año. Elige la plataforma cuando quieras que el reparto sea un artefacto gobernado, versionado y dentro del CRM, con plan y ejecución en un solo sistema; elige el Skill cuando necesites un pre-mortem sobre un reparto que alguien ya redactó en una hoja de cálculo. No son excluyentes: correr el Skill contra un reparto creado en Sales Planning es una segunda opinión razonable, porque la plataforma que generó el plan no es el lugar natural para buscar razones por las que va a fallar.
+- **[Fullcast](/es/tools/fullcast/)** — una plataforma de plan-a-ejecución que cubre territorio, cuota, capacidad y ruteo, con precio bajo consulta y nada publicado. La elección correcta cuando tu reparto es continuo y no anual: territorios que se ajustan conforme se mueven cuentas y headcount, con el plan y las reglas de ruteo sincronizados. El Skill no tiene capa de ejecución alguna, así que pierde por mucho en esa modalidad.
+- **La hoja de cálculo** — la línea base real en la mayoría de las empresas, y produce el reparto que se lanza y luego se revisa en silencio en la semana tres. No puede ponderar disrupción ni modelar ramp, así que falla en las dos preguntas que deciden si el reparto se sostiene.
+- **Lanzar y arreglar dentro del trimestre** — el default honesto. El costo nunca aparece como una línea de presupuesto; aparece como un segmento que no llega a plan y dos reps de enterprise renunciando en el mes dos, momento en el que nadie atribuye ninguna de las dos cosas al reparto.
+
+## Puntos de atención
+
+- **Un snapshot del CRM que se vuelve obsoleto antes del go-live.** Guardrail: el encabezado de la salida lleva `snapshot_date` y una fecha límite de re-corrida, por defecto 14 días desde `snapshot_staleness_days`. La fecha límite va en el encabezado, no en una nota al pie, y el reporte declara que los números quedan nulos pasada esa fecha.
+- **Historial de propiedad no rastreado en `Account.OwnerId`.** La antigüedad colapsa en silencio a cero y cualquier reparto se lee como barato. Guardrail: el Skill verifica la cobertura de ese campo en `AccountHistory` y devuelve `blocked` por debajo del piso, en vez de reportar un número que no puede sostener.
+- **Una curva de ramp que escribió RRHH y no una que los datos respalden.** Guardrail: `dry_run` hace backtest de la curva contra la cohorte del año pasado y avisa cuando los meses observados hasta productividad plena exceden el archivo por más de `ramp_tolerance_months`, reportando la curva observada junto a la configurada.
+- **Una lista de cuentas protegidas que solo crece.** Cuando toda cuenta que a alguien le importa está protegida, la lista deja de ser una señal y se convierte en un veto a la realineación. Guardrail: cada entrada lleva un motivo con fecha, y la fecha `last_reviewed` del archivo de umbrales dispara un banner de advertencia en todo reporte con más de 180 días.
+- **Tratar `revise` como un veto.** El veredicto nombra territorios y cuentas, no una decisión. El liderazgo puede lanzar a sabiendas un reparto con déficit de capacidad porque un plan de contratación lo cierra en Q2. Guardrail: la sección de "qué cambiar" expresa el arreglo en unidades —mover unos 1,2M de cuota, sacar una cuenta del reparto— para que aceptar el riesgo sea una elección explícita con una magnitud asociada.
+
+## Stack
+
+- **[Salesforce](/es/tools/salesforce/)** — cuentas, historial de propiedad, pipeline abierto, historial de etapas de oportunidad, registros de usuario
+- **[Claude](/es/tools/claude/)** — evaluación de reglas, ordenamiento de impacto, síntesis del reporte; la aritmética corre en código, no en contexto
+- **Los archivos de spec del reparto y de umbrales** — los dos insumos que hacen que la salida sea específica de tu organización y no genérica
+- **Un sistema de ruteo o gestión de territorios** — [Fullcast](/es/tools/fullcast/), [LeanData](/es/tools/leandata/) o Salesforce Territory Management, allí donde el reparto aprobado se ejecuta de verdad

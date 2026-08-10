@@ -1,0 +1,79 @@
+---
+slug: territory-carve-impact-simulator-skill
+canonical_slug: territory-carve-impact-simulator-skill
+locale: fr
+verticals: [revops]
+title: "Simulateur d'impact de découpage territorial"
+artifact_type: claude-skill
+tools_used: [claude, salesforce, fullcast]
+roles: [revops]
+difficulty: advanced
+time_to_setup: "2-3 hours"
+human_tested: false
+last_updated: "2026-08-10"
+en_verified: "2026-08-10"
+---
+
+Un Claude Skill qui prend un découpage territorial déjà rédigé et rapporte ce qu'il va réellement produire : où la couverture se casse, quels territoires portent plus de quota que leurs reps ne peuvent atteindre, et quels comptes nommés changent de mains à un prix qui mérite attention. Il s'exécute avant que le découpage n'arrive aux reps, tant que les règles restent modifiables, et se termine par un verdict `ready`, `revise` ou `blocked`. Il n'écrit jamais une affectation dans le CRM.
+
+Le bundle est publié dans `apps/web/public/artifacts/territory-carve-impact-simulator-skill/` et contient `SKILL.md` plus trois templates de référence : `references/1-carve-input-template.md` (le découpage proposé — règles ordonnées, roster de reps, date d'effet), `references/2-coverage-thresholds-template.md` (le modèle de capacité de l'organisation, la courbe de ramp, les tolérances de disruption et les comptes protégés) et `references/3-sample-output-format.md` (le Markdown exact que le Skill produit, avec un exemple travaillé).
+
+## Quand l'utiliser
+
+Deux à quatre semaines avant un réalignement de début d'exercice ou de mi-année, sur un découpage que quelqu'un a rédigé et que personne n'a mis à l'épreuve. Cette fenêtre compte plus qu'il n'y paraît : un découpage devient politiquement coûteux à modifier dès l'instant où les reps voient la carte, et le Skill lit `carve_status` depuis la spec du découpage, si bien qu'un rapport exécuté après la communication s'ouvre en précisant que les révisions recommandées coûtent désormais de la crédibilité en plus de l'effort. Les exécutions sur un seul segment sont également valables — un pod qui prend de l'avance sur le réalignement global — tout comme une exécution a posteriori quand un segment rate son plan et que personne ne sait dire si le tort revient au design de couverture ou à l'exécution.
+
+La partie qui rentabilise l'outil, c'est la pondération. N'importe quel outil de planification sait compter combien de comptes changent de propriétaire, et ce décompte est quasiment inutile : un découpage qui déplace 200 comptes dormants est gratuit, un qui déplace douze comptes portant du pipeline en fin de cycle avec un rep ayant trois ans d'ancienneté relationnelle ne l'est pas, et le décompte non pondéré les classe à l'envers. Le Skill classe le churn selon le pipeline ouvert matériel multiplié par un facteur d'ancienneté, ce qui réduit typiquement une liste de 200 comptes à quatre ou cinq lignes qui concentrent l'essentiel du risque.
+
+## Quand NE PAS l'utiliser
+
+- **Générer un découpage.** Il note un découpage conçu par quelqu'un d'autre. Il ne propose pas de règles, ne rééquilibre pas les comptes et ne cherche pas une répartition optimale. Sans brouillon, il n'y a rien à simuler.
+- **Écrire dans Salesforce.** Le Skill est en lecture seule sur chaque objet qu'il touche. Les changements de territoire s'exécutent dans le système qui les gouverne, après validation humaine du plan ; brancher la sortie sur un job d'affectation automatique supprime précisément la décision que l'outil existe pour éclairer.
+- **Alimenter le comp.** Le rapport de capacité dit si un territoire peut porter un quota que quelqu'un a déjà fixé. Le router vers les calculs de comp crée une incitation directe à contester les entrées : les bandes de productivité sont rediscutées, les courbes de ramp deviennent négociables, et le modèle cesse de décrire la réalité.
+- **Les découpages qui n'existent que sous forme de tableur d'IDs de comptes.** Une liste de paires compte-rep ne peut pas être simulée contre ce que le moteur de routage fera au go-live. Convertissez-la en règles et simulez celles-ci ; si les règles ne reproduisent pas le tableur, cet écart est déjà le constat.
+- **Les books sans historique de propriété.** Si `AccountHistory` n'enregistre pas les changements d'`OwnerId`, l'ancienneté se lit comme nulle partout et tout découpage paraît bon marché. Le Skill renvoie `blocked` sous le seuil `history_coverage_floor_pct` plutôt que d'émettre un chiffre de churn qu'il ne peut pas soutenir.
+
+## Mise en place
+
+1. **Écrivez le découpage sous forme de règles ordonnées.** Dans `references/1-carve-input-template.md`, remplacez les règles d'exemple par les vôtres, dans l'ordre où le moteur de routage les évaluera, en utilisant les noms de champs de l'API Salesforce plutôt que les libellés. L'ordre est porteur : le Skill évalue en first-match-wins pour refléter l'exécution, donc réordonner les règles change la carte d'affectation.
+2. **Tranchez sur la règle attrape-tout.** Le template embarque une règle finale qui capture tout. Gardez-la et `no_rule_matched` sera toujours à zéro, ce qui transforme le rapport de couverture en question sur la taille du pool ; retirez-la et les vraies lacunes de règles apparaissent nommément. Choisissez délibérément au lieu d'hériter du choix du template.
+3. **Renseignez le fichier de seuils.** Dans `references/2-coverage-thresholds-template.md`, dérivez `productivity_bands` de votre propre closed-won des douze derniers mois par rep pleinement rampé — 75e centile pour `high`, médiane pour `mid`, 25e centile pour `low` — plutôt que d'un benchmark. Fixez `max_revenue_churn_pct` explicitement : les 25% du template laissent un quart des relations de revenu d'un territoire changer de mains avant qu'un signal se déclenche, ce qui convient au mid-market de volume et reste beaucoup trop large pour de l'enterprise à fort contact.
+4. **Backtestez la courbe de ramp.** Exécutez une fois avec `dry_run: true` avant de faire confiance à un chiffre de capacité. Le run compare votre courbe à l'attainment de la cohorte d'embauches de l'an dernier et rapporte l'écart — le décalage entre la ramp validée par la finance et celle que la cohorte a réellement produite est généralement la plus grosse erreur isolée d'un modèle de capacité.
+5. **Installez et restreignez les accès.** Déposez le bundle dans `~/.claude/skills/territory-carve-impact-simulator/` et configurez `SFDC_TOKEN` en lecture sur `Account`, `AccountHistory`, `Opportunity`, `OpportunityHistory`, `User` et `UserTerritory2Association`. La lecture seule est le bon scope, pas une précaution.
+
+## Ce que le skill fait réellement
+
+Il tourne en deux passes, et la séparation est délibérée. La première passe affecte chaque compte en évaluant les règles du découpage dans l'ordre déclaré, s'arrête à la première correspondance, et enregistre l'index de règle qui a matché. La seconde effectue l'arithmétique d'impact contre cette carte d'affectation finalisée. Calculer churn et capacité en ligne pendant que les règles se résolvent encore double le comptage de tout compte que plusieurs règles pourraient revendiquer — et comme le first-match-wins signifie qu'une seule le revendiquera vraiment, ces chiffres en ligne décrivent un découpage qui n'existera jamais.
+
+Les comptes non affectés se répartissent en deux causes plutôt qu'un seul bucket : `no_rule_matched` est une lacune de couverture, `null_input_field` une lacune de données, et le Skill nomme le champ fautif. Les confondre envoie une équipe de planification refondre des règles alors que le correctif est un backfill. Dans l'exemple travaillé de `references/3-sample-output-format.md`, 387 comptes atterrissent en mid-market uniquement parce que `Account.AnnualRevenue` est null et qu'ils ont sauté les deux règles enterprise situées au-dessus — une segmentation qui se produit par accident, et invisible dans un décompte unique de non-affectés.
+
+La capacité est une capacité de port de quota ajustée à la ramp, pas un headcount multiplié par un quota moyen : chaque rep apporte sa bande de productivité mise à l'échelle par le facteur de ramp du mois où sa date de démarrage le situe à la date d'effet. Un territoire équilibré au nombre de comptes qui absorbe deux reps démarrant six semaines avant le go-live affiche ici un déficit, ce qui est exactement la défaillance qu'un découpage équilibré au nombre de comptes est construit pour masquer.
+
+Cette arithmétique tourne en code et non via la lecture des enregistrements par le modèle. Une conversation de planification s'effondre dès que deux exécutions du même découpage produisent des chiffres différents, et un modèle qui lit plusieurs milliers de lignes de comptes ne sera pas reproductible. Le travail du modèle, c'est le classement, le récit et la section « ce qu'il faut changer ».
+
+## Réalité des coûts
+
+Parce que le travail au niveau enregistrement se fait en code, le coût en tokens croît avec la taille du résumé, pas avec celle du book. Un découpage de 5 000 comptes et 30 reps revient à environ 2 à 4 USD par simulation sur Claude Sonnet 5, au tarif API publié de 3 USD par million de tokens d'entrée et 15 USD par million de tokens de sortie — les fichiers de référence, les tables agrégées et le rapport lui-même, pas les 5 000 lignes. Ce chiffre est une estimation dérivée du tarif par token et de la longueur typique du rapport ; il bouge avec la quantité de récit demandée, pas avec le nombre de comptes. Un cycle de planification demande cinq à quinze exécutions à mesure que le découpage est révisé, donc prévoyez autour de 50 USD de dépense API pour le cycle.
+
+La comparaison qui compte, c'est le temps. Un analyste RevOps qui produit ces trois vues à la main — pivoter le book de comptes contre les règles proposées, joindre pipeline et historique de propriété, construire un modèle de capacité pondéré par la ramp — y passe trois à cinq jours par itération, et c'est pourquoi la plupart des équipes ne le font qu'une fois puis argumentent à partir de la première version. Le Skill transforme chaque itération en une exécution de quinze minutes plus une heure de lecture du rapport, ce qui fait tenir cinq révisions dans une fenêtre de planification au lieu d'une.
+
+## Face aux alternatives
+
+- **Salesforce Sales Planning** — publié à 75 USD par utilisateur et par mois en facturation annuelle (page tarifaire de l'éditeur, vérifiée le 2026-08-10), couvrant Hierarchy Management, Segment Design et Territory Planning ; inclus dans Agentforce 1 Sales Edition à 550 USD par utilisateur et par mois. Pour une organisation commerciale de 40 sièges, l'add-on autonome représente environ 36 000 USD par an. Prenez la plateforme quand vous voulez que le découpage soit un artefact gouverné, versionné et dans le CRM, avec plan et exécution dans un seul système ; prenez le Skill quand vous avez besoin d'un pre-mortem sur un découpage que quelqu'un a déjà rédigé dans un tableur. Les deux ne s'excluent pas : passer le Skill sur un découpage créé dans Sales Planning constitue un second avis raisonnable, parce que la plateforme qui a produit le plan n'est pas l'endroit naturel où chercher les raisons de son échec.
+- **[Fullcast](/fr/tools/fullcast/)** — une plateforme plan-to-execution couvrant territoire, quota, capacité et routage, tarifée sur demande sans rien de publié. Le bon choix quand votre découpage est continu plutôt qu'annuel : des territoires qui s'ajustent à mesure que comptes et headcount bougent, avec plan et règles de routage maintenus synchronisés. Le Skill n'a aucune couche d'exécution, il perd donc largement sur ce mode de fonctionnement.
+- **Le tableur** — la vraie base de référence dans la plupart des entreprises, et il produit le découpage qui part en production puis se fait discrètement réviser en semaine trois. Il ne sait ni pondérer la disruption ni modéliser la ramp, il échoue donc précisément sur les deux questions qui décident si le découpage tient.
+- **Déployer et corriger en cours de trimestre** — le défaut honnête. Le coût n'apparaît jamais comme une ligne budgétaire ; il se manifeste par un segment qui rate son plan et deux reps enterprise qui démissionnent au deuxième mois, à un moment où personne n'attribue ni l'un ni l'autre au découpage.
+
+## Points de vigilance
+
+- **Un snapshot CRM qui périme avant le go-live.** Garde-fou : l'en-tête de sortie porte `snapshot_date` et une date limite de réexécution, par défaut 14 jours depuis `snapshot_staleness_days`. La date limite figure dans l'en-tête, pas dans une note de bas de page, et le rapport déclare les chiffres caducs au-delà.
+- **Historique de propriété non tracé sur `Account.OwnerId`.** L'ancienneté retombe silencieusement à zéro et tout découpage se lit comme bon marché. Garde-fou : le Skill vérifie la couverture de ce champ dans `AccountHistory` et renvoie `blocked` sous le plancher, plutôt que de rapporter un chiffre qu'il ne peut pas soutenir.
+- **Une courbe de ramp écrite par les RH plutôt que soutenue par les données.** Garde-fou : `dry_run` backteste la courbe contre la cohorte de l'an dernier et alerte quand les mois observés jusqu'à pleine productivité dépassent le fichier de plus de `ramp_tolerance_months`, en rapportant la courbe observée à côté de celle configurée.
+- **Une liste de comptes protégés qui ne fait que grossir.** Dès que tout compte auquel quelqu'un tient est protégé, la liste cesse d'être un signal et devient un veto sur le réalignement. Garde-fou : chaque entrée porte un motif daté, et la date `last_reviewed` du fichier de seuils déclenche une bannière d'avertissement sur tout rapport de plus de 180 jours.
+- **Traiter `revise` comme un veto.** Le verdict nomme des territoires et des comptes, pas une décision. La direction peut sciemment déployer un découpage avec un déficit de capacité parce qu'un plan de recrutement le comble au deuxième trimestre. Garde-fou : la section « ce qu'il faut changer » chiffre le correctif en unités — déplacer environ 1,2 M de quota, sortir un compte du découpage — pour que l'acceptation du risque soit un choix explicite assorti d'un ordre de grandeur.
+
+## Stack
+
+- **[Salesforce](/fr/tools/salesforce/)** — comptes, historique de propriété, pipeline ouvert, historique d'étapes des opportunités, enregistrements utilisateurs
+- **[Claude](/fr/tools/claude/)** — évaluation des règles, classement d'impact, synthèse du rapport ; l'arithmétique tourne en code, pas en contexte
+- **Les fichiers de spec du découpage et de seuils** — les deux entrées qui rendent la sortie spécifique à votre organisation plutôt que générique
+- **Un système de routage ou de gestion de territoires** — [Fullcast](/fr/tools/fullcast/), [LeanData](/fr/tools/leandata/) ou Salesforce Territory Management, là où le découpage validé s'exécute réellement
