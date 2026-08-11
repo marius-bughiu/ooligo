@@ -1,0 +1,82 @@
+---
+slug: comp-plan-drafter-skill
+canonical_slug: comp-plan-drafter-skill
+locale: pt-BR
+verticals: [revops]
+title: Redator de planos de remuneração de vendas
+artifact_type: claude-skill
+tools_used: [claude, salesforce, captivateiq]
+roles: [revops, sales-enablement]
+difficulty: advanced
+time_to_setup: "2-3 hours"
+human_tested: false
+last_updated: "2026-08-11"
+en_verified: "2026-08-11"
+---
+
+Um Claude Skill que redige um plano de remuneração de vendas — métrica, pay mix, cota, curva de aceleradores, SPIFs, trigger de clawback, política de disputas — e depois precifica esse plano reproduzindo a distribuição real de atingimento do ano passado através da nova curva. Ele reporta quanto o plano custa em três níveis de desempenho da empresa, quanto o rep mediano de fato ganha frente ao OTE com que foi recrutado, e quais condições de clawback o rascunho não cumpre. Termina em `draft` ou `blocked`. Não existe veredicto que signifique aprovado.
+
+O bundle fica em `apps/web/public/artifacts/comp-plan-drafter-skill/` e contém `SKILL.md` mais três templates de referência: `references/1-plan-inputs-template.md` (cargo, segmento, OTE, cota, curva, estados onde os reps trabalham, orçamento), `references/2-attainment-history-template.md` (uma linha por rep-ano, incluindo quem saiu) e `references/3-sample-output-format.md` (o Markdown exato que o Skill emite, com um exemplo trabalhado).
+
+## Quando usar
+
+De seis a dez semanas antes de o ano do plano abrir, sobre um plano cujo único modelo de custo é uma planilha que assume que todo mundo cai em 100% da cota. Essa suposição é a razão de isto existir. A pesquisa de AEs 2026 do Bridge Group, com 158 empresas B2B, coloca 48% dos reps em cota, com AEs de enterprise em 38% e uma razão mediana cota-para-OTE que subiu para 4,6x. Um plano custeado no atingimento cheio não é conservador nem agressivo: ele está precificado contra uma população que não existe, e o erro aparece como estouro de orçamento ou, muito mais frequentemente, como um time ganhando silenciosamente bem menos do que o OTE da carta-proposta.
+
+Também vale: uma emenda de meio de ano para um segmento, um cargo novo sem plano precedente, e um post-mortem contra o plano que está em mercado hoje quando a remuneração variável fechou longe do forecast e ninguém consegue dizer se a causa foi a curva ou a cota.
+
+A parte que se paga é o passo 3. Qualquer ferramenta de comp desenha uma curva; quase nenhuma reproduz o seu próprio histórico no nível do rep através da curva que você está prestes a lançar. Essa retroprojeção é o que transforma "os aceleradores parecem razoáveis" em "isto custa 2,41M no desempenho do ano passado e 2,98M se o time melhorar dez pontos".
+
+## Quando NÃO usar
+
+- **Aprovar ou emitir um plano.** Um plano de comp é um contrato. Na Califórnia, o Labor Code § 2751 exige que ele seja escrito, assinado pelo empregador, com um aceite de recebimento assinado pelo empregado, e precisa declarar o método de cálculo das comissões incluindo a política de chargebacks. Todo `draft` que o Skill emite carrega `requires_counsel_review: true` no cabeçalho e nenhum caminho remove isso.
+- **Calcular ou pagar comissões.** Isto redige e precifica o plano. Cálculo de pagamento, tratamento de disputas e folha pertencem a uma plataforma de ICM. O Skill não escreve em nada.
+- **Definir a cota de um rep específico.** Ele modela uma cota para um cargo e um segmento. Atribuir um número a uma pessoa com nome é uma questão de cobertura e capacidade: faça primeiro o [recorte de territórios](/pt-BR/workflows/territory-carve-impact-simulator-skill/) e depois precifique o plano contra ele.
+- **Faixas salariais de recrutamento.** Fazer benchmark de base e equity para um cargo contra dados de Radford ou Pave é outro trabalho, com outras fontes e outro aprovador.
+- **Carteiras com menos de uma dúzia de rep-anos totalmente rampados.** Treze linhas são uma distribuição sobre a qual dá para discutir. Seis são uma anedota com uma função de percentil aplicada em cima, e o Skill devolve `blocked` em vez de um número de custo que não consegue sustentar.
+
+## Setup
+
+1. **Preencha os inputs do plano.** Em `references/1-plan-inputs-template.md`, defina cargo, segmento, headcount, OTE alvo, pay mix, cota proposta e `budget_ceiling`. Deixe qualquer campo de curva como `propose` e o Skill redige aquela peça; fixe os que já estão decididos. Defina `market_ote_reference` a partir de uma pesquisa que você realmente tenha e cite a fonte em `market_ote_source` — o alerta de retenção do output vale exatamente o que esse número valer.
+2. **Exporte o histórico de atingimento com quem saiu incluído.** Em `references/2-attainment-history-template.md`, uma linha por rep-ano do ano anterior: cota proporcional, atingimento contra essa cota proporcional, meses rampados, data de desligamento. `include_terminated: true` é obrigatório e o Skill devolve `blocked` quando é falso.
+3. **Decida o cap deliberadamente.** O template vem sem cap. Um cap protege o orçamento contra um deal fora da curva e produz de forma confiável o sandbagging que ele foi escrito para evitar. Olhe o caso alto da tabela de custos antes de escolher, em vez de herdar o default do template.
+4. **Rode `dry_run: true` primeiro.** Ele devolve a distribuição observada, a contagem de rampados completos e cada linha que precisou excluir com o motivo. A maioria dos exports de histórico traz duas ou três linhas com cota zero ou atingimento de 400% vindo de um único deal, e você quer vê-las antes que estejam dentro de um número de custo.
+5. **Instale e limite as credenciais.** Coloque o bundle em `~/.claude/skills/comp-plan-drafter/` e defina `SFDC_TOKEN` com leitura em `Opportunity`, `User` e `Quota` se você for puxar o histórico do [Salesforce](/pt-BR/tools/salesforce/) em vez de um CSV. Somente leitura é o escopo correto, não uma precaução.
+
+## O que o skill realmente faz
+
+Duas passadas, e a divisão é deliberada. A primeira redige o plano — esse é o trabalho de julgamento e cabe ao modelo. A segunda retroprojeta o rascunho contra a distribuição observada, e essa aritmética roda em código. Uma função de pagamento por faixas aplicada a quarenta linhas de reps não se reproduz de rodada em rodada quando um modelo faz isso em contexto, e uma conversa de remuneração desaba no momento em que duas rodadas do mesmo rascunho devolvem dois custos de plano.
+
+O relatório de custo entrega três números em vez de um: a distribuição observada, mais e menos a banda de sensibilidade. Um plano de comp é um instrumento alavancado e o valor útil é a inclinação. Um plano cujo custo se move 8% ao longo de um swing de vinte pontos de atingimento não está direcionando ninguém; um que se move 60% é uma exposição orçamentária que alguém deveria aceitar de propósito.
+
+Os ganhos são reportados por decil, nunca como média. No exemplo trabalhado em `references/3-sample-output-format.md`, o plano fica 21% abaixo de um orçamento aprovado enquanto o rep mediano ganha 154.900 contra um OTE de 200.000 — uma combinação que uma revisão só de orçamento aprova sem comentar. O Skill também recusa a solução fácil: com 61% de atingimento mediano, nenhuma razão cota-para-OTE defensável paga o alvo ao rep mediano, então ele nomeia a decisão real (corrigir cobertura, território ou ramp — ou dizer a parte incômoda na contratação) em vez de propor um ajuste de taxa que não fecha a lacuna.
+
+A checagem de política emite um checklist, não uma conclusão. Três condições decidem se um clawback sobrevive a uma contestação na maioria dos estados: o trigger está definido no documento do plano antes de a comissão ser paga, o evento de competência está atrelado a algo genuinamente reversível, e a recuperação não pode empurrar o rep abaixo do salário mínimo aplicável em nenhum período de pagamento. O erro de redação mais comum é o segundo — competência no booking enquanto se recupera por churn em doze meses — e o Skill nomeia o descasamento em vez de reportar um pass genérico.
+
+## A realidade do custo
+
+Como a aritmética no nível do rep acontece em código, o custo em tokens escala com o tamanho do resumo e do documento do plano, não com o headcount. Um plano de 40 reps roda por volta de 1 a 3 USD por ciclo de redação e stress-test no Claude Sonnet 5, ao preço publicado de API de 3 USD por milhão de tokens de entrada e 15 USD por milhão de tokens de saída. Esse número é uma estimativa derivada do preço por token e do tamanho típico do documento; ele se move com quanta narrativa você pede, não com o tamanho do time. Um ciclo de desenho leva de seis a doze rodadas conforme a curva é revisada, então reserve algo perto de 20 USD para a temporada.
+
+A comparação que importa não é o gasto com ferramenta, é o calendário. Um analista de RevOps montando as mesmas três visões na mão — reproduzir cada rep-ano através de uma curva candidata, refazer isso a cada revisão e montar o checklist de estados — gasta de dois a quatro dias por iteração, e é por isso que a maioria dos times modela uma curva e depois negocia a partir dela. Cada rodada aqui são minutos mais uma hora lendo o output, que é o que faz oito revisões caberem na janela em vez de uma.
+
+## vs alternativas
+
+- **QuotaPath** — publica números reais, o que é raro nesta categoria: Growth com taxa de plataforma de 800 USD mensais incluindo os primeiros cinco usuários mais 50 USD por usuário/mês no tier Premium, cobrado anualmente, com modelagem de planos, aprovações multinível e acesso à API (página de preços do fornecedor, verificada em 2026-08-11). Uma operação de 40 reps roda em torno de 30.600 USD por ano no Premium. Escolha quando quiser que o plano viva no sistema que também calcula os pagamentos e roteia as aprovações. Ele modela cenários bem; não te diz que o rep mediano vai ganhar 77% do OTE.
+- **[CaptivateIQ](/pt-BR/tools/captivateiq/)** — nada publicado, por assento sobre payees em vez de admins, com a Vendr reportando contrato anual mediano de 36.120 USD sobre 305 compras analisadas. O Compensation Builder Agent entrou em beta limitado em maio de 2026 e redige fórmulas a partir dos seus planos existentes, que é exatamente o problema: um time com quatro aceleradores sobrepostos ganha ajuda para construir o quinto. Escolha CaptivateIQ quando o escopo for gestão de remuneração de incentivos e a estrutura do plano já estiver resolvida.
+- **Um consultor de remuneração** — o incumbente honesto para o *desenho* do plano, e melhor que isto no trabalho político de fazer um plano ser aceito. Eles produzem um bom plano por ano e em geral não o retroprojetam contra o seu histórico no nível do rep, a menos que você entregue os dados e pague pela análise.
+- **O plano do ano passado com os números trocados** — a linha de base real na maioria das empresas, e a razão pela qual esquemas de aceleradores derivam por anos sem ninguém precificar essa deriva. Não custa nada e é assim que um quarto componente acaba num plano que ninguém explica em duas frases.
+
+## Pontos de atenção
+
+- **Um histórico de atingimento que exclui quem saiu.** A rotatividade não é aleatória em relação ao atingimento: quem atinge pouco sai, desproporcionalmente. Um arquivo só de sobreviventes subestima o custo do plano e superestima a saúde da distribuição ao mesmo tempo. Guarda: `include_terminated` é obrigatório, o Skill devolve `blocked` quando é falso, e reps desligados entram com cota proporcional e atingimento parcial do ano.
+- **Uma distribuição produzida sob outra cota.** O atingimento do ano passado reflete a cota e os territórios do ano passado. Guarda: o Skill registra `prior_plan_quota_median` e avisa quando a cota redigida se move mais que `quota_shift_tolerance_pct`, rotulando o modelo de custo como direcional em vez de apresentá-lo como forecast.
+- **Um plano que passa na checagem de orçamento e perde gente.** O relatório de custo é um instrumento de finanças e vai aprovar com prazer um plano com o qual o rep mediano não consegue viver. Guarda: a tabela de decis fica ao lado da tabela de custos, então o custo de retenção e o custo orçamentário ficam na mesma página e são lidos na mesma reunião.
+- **Um SPIF permanente.** Um SPIF sem data de fim não é um SPIF, é um aumento de taxa não documentado que ninguém reaprova. Guarda: a linha de SPIF exige uma expiração explícita no arquivo de inputs e o Skill se recusa a redigir o componente sem ela.
+- **Tratar `blocked` como julgamento sobre o desenho.** Ele diz que os números não são confiáveis, não que o plano está errado. Guarda: todo retorno `blocked` nomeia o defeito de dado específico e o que o resolveria, então a resposta é corrigir o export, não redesenhar.
+
+## Stack
+
+- **[Claude](/pt-BR/tools/claude/)** — redação do plano, desenho da curva, narrativa das lacunas de política; a aritmética da retroprojeção roda em código, não em contexto
+- **[Salesforce](/pt-BR/tools/salesforce/)** — histórico de closed-won, registros de cota e roster, quando o arquivo de atingimento é puxado em vez de exportado na mão
+- **Os arquivos de inputs do plano e de histórico de atingimento** — os dois inputs que fazem o output ser específico da sua organização e não um template
+- **Uma plataforma de ICM** — [CaptivateIQ](/pt-BR/tools/captivateiq/), QuotaPath, ou o que quer que calcule os pagamentos depois que o plano redigido for aprovado e assinado
+- **[Desenho de planos de remuneração de vendas](/pt-BR/learn/compensation-plans/)** — o framework por trás das escolhas de métrica, curva e piso contra as quais este Skill redige, mais [cobertura de cota](/pt-BR/learn/quota-coverage/) para a matemática de capacidade que precisa fechar antes de o plano significar alguma coisa
