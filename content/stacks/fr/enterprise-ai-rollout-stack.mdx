@@ -1,0 +1,89 @@
+---
+slug: enterprise-ai-rollout-stack
+canonical_slug: enterprise-ai-rollout-stack
+locale: fr
+verticals: [revops, legal-ops, recruiting, customer-success]
+title: "Enterprise AI rollout stack — des agents avec une identité que vous avez émise et un plafond de dépense que vous avez fixé"
+tools: [claude, chatgpt, glean, n8n]
+use_case: "Une organisation ops qui place des agents devant de vrais systèmes, où chaque agent capable d'écrire quelque part dispose d'une identité, d'un point de validation et d'une limite de dépense — pas seulement d'une licence par siège."
+difficulty: advanced
+related_workflows:
+  - crm-agent-access-audit-skill
+  - inbound-lead-triage-n8n
+last_updated: "2026-08-12"
+---
+
+Le **1er mai 2026**, Microsoft a rendu Agent 365 généralement disponible à **15,00 $ par utilisateur et par mois, payé annuellement**, et a ainsi mis un prix sur quelque chose qu'une licence par siège n'a jamais couvert : un registre, une identité et une piste d'audit pour un logiciel qui agit de lui-même. Le détail tarifaire le plus important, c'est l'unité. Agent 365 se licencie **par utilisateur humain, pas par agent**. Votre quarantième agent est gratuit. Votre deux cent unième salarié coûte 15 $ par mois.
+
+Cela inverse la façon dont la plupart des organisations ops budgètent le sujet. Elles comptent des agents et négocient des sièges. La facture suit l'effectif, le risque suit les agents — deux courbes différentes, et une seule apparaît sur la facture.
+
+Ce stack est construit autour d'une règle unique : **un agent capable d'écrire dans un vrai système tourne sous une identité que vous avez émise et un plafond de dépense que vous avez fixé.** Tout ce qui suit applique cette règle ou se situe honnêtement en dehors d'elle.
+
+## La structure
+
+- **Microsoft Entra Agent ID est le plan d'identité, et c'est la couche que l'on saute.** Il émet des identités d'agent à partir de blueprints avec relations parent-enfant, de sorte que la politique s'applique à une famille d'agents plutôt qu'un par un, et il parle OAuth 2.0, MCP et A2A. Les agents construits hors de Microsoft s'enregistrent via le sidecar Entra Auth SDK ou la fédération d'identité de charge de travail — Microsoft cite explicitement **AWS Bedrock et n8n**. Agent ID est disponible pour tout client Entra. Le piège tient en une ligne de la documentation de Microsoft : étendre les fonctions de *sécurité* d'Entra aux agents — Conditional Access pour agents, détection de risque via Identity Protection, gouvernance des identités — exige une licence Agent 365. L'identité sans Agent 365, c'est un badge, pas une serrure.
+- **Agent 365 est le plan de contrôle.** Trois missions : observer (registre des agents, synchronisation du registre, Agent Map dans le centre d'administration Microsoft 365), gouverner (cycle de vie, revues d'accès) et sécuriser (Entra pour l'accès, Purview pour les données, Defender pour les menaces). Il est inclus dans Microsoft 365 E7 et vendu en add-on d'E5, A5 ou Business Premium, ou d'une combinaison Defender Suite plus Purview Suite. Si vous n'êtes pas déjà une maison E5, chiffrez le prérequis avant de chiffrer l'add-on.
+- **[n8n](/fr/tools/n8n/) est la couche d'action, et c'est le seul composant ici que Microsoft liste comme agent factory.** Les agents construits sur n8n reçoivent automatiquement un Entra Agent ID, apparaissent dans le centre d'administration et héritent de l'observabilité d'Agent 365 — sans travail d'identité de votre côté. n8n tient aussi le point de validation : le oui ou non humain qui se place entre la décision d'un modèle et une écriture dans votre CRM. Lisez toutefois attentivement la condition sur la liste des partenaires. Le node trigger Agent 365 de n8n est en **early preview et exige une inscription au programme Frontier de Microsoft**. Construisez sur n8n aujourd'hui parce que c'est la couche d'action fiable la moins chère ; ne construisez pas un argumentaire de conformité sur une intégration en preview.
+- **[Glean](/fr/tools/glean/) est la couche de récupération, et elle se gouverne elle-même.** Glean n'est pas sur la liste des partenaires Agent 365, donc ses agents n'atterrissent pas dans votre registre Microsoft — c'est précisément pour cela que ses propres contrôles comptent. Les agent access policies de Glean s'exécutent au runtime à deux endroits : **avant l'exécution**, en inspectant l'identité de l'outil et les arguments d'entrée avant un appel, et **après l'exécution**, en inspectant le payload de réponse structuré. Trois actions : **Block** arrête l'appel, **Filter** retire des éléments individuels d'un tableau de résultats, **Flag for review** laisse passer et journalise. La portée se définit par groupe d'utilisateurs, par agent ou dossier d'agents, et par outil. C'est un vrai moteur de politiques, et c'est la réponse à « cet agent peut-il envoyer un email vers un domaine non professionnel ? » d'une manière qu'un produit de recherche ne sait généralement pas fournir du tout.
+- **[Claude](/fr/tools/claude/) ou [ChatGPT](/fr/tools/chatgpt/) est la surface qu'un humain pilote.** C'est la couche que vos collaborateurs vont réellement utiliser, et celle que votre plan de contrôle Microsoft ne voit pas. Aucun des deux n'apparaît sur la liste des partenaires Agent 365. Leurs contrôles vivent dans leurs propres consoles d'administration, et vous les configurez là-bas ou pas du tout.
+
+### Passages de relais nommés
+
+1. **Quelqu'un construit un agent de workflow dans n8n → Entra lui émet une identité et Agent 365 l'enregistre.** Pas de ticket, pas de provisioning manuel. L'agent est dans le registre parce qu'il y est né.
+2. **L'agent demande un token → Conditional Access pour agents l'évalue** contre le même moteur de politiques qui gouverne vos humains. C'est l'étape qui exige la licence Agent 365.
+3. **L'agent interroge Glean → la politique d'accès se déclenche deux fois.** Une fois sur l'appel d'outil et ses arguments, une fois sur le payload qui revient. Les documents finance sont filtrés d'un jeu de résultats que l'agent avait par ailleurs le droit de récupérer.
+4. **L'agent propose une écriture → n8n la retient au point de validation → Agent 365 journalise l'action et Purview conserve la trace.** Le point de validation est le vôtre, le log est celui de Microsoft, aucun des deux n'appartient au fournisseur du modèle.
+5. **Un humain pilote Claude ou ChatGPT Work → cette dépense tombe sur le compteur de ce fournisseur,** et le plafond qui l'arrête se fixe dans la console d'Anthropic ou d'OpenAI. Agent 365 ne l'arrêtera pas, ne le verra pas et ne le remontera pas.
+
+Le relais 5 est le trou assumé de ce stack. Ne le maquillez pas — affectez-lui quelqu'un.
+
+## L'embranchement qui décide du coût
+
+La couche assistant est l'endroit où le prix par siège et le prix à l'usage divergent, et les deux fournisseurs ont choisi des camps opposés.
+
+**Claude Enterprise est disponible en self-serve depuis le 12 février 2026** et facture un forfait de siège fixe par utilisateur et par mois, en annuel, **plus chaque token aux tarifs API standard**. Minimum 20 sièges. Le self-serve achète des crédits d'avance qui se consomment ; la formule assistée par les ventes facture mensuellement à terme échu. Anthropic publie le modèle mais pas le montant du siège. Ce qu'il publie, c'est le contrôle : **les administrateurs fixent des plafonds de dépense au niveau de l'organisation et par utilisateur individuel**, avec la dépense du mois en cours par membre et des alertes de seuil. Le plan embarque SSO, capture de domaine, SCIM, logs d'audit, une Compliance API, une rétention personnalisée et l'opt-out d'entraînement par défaut.
+
+**ChatGPT Business inclut l'usage dans le siège à 25,00 $ par utilisateur et par mois en facturation mensuelle**, minimum deux utilisateurs, avec un tarif annuel plus bas. Enterprise est uniquement sur devis et ajoute l'Enterprise Compliance API — conversations horodatées, fichiers téléversés, configuration des GPT du workspace, mémoires — plus des apps et connecteurs **désactivés par défaut** sur Enterprise et Edu. ChatGPT Work, l'agent qui prend un brief et rend un fichier terminé, est sorti le **9 juillet 2026**.
+
+**Le choix :** si vous ne savez pas prévoir l'usage, achetez le siège avec usage inclus. Un plan mesuré dont le plafond n'est pas fixé, c'est ainsi qu'un pilote devient un incident budgétaire. Si vous savez prévoir l'usage et que vous voulez la dépense visible par personne, le plan mesuré est strictement plus informatif — mais seulement si quelqu'un fixe les plafonds en semaine une plutôt qu'après la première facture. Le principe général est dans [tarification par siège vs tarification à l'usage en AI](/fr/learn/seat-based-vs-usage-based-ai-pricing/).
+
+## Réalité des coûts
+
+Une organisation de 200 personnes déjà licenciée sur Microsoft 365 E5, avec une trentaine d'agents en fonctionnement :
+
+- **Agent 365 :** 15 $ × 200 utilisateurs = **36 000 $/an**. Identique que vous fassiez tourner 5 agents ou 50.
+- **ChatGPT Business :** 25 $ × 200 = **60 000 $/an** au tarif mensuel, usage inclus.
+- **Claude Enterprise :** forfait de siège sur devis × 200, **plus** une ligne d'usage aux tarifs API que vous devez prévoir séparément. Modélisez la ligne d'usage en premier ; c'est elle qui bouge.
+- **[n8n](/fr/tools/n8n/) Pro :** **50 €/mois** en facturation annuelle pour 10 000 exécutions — facturé à l'exécution complète, pas à l'étape. Business est à 667 €/mois, avec dépassement à 4 000 € par bloc supplémentaire de 300 000 exécutions.
+- **Glean :** aucun prix publié sur sa propre page tarifaire, qui n'affiche qu'une demande de démo. Des observateurs tiers rapportent des minimums entreprise de plusieurs dizaines de milliers par an ; traitez tout chiffre trouvé comme rapporté et non publié, et obtenez le devis avant de concevoir autour.
+
+Environ **96 000 $/an en chiffres publiés et défendables** plus deux lignes sur devis. Le devis Glean est la ligne la plus susceptible de dépasser tout le reste réuni.
+
+## Variantes et quand permuter
+
+- **Retirez Glean quand votre connaissance vit déjà dans Microsoft 365.** Si les réponses sont dans SharePoint, Teams et Outlook, vous payez deux fois la récupération. Gardez Glean quand une part réelle du corpus se trouve dans des systèmes que Microsoft indexe mal — Salesforce, Jira, un wiki, un data warehouse — et quand vous avez besoin d'une politique de lecture et d'écriture sur les appels d'outils d'un agent, ce que votre CRM ne sait pas exprimer.
+- **Remplacez n8n par une agent factory native Microsoft** si votre déploiement dépend d'une intégration Agent 365 en disponibilité générale plutôt qu'en preview Frontier. Kore et Kasisto figurent aujourd'hui sur la liste des partenaires comme agent factories. La règle : n8n pour l'étendue et le coût, la voie native quand les achats exigent une intégration GA sur le papier.
+- **Faites tourner Claude et ChatGPT côte à côte pendant un trimestre, puis coupez-en un.** Deux contrats d'assistant, c'est un pilote défendable et un régime permanent indéfendable. Fixez la date de revue à la signature, pas à l'arrivée du renouvellement.
+
+## Ce que ce stack ne remplace pas
+
+- **Ce n'est pas une politique AI.** Il applique des décisions, il ne les prend pas. Quels agents peuvent écrire dans quel système est d'abord une règle écrite — voir [politique AI pour les équipes RevOps](/fr/learn/ai-policy-for-revops-teams/).
+- **Ce n'est pas une plateforme pour construire les agents eux-mêmes.** Une petite équipe qui construit des agents sans ingénieur veut l'[AI agent ops stack](/fr/stacks/ai-agent-ops-stack/), qui coûte un dixième et n'a rien de cette gouvernance.
+- **Il ne gouverne pas le shadow AI.** Tout ce qu'un collaborateur ouvre dans un onglet personnel échappe à toutes les couches présentes ici.
+- **Il ne rend pas les agents exacts.** L'identité, la journalisation et les plafonds limitent ce qu'une mauvaise réponse peut provoquer. Ils ne réduisent pas la fréquence à laquelle vous en obtenez une.
+
+## Points de vigilance, chacun avec sa parade
+
+- **Agent ID sans Agent 365 vous donne des noms, pas de l'application.** Conditional Access et Identity Protection pour agents sont derrière la licence. **Parade :** avant d'annoncer la couche d'identité comme un contrôle, confirmez au moins la chaîne de prérequis de licence — E5, A5, Business Premium, ou Defender plus Purview Suite.
+- **L'intégration n8n est en early preview et verrouillée par Frontier.** Une fonctionnalité en preview peut changer de forme entre votre pilote et votre déploiement. **Parade :** rédigez le récit de conformité uniquement contre les capacités GA d'Agent 365, et traitez la présence de n8n dans le registre comme un accélérateur dont vous auriez pu vous passer.
+- **Vos deux produits AI les plus utilisés sont hors du registre Microsoft.** Claude et ChatGPT ne sont pas sur la liste des partenaires. **Parade :** configurez leurs propres exports d'audit — la Compliance API d'Anthropic, l'Enterprise Compliance API d'OpenAI — et versez les deux dans la même revue que vos logs Agent 365. Une revue, trois sources.
+- **Le prix par utilisateur masque la prolifération d'agents.** Comme la facture ne bouge pas quand les agents se multiplient, rien ne vous facture le trentième agent redondant. **Parade :** passez le registre Agent 365 en revue chaque mois contre une liste de propriétaires, et retirez tout ce qui n'a pas de propriétaire nommé. Lancez [l'audit d'accès des agents au CRM](/fr/workflows/crm-agent-access-audit-skill/) contre tout ce qui conserve un droit d'écriture.
+- **Un plafond de dépense réglé sur « illimité » facture quand même.** La documentation d'Anthropic est explicite : la consommation est facturée même lorsque la limite est illimitée. **Parade :** fixez un plafond d'organisation et des plafonds par utilisateur dès le premier jour, avec des alertes de seuil vers un canal qu'un humain lit.
+
+## Règles d'adéquation
+
+**Bon choix quand :** vous êtes déjà sur Microsoft 365 E5 ou au-dessus, vous avez entre 100 et 2 000 salariés, des agents se construisent à plus d'un endroit, et quelqu'un — un CISO, un auditeur, un conseil — va demander qui a autorisé une écriture précise dans un système précis. Le stack se justifie au moment où la réponse cesse d'être « il faudrait que je demande autour de moi ».
+
+**Mauvais choix quand :** vous êtes sous la barre des 50 personnes, où le seul prérequis E5 pèse plus lourd que le risque géré et où un propriétaire nommé par agent fait le même travail gratuitement. Mauvais aussi quand vous tournez sur Google Workspace plutôt que Microsoft — le plan de contrôle suppose un tenant Entra, et le chemin d'enregistrement Vertex AI rend les agents *visibles* dans le centre d'administration sans vous donner de raison d'acheter le reste du parc. Et mauvais quand aucun agent n'écrit encore nulle part chez vous : gouvernez le deuxième agent, pas le premier.
+
+**Si vous ne pouvez faire qu'une chose :** fixez les plafonds de dépense sur votre plan assistant. Cela prend dix minutes, cela ne coûte rien, et c'est le seul contrôle de ce stack qui empêche une mauvaise semaine de devenir un mauvais trimestre.
