@@ -1,0 +1,88 @@
+---
+slug: routing-failure-watchdog-n8n
+canonical_slug: routing-failure-watchdog-n8n
+locale: en
+verticals: [revops]
+title: Watch lead routing for unrouted, mis-assigned, and SLA-breached records
+artifact_type: n8n-flow
+tools_used: [n8n, salesforce, leandata, slack]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 2-3 hours
+human_tested: false
+last_updated: "2026-08-12"
+---
+
+An [n8n](/en/tools/n8n/) flow that watches [Salesforce](/en/tools/salesforce/) lead routing from the outside and pages a human before the reps notice. Three detectors run every 15 minutes over one SOQL query — records stuck in a parking queue, records owned by a deactivated user, and records past a first-touch SLA — plus a weekday-morning check for round-robin skew. Findings are deduplicated, auto-resolved when the condition clears, and split between PagerDuty and [Slack](/en/tools/slack/) by a rule the flow states out loud. The bundle at `apps/web/public/artifacts/routing-failure-watchdog-n8n/` ships the complete 20-node export plus a `_README.md` covering import, the two credentials, the full environment-variable table, a five-step verification, and what running it costs.
+
+## The two clocks
+
+Most speed-to-lead dashboards report one number: time from lead creation to first touch. That number is the sum of two independent failures, and summing them is why the resulting alert pages the wrong person.
+
+**Routing latency** is create → assigned. It breaks when an assignment rule stops matching, a routing graph node throws, a queue fills, or a credential behind an enrichment step expires mid-graph. It is an ops incident, it is fixable at 02:00 by the person on call, and in this flow it pages.
+
+**Response latency** is assigned → first logged touch. It breaks when a rep is in a meeting, on PTO, or ignoring the queue. It is a management conversation, it is not fixable at 02:00 by anyone, and in this flow it posts to Slack and never pages.
+
+`Parse Routing State` computes both separately and refuses to fabricate the first one. If a record has no routing timestamp — no routed-at field, no [LeanData](/en/tools/leandata/) log row — it is marked `routedAtSource: 'none'` rather than defaulted to `CreatedDate`, which would report a routing latency of zero for every record in the org and make the detector permanently silent.
+
+The published evidence for why any of this matters is older and thinner than the folklore around it. The traceable finding is the 2007 Lead Response Management study (Oldroyd, with InsideSales.com), which analysed roughly 15,000 leads and 100,000 call attempts and reported that odds of contacting a lead drop about 100x and odds of qualifying one about 21x when the call goes out at 30 minutes instead of 5. That is a nearly twenty-year-old dataset from six companies, and the widely-repeated "78% buy from whoever responds first" figure traces to no published methodology at all. Set `RESPONSE_SLA_MINUTES` from your own funnel if you can measure it; the 5-minute default is a convention, not a law.
+
+## When to use this
+
+Use it when routing is automated and a failure is silent. That combination is the whole condition. A rules-based Salesforce assignment setup, a LeanData graph, or a round-robin pool all share the property that when they break, nothing errors — the record still has an owner, every dashboard still renders, and the first signal is a rep asking why their queue went quiet, or a prospect replying to a competitor.
+
+It fits teams already routing enough volume that a broken hour is expensive: roughly 100 inbound records a day upward, where a two-hour outage is 25 leads and the parking queue is not something anyone eyeballs.
+
+It pairs with [inbound lead triage](/en/workflows/inbound-lead-triage-n8n/), which decides where records go, and with the [LeanData routing MCP server](/en/workflows/mcp-server-leandata-routing/), which lets an agent answer "why did this lead land here?" after the watchdog has told you something landed wrong. This flow is the alarm; that one is the investigation.
+
+## When NOT to use this
+
+Skip it if a human assigns leads by hand. Manual assignment fails visibly — someone notices the list is long. The failure mode this flow catches is specifically automation failing quietly.
+
+Skip it if you cannot name your parking owners. The unrouted detector is a membership test against `PARKING_OWNER_IDS`, not a null test, for a reason covered below. If nobody can say which queue holds records that matched no rule, that question needs answering before any monitoring is worth building — and the flow will keep telling you so on every sweep rather than reporting a clean org.
+
+Skip the 15-minute cadence if you run n8n Cloud Starter. One execution per firing means 96 a day, roughly 2,950 a month, against the 2,500 executions Starter includes (n8n pricing page, checked 2026-08-12, €20/month billed annually). Either take Pro at 10,000 executions, self-host, or run `*/30` and accept up to 15 more minutes of detection latency.
+
+## Why the unrouted detector is a set-membership test
+
+`Lead.OwnerId` is never null. When no assignment rule matches, Salesforce hands the record to the Default Lead Owner configured in Lead Settings. There is no field meaning "this was not routed" — an unrouted lead and a correctly routed one are structurally identical records, distinguishable only by who owns them.
+
+So `PARKING_OWNER_IDS` carries the default owner plus every holding and catch-all queue, and the detector asks whether a record has sat in one of them past `UNROUTED_GRACE_MINUTES` of business time. The comparison runs on the 15-character Id prefix, because admins paste 15-character Ids out of the Salesforce URL bar and the REST API returns 18-character ones — comparing the two forms directly is the most common way a correctly-reasoned detector matches nothing forever.
+
+The owner check needs one more piece of SOQL. `OwnerId` is polymorphic and can point at a `User` or a `Group`, so `Owner.IsActive` is not a legal field path on its own. `Build Sweep Query` uses `TYPEOF Owner WHEN User THEN Id, Name, IsActive WHEN Group THEN Id, Name, Type END` (SOQL, API version 46.0 and later) to get active-status for user owners and queue type for queue owners in a single round trip.
+
+## Setup
+
+1. **Import** `apps/web/public/artifacts/routing-failure-watchdog-n8n/routing-failure-watchdog-n8n.json` via **Workflows → Import from File**. Set the workflow timezone — both cron expressions read it.
+
+2. **Wire the Salesforce credential.** A Connected App using the client-credentials grant with a read-only Run As integration user. The watchdog is a job, not a person, and every Salesforce call in the export is a `GET` against `/query/` or `/limits`.
+
+3. **Set `PARKING_OWNER_IDS`.** Section 4 of `_README.md` covers where to find the Ids. Nothing else in the setup matters as much.
+
+4. **Set the two SLAs deliberately.** `ROUTING_SLA_MINUTES` (2 by default) pages; `RESPONSE_SLA_MINUTES` (5) posts. Confirm that split in verification step 4 before you activate — a response breach reaching PagerDuty on a Tuesday afternoon will reach it at 02:00 on a Saturday.
+
+5. **Set the business clock.** `BUSINESS_HOURS_TZ` is separate from the workflow timezone: one decides when the flow wakes, the other decides which minutes count against an SLA.
+
+6. **Run the five-step verification in `_README.md` before activating.** Step 1 is the one that matters: break the Salesforce credential on purpose and confirm the flow alerts instead of reporting a clean sweep.
+
+## Failure modes and guards
+
+**Zero rows reads as an all-clear.** A filter typo, a permissions change on the integration user, or an expired credential all produce an empty result set, and every detector then reports nothing wrong. Guard: `Parse Routing State` emits a `sweep_summary` denominator item, and `Run Detectors` returns a `no_denominator` finding at severity `error` — replacing all detector output — when a business-hours sweep sampled nothing. The HTTP nodes run with `neverError` and `fullResponse` so 401 and 403 arrive as data rather than as a failed execution nobody reads.
+
+**A bulk import looks exactly like a routing outage.** A 40,000-record marketing list legitimately parks everything for minutes. Alerting on absolute count makes every import an incident. Guard: the discriminator is source concentration — a real routing failure spreads across `LeadSource` values, an import does not. Past `STAMPEDE_MIN_BATCH` (250) with 90% of parked records sharing one source, the finding downgrades to `info` and paging is suppressed with the reason stated in the message.
+
+**Wall-clock SLA math floods Monday morning.** A lead landing 18:55 Friday has not breached a 5-minute SLA at 09:00 Monday, but naive arithmetic says it breached by 3,725 minutes. Guard: elapsed time is computed in business minutes against `BUSINESS_HOURS_TZ`, `BUSINESS_DAYS`, and `BUSINESS_HOLIDAYS`, using `Intl.DateTimeFormat` rather than the worker's own clock so the n8n host's timezone cannot leak into the result.
+
+**One cause, 900 alerts.** A broken routing graph breaches every record it touches. Guard: findings are grouped by cause and carry an exact count with a sample capped at `MAX_ITEMS_PER_ALERT` (25); the PagerDuty `dedup_key` collapses repeats into one incident, and `RENOTIFY_MINUTES` (120) suppresses re-alerting unless severity escalates.
+
+**Incidents that never close.** A condition that clears without an explicit resolve leaves PagerDuty incidents open until someone acks a stale page, which is how a channel gets muted. Guard: `Alert Gate + Resolve` sends `event_action: 'resolve'` on the same `dedup_key` when a key stops firing — but only when the sweep that would have re-detected it actually succeeded, so an auth failure cannot resolve a real backlog into silence. Resolves are also scoped by source, because the 15-minute sweep and the 08:00 fairness job share one state object and the sweep would otherwise close every fairness alert a quarter-hour after it opened.
+
+**The watchdog eats the API budget it depends on.** Guard: `API Budget Gate` reads `DailyApiRequests` from `/limits` each sweep and stands down above `SFDC_API_BUDGET_PCT` (85). The flow's own consumption is not the risk — two calls per sweep is 192 a day against an Enterprise allocation starting at 100,000 requests per rolling 24 hours plus 1,000 per user licence. The risk is being the call that tips an already-strained org over.
+
+## What this replaces
+
+The status quo is a report someone built once and nobody opens. It shows the parked queue accurately and says nothing at the moment the queue starts growing, which is the only moment that matters.
+
+LeanData's own Audit Logs are the closer comparison and are better than this flow at what they do. The Q2-2026 release rebuilt them with an embedded assistant that answers routing questions in natural language and cites the node path and evaluated conditions. For an admin debugging one lead, that is included in what you already pay for and beats anything here. What it does not do is wake up on its own — it answers questions, and the failure mode this flow addresses is nobody knowing there is a question to ask. Run both: the watchdog tells you something broke, the audit log tells you why.
+
+Building this as scheduled SQL over a warehouse is the legitimate alternative and wins outright once Salesforce data already lands there through a sync, because you get history, backfill, and cheaper aggregates. The n8n version wins when it does not, since it reads the CRM directly and needs no ingestion pipeline standing up first — and paging, deduplication, and auto-resolve are the parts a `SELECT` statement does not give you at any price.

@@ -1,0 +1,88 @@
+---
+slug: routing-failure-watchdog-n8n
+canonical_slug: routing-failure-watchdog-n8n
+locale: de
+verticals: [revops]
+title: Lead-Routing auf nicht zugewiesene, falsch zugewiesene und SLA-verletzende Datensätze überwachen
+artifact_type: n8n-flow
+tools_used: [n8n, salesforce, leandata, slack]
+roles: [revops, gtm-engineer]
+difficulty: advanced
+time_to_setup: 2-3 hours
+human_tested: false
+last_updated: "2026-08-12"
+---
+
+Ein [n8n](/de/tools/n8n/)-Workflow, der das Lead-Routing in [Salesforce](/de/tools/salesforce/) von außen überwacht und einen Menschen alarmiert, bevor die Reps es merken. Drei Detektoren laufen alle 15 Minuten über eine einzige SOQL-Abfrage — Datensätze, die in einer Warteschlange feststecken, Datensätze mit deaktiviertem Owner und Datensätze jenseits des Erstkontakt-SLA — dazu eine Prüfung auf Round-Robin-Schieflage an jedem Werktagmorgen. Findings werden dedupliziert, lösen sich selbst auf, sobald die Bedingung wegfällt, und werden nach einer Regel, die der Workflow ausdrücklich benennt, zwischen PagerDuty und [Slack](/de/tools/slack/) aufgeteilt. Das Bundle unter `apps/web/public/artifacts/routing-failure-watchdog-n8n/` liefert den vollständigen Export mit 20 Nodes plus eine `_README.md` zu Import, den zwei Credentials, der kompletten Tabelle der Umgebungsvariablen, einer fünfstufigen Verifikation und den laufenden Kosten.
+
+## Die zwei Uhren
+
+Die meisten Speed-to-Lead-Dashboards melden eine einzige Zahl: die Zeit von der Lead-Erstellung bis zum Erstkontakt. Diese Zahl ist die Summe zweier unabhängiger Fehler, und genau dieses Summieren sorgt dafür, dass der resultierende Alarm die falsche Person weckt.
+
+**Routing-Latenz** ist erstellt → zugewiesen. Sie bricht, wenn eine Zuweisungsregel nicht mehr greift, ein Node im Routing-Graph einen Fehler wirft, eine Queue volläuft oder ein Credential hinter einem Anreicherungsschritt mitten im Graph abläuft. Das ist ein Ops-Incident, die Bereitschaft kann ihn um 02:00 Uhr beheben, und in diesem Workflow löst er einen Anruf aus.
+
+**Response-Latenz** ist zugewiesen → erster protokollierter Kontakt. Sie bricht, wenn ein Rep in einem Termin sitzt, im Urlaub ist oder die Queue ignoriert. Das ist ein Führungsgespräch, um 02:00 Uhr kann das niemand beheben, und in diesem Workflow geht es nach Slack und niemals an die Bereitschaft.
+
+`Parse Routing State` berechnet beide getrennt und weigert sich, die erste zu erfinden. Hat ein Datensatz keinen Routing-Zeitstempel — kein Zuweisungsfeld, keine [LeanData](/de/tools/leandata/)-Log-Zeile —, wird er als `routedAtSource: 'none'` markiert statt auf `CreatedDate` zurückzufallen, was für jeden Datensatz der Org eine Routing-Latenz von null melden und den Detektor dauerhaft stummschalten würde.
+
+Die publizierte Evidenz dafür, warum das zählt, ist älter und dünner als die Folklore darum herum. Nachvollziehbar ist die Lead-Response-Management-Studie von 2007 (Oldroyd, mit InsideSales.com), die rund 15.000 Leads und 100.000 Anrufversuche auswertete und berichtete, dass die Chance, einen Lead zu erreichen, um etwa das 100-fache und die Chance, ihn zu qualifizieren, um etwa das 21-fache sinkt, wenn der Anruf nach 30 statt nach 5 Minuten rausgeht. Das sind fast zwanzig Jahre alte Daten aus sechs Unternehmen, und die viel zitierte Zahl, "78% kaufen bei dem, der zuerst antwortet", geht auf keine publizierte Methodik zurück. Setzen Sie `RESPONSE_SLA_MINUTES` aus Ihrem eigenen Funnel, wenn Sie ihn messen können; die 5 Minuten sind eine Konvention, kein Gesetz.
+
+## Wann Sie das einsetzen
+
+Setzen Sie es ein, wenn Routing automatisiert ist und ein Ausfall lautlos passiert. Diese Kombination ist die ganze Bedingung. Ein regelbasiertes Zuweisungs-Setup in Salesforce, ein LeanData-Graph oder ein Round-Robin-Pool teilen die Eigenschaft, dass beim Bruch nichts einen Fehler wirft: Der Datensatz hat weiterhin einen Owner, alle Dashboards rendern weiterhin, und das erste Signal ist ein Rep, der fragt, warum seine Queue leer ist — oder ein Interessent, der einem Wettbewerber antwortet.
+
+Es passt zu Teams mit genug Volumen, dass eine kaputte Stunde teuer ist: ab rund 100 Inbound-Datensätzen pro Tag aufwärts, wo ein zweistündiger Ausfall 25 Leads sind und niemand die Warteschlange per Auge kontrolliert.
+
+Es ergänzt die [Inbound-Lead-Triage](/de/workflows/inbound-lead-triage-n8n/), die entscheidet, wohin Datensätze gehen, und den [LeanData-Routing-MCP-Server](/de/workflows/mcp-server-leandata-routing/), mit dem ein Agent beantworten kann, warum ein Lead genau dort gelandet ist — nachdem der Watchdog gemeldet hat, dass etwas falsch gelandet ist. Dieser Workflow ist der Alarm; jener ist die Untersuchung.
+
+## Wann Sie das NICHT einsetzen
+
+Lassen Sie es, wenn ein Mensch Leads von Hand zuweist. Manuelle Zuweisung scheitert sichtbar: Jemand merkt, dass die Liste lang ist. Der Fehlerfall, den dieser Workflow fängt, ist ausdrücklich die Automatisierung, die still bricht.
+
+Lassen Sie es, wenn Sie Ihre Parkplatz-Owner nicht benennen können. Der Unrouted-Detektor ist ein Mengentest gegen `PARKING_OWNER_IDS`, kein Null-Test — aus einem Grund, der weiter unten steht. Wenn niemand sagen kann, welche Queue die Datensätze hält, die keiner Regel entsprachen, muss diese Frage beantwortet werden, bevor sich irgendein Monitoring lohnt — und der Workflow wird Ihnen das bei jedem Durchlauf sagen, statt eine saubere Org zu melden.
+
+Lassen Sie die 15-Minuten-Taktung, wenn Sie n8n Cloud Starter fahren. Eine Execution pro Auslösung sind 96 pro Tag, rund 2.950 pro Monat, gegen die 2.500 Executions, die Starter enthält (n8n-Preisseite, geprüft am 2026-08-12, 20 € pro Monat bei jährlicher Abrechnung). Entweder Pro mit 10.000 Executions, oder Self-Hosting, oder `*/30` mit bis zu 15 Minuten zusätzlicher Erkennungslatenz.
+
+## Warum der Unrouted-Detektor ein Mengentest ist
+
+`Lead.OwnerId` ist niemals null. Greift keine Zuweisungsregel, übergibt Salesforce den Datensatz an den Default Lead Owner aus den Lead Settings. Es gibt kein Feld mit der Bedeutung "wurde nicht geroutet": Ein nicht gerouteter und ein korrekt gerouteter Lead sind strukturell identische Datensätze, unterscheidbar nur daran, wem sie gehören.
+
+Also führt `PARKING_OWNER_IDS` den Default-Owner plus jede Halte- und Catch-all-Queue, und der Detektor fragt, ob ein Datensatz in einer davon länger als `UNROUTED_GRACE_MINUTES` Geschäftszeit liegt. Verglichen wird auf dem 15-stelligen Id-Präfix, denn Admins kopieren 15-stellige Ids aus der Salesforce-Adressleiste, während die REST-API 18-stellige zurückgibt — beide Formen direkt zu vergleichen ist der häufigste Weg, auf dem ein sauber durchdachter Detektor dauerhaft auf nichts matcht.
+
+Die Owner-Prüfung braucht noch ein Stück SOQL. `OwnerId` ist polymorph und kann auf einen `User` oder eine `Group` zeigen, deshalb ist `Owner.IsActive` für sich allein kein gültiger Feldpfad. `Build Sweep Query` nutzt `TYPEOF Owner WHEN User THEN Id, Name, IsActive WHEN Group THEN Id, Name, Type END` (SOQL, API-Version 46.0 und höher), um Aktivstatus für User-Owner und Queue-Typ für Queue-Owner in einem Roundtrip zu holen.
+
+## Setup
+
+1. **Importieren Sie** `apps/web/public/artifacts/routing-failure-watchdog-n8n/routing-failure-watchdog-n8n.json` über **Workflows → Import from File**. Setzen Sie die Workflow-Zeitzone — beide Cron-Ausdrücke lesen sie.
+
+2. **Verdrahten Sie das Salesforce-Credential.** Eine Connected App mit Client-Credentials-Grant und einem lesenden Run-As-Integrationsnutzer. Der Watchdog ist ein Job, keine Person, und jeder Salesforce-Aufruf im Export ist ein `GET` gegen `/query/` oder `/limits`.
+
+3. **Setzen Sie `PARKING_OWNER_IDS`.** Abschnitt 4 der `_README.md` erklärt, wo Sie die Ids finden. Nichts anderes im Setup zählt so viel.
+
+4. **Setzen Sie die beiden SLAs bewusst.** `ROUTING_SLA_MINUTES` (Standard 2) alarmiert die Bereitschaft; `RESPONSE_SLA_MINUTES` (5) postet. Bestätigen Sie diese Trennung in Verifikationsschritt 4, bevor Sie aktivieren — eine Response-Verletzung, die an einem Dienstagnachmittag PagerDuty erreicht, erreicht es auch samstags um 02:00 Uhr.
+
+5. **Setzen Sie die Geschäftsuhr.** `BUSINESS_HOURS_TZ` ist unabhängig von der Workflow-Zeitzone: Die eine entscheidet, wann der Workflow aufwacht, die andere, welche Minuten gegen ein SLA zählen.
+
+6. **Führen Sie die fünfstufige Verifikation aus der `_README.md` vor der Aktivierung aus.** Schritt 1 ist der entscheidende: Zerstören Sie das Salesforce-Credential absichtlich und prüfen Sie, dass der Workflow alarmiert, statt einen sauberen Durchlauf zu melden.
+
+## Fehlerbilder und Guards
+
+**Null Zeilen liest sich wie Entwarnung.** Ein Tippfehler im Filter, eine Rechteänderung am Integrationsnutzer oder ein abgelaufenes Credential erzeugen alle ein leeres Ergebnis, und jeder Detektor meldet daraufhin, dass nichts falsch ist. Guard: `Parse Routing State` gibt ein Nenner-Item `sweep_summary` aus, und `Run Detectors` liefert ein `no_denominator`-Finding mit Severity `error` — es ersetzt die gesamte Detektorausgabe —, wenn ein Durchlauf in Geschäftszeit nichts gesampelt hat. Die HTTP-Nodes laufen mit `neverError` und `fullResponse`, damit 401 und 403 als Daten ankommen und nicht als fehlgeschlagene Execution, die niemand liest.
+
+**Ein Massenimport sieht exakt aus wie ein Routing-Ausfall.** Eine Marketingliste mit 40.000 Datensätzen parkt legitim alles für Minuten. Auf absolute Zahlen zu alarmieren macht jeden Import zum Incident. Guard: Das Unterscheidungsmerkmal ist Quellenkonzentration — ein echter Routing-Ausfall verteilt sich über `LeadSource`-Werte, ein Import nicht. Jenseits von `STAMPEDE_MIN_BATCH` (250) mit 90% der geparkten Datensätze auf einer einzigen Quelle sinkt das Finding auf `info`, und die Alarmierung wird unterdrückt, mit dem Grund im Text.
+
+**SLA-Arithmetik nach Wanduhr flutet den Montagmorgen.** Ein Lead, der freitags um 18:55 Uhr eintrifft, hat montags um 09:00 Uhr kein 5-Minuten-SLA verletzt, aber die naive Rechnung sagt, er habe es um 3.725 Minuten verletzt. Guard: Verstrichene Zeit wird in Geschäftsminuten gegen `BUSINESS_HOURS_TZ`, `BUSINESS_DAYS` und `BUSINESS_HOLIDAYS` gerechnet, mit `Intl.DateTimeFormat` statt der Uhr des Workers, damit die Zeitzone des n8n-Hosts nicht ins Ergebnis durchsickert.
+
+**Eine Ursache, 900 Alarme.** Ein kaputter Routing-Graph verletzt das SLA jedes Datensatzes, den er berührt. Guard: Findings werden nach Ursache gruppiert und tragen eine exakte Anzahl mit einer auf `MAX_ITEMS_PER_ALERT` (25) begrenzten Stichprobe; der `dedup_key` von PagerDuty faltet Wiederholungen zu einem Incident, und `RENOTIFY_MINUTES` (120) unterdrückt Nachalarmierung, sofern die Severity nicht eskaliert.
+
+**Incidents, die nie schließen.** Eine Bedingung, die ohne expliziten Resolve wegfällt, lässt PagerDuty-Incidents offen, bis jemand einen abgestandenen Alarm quittiert — so wird ein Kanal stummgeschaltet. Guard: `Alert Gate + Resolve` sendet `event_action: 'resolve'` auf demselben `dedup_key`, sobald ein Key nicht mehr feuert — aber nur, wenn der Durchlauf, der ihn erneut erkannt hätte, tatsächlich erfolgreich war, damit ein Auth-Fehler kein echtes Backlog ins Schweigen auflöst. Resolves sind außerdem nach Quelle abgegrenzt, weil der 15-Minuten-Durchlauf und der 08:00-Fairness-Job dasselbe State-Objekt teilen und der Durchlauf sonst jede Fairness-Warnung eine Viertelstunde nach ihrem Auslösen schließen würde.
+
+**Der Watchdog frisst das API-Budget, von dem er abhängt.** Guard: `API Budget Gate` liest `DailyApiRequests` aus `/limits` bei jedem Durchlauf und zieht sich oberhalb von `SFDC_API_BUDGET_PCT` (85) zurück. Der Eigenverbrauch ist nicht das Risiko — zwei Aufrufe pro Durchlauf sind 192 pro Tag gegen eine Enterprise-Zuteilung, die bei 100.000 Requests pro rollenden 24 Stunden startet, plus 1.000 je Nutzerlizenz. Das Risiko ist, der Aufruf zu sein, der eine ohnehin angespannte Org kippt.
+
+## Was das ersetzt
+
+Der Status quo ist ein Report, den jemand einmal gebaut hat und den niemand öffnet. Er zeigt die geparkte Queue exakt an und sagt nichts in dem Moment, in dem die Queue zu wachsen beginnt — dem einzigen Moment, der zählt.
+
+Die Audit Logs von LeanData selbst sind der nähere Vergleich und in dem, was sie tun, besser als dieser Workflow. Das Q2-2026-Release hat sie mit einem eingebetteten Assistenten neu gebaut, der Routing-Fragen in natürlicher Sprache beantwortet und dabei Node-Pfad und ausgewertete Bedingungen zitiert. Für einen Admin, der einen einzelnen Lead debuggt, ist das in dem enthalten, was Sie ohnehin zahlen, und schlägt alles hier. Was es nicht tut: von selbst aufwachen. Es beantwortet Fragen, und der Fehlerfall, den dieser Workflow adressiert, ist, dass niemand weiß, dass es eine Frage zu stellen gibt. Fahren Sie beides: Der Watchdog sagt Ihnen, dass etwas gebrochen ist, das Audit Log sagt Ihnen, warum.
+
+Dasselbe als geplantes SQL über ein Warehouse zu bauen ist die legitime Alternative und gewinnt klar, sobald Salesforce-Daten dort ohnehin per Sync landen, weil Sie Historie, Backfill und billigere Aggregate bekommen. Die n8n-Variante gewinnt, wenn sie das nicht tun, denn sie liest das CRM direkt und braucht keine vorher aufgesetzte Ingestion-Pipeline — und Alarmierung, Deduplizierung und Auto-Resolve sind der Teil, den ein `SELECT` zu keinem Preis liefert.

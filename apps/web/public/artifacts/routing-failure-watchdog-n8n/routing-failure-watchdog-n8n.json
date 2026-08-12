@@ -1,0 +1,728 @@
+{
+  "name": "Routing Failure Watchdog",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule---routing-sweep",
+      "name": "Schedule — Routing Sweep",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule---fairness--digest-0800",
+      "name": "Schedule — Fairness + Digest 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -560,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.SFDC_INSTANCE_URL || '').replace(/\\/+$/, '') + '/services/data/' + ($env.SFDC_API_VERSION || 'v67.0') + '/limits' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "http---salesforce-limits",
+      "name": "HTTP — Salesforce Limits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -340,
+        0
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "PLACEHOLDER_SALESFORCE_OAUTH2_CRED_ID",
+          "name": "Salesforce Watchdog (OAuth2 client credentials)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- shared business-clock helpers -------------------------------------\n// Elapsed time is measured in BUSINESS minutes, not wall-clock minutes.\n// A lead that lands 18:55 Friday has not breached a 5-minute SLA at 09:00\n// Monday; wall-clock arithmetic says it breached by 3,725 minutes and\n// produces a Monday-morning flood of alerts nobody can act on.\nfunction bizConfig() {\n  return {\n    tz: $env.BUSINESS_HOURS_TZ || 'America/New_York',\n    startMin: parseInt($env.BUSINESS_HOURS_START_MIN || '480', 10),  // 08:00\n    endMin: parseInt($env.BUSINESS_HOURS_END_MIN || '1080', 10),     // 18:00\n    days: (($env.BUSINESS_DAYS || '1,2,3,4,5').split(',')).map(function (d) { return parseInt(d, 10); }),\n    holidays: (($env.BUSINESS_HOLIDAYS || '').split(',')).map(function (s) { return s.trim(); }).filter(Boolean),\n  };\n}\n\n// Reads wall-clock parts of an instant AS SEEN IN the business timezone.\n// Intl is used rather than Date#getHours because the n8n worker's own\n// timezone is not the business timezone and must never leak into the math.\nfunction partsIn(date, tz) {\n  const fmt = new Intl.DateTimeFormat('en-CA', {\n    timeZone: tz, hour12: false,\n    year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', weekday: 'short',\n  });\n  const p = {};\n  for (const part of fmt.formatToParts(date)) { p[part.type] = part.value; }\n  const wd = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[p.weekday];\n  return {\n    ymd: p.year + '-' + p.month + '-' + p.day,\n    minuteOfDay: parseInt(p.hour, 10) * 60 + parseInt(p.minute, 10),\n    weekday: wd,\n  };\n}\n\nfunction isBusinessDay(parts, cfg) {\n  if (cfg.holidays.indexOf(parts.ymd) !== -1) return false;\n  return cfg.days.indexOf(parts.weekday) !== -1;\n}\n\n// Walks the interval in 1-minute steps capped at BIZ_WALK_CAP minutes of\n// wall clock. Stepping is O(minutes) and deliberately bounded: an unrouted\n// record from six weeks ago must not spin the Code node for 60,000\n// iterations. Past the cap the function returns `capped: true` and the\n// caller reports \"older than N business minutes\" instead of a false number.\nconst BIZ_WALK_CAP = 60 * 24 * 21;\nfunction businessMinutesBetween(fromISO, toISO, cfg) {\n  const from = new Date(fromISO);\n  const to = new Date(toISO);\n  if (isNaN(from.getTime()) || isNaN(to.getTime())) return { minutes: null, capped: false, invalid: true };\n  if (to <= from) return { minutes: 0, capped: false, invalid: false };\n\n  const totalWall = Math.floor((to - from) / 60000);\n  const capped = totalWall > BIZ_WALK_CAP;\n  const walk = capped ? BIZ_WALK_CAP : totalWall;\n\n  let minutes = 0;\n  let cursor = new Date(from.getTime());\n  for (let i = 0; i < walk; i++) {\n    const p = partsIn(cursor, cfg.tz);\n    if (isBusinessDay(p, cfg) && p.minuteOfDay >= cfg.startMin && p.minuteOfDay < cfg.endMin) minutes++;\n    cursor = new Date(cursor.getTime() + 60000);\n  }\n  return { minutes: minutes, capped: capped, invalid: false };\n}\n\nfunction insideBusinessHours(date, cfg) {\n  const p = partsIn(date, cfg.tz);\n  return isBusinessDay(p, cfg) && p.minuteOfDay >= cfg.startMin && p.minuteOfDay < cfg.endMin;\n}\n\nfunction envInt(name, dflt) {\n  const raw = $env[name];\n  const n = parseInt(raw === undefined || raw === '' ? String(dflt) : raw, 10);\n  return isNaN(n) ? dflt : n;\n}\n\nfunction envList(name) {\n  return (($env[name] || '').split(',')).map(function (s) { return s.trim(); }).filter(Boolean);\n}\n\n// Salesforce Ids come back 18-char from the API but admins paste 15-char\n// Ids out of the URL bar. Comparing the two forms directly is the single\n// most common reason a correctly-configured parking-queue list matches\n// nothing and the unrouted detector reports a permanent all-clear.\nfunction id15(id) { return typeof id === 'string' ? id.substring(0, 15) : id; }\n\n// ---- API budget gate ---------------------------------------------------\n// The watchdog is a tenant of the same daily API allocation the rest of the\n// org spends. Salesforce publishes it two ways: the Sforce-Limit-Info\n// response header on every REST call, and the /limits resource queried\n// here. Enterprise orgs start at 100,000 requests per rolling 24 hours and\n// gain 1,000 per user licence, so this flow's ~390 calls/day is a rounding\n// error -- right up until a broken sync upstream eats 95% of the org's\n// allocation, at which point the watchdog must get out of the way rather\n// than be the call that tips the org into 'REQUEST_LIMIT_EXCEEDED'.\n\nconst cfg = bizConfig();\nconst budgetPct = envInt('SFDC_API_BUDGET_PCT', 85);\nconst now = new Date();\nconst item = $input.first().json;\nconst status = item.statusCode !== undefined ? item.statusCode : 200;\nconst body = item.body !== undefined ? item.body : item;\n\nif (status === 401 || status === 403) {\n  return [{ json: {\n    proceed: false, kind: 'poll_health', severity: 'error',\n    reason: 'auth_' + status,\n    detail: 'Salesforce rejected the watchdog credential. Every detector below this point would have reported zero findings, which is indistinguishable from a healthy org.',\n    checkedAt: now.toISOString(),\n  } }];\n}\n\nif (status >= 500 || status === 429) {\n  return [{ json: {\n    proceed: false, kind: 'poll_health', severity: 'warning',\n    reason: 'sfdc_' + status,\n    detail: 'Salesforce returned ' + status + '. Skipping this sweep; the next one is 15 minutes out.',\n    checkedAt: now.toISOString(),\n  } }];\n}\n\nconst daily = (body && body.DailyApiRequests) || {};\nconst max = Number(daily.Max);\nconst remaining = Number(daily.Remaining);\n\nif (!isFinite(max) || !isFinite(remaining) || max <= 0) {\n  // Do NOT fail open into \"budget fine\" and do NOT fail closed into silence.\n  // Proceed, but mark the budget unknown so the digest shows it.\n  return [{ json: {\n    proceed: true, budgetKnown: false, usedPct: null,\n    insideHours: insideBusinessHours(now, cfg),\n    checkedAt: now.toISOString(),\n  } }];\n}\n\nconst usedPct = ((max - remaining) / max) * 100;\n\nif (usedPct >= budgetPct) {\n  return [{ json: {\n    proceed: false, kind: 'poll_health', severity: 'warning',\n    reason: 'api_budget',\n    detail: 'Org API usage at ' + usedPct.toFixed(1) + '% of ' + max + ' daily requests (threshold ' + budgetPct + '%). Watchdog standing down until usage falls.',\n    usedPct: usedPct, max: max, remaining: remaining,\n    checkedAt: now.toISOString(),\n  } }];\n}\n\nreturn [{ json: {\n  proceed: true, budgetKnown: true, usedPct: usedPct,\n  max: max, remaining: remaining,\n  insideHours: insideBusinessHours(now, cfg),\n  checkedAt: now.toISOString(),\n} }];\n"
+      },
+      "id": "api-budget-gate",
+      "name": "API Budget Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "proceed",
+              "leftValue": "={{ $json.proceed }}",
+              "rightValue": "={{ true }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "proceed?",
+      "name": "Proceed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- build the sweep SOQL ---------------------------------------------\n// One query per sweep, not one per detector. All three detectors read the\n// same window of records; splitting them into three queries triples the\n// API cost for identical rows and lets the detectors disagree about what\n// \"now\" means when a sweep straddles a minute boundary.\n//\n// TYPEOF is what makes the owner check possible in a single round trip.\n// Lead.OwnerId is polymorphic -- it points at a User or at a Group (queue)\n// -- so `Owner.IsActive` is not a legal field path on its own. TYPEOF\n// (SOQL, API 46.0 and later) selects User fields when the owner is a User\n// and Group fields when it is a queue, in one query.\n\nconst obj = $env.ROUTING_OBJECT || 'Lead';\nconst lookbackHours = parseInt($env.LOOKBACK_HOURS || '48', 10);\nconst apiVersion = $env.SFDC_API_VERSION || 'v67.0';\nconst instance = ($env.SFDC_INSTANCE_URL || '').replace(/\\/+$/, '');\nconst rowCap = parseInt($env.SWEEP_ROW_CAP || '2000', 10);\n\nconst since = new Date(Date.now() - lookbackHours * 3600 * 1000).toISOString().replace(/\\.\\d{3}Z$/, 'Z');\n\nconst fields = [\n  'Id', 'CreatedDate', 'OwnerId', 'IsConverted', 'Status',\n  'LeadSource', 'LastActivityDate',\n  'TYPEOF Owner WHEN User THEN Id, Name, IsActive, UserRoleId WHEN Group THEN Id, Name, Type END',\n  '(SELECT Id, CreatedDate, Type, Subject FROM Tasks ORDER BY CreatedDate ASC LIMIT 1)',\n];\n\nconst routingTsField = $env.ROUTING_TS_FIELD || '';\nif (routingTsField) fields.splice(6, 0, routingTsField);\n\nconst soql =\n  'SELECT ' + fields.join(', ') +\n  ' FROM ' + obj +\n  ' WHERE CreatedDate >= ' + since +\n  ' AND IsConverted = false' +\n  ' ORDER BY CreatedDate DESC' +\n  ' LIMIT ' + rowCap;\n\nreturn [{ json: {\n  url: instance + '/services/data/' + apiVersion + '/query/?q=' + encodeURIComponent(soql),\n  soql: soql,\n  object: obj,\n  since: since,\n  rowCap: rowCap,\n  routingTsField: routingTsField,\n  budget: $input.first().json,\n} }];\n"
+      },
+      "id": "build-sweep-query",
+      "name": "Build Sweep Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "query-routing-state",
+      "name": "Query Routing State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        -100
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "PLACEHOLDER_SALESFORCE_OAUTH2_CRED_ID",
+          "name": "Salesforce Watchdog (OAuth2 client credentials)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.SFDC_INSTANCE_URL || '').replace(/\\/+$/, '') + '/services/data/' + ($env.SFDC_API_VERSION || 'v67.0') + '/query/?q=' + encodeURIComponent('SELECT Id, CreatedDate, ' + ($env.LEANDATA_RECORD_ID_FIELD || 'LeanData__Lead__c') + ' FROM LeanData__Log__c WHERE CreatedDate >= ' + $('Build Sweep Query').first().json.since + ' ORDER BY CreatedDate ASC LIMIT 2000') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "query-leandata-log",
+      "name": "Query LeanData Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        90
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "PLACEHOLDER_SALESFORCE_OAUTH2_CRED_ID",
+          "name": "Salesforce Watchdog (OAuth2 client credentials)"
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "Skipped unless LEANDATA_LOG_ENABLED=true; the merge node passes records through untouched when it is off."
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- shared business-clock helpers -------------------------------------\n// Elapsed time is measured in BUSINESS minutes, not wall-clock minutes.\n// A lead that lands 18:55 Friday has not breached a 5-minute SLA at 09:00\n// Monday; wall-clock arithmetic says it breached by 3,725 minutes and\n// produces a Monday-morning flood of alerts nobody can act on.\nfunction bizConfig() {\n  return {\n    tz: $env.BUSINESS_HOURS_TZ || 'America/New_York',\n    startMin: parseInt($env.BUSINESS_HOURS_START_MIN || '480', 10),  // 08:00\n    endMin: parseInt($env.BUSINESS_HOURS_END_MIN || '1080', 10),     // 18:00\n    days: (($env.BUSINESS_DAYS || '1,2,3,4,5').split(',')).map(function (d) { return parseInt(d, 10); }),\n    holidays: (($env.BUSINESS_HOLIDAYS || '').split(',')).map(function (s) { return s.trim(); }).filter(Boolean),\n  };\n}\n\n// Reads wall-clock parts of an instant AS SEEN IN the business timezone.\n// Intl is used rather than Date#getHours because the n8n worker's own\n// timezone is not the business timezone and must never leak into the math.\nfunction partsIn(date, tz) {\n  const fmt = new Intl.DateTimeFormat('en-CA', {\n    timeZone: tz, hour12: false,\n    year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', weekday: 'short',\n  });\n  const p = {};\n  for (const part of fmt.formatToParts(date)) { p[part.type] = part.value; }\n  const wd = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[p.weekday];\n  return {\n    ymd: p.year + '-' + p.month + '-' + p.day,\n    minuteOfDay: parseInt(p.hour, 10) * 60 + parseInt(p.minute, 10),\n    weekday: wd,\n  };\n}\n\nfunction isBusinessDay(parts, cfg) {\n  if (cfg.holidays.indexOf(parts.ymd) !== -1) return false;\n  return cfg.days.indexOf(parts.weekday) !== -1;\n}\n\n// Walks the interval in 1-minute steps capped at BIZ_WALK_CAP minutes of\n// wall clock. Stepping is O(minutes) and deliberately bounded: an unrouted\n// record from six weeks ago must not spin the Code node for 60,000\n// iterations. Past the cap the function returns `capped: true` and the\n// caller reports \"older than N business minutes\" instead of a false number.\nconst BIZ_WALK_CAP = 60 * 24 * 21;\nfunction businessMinutesBetween(fromISO, toISO, cfg) {\n  const from = new Date(fromISO);\n  const to = new Date(toISO);\n  if (isNaN(from.getTime()) || isNaN(to.getTime())) return { minutes: null, capped: false, invalid: true };\n  if (to <= from) return { minutes: 0, capped: false, invalid: false };\n\n  const totalWall = Math.floor((to - from) / 60000);\n  const capped = totalWall > BIZ_WALK_CAP;\n  const walk = capped ? BIZ_WALK_CAP : totalWall;\n\n  let minutes = 0;\n  let cursor = new Date(from.getTime());\n  for (let i = 0; i < walk; i++) {\n    const p = partsIn(cursor, cfg.tz);\n    if (isBusinessDay(p, cfg) && p.minuteOfDay >= cfg.startMin && p.minuteOfDay < cfg.endMin) minutes++;\n    cursor = new Date(cursor.getTime() + 60000);\n  }\n  return { minutes: minutes, capped: capped, invalid: false };\n}\n\nfunction insideBusinessHours(date, cfg) {\n  const p = partsIn(date, cfg.tz);\n  return isBusinessDay(p, cfg) && p.minuteOfDay >= cfg.startMin && p.minuteOfDay < cfg.endMin;\n}\n\nfunction envInt(name, dflt) {\n  const raw = $env[name];\n  const n = parseInt(raw === undefined || raw === '' ? String(dflt) : raw, 10);\n  return isNaN(n) ? dflt : n;\n}\n\nfunction envList(name) {\n  return (($env[name] || '').split(',')).map(function (s) { return s.trim(); }).filter(Boolean);\n}\n\n// Salesforce Ids come back 18-char from the API but admins paste 15-char\n// Ids out of the URL bar. Comparing the two forms directly is the single\n// most common reason a correctly-configured parking-queue list matches\n// nothing and the unrouted detector reports a permanent all-clear.\nfunction id15(id) { return typeof id === 'string' ? id.substring(0, 15) : id; }\n\n// ---- normalise the sweep result ---------------------------------------\n// Emits one item per record plus one summary item. Everything downstream\n// reads this shape, so the three detectors cannot drift in how they define\n// \"parked\", \"assigned\", or the two clocks.\n//\n// THE TWO CLOCKS. Routing latency (created -> assigned) and response\n// latency (assigned -> first touch) fail for different reasons, are fixed\n// by different people, and must never be summed into one \"speed to lead\"\n// number. A blown routing clock is an ops incident and pages the on-call.\n// A blown response clock is a coaching conversation and goes to a digest.\n// Collapsing them is why most speed-to-lead dashboards page the wrong\n// person: the number moves, and nobody can tell whether the router broke\n// or a rep went to lunch.\n\nconst cfg = bizConfig();\nconst nowISO = new Date().toISOString();\nconst meta = $('Build Sweep Query').first().json;\nconst parking = new Set(envList('PARKING_OWNER_IDS').map(id15));\nconst routingTsField = meta.routingTsField;\n\nconst raw = $input.first().json;\nconst status = raw.statusCode !== undefined ? raw.statusCode : 200;\nconst body = raw.body !== undefined ? raw.body : raw;\n\nif (status !== 200) {\n  const detail = Array.isArray(body) && body[0] ? (body[0].errorCode + ': ' + body[0].message) : ('HTTP ' + status);\n  return [{ json: { kind: 'poll_health', severity: 'error', reason: 'query_failed', detail: detail, soql: meta.soql, checkedAt: nowISO } }];\n}\n\nconst records = Array.isArray(body.records) ? body.records : [];\n\n// A truncated page silently shrinks every count below. Report it rather\n// than quietly analysing the first 2,000 of 9,000 records.\nconst truncated = body.done === false || records.length >= meta.rowCap;\n\nconst out = [];\nlet parked = 0, inactiveOwner = 0, assigned = 0;\n\nfor (const r of records) {\n  const owner = r.Owner || {};\n  const ownerIsQueue = owner.Type !== undefined && owner.IsActive === undefined;\n  const ownerId15 = id15(r.OwnerId);\n  const isParked = parking.has(ownerId15);\n  const ownerInactive = !ownerIsQueue && owner.IsActive === false;\n\n  // Routing timestamp, in order of trustworthiness:\n  //   1. an explicit routed-at field on the record, if the org has one\n  //   2. the LeanData log row merged in downstream\n  //   3. nothing -- and the record is marked so, never defaulted to\n  //      CreatedDate, which would silently report routing latency of 0\n  //      for every record in the org.\n  let routedAt = null, routedAtSource = 'none';\n  if (routingTsField && r[routingTsField]) { routedAt = r[routingTsField]; routedAtSource = 'field:' + routingTsField; }\n\n  const firstTask = (r.Tasks && r.Tasks.records && r.Tasks.records[0]) || null;\n  const firstTouchAt = firstTask ? firstTask.CreatedDate : (r.LastActivityDate ? r.LastActivityDate + 'T00:00:00Z' : null);\n  const firstTouchSource = firstTask ? 'task' : (r.LastActivityDate ? 'lastActivityDate' : 'none');\n\n  const ageBiz = businessMinutesBetween(r.CreatedDate, nowISO, cfg);\n  const routeClock = routedAt ? businessMinutesBetween(r.CreatedDate, routedAt, cfg) : { minutes: null, capped: false };\n  const responseClock = (routedAt && firstTouchAt)\n    ? businessMinutesBetween(routedAt, firstTouchAt, cfg)\n    : (routedAt ? businessMinutesBetween(routedAt, nowISO, cfg) : { minutes: null, capped: false });\n\n  if (isParked) parked++; else if (ownerInactive) inactiveOwner++; else assigned++;\n\n  out.push({ json: {\n    kind: 'record',\n    id: r.Id,\n    createdAt: r.CreatedDate,\n    leadSource: r.LeadSource || null,\n    status: r.Status || null,\n    ownerId: r.OwnerId,\n    ownerName: owner.Name || null,\n    ownerIsQueue: ownerIsQueue,\n    ownerInactive: ownerInactive,\n    isParked: isParked,\n    routedAt: routedAt,\n    routedAtSource: routedAtSource,\n    firstTouchAt: firstTouchAt,\n    firstTouchSource: firstTouchSource,\n    ageBizMinutes: ageBiz.minutes,\n    ageCapped: ageBiz.capped,\n    routeBizMinutes: routeClock.minutes,\n    responseBizMinutes: responseClock.minutes,\n    responseOpen: !firstTouchAt,\n    checkedAt: nowISO,\n  } });\n}\n\n// THE DENOMINATOR ITEM. Without this, a filter typo that returns zero rows\n// is indistinguishable from a healthy org with nothing wrong. Every\n// detector refuses to declare all-clear when `sampled` is 0 during\n// business hours.\nout.push({ json: {\n  kind: 'sweep_summary',\n  sampled: records.length,\n  totalSize: body.totalSize !== undefined ? body.totalSize : records.length,\n  truncated: truncated,\n  parked: parked,\n  inactiveOwner: inactiveOwner,\n  assigned: assigned,\n  insideHours: insideBusinessHours(new Date(), cfg),\n  windowSince: meta.since,\n  checkedAt: nowISO,\n} });\n\nreturn out;\n"
+      },
+      "id": "parse-routing-state",
+      "name": "Parse Routing State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- merge LeanData audit rows onto the records ------------------------\n// LeanData writes one LeanData__Log__c row per record per trip through a\n// deployed routing graph, and that object is the only place the routing\n// timestamp exists for orgs that do not stamp a routed-at field.\n//\n// Two properties of that object drive the code below.\n//\n// 1. Retention defaults to 90 days and is configurable in the LeanData\n//    dashboard. A missing log row therefore means \"not routed\" OR \"routed\n//    and aged out\". Treating the absence as \"not routed\" would fabricate\n//    an unrouted backlog out of every record older than the retention\n//    window, which is why the lookback here is clamped under it.\n//\n// 2. The field API names beyond the object name itself are managed-package\n//    internals that LeanData documents in-product rather than publicly.\n//    They are therefore CONFIGURED, not hardcoded, and a wrong mapping\n//    fails loudly at parse time instead of silently producing nulls.\n\nconst enabled = ($env.LEANDATA_LOG_ENABLED || 'false').toLowerCase() === 'true';\nconst items = $input.all();\n\nif (!enabled) return items;\n\nconst recordIdField = $env.LEANDATA_RECORD_ID_FIELD || 'LeanData__Lead__c';\nconst logs = {};\nlet logError = null;\n\nconst logItems = $('Query LeanData Log').all();\nfor (const li of logItems) {\n  const raw = li.json;\n  const status = raw.statusCode !== undefined ? raw.statusCode : 200;\n  const body = raw.body !== undefined ? raw.body : raw;\n  if (status !== 200) {\n    const first = Array.isArray(body) && body[0] ? body[0] : {};\n    // INVALID_FIELD here means the configured field map is wrong. Surfacing\n    // it as a poll-health finding is the whole point: the alternative is a\n    // watchdog that reports \"routing timestamp unavailable\" forever.\n    logError = (first.errorCode || 'HTTP_' + status) + ': ' + (first.message || 'LeanData log query failed');\n    break;\n  }\n  for (const rec of (body.records || [])) {\n    const rid = rec[recordIdField];\n    if (!rid) continue;\n    const prev = logs[rid];\n    if (!prev || new Date(rec.CreatedDate) < new Date(prev.CreatedDate)) logs[rid] = rec;\n  }\n}\n\nconst out = [];\nfor (const item of items) {\n  const j = item.json;\n  if (j.kind === 'record' && j.routedAtSource === 'none') {\n    const log = logs[j.id];\n    if (log) { j.routedAt = log.CreatedDate; j.routedAtSource = 'leandata_log'; }\n  }\n  if (j.kind === 'sweep_summary') {\n    j.leanDataLogRows = Object.keys(logs).length;\n    j.leanDataLogError = logError;\n  }\n  out.push({ json: j });\n}\n\nif (logError) {\n  out.push({ json: {\n    kind: 'poll_health', severity: 'warning', reason: 'leandata_log_query_failed',\n    detail: logError + ' -- check LEANDATA_RECORD_ID_FIELD against the Log object in your org. Routing-latency detection is degraded until this is fixed.',\n    checkedAt: new Date().toISOString(),\n  } });\n}\n\nreturn out;\n"
+      },
+      "id": "merge-leandata-log",
+      "name": "Merge LeanData Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- shared business-clock helpers -------------------------------------\n// Elapsed time is measured in BUSINESS minutes, not wall-clock minutes.\n// A lead that lands 18:55 Friday has not breached a 5-minute SLA at 09:00\n// Monday; wall-clock arithmetic says it breached by 3,725 minutes and\n// produces a Monday-morning flood of alerts nobody can act on.\nfunction bizConfig() {\n  return {\n    tz: $env.BUSINESS_HOURS_TZ || 'America/New_York',\n    startMin: parseInt($env.BUSINESS_HOURS_START_MIN || '480', 10),  // 08:00\n    endMin: parseInt($env.BUSINESS_HOURS_END_MIN || '1080', 10),     // 18:00\n    days: (($env.BUSINESS_DAYS || '1,2,3,4,5').split(',')).map(function (d) { return parseInt(d, 10); }),\n    holidays: (($env.BUSINESS_HOLIDAYS || '').split(',')).map(function (s) { return s.trim(); }).filter(Boolean),\n  };\n}\n\n// Reads wall-clock parts of an instant AS SEEN IN the business timezone.\n// Intl is used rather than Date#getHours because the n8n worker's own\n// timezone is not the business timezone and must never leak into the math.\nfunction partsIn(date, tz) {\n  const fmt = new Intl.DateTimeFormat('en-CA', {\n    timeZone: tz, hour12: false,\n    year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', weekday: 'short',\n  });\n  const p = {};\n  for (const part of fmt.formatToParts(date)) { p[part.type] = part.value; }\n  const wd = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[p.weekday];\n  return {\n    ymd: p.year + '-' + p.month + '-' + p.day,\n    minuteOfDay: parseInt(p.hour, 10) * 60 + parseInt(p.minute, 10),\n    weekday: wd,\n  };\n}\n\nfunction isBusinessDay(parts, cfg) {\n  if (cfg.holidays.indexOf(parts.ymd) !== -1) return false;\n  return cfg.days.indexOf(parts.weekday) !== -1;\n}\n\n// Walks the interval in 1-minute steps capped at BIZ_WALK_CAP minutes of\n// wall clock. Stepping is O(minutes) and deliberately bounded: an unrouted\n// record from six weeks ago must not spin the Code node for 60,000\n// iterations. Past the cap the function returns `capped: true` and the\n// caller reports \"older than N business minutes\" instead of a false number.\nconst BIZ_WALK_CAP = 60 * 24 * 21;\nfunction businessMinutesBetween(fromISO, toISO, cfg) {\n  const from = new Date(fromISO);\n  const to = new Date(toISO);\n  if (isNaN(from.getTime()) || isNaN(to.getTime())) return { minutes: null, capped: false, invalid: true };\n  if (to <= from) return { minutes: 0, capped: false, invalid: false };\n\n  const totalWall = Math.floor((to - from) / 60000);\n  const capped = totalWall > BIZ_WALK_CAP;\n  const walk = capped ? BIZ_WALK_CAP : totalWall;\n\n  let minutes = 0;\n  let cursor = new Date(from.getTime());\n  for (let i = 0; i < walk; i++) {\n    const p = partsIn(cursor, cfg.tz);\n    if (isBusinessDay(p, cfg) && p.minuteOfDay >= cfg.startMin && p.minuteOfDay < cfg.endMin) minutes++;\n    cursor = new Date(cursor.getTime() + 60000);\n  }\n  return { minutes: minutes, capped: capped, invalid: false };\n}\n\nfunction insideBusinessHours(date, cfg) {\n  const p = partsIn(date, cfg.tz);\n  return isBusinessDay(p, cfg) && p.minuteOfDay >= cfg.startMin && p.minuteOfDay < cfg.endMin;\n}\n\nfunction envInt(name, dflt) {\n  const raw = $env[name];\n  const n = parseInt(raw === undefined || raw === '' ? String(dflt) : raw, 10);\n  return isNaN(n) ? dflt : n;\n}\n\nfunction envList(name) {\n  return (($env[name] || '').split(',')).map(function (s) { return s.trim(); }).filter(Boolean);\n}\n\n// Salesforce Ids come back 18-char from the API but admins paste 15-char\n// Ids out of the URL bar. Comparing the two forms directly is the single\n// most common reason a correctly-configured parking-queue list matches\n// nothing and the unrouted detector reports a permanent all-clear.\nfunction id15(id) { return typeof id === 'string' ? id.substring(0, 15) : id; }\n\n// ---- the three detectors ----------------------------------------------\n// All three run over the same normalised items and emit findings in one\n// shape: { kind:'finding', class, severity, channel, dedupKey, count,\n// sample[], detail }. `channel` is decided HERE, not at the sink, because\n// the routing rule -- what pages a human at 02:00 and what does not -- is\n// a policy statement and belongs next to the evidence that triggers it.\n\nconst cfg = bizConfig();\nconst nowISO = new Date().toISOString();\nconst items = $input.all().map(function (i) { return i.json; });\nconst records = items.filter(function (j) { return j.kind === 'record'; });\nconst summary = items.find(function (j) { return j.kind === 'sweep_summary'; }) || {};\nconst passthrough = items.filter(function (j) { return j.kind === 'poll_health'; });\n\nconst graceMin = envInt('UNROUTED_GRACE_MINUTES', 10);\nconst backlogWarn = envInt('UNROUTED_BACKLOG_WARN', 25);\nconst backlogPage = envInt('UNROUTED_BACKLOG_PAGE', 100);\nconst routingSla = envInt('ROUTING_SLA_MINUTES', 2);\nconst responseSla = envInt('RESPONSE_SLA_MINUTES', 5);\nconst stampedeMin = envInt('STAMPEDE_MIN_BATCH', 250);\nconst maxSample = envInt('MAX_ITEMS_PER_ALERT', 25);\n\nconst findings = [];\nconst sample = function (arr) { return arr.slice(0, maxSample).map(function (r) { return { id: r.id, owner: r.ownerName, ageBizMinutes: r.ageBizMinutes, createdAt: r.createdAt }; }); };\n\n// ---------------------------------------------------------------- guard 1\n// Zero rows during business hours is a broken watchdog until proven\n// otherwise. This finding fires INSTEAD of any all-clear.\nif (summary.sampled === 0) {\n  if (summary.insideHours) {\n    findings.push({\n      kind: 'finding', class: 'poll_health', severity: 'error', channel: 'page',\n      dedupKey: 'watchdog::no_denominator',\n      count: 0, sample: [],\n      detail: 'Sweep returned zero records during business hours over a ' + (envInt('LOOKBACK_HOURS', 48)) + 'h window. Either inbound has stopped or the query/filter is broken. No detector can distinguish those, so none of them ran.',\n    });\n  }\n  return findings.concat(passthrough).map(function (j) { return { json: j }; });\n}\n\nif (summary.truncated) {\n  findings.push({\n    kind: 'finding', class: 'poll_health', severity: 'warning', channel: 'post',\n    dedupKey: 'watchdog::truncated_sweep',\n    count: summary.totalSize, sample: [],\n    detail: 'Sweep hit the ' + envInt('SWEEP_ROW_CAP', 2000) + '-row cap against ' + summary.totalSize + ' matching records. Counts below are floors, not totals. Shorten LOOKBACK_HOURS or raise SWEEP_ROW_CAP.',\n  });\n}\n\n// ---------------------------------------------------- detector 1: unrouted\n// Lead.OwnerId is NEVER null. When no assignment rule matches, Salesforce\n// assigns the record to the Default Lead Owner configured in Lead Settings.\n// So \"unrouted\" is not a null test -- it is membership in a configured set\n// of parking owners (the default owner plus any unsorted/holding queues).\n// An empty PARKING_OWNER_IDS means this detector cannot work, and says so\n// rather than reporting a permanent all-clear.\nconst parkingConfigured = envList('PARKING_OWNER_IDS').length > 0;\nif (!parkingConfigured) {\n  findings.push({\n    kind: 'finding', class: 'config', severity: 'warning', channel: 'post',\n    dedupKey: 'watchdog::parking_unconfigured',\n    count: 0, sample: [],\n    detail: 'PARKING_OWNER_IDS is empty, so the unrouted detector is disabled. Set it to your Default Lead Owner plus every holding queue, or this watchdog will never report an unrouted lead.',\n  });\n} else {\n  const stuck = records.filter(function (r) { return r.isParked && r.ageBizMinutes !== null && r.ageBizMinutes >= graceMin; });\n\n  // Stampede suppression. A marketing list import legitimately parks tens\n  // of thousands of records for minutes. Alerting on the absolute count\n  // turns every import into an incident; alerting on nothing misses the\n  // real backlog. The discriminator is source concentration: a genuine\n  // routing failure is spread across LeadSource values, an import is not.\n  const bySource = {};\n  for (const r of stuck) { const k = r.leadSource || '(none)'; bySource[k] = (bySource[k] || 0) + 1; }\n  const sources = Object.keys(bySource);\n  const topSource = sources.sort(function (a, b) { return bySource[b] - bySource[a]; })[0];\n  const topShare = topSource ? bySource[topSource] / stuck.length : 0;\n  const stampede = stuck.length >= stampedeMin && topShare >= 0.9 && sources.length > 0;\n\n  if (stuck.length > 0 && !stampede) {\n    const sev = stuck.length >= backlogPage ? 'critical' : (stuck.length >= backlogWarn ? 'error' : 'warning');\n    findings.push({\n      kind: 'finding', class: 'unrouted_backlog',\n      severity: sev,\n      channel: sev === 'critical' ? 'page' : 'post',\n      dedupKey: 'watchdog::unrouted_backlog',\n      count: stuck.length, sample: sample(stuck),\n      detail: stuck.length + ' record(s) still owned by a parking queue past the ' + graceMin + '-business-minute grace window. Oldest: ' + Math.max.apply(null, stuck.map(function (r) { return r.ageBizMinutes || 0; })) + ' business minutes.',\n    });\n  } else if (stampede) {\n    findings.push({\n      kind: 'finding', class: 'unrouted_stampede', severity: 'info', channel: 'post',\n      dedupKey: 'watchdog::unrouted_stampede',\n      count: stuck.length, sample: sample(stuck),\n      detail: stuck.length + ' parked records, ' + Math.round(topShare * 100) + '% from LeadSource \"' + topSource + '\". Reads as a bulk import rather than a routing failure; paging suppressed. Re-check after ' + envInt('STAMPEDE_SUPPRESS_MINUTES', 30) + ' minutes.',\n    });\n  }\n}\n\n// ------------------------------------------ detector 2: assignment defects\n// An owner who has left the company is the one mis-assignment class that\n// is deterministic from CRM data alone. It is also the most expensive:\n// the record looks routed on every dashboard, so nothing else ever flags\n// it, and it sits in a deactivated user's name until someone audits.\nconst orphaned = records.filter(function (r) { return r.ownerInactive; });\nif (orphaned.length > 0) {\n  const byOwner = {};\n  for (const r of orphaned) { const k = r.ownerName || r.ownerId; byOwner[k] = (byOwner[k] || 0) + 1; }\n  findings.push({\n    kind: 'finding', class: 'inactive_owner',\n    severity: orphaned.length >= backlogWarn ? 'error' : 'warning',\n    channel: orphaned.length >= backlogWarn ? 'page' : 'post',\n    dedupKey: 'watchdog::inactive_owner',\n    count: orphaned.length, sample: sample(orphaned),\n    detail: orphaned.length + ' record(s) assigned to a deactivated user. Owners: ' + Object.keys(byOwner).map(function (k) { return k + ' (' + byOwner[k] + ')'; }).join(', ') + '. These read as routed everywhere except here.',\n  });\n}\n\n// ------------------------------------------------ detector 3: the two clocks\n// Split deliberately. Routing latency is the router's fault and pages.\n// Response latency is a rep/manager conversation and never pages.\nconst routable = records.filter(function (r) { return r.routeBizMinutes !== null; });\nconst routingBreaches = routable.filter(function (r) { return r.routeBizMinutes > routingSla; });\nconst noRoutingClock = records.filter(function (r) { return r.routedAtSource === 'none' && !r.isParked; });\n\nif (routingBreaches.length > 0) {\n  const worst = Math.max.apply(null, routingBreaches.map(function (r) { return r.routeBizMinutes; }));\n  findings.push({\n    kind: 'finding', class: 'routing_latency',\n    severity: worst >= routingSla * 10 ? 'critical' : 'error',\n    channel: 'page',\n    dedupKey: 'watchdog::routing_latency',\n    count: routingBreaches.length, sample: sample(routingBreaches),\n    detail: routingBreaches.length + ' of ' + routable.length + ' records took longer than ' + routingSla + ' business minutes to get an owner (worst: ' + worst + '). This is the router, not the rep.',\n  });\n}\n\nif (noRoutingClock.length > 0 && noRoutingClock.length === records.length) {\n  findings.push({\n    kind: 'finding', class: 'config', severity: 'warning', channel: 'post',\n    dedupKey: 'watchdog::no_routing_clock',\n    count: noRoutingClock.length, sample: [],\n    detail: 'No record in this sweep has a routing timestamp. Set ROUTING_TS_FIELD to a routed-at field on the object, or enable LEANDATA_LOG_ENABLED. Until then the routing-latency detector is dark and only the response clock runs.',\n  });\n}\n\nconst responseBreaches = records.filter(function (r) {\n  return r.responseOpen && r.responseBizMinutes !== null && r.responseBizMinutes > responseSla && !r.isParked && !r.ownerInactive;\n});\nif (responseBreaches.length > 0) {\n  const byOwner = {};\n  for (const r of responseBreaches) { const k = r.ownerName || r.ownerId; byOwner[k] = (byOwner[k] || 0) + 1; }\n  findings.push({\n    kind: 'finding', class: 'response_latency', severity: 'warning', channel: 'post',\n    dedupKey: 'watchdog::response_latency',\n    count: responseBreaches.length, sample: sample(responseBreaches),\n    detail: responseBreaches.length + ' assigned record(s) past the ' + responseSla + '-business-minute first-touch SLA with no logged activity. Top owners: ' + Object.keys(byOwner).sort(function (a, b) { return byOwner[b] - byOwner[a]; }).slice(0, 5).map(function (k) { return k + ' (' + byOwner[k] + ')'; }).join(', ') + '. Coaching signal, not an incident -- never paged.',\n  });\n}\n\n// An explicit all-clear item. The gate needs it to send resolve events for\n// classes that fired on a previous sweep and no longer match.\nfindings.push({\n  kind: 'sweep_result',\n  classesFiring: findings.map(function (f) { return f.dedupKey; }),\n  sampled: summary.sampled, parked: summary.parked,\n  assigned: summary.assigned, inactiveOwner: summary.inactiveOwner,\n  insideHours: summary.insideHours,\n  checkedAt: nowISO,\n});\n\nreturn findings.concat(passthrough).map(function (j) { return { json: j }; });\n"
+      },
+      "id": "run-detectors",
+      "name": "Run Detectors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- alert gate: dedup, resolve, and route to a channel ----------------\n// Three jobs, in this order.\n//\n// 1. DEDUP. A 15-minute poll against a condition that persists for a day\n//    is 96 identical alerts. Findings are keyed on dedupKey and suppressed\n//    for RENOTIFY_MINUTES unless the severity escalates.\n// 2. RESOLVE. A dedupKey that fired on a previous sweep and is absent from\n//    this one emits an explicit resolve. Without it, PagerDuty incidents\n//    stay open after the condition clears and the next real page arrives\n//    in a channel everyone has learned to ignore.\n// 3. ROUTE. `channel: 'page'` goes to PagerDuty; everything else goes to\n//    Slack. The policy: page only for what the on-call can fix right now.\n//\n// State lives in workflow static data, which n8n persists on PRODUCTION\n// executions only. Testing this node with the manual run button will show\n// no deduplication at all -- that is the documented behaviour, not a bug,\n// and the verification step in _README.md uses an activated schedule.\n\nconst staticData = $getWorkflowStaticData('global');\nstaticData.fired = staticData.fired || {};\n\nconst renotifyMin = parseInt($env.RENOTIFY_MINUTES || '120', 10);\nconst now = Date.now();\nconst nowISO = new Date().toISOString();\nconst sevRank = { info: 0, warning: 1, error: 2, critical: 3 };\n\nconst items = $input.all().map(function (i) { return i.json; });\nconst findings = items.filter(function (j) { return j.kind === 'finding'; });\nconst health = items.filter(function (j) { return j.kind === 'poll_health'; });\nconst result = items.find(function (j) { return j.kind === 'sweep_result'; });\n\n// poll_health items produced upstream (auth failure, budget stand-down)\n// are findings for gating purposes -- they are exactly the case where\n// every other detector went quiet for the wrong reason.\nfor (const h of health) {\n  findings.push({\n    kind: 'finding', class: 'poll_health', severity: h.severity || 'warning',\n    channel: (h.severity === 'error' || h.severity === 'critical') ? 'page' : 'post',\n    dedupKey: 'watchdog::' + (h.reason || 'poll_health'),\n    count: 0, sample: [], detail: h.detail || h.reason,\n  });\n}\n\nconst out = [];\nconst firingNow = {};\n\nfor (const f of findings) {\n  firingNow[f.dedupKey] = true;\n  const prev = staticData.fired[f.dedupKey];\n  const escalated = prev && sevRank[f.severity] > sevRank[prev.severity];\n  const aged = prev && (now - prev.at) >= renotifyMin * 60 * 1000;\n\n  if (prev && !escalated && !aged) continue;\n\n  staticData.fired[f.dedupKey] = { at: now, severity: f.severity, channel: f.channel, source: f.source || 'sweep' };\n  out.push({ json: Object.assign({}, f, {\n    action: 'trigger',\n    escalated: !!escalated,\n    renotify: !!aged && !escalated,\n    emittedAt: nowISO,\n  }) });\n}\n\n// Resolves. Three conditions, all required.\n//   - the key was opened by us\n//   - the sweep that would have re-detected it ran successfully (a sweep\n//     that died on an auth error must not resolve yesterday's real backlog\n//     into silence)\n//   - the key belongs to THIS trigger's detector set. The 15-minute sweep\n//     and the 08:00 fairness job share this gate and share the state\n//     object; without the source scope the sweep would resolve every\n//     fairness alert fifteen minutes after it fired, every single day.\nconst sweepHealthy = !!result && result.sampled > 0;\nif (sweepHealthy) {\n  for (const key of Object.keys(staticData.fired)) {\n    if (firingNow[key]) continue;\n    const prev = staticData.fired[key];\n    if ((prev.source || 'sweep') !== 'sweep') continue;\n    delete staticData.fired[key];\n    out.push({ json: {\n      kind: 'finding', class: 'resolved', severity: 'info',\n      channel: prev.channel, dedupKey: key,\n      action: 'resolve', count: 0, sample: [],\n      detail: 'Condition cleared: ' + key,\n      emittedAt: nowISO,\n    } });\n  }\n}\n\nif (out.length === 0) {\n  return [{ json: { kind: 'noop', suppressed: findings.length, checkedAt: nowISO } }];\n}\n\nreturn out;\n"
+      },
+      "id": "alert-gate--resolve",
+      "name": "Alert Gate + Resolve",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "page",
+                    "leftValue": "={{ $json.channel }}",
+                    "rightValue": "page",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "page"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "post",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "finding",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "post"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "id": "page-or-post?",
+      "name": "Page or Post?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- PagerDuty Events API v2 payload ----------------------------------\n// POST https://events.pagerduty.com/v2/enqueue\n// routing_key is the integration key from an Events API v2 integration on\n// the target service. dedup_key ties trigger and resolve together: send\n// the same key with event_action 'resolve' and PagerDuty closes the alert\n// it opened, which is what keeps the on-call's incident list honest.\n\nconst j = $json;\nconst severityMap = { info: 'info', warning: 'warning', error: 'error', critical: 'critical' };\n\nif (j.action === 'resolve') {\n  return [{ json: {\n    routing_key: $env.PAGERDUTY_ROUTING_KEY,\n    event_action: 'resolve',\n    dedup_key: j.dedupKey,\n  } }];\n}\n\nconst titles = {\n  unrouted_backlog: 'Leads stuck in a parking queue',\n  routing_latency: 'Lead routing latency past SLA',\n  inactive_owner: 'Leads assigned to a deactivated user',\n  poll_health: 'Routing watchdog cannot see Salesforce',\n};\n\nreturn [{ json: {\n  routing_key: $env.PAGERDUTY_ROUTING_KEY,\n  event_action: 'trigger',\n  dedup_key: j.dedupKey,\n  payload: {\n    summary: (titles[j.class] || j.class) + ' -- ' + j.count + ' record(s)',\n    severity: severityMap[j.severity] || 'warning',\n    source: ($env.SFDC_INSTANCE_URL || 'salesforce') + '/' + ($env.ROUTING_OBJECT || 'Lead'),\n    component: 'lead-routing',\n    group: 'revops',\n    class: j.class,\n    custom_details: {\n      detail: j.detail,\n      count: j.count,\n      sample: j.sample,\n      escalated: j.escalated || false,\n    },\n  },\n  links: [{\n    href: ($env.SFDC_INSTANCE_URL || '') + '/lightning/o/' + ($env.ROUTING_OBJECT || 'Lead') + '/list',\n    text: 'Open the object list view',\n  }],\n} }];\n"
+      },
+      "id": "build-pagerduty-event",
+      "name": "Build PagerDuty Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://events.pagerduty.com/v2/enqueue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "http---pagerduty-enqueue",
+      "name": "HTTP — PagerDuty Enqueue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- Slack Block Kit ---------------------------------------------------\n// One message per finding, not one per record. A systemic failure is one\n// cause and N symptoms; posting N messages buries the cause and trains the\n// channel to mute the bot.\n\nconst j = $json;\nconst icons = { info: ':white_circle:', warning: ':large_yellow_circle:', error: ':red_circle:', critical: ':rotating_light:' };\nconst instance = ($env.SFDC_INSTANCE_URL || '').replace(/\\/+$/, '');\n\nif (j.action === 'resolve') {\n  return [{ json: {\n    channel: $env.SLACK_CHANNEL_ID,\n    text: 'Resolved: ' + j.dedupKey,\n    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: ':white_check_mark: *Resolved* -- `' + j.dedupKey + '` no longer matches.' } }],\n  } }];\n}\n\nconst lines = (j.sample || []).slice(0, 10).map(function (s) {\n  return '- <' + instance + '/' + s.id + '|' + s.id + '> -- ' + (s.owner || 'unknown owner') + ' -- ' + (s.ageBizMinutes === null ? 'age unknown' : s.ageBizMinutes + ' biz min');\n});\nconst overflow = (j.count || 0) - lines.length;\n\nconst blocks = [\n  { type: 'header', text: { type: 'plain_text', text: (icons[j.severity] || '') + ' ' + j.class.replace(/_/g, ' ') } },\n  { type: 'section', text: { type: 'mrkdwn', text: j.detail } },\n];\nif (lines.length) {\n  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: lines.join('\\n') + (overflow > 0 ? '\\n_+ ' + overflow + ' more_' : '') } });\n}\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: '`' + j.dedupKey + '` | severity `' + j.severity + '` | ' + j.emittedAt + (j.renotify ? ' | re-notify' : '') + (j.escalated ? ' | escalated' : '') }] });\n\nreturn [{ json: {\n  channel: $env.SLACK_CHANNEL_ID,\n  text: j.class + ': ' + j.detail,\n  blocks: blocks,\n} }];\n"
+      },
+      "id": "compose-slack-blocks",
+      "name": "Compose Slack Blocks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel }}",
+          "mode": "id"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ JSON.stringify({ blocks: $json.blocks }) }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "slack---notify",
+      "name": "Slack — Notify",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2080,
+        120
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — routing watchdog"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- build the fairness query -----------------------------------------\n// Round-robin skew is invisible on every routing dashboard because each\n// individual assignment is valid. The failure is distributional: a rep\n// whose calendar broke, whose licence lapsed, or who was removed from a\n// pool by a config change stops receiving records, and the pool silently\n// redistributes their share to everyone else. Nothing errors. Nothing is\n// unrouted. The number only shows up in aggregate.\n\nconst obj = $env.ROUTING_OBJECT || 'Lead';\nconst apiVersion = $env.SFDC_API_VERSION || 'v67.0';\nconst instance = ($env.SFDC_INSTANCE_URL || '').replace(/\\/+$/, '');\nconst days = parseInt($env.RR_WINDOW_DAYS || '7', 10);\nconst since = new Date(Date.now() - days * 86400 * 1000).toISOString().replace(/\\.\\d{3}Z$/, 'Z');\n\n// Aggregate SOQL: the grouping happens in Salesforce, so this returns one\n// row per owner rather than one row per lead. That is the difference\n// between ~40 rows and ~40,000 for the same answer.\nconst soql =\n  'SELECT OwnerId, COUNT(Id) assignedCount FROM ' + obj +\n  ' WHERE CreatedDate >= ' + since +\n  ' AND IsConverted = false' +\n  ' GROUP BY OwnerId' +\n  ' ORDER BY COUNT(Id) DESC';\n\nreturn [{ json: {\n  url: instance + '/services/data/' + apiVersion + '/query/?q=' + encodeURIComponent(soql),\n  soql: soql, windowDays: days, since: since,\n} }];\n"
+      },
+      "id": "build-fairness-query",
+      "name": "Build Fairness Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -340,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "query-assignment-distribution",
+      "name": "Query Assignment Distribution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -120,
+        620
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "PLACEHOLDER_SALESFORCE_OAUTH2_CRED_ID",
+          "name": "Salesforce Watchdog (OAuth2 client credentials)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- round-robin fairness ---------------------------------------------\n// Compares each pool member's share against an equal-share baseline.\n// Two thresholds, both required, because either alone produces noise:\n//   RR_MIN_ASSIGNMENTS  -- below this the pool is too small for share to\n//                          mean anything (3 leads across 4 reps will always\n//                          look unfair and never is).\n//   RR_MIN_SHARE_RATIO  -- how far below equal share counts as broken.\n//                          0.5 means \"received less than half of what an\n//                          equal split would have given you\".\n// A member at exactly zero is reported separately: zero is qualitatively\n// different from low, and is nearly always a config or licence problem\n// rather than a distribution one.\n\nconst pool = (($env.RR_POOL_OWNER_IDS || '').split(',')).map(function (s) { return s.trim(); }).filter(Boolean);\nconst minAssignments = parseInt($env.RR_MIN_ASSIGNMENTS || '40', 10);\nconst minRatio = parseFloat($env.RR_MIN_SHARE_RATIO || '0.5');\nconst nowISO = new Date().toISOString();\nconst meta = $('Build Fairness Query').first().json;\n\nif (pool.length < 2) {\n  return [{ json: {\n    kind: 'finding', class: 'config', severity: 'info', channel: 'post',\n    dedupKey: 'watchdog::rr_unconfigured', count: 0, sample: [],\n    detail: 'RR_POOL_OWNER_IDS holds fewer than two owner Ids, so the fairness check is off. Populate it with the round-robin pool you actually run.',\n    emittedAt: nowISO, action: 'trigger', source: 'fairness',\n  } }];\n}\n\nconst raw = $input.first().json;\nconst status = raw.statusCode !== undefined ? raw.statusCode : 200;\nconst body = raw.body !== undefined ? raw.body : raw;\n\nif (status !== 200) {\n  const first = Array.isArray(body) && body[0] ? body[0] : {};\n  return [{ json: {\n    kind: 'finding', class: 'poll_health', severity: 'warning', channel: 'post',\n    dedupKey: 'watchdog::fairness_query_failed', count: 0, sample: [],\n    detail: (first.errorCode || 'HTTP_' + status) + ': ' + (first.message || 'fairness query failed'),\n    emittedAt: nowISO, action: 'trigger', source: 'fairness',\n  } }];\n}\n\nconst counts = {};\nfor (const r of (body.records || [])) {\n  const oid = (r.OwnerId || '').substring(0, 15);\n  counts[oid] = (counts[oid] || 0) + Number(r.assignedCount || 0);\n}\n\nconst poolCounts = pool.map(function (id) { return { ownerId: id, count: counts[id.substring(0, 15)] || 0 }; });\nconst total = poolCounts.reduce(function (a, b) { return a + b.count; }, 0);\n\nif (total < minAssignments) {\n  return [{ json: {\n    kind: 'noop', reason: 'insufficient_data',\n    detail: total + ' assignments across the pool in ' + meta.windowDays + ' days, below RR_MIN_ASSIGNMENTS=' + minAssignments + '. Share is not meaningful at this volume.',\n    checkedAt: nowISO,\n  } }];\n}\n\nconst fairShare = total / pool.length;\nconst starved = poolCounts.filter(function (p) { return p.count > 0 && p.count < fairShare * minRatio; });\nconst zeroed = poolCounts.filter(function (p) { return p.count === 0; });\nconst out = [];\n\nif (zeroed.length) {\n  out.push({ json: {\n    kind: 'finding', class: 'round_robin_zero', severity: 'error', channel: 'post',\n    dedupKey: 'watchdog::rr_zero', count: zeroed.length,\n    sample: zeroed.map(function (p) { return { id: p.ownerId, owner: p.ownerId, ageBizMinutes: null }; }),\n    detail: zeroed.length + ' pool member(s) received zero assignments in ' + meta.windowDays + ' days against a pool total of ' + total + '. Check licence status, calendar connection, and pool membership before assuming the router is at fault.',\n    emittedAt: nowISO, action: 'trigger', source: 'fairness',\n  } });\n}\n\nif (starved.length) {\n  out.push({ json: {\n    kind: 'finding', class: 'round_robin_skew', severity: 'warning', channel: 'post',\n    dedupKey: 'watchdog::rr_skew', count: starved.length,\n    sample: starved.map(function (p) { return { id: p.ownerId, owner: p.ownerId + ' (' + p.count + ' vs ' + fairShare.toFixed(1) + ' fair share)', ageBizMinutes: null }; }),\n    detail: starved.length + ' pool member(s) below ' + (minRatio * 100) + '% of the ' + fairShare.toFixed(1) + '-record equal share over ' + meta.windowDays + ' days (pool total ' + total + ').',\n    emittedAt: nowISO, action: 'trigger', source: 'fairness',\n  } });\n}\n\nif (out.length === 0) {\n  out.push({ json: {\n    kind: 'noop', reason: 'fairness_ok',\n    detail: 'Pool of ' + pool.length + ' split ' + total + ' records with no member below ' + (minRatio * 100) + '% of equal share.',\n    checkedAt: nowISO,\n  } });\n}\n\nreturn out;\n"
+      },
+      "id": "round-robin-fairness",
+      "name": "Round-Robin Fairness",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        620
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule — Routing Sweep": {
+      "main": [
+        [
+          {
+            "node": "HTTP — Salesforce Limits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP — Salesforce Limits": {
+      "main": [
+        [
+          {
+            "node": "API Budget Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Budget Gate": {
+      "main": [
+        [
+          {
+            "node": "Proceed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proceed?": {
+      "main": [
+        [
+          {
+            "node": "Build Sweep Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Gate + Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Sweep Query": {
+      "main": [
+        [
+          {
+            "node": "Query Routing State",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Query LeanData Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Routing State": {
+      "main": [
+        [
+          {
+            "node": "Parse Routing State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Routing State": {
+      "main": [
+        [
+          {
+            "node": "Merge LeanData Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge LeanData Log": {
+      "main": [
+        [
+          {
+            "node": "Run Detectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Detectors": {
+      "main": [
+        [
+          {
+            "node": "Alert Gate + Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Gate + Resolve": {
+      "main": [
+        [
+          {
+            "node": "Page or Post?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page or Post?": {
+      "main": [
+        [
+          {
+            "node": "Build PagerDuty Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Compose Slack Blocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build PagerDuty Event": {
+      "main": [
+        [
+          {
+            "node": "HTTP — PagerDuty Enqueue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Slack Blocks": {
+      "main": [
+        [
+          {
+            "node": "Slack — Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule — Fairness + Digest 08:00": {
+      "main": [
+        [
+          {
+            "node": "Build Fairness Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fairness Query": {
+      "main": [
+        [
+          {
+            "node": "Query Assignment Distribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Assignment Distribution": {
+      "main": [
+        [
+          {
+            "node": "Round-Robin Fairness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Round-Robin Fairness": {
+      "main": [
+        [
+          {
+            "node": "Alert Gate + Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": ""
+  },
+  "active": false,
+  "version": 1,
+  "id": "routing-failure-watchdog-n8n",
+  "meta": {
+    "instanceId": "PLACEHOLDER_N8N_INSTANCE_ID",
+    "templateCredsSetupCompleted": false
+  }
+}
