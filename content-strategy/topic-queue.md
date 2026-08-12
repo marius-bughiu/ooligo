@@ -68,7 +68,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:learn] [vertical:legal-ops] nda-playbook — material (lawgeex enterprise product dismantled 2023 [related_tools]) → slug: nda-playbook
 - refresh:C: [type:learn] [vertical:legal-ops] privilege-review — material (casetext retired by Thomson Reuters 2025-04 [names retired product as live]) → slug: privilege-review
 - refresh:C: [type:tool] [vertical:revops] salesforce — material (body carries banned vocab at L36 and stale Agentforce/Einstein 1 pricing refs; pricing frontmatter itself verified unchanged 2026-08-04) → slug: salesforce
-- refresh:C: [type:tool] [vertical:recruiting] recruitee — material (rebranded Tellent Recruitee and withdrew published pricing (entry says flat/$224, all three plans now demo-gated)) → claimed: refresh 2026-08-12T05:04:00Z
+- refresh:C: [type:tool] [vertical:recruiting] recruitee — material (rebranded Tellent Recruitee and withdrew published pricing (entry says flat/$224, all three plans now demo-gated)) → slug: recruitee
 - refresh:C: [type:tool] [vertical:revops] relevance-ai — material (self-serve tiers withdrawn, pricing page is Enterprise quote-only (entry says usage-based/$19))
 - refresh:C: [type:tool] [vertical:revops] rollworks — material (rollworks.com 301s to adroll.com, brand folded into AdRoll ABM)
 - refresh:C: [type:tool] [vertical:recruiting] seekout — material (now publishes $149/mo self-serve Recruit Core (entry says custom / no public price))
