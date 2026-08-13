@@ -1,0 +1,75 @@
+---
+slug: ai-sdr-pilot-scorecard-skill
+canonical_slug: ai-sdr-pilot-scorecard-skill
+locale: es
+verticals: [revops]
+title: Score an AI SDR pilot against pre-registered kill criteria and produce a keep/kill memo
+artifact_type: claude-skill
+tools_used: [claude, 11x, artisan, aisdr, salesforce]
+roles: [revops, sdr-leader, gtm-engineer]
+difficulty: advanced
+time_to_setup: 2-4 hours
+human_tested: false
+last_updated: "2026-08-13"
+---
+
+Un Claude Skill que convierte un piloto de [AI SDR](/es/learn/ai-sdr/) terminado en un memo de continuar, matar o extender, calificado contra criterios que el equipo escribió antes del primer envío. Calcula cuatro ejes — costo totalmente cargado por reunión calificada, reuniones por respuesta positiva, horas humanas de retrabajo y delta de reputación de envío — y se niega a devolver un veredicto cuando los criterios fueron modificados a mitad del piloto o cuando la muestra es demasiado pequeña para sostenerlo. El bundle en `apps/web/public/artifacts/ai-sdr-pilot-scorecard-skill/` incluye `SKILL.md` más cuatro archivos de referencia: la plantilla de pre-registro que el equipo completa antes de empezar el piloto, el modelo de costos de cinco líneas, las definiciones de métricas y dos memos de ejemplo literales.
+
+El problema que resuelve no es la medición. Es que casi nadie escribe primero la línea de corte. Un piloto termina, el dashboard del vendor muestra reuniones agendadas, alguien divide la licencia entre ese número, y el resultado supera un umbral que nadie registró de antemano. Tres meses después el contrato se renueva automáticamente porque nadie produjo un documento que dijera cómo se vería el fracaso.
+
+## Cuándo usarlo
+
+Ejecútalo 14 días después del último envío del piloto, con el export completo. La cola de 14 días es deliberada: las reuniones agendadas en la última semana todavía no se han celebrado, y el filtrado por quejas se degrada con retraso, así que un piloto calificado en su fecha de cierre se califica antes de que lleguen sus propias consecuencias.
+
+Hay otros dos modos. Un checkpoint a mitad del piloto con `checkpoint: true` calcula los ejes y devuelve `no_verdict` — esa corrida existe para detectar una ruptura de reputación en la semana tres, no para decidir nada. Y una revisión de renovación sobre un despliegue ya en marcha trata los últimos 90 días como la ventana; es el único modo donde un pre-registro escrito después de los hechos es aceptable, y el memo lleva `retrospective: true` de forma permanente.
+
+El skill encaja igual con [11x](/es/tools/11x/), [Artisan](/es/tools/artisan/), [aisdr](/es/tools/aisdr/) y agentes propios, porque califica tus sistemas y no los del vendor. Todo lo que lee viene de tu CRM, tu export de finanzas, tus registros de horas y Google Postmaster Tools.
+
+## Cuándo NO usarlo
+
+**No existe pre-registro.** El skill devuelve `no_preregistration` y se detiene. Escribir los criterios ahora y antedatarlos produce un artefacto peor que ningún memo — convierte un juicio posterior en algo que parece una medición. El modo de revisión de renovación es la única excepción, y se etiqueta a sí mismo.
+
+**Por debajo de la muestra mínima registrada.** Devuelve `insufficient_sample` con los conteos observado y requerido. Con `n` reuniones calificadas, agregar o quitar una mueve el costo por reunión en aproximadamente `1/n` — 12,5% con ocho reuniones, 5% con veinte. Un piloto de seis semanas que produjo nueve reuniones celebradas no puede distinguir una tasa de respuesta-a-reunión de 4% de una de 7%, y un veredicto calculado sobre eso es ruido con un decimal.
+
+**Elegir entre dos vendors.** Esto califica un despliegue contra un umbral, no dos entre sí. Un cara a cara necesita ambos corriendo sobre segmentos comparables con una lista de exclusión compartida, que es otro diseño.
+
+**La revisión trimestral de un equipo humano de SDR.** El modelo de costos asume un medidor por lead o por contacto y una línea de retrabajo que no existe de la misma forma para headcount.
+
+## Setup
+
+De dos a cuatro horas, en su mayoría decidiendo umbrales más que conectando nada.
+
+1. **Completa el pre-registro antes del primer envío.** Copia `references/1-preregistration-template.md`, reemplaza cada placeholder, haz commit. Define `min_held_meetings` de modo que mover una reunión hacia dentro o hacia fuera cambie el costo por reunión menos que el margen entre tu umbral y tu valor esperado — si esperas aterrizar cerca de 700 contra un techo de 750, ese margen es de alrededor del 7% y veinte reuniones es el piso.
+2. **Define `max_cost_per_qualified_meeting` contra tu motion actual, no contra el precio de lista del vendor.** Los precios publicados solo te dan la línea de suscripción. AiSDR publica 250 al mes por 200 contactos investigados por AI, 900 por 800 y 2.500 por 2.500, con los dos tiers mayores en compromiso trimestral. 11x publica 3.750 al mes facturado anualmente para Growth — 45.000 al año — cubriendo 2.000 prospects nuevos al mes y hasta cinco usuarios finales, y declara que cobra por lead y no por envío. Artisan no publica precio y describe sus tiers en aproximadamente 2.500 y aproximadamente 6.000 leads contactados al mes.
+3. **Define `max_spam_rate` en 0,0030 y déjalo ahí.** Ese es el requisito publicado por Google para remitentes de más de 5.000 mensajes diarios a cuentas de Gmail: mantener la tasa de spam reportada en Postmaster Tools por debajo de 0,30%. Google recomienda además quedarse por debajo de 0,10% para que un pico ordinario de quejas no alcance la línea dura. En una lista con mucho Gmail, fija el umbral de trabajo en 0,0010 y trata 0,0030 como el corte.
+4. **Define las reglas de exclusión ahora.** `exclude_open_opp_at_booking` y `exclude_prior_human_touch_within_days: 90` son las dos que deciden qué cuenta como reunión del agente. Aflójalas aquí, por escrito, antes de saber hacia qué lado te conviene.
+5. **Instrumenta las horas de retrabajo desde el día uno.** Un número semanal auto-reportado por las dos personas que hacen el trabajo es impreciso y honesto. Un número reconstruido al final por quien defiende la herramienta es preciso e inútil.
+6. **Instala el skill.** Coloca `SKILL.md` y `references/` en `.claude/skills/ai-sdr-pilot-scorecard/`, o súbelo como Skill en claude.ai. Arma el payload de entrada desde tu export de CRM, finanzas, registros de horas y Postmaster.
+
+## Por qué los cuatro ejes están construidos así
+
+**El costo por reunión calificada se emite dos veces.** Una sobre las cinco líneas de costo — suscripción, datos y enriquecimiento, infraestructura de envío, implementación amortizada, y horas de retrabajo valuadas a tarifa cargada — y otra solo sobre suscripción. Ambas van al memo. La cifra de solo-suscripción es el número del business case del vendor; no está mal, responde otra pregunta, e imprimir ambas hace visible la base en lugar de discutible. En el ejemplo trabajado de `references/2-cost-model.md`, un piloto de 42 días con 14 reuniones calificadas da 851 por reunión cargado y 370 solo sobre suscripción, y 6.035 de los 6.735 que las separan son una sola línea: 71 horas de retrabajo humano. Esa distinción cambia el siguiente paso. "Demasiado caro" es una negociación; "seis horas de trabajo humano por reunión producida" es un problema de producto que un descuento no resuelve.
+
+**Respuesta-a-reunión cuenta solo respuestas positivas.** Una respuesta negativa, un fuera-de-oficina y una solicitud de baja no son oportunidades de conversión, y agruparlas en un mismo denominador es cómo un gráfico de tasa de respuesta se mantiene plano mientras la lista se quema. Cuando el clasificador del propio vendor etiquetó las respuestas, `references/3-metric-definitions.md` aplica un descuento de 0,80 y marca la cifra como `unaudited` — una convención que ese archivo establece para que las corridas sigan siendo comparables, no un número medido de la industria. Aporta una muestra estratificada de 50 respuestas etiquetadas por humanos y el skill calcula la precisión real.
+
+**El retrabajo se califica por tendencia además de por nivel.** Que caiga semana a semana significa que el equipo está aprendiendo la herramienta; plano o en alza significa que la herramienta no converge. Mismo nivel, veredictos opuestos.
+
+**La reputación es un corte duro, evaluado independientemente de la economía.** Si la ventana de cola cruza la línea absoluta, el veredicto es `kill` sin importar lo que diga el costo por reunión. La reputación de remitente se comparte con todo lo que la empresa envía desde esos dominios — facturas, renovaciones, respuestas de soporte — así que un piloto no puede gastarla y anotar el ahorro como resultado.
+
+## Modos de fallo y guardas
+
+- **La línea de corte se mueve a mitad del piloto.** Es la forma más común en que sobrevive un piloto que fracasa, y rara vez es deshonesta — es un umbral suavizado en silencio en un doc por alguien que ya empezó a creer. **Guarda:** el paso 1 hashea el pre-registro y se niega a calificar contra uno modificado, devolviendo un diff a nivel de campo en lugar de un veredicto. Modificar está permitido; re-registra con un hash nuevo y el memo lleva `retrospective: true` de forma permanente.
+- **Inflación de atribución.** Los vendors cuentan reuniones sobre cuentas que ya estaban en ciclo o con contacto humano reciente. **Guarda:** las reuniones excluidas salen del numerador por regla y no por descuento negociado, y el conteo de exclusiones y la distribución de razones se reportan como hallazgo. Un vendor cuyas reuniones atribuidas son 32% cuentas ya abiertas te está diciendo algo sobre su sourcing que ningún descuento arregla.
+- **El denominador de solo-suscripción.** **Guarda:** la corrida se rechaza con `incomplete_cost_model` si alguna de las cinco líneas es `null`. Una línea que crees que es cero debe ingresarse como `0`, lo cual es una afirmación y no un vacío.
+- **El daño que aterriza después de la fecha de calificación.** **Guarda:** la ventana de cola de 14 días es obligatoria y el eje de reputación puede matar un piloto que superó todos los umbrales de costo.
+- **`keep` leído como "escalar".** El skill califica una configuración a un volumen. El volumen es el input con más probabilidad de romper el eje de reputación. **Guarda:** la sección final del memo nombra el volumen calificado y hace del recálculo una condición de cualquier aumento.
+
+## Contra las alternativas
+
+El **deck de QBR del vendor** reporta el numerador. No tiene acceso a tus horas de retrabajo, ningún incentivo para aplicar tus reglas de exclusión, y etiqueta sus propias respuestas positivas. Léelo, y después ejecuta esto.
+
+La **hoja de cálculo de un analista de RevOps** hace bien la aritmética y aun así pierde ante la deriva de criterios, porque la hoja se arma después de que los resultados son visibles y los umbrales se eligen junto a ellos. El hash es la única parte de este workflow que una hoja de cálculo estructuralmente no puede replicar.
+
+**Dejar que el contrato se renueve solo** es el default real, y es lo que esto existe para desplazar. Sobre un compromiso 11x Growth, ese default cuesta 45.000 por un año que nadie decidió comprar.
+
+Combínalo con [ai-sdr-draft-qa-skill](/es/workflows/ai-sdr-draft-qa-skill/), que controla la calidad del output durante el piloto, y [email-deliverability-monitor-n8n](/es/workflows/email-deliverability-monitor-n8n/), que vigila el eje de reputación de forma continua en vez de en dos checkpoints. Para la pregunta de selección de vendor que precede a todo esto, ve [ai-sdr-stack](/es/stacks/ai-sdr-stack/) y [AI SDR signal-driven vs autónomo](/es/learn/signal-driven-vs-autonomous-ai-sdr/).
