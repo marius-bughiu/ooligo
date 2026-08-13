@@ -71,7 +71,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:recruiting] recruitee — material (rebranded Tellent Recruitee and withdrew published pricing (entry says flat/$224, all three plans now demo-gated)) → slug: recruitee
 - refresh:C: [type:tool] [vertical:revops] relevance-ai — material (self-serve tiers withdrawn, pricing page is Enterprise quote-only (entry says usage-based/$19)) → slug: relevance-ai
 - refresh:C: [type:tool] [vertical:revops] rollworks — material (rollworks.com 301s to adroll.com, brand folded into AdRoll ABM) → slug: rollworks
-- refresh:C: [type:tool] [vertical:recruiting] seekout — material (now publishes $149/mo self-serve Recruit Core (entry says custom / no public price)) → claimed: refresh 2026-08-13T21:05:00Z
+- refresh:C: [type:tool] [vertical:recruiting] seekout — material (now publishes $149/mo self-serve Recruit Core (entry says custom / no public price)) → slug: seekout
 - refresh:C: [type:tool] [vertical:legal-ops] sirionlabs — material (sirionlabs.com 301s to sirion.ai; acquisition by Haveli Investments Jan 2026 to confirm)
 - refresh:C: [type:comparison] [vertical:revops] best-abm-platforms — material (rollworks rebranded to AdRoll ABM 2025-08-27 [roundup option]; terminus acquired by DemandScience Oct 2024 and standalone platform retired, terminus.com 301s to demandscience.com [roundup option])
 - refresh:C: [type:tool] [vertical:revops] influ2 — material (body names RollWorks as a live competitor brand; renamed AdRoll ABM 2025-08-27 — the tool page was Tier-A verified so the pricing sweep will never surface this)
