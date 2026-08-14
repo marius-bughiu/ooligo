@@ -174,53 +174,53 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] instantly — pricing never verified (no pricing_checked field; SLA 60d) → slug: instantly
 - refresh:A: [type:tool] [vertical:revops] intercom — pricing never verified (no pricing_checked field; SLA 60d) → slug: intercom
 - refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing never verified (no pricing_checked field; SLA 60d) → slug: ironclad
-- refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: ivo
-- refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, pricing unchanged (quote-only, Employ Inc. "Get My Quote") but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("sophisticated" L34) — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:recruiting] juicebox — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] juicebox — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, Growth annual rate moved — requeued as refresh:B: below
-- refresh:A: [type:tool] [vertical:legal-ops] juro — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] juro — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: juro
-- refresh:A: [type:tool] [vertical:recruiting] karat — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] karat — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: karat
-- refresh:A: [type:tool] [vertical:legal-ops] kira-systems — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] kira-systems — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: kira-systems
-- refresh:A: [type:tool] [vertical:revops] koala — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] koala — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, product is shutting down — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:customer-success] kustomer — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] kustomer — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, published entry price withdrawn — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:revops] lavender — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] lavender — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, Teams tier repriced +51% and a new product line launched — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:revops] leandata — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] leandata — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: leandata
-- refresh:A: [type:tool] [vertical:legal-ops] legora — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] legora — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: legora
-- refresh:A: [type:tool] [vertical:recruiting] lever — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] lever — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, pricing unchanged (quote-only, Employ Inc.) but the frontmatter-only stamp is blocked by legacy banned vocab in the body ("leverage" L43) — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-protege — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: lexisnexis-protege
-- refresh:A: [type:tool] [vertical:revops] lindy — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] lindy — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: lindy
-- refresh:A: [type:tool] [vertical:revops] linear — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] linear — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, tiers renamed and entry price up 25% — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:legal-ops] linksquares — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] linksquares — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: linksquares
-- refresh:A: [type:tool] [vertical:legal-ops] litera — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] litera — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, company relaunched around a single-agent platform — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:legal-ops] logikcull — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] logikcull — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: logikcull
-- refresh:A: [type:tool] [vertical:recruiting] loxo — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] loxo — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, vendor now publishes a free tier and a per-seat price — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:legal-ops] luminance — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] luminance — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: luminance
-- refresh:A: [type:tool] [vertical:revops] lusha — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] lusha — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → slug: lusha
-- refresh:A: [type:tool] [vertical:revops] make — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] make — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, billing unit renamed and mcp_available is stale — requeued as refresh:B: below
-- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, repositioned around named credit-based agents — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-14T05:12:00Z
  → skip: verified 2026-07-30, new top tier added and entry price moved — requeued as refresh:C: below
 - refresh:A: [type:tool] [vertical:recruiting] mercor — pricing never verified (no pricing_checked field; SLA 60d) → slug: mercor
 - refresh:A: [type:tool] [vertical:recruiting] metaview — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-07-31, repositioned as an agentic sourcing platform and every tier renamed — requeued as refresh:C: below
