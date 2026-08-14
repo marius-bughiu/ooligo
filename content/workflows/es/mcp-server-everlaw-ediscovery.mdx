@@ -1,0 +1,72 @@
+---
+slug: mcp-server-everlaw-ediscovery
+canonical_slug: mcp-server-everlaw-ediscovery
+locale: es
+verticals: [legal-ops]
+title: "Answer Everlaw review-progress questions from Claude via MCP"
+artifact_type: mcp-server
+tools_used: [everlaw, claude]
+roles: [legal-ops-manager]
+difficulty: advanced
+time_to_setup: "2-4 hours"
+human_tested: false
+last_updated: "2026-08-14"
+---
+
+[Everlaw](/es/tools/everlaw/) publica su propio servidor MCP alojado, así que la pregunta interesante ya no es si conectar [Claude](/es/tools/claude/) a tus asuntos, sino qué te deja sin poder preguntar ese servidor. La respuesta es la gestión de la revisión: los grupos de asignación, el esquema de codificación y cuánto ha avanzado realmente el equipo de revisión en un lote. El scaffold en `apps/web/public/artifacts/mcp-server-everlaw-ediscovery/` cubre ese hueco y nada más.
+
+## Empieza por el servidor oficial
+
+Everlaw documenta un servidor MCP alojado en `https://api.everlaw.com/v1/mcp` — nombre de servidor `everlaw-mcp`, versión 0.1.0, revisión de protocolo 2025-11-25, según su referencia para desarrolladores publicada el 9 de julio de 2026. Es un servidor de autorización OAuth 2.0 conforme al estándar que anuncia metadatos de recurso protegido RFC 9728, lo que significa que un cliente compatible se conecta sin más configuración que la URL del recurso. Cada acción se ejecuta con los permisos del usuario autenticado: el servidor no puede ver nada que ese usuario no pudiera ver en la interfaz web de Everlaw.
+
+Registra ocho herramientas. `GetProjects`, `GetProjectBinders`, `GetProjectMetadataFields`, `GetProjectProcessedUploads` y `GetProjectDatasets` enumeran un proyecto. `PostProjectSearch`, `GetProjectSearchResult` y `DescribeProjectSearchTerm` ejecutan búsquedas sobre 24 términos de búsqueda y paginan los resultados, con metadatos por documento, enlaces de descarga de texto y valores extraídos por IA de forma opcional.
+
+Conecta ese servidor primero. Para el trabajo de localizar documentos es mejor que cualquier cosa que construyas: hereda los permisos por usuario, no requiere aprovisionar credenciales y lo mantiene Everlaw.
+
+## El hueco que cubre este scaffold
+
+Dos de los términos de búsqueda que acepta `PostProjectSearch` no se pueden construir con esas ocho herramientas. `ASSIGNED` exige un `assignmentGroup.id`, un `assignmentId` o un `userId`. `CODED` exige un `labelId` — el id de una categoría o de un código. La propia referencia de Everlaw para esos términos remite al lector a `GetProjectAssignmentGroups`, `GetProjectCodes`, `GetProjectUsers` y `GetProjectGroups`, y las cuatro son operaciones REST, no herramientas del servidor alojado.
+
+El efecto práctico: un agente conectado solo al servidor alojado encuentra todos los documentos que contienen "indemnización" en un rango Bates, y no puede decirte que existe un lote de privilegio de segundo nivel, mucho menos cuánto queda sin codificar. Las preguntas sobre el estado de la revisión son las que un responsable de Legal Ops atiende varias veces al día, y son justo las que el servidor alojado no alcanza.
+
+El scaffold registra cinco herramientas de solo lectura sobre la API REST para cerrar ese circuito. `list_assignment_groups` devuelve grupos, número de asignaciones e ids de asignatarios. `list_codes` devuelve categorías y códigos con sus marcas de exclusividad mutua. `review_progress` devuelve el recuento de documentos revisados y no revisados con un porcentaje por grupo. `list_search_term_reports` devuelve nombres de informes, propietarios y número de términos. `resolve_assignee_names` traduce ids de usuario a nombres de revisores y viene desactivada.
+
+No registra deliberadamente ninguna herramienta de búsqueda, ni de descarga de documentos, ni de texto de documentos. Esas ya existen en el servidor alojado, ejecutándose con los permisos del usuario autenticado, que es un hogar más seguro para ellas que una clave de API de organización.
+
+## Cómo review_progress calcula un número que Everlaw no publica
+
+Everlaw no tiene un endpoint de progreso de revisión. Los recuentos en `src/everlaw_ediscovery_mcp/server.py` salen de ejecutar el término `ASSIGNED` dos veces por grupo — una con `reviewStatus: "REVIEWED"` y otra con `"NOT_REVIEWED"` — y leer `numDocs` en cada respuesta.
+
+La decisión que conviene nombrar es el nivel de agregación. El scaffold consulta a nivel `ALL_IN_GROUP`, dos búsquedas por grupo, en lugar de por asignación. Cada llamada a `PostProjectSearch` materializa un objeto de búsqueda guardada que aparece en el historial de búsquedas del proyecto con una URL de `app.everlaw.com`, y Everlaw limita el número de objetos visibles para el usuario que la API puede crear, devolviendo 422 al superarlo. Un grupo de 12 asignatarios cuesta 2 búsquedas a nivel de grupo y 24 a nivel de asignación, para un desglose que nadie pidió.
+
+## Cuándo no usarlo
+
+Sáltatelo si todavía no has conectado el servidor alojado. Casi toda pregunta que hace un equipo de un asunto es una pregunta sobre documentos, y montar infraestructura de credenciales para responder antes la categoría menor es hacerlo al revés.
+
+Sáltatelo si tu organización lleva menos de unos cuatro asuntos simultáneos, o si las consultas de estado de revisión bajan de unas quince por semana. La puesta en marcha cuesta de 2 a 4 horas: un administrador de la organización genera la clave de API, alguien mapea los cuatro permisos necesarios, la asesoría jurídica interna revisa el radio de impacto de una credencial con alcance de organización, y los cuatro pasos de verificación del `README.md` hay que ejecutarlos contra un proyecto cuyos números puedas confirmar a mano. Eso no se amortiza con poco volumen: usa los propios paneles de Everlaw.
+
+Sáltatelo si no consigues que un administrador de la organización aprovisione una clave acotada. Una clave de API de Everlaw no está ligada a una cuenta de usuario y concede un acceso equivalente al de un administrador de organización, limitado únicamente por los permisos por endpoint que se le otorguen. Si la única clave que consigues es una sin acotar, la revisión de seguridad fallará, y debe fallar.
+
+Sáltatelo si una orden de protección rige cómo se transmiten o procesan los datos del asunto. Los nombres de los grupos de asignación y las categorías de codificación describen la estrategia de revisión. Confírmalo con la asesoría jurídica antes de enrutarlos por una sesión de Claude.
+
+## Modos de fallo y sus salvaguardas
+
+**Una clave con alcance de organización lee entre asuntos.** Una sola credencial alcanza todos los proyectos de la organización, incluidos asuntos bajo órdenes de protección distintas. *Salvaguarda:* fija `EVERLAW_ALLOWED_PROJECTS` con ids numéricos explícitos. El paso 2 de verificación del `README.md` pide un proyecto fuera de la lista y espera un rechazo sin que se emita ninguna petición HTTP.
+
+**El 403 es ambiguo por diseño.** Everlaw devuelve un 403 idéntico tanto si el proyecto no existe como si quien llama no tiene acceso, para que no se puedan enumerar ids de proyecto. Un agente lo interpreta como una errata y reintenta con otro id. *Salvaguarda:* `raise_for_everlaw()` reescribe el 403 para explicar que ambos casos son indistinguibles y que hay que revisar los permisos de la clave, no el número.
+
+**El sondeo programado agota el límite de objetos.** `review_progress` escribe dos búsquedas guardadas por grupo y por llamada. Sondear cada hora en 10 grupos son 480 búsquedas guardadas al día, dentro de un cupo limitado, ensuciando el historial de búsquedas que usa el equipo de revisión. *Salvaguarda:* la descripción de la herramienta lo advierte, el README prohíbe ponerla en un bucle de sondeo, y el 422 se traduce en una explicación del límite en vez de un error genérico.
+
+**"Revisado" significa cosas distintas según el grupo.** Cada grupo de asignación lleva sus propios criterios de revisión, así que el porcentaje sigue la definición de quien creó el grupo y no es sinónimo de "codificado". Dos grupos de un mismo proyecto pueden discrepar sobre el mismo número. *Salvaguarda:* cada respuesta de `review_progress` incluye un campo `_note` que lo indica, y el paso 4 de verificación te pide reconciliar un grupo contra la interfaz antes de citar cifra alguna.
+
+**Los límites de tasa se comparten por credencial.** Everlaw aplica 25 peticiones por segundo por cuenta de usuario autenticada y devuelve 429 al superarlo. *Salvaguarda:* el cliente marca un ritmo de 8 peticiones por segundo con una compuerta de concurrencia de cuatro vías y backoff exponencial, y el README te dice que des una clave propia a cualquier trabajo nocturno de exportación.
+
+## Las alternativas, y cuándo ganan
+
+**El servidor alojado en solitario** gana siempre que las preguntas traten de documentos y no de lotes. Es gratuito, hereda permisos y lo mantiene el proveedor. Añade este scaffold solo cuando puedas nombrar las preguntas de estado de revisión que aquel no responde.
+
+**La analítica propia de Everlaw** gana para informes de productividad por revisor. `GetProjectAnalytics` está en el grupo de alcance `SECURITY_READ` y requiere acceso de administrador de organización; el scaffold la excluye a propósito, porque los datos de actividad por revisor plantean cuestiones de supervisión que una herramienta de chat no debería responder por accidente.
+
+**El [equivalente para Relativity](/es/workflows/mcp-server-relativity-ediscovery/)** es el patrón a copiar si operas ambas plataformas — con el trade-off invertido, ya que Relativity no tiene servidor MCP alojado y toda la superficie te toca construirla.
+
+Everlaw cobra por volumen de datos y no por puestos, así que nada de esto cambia tu factura. El coste son las 2 a 4 horas de puesta en marcha y la obligación permanente de mantener acotada una credencial con alcance de organización. Si quieres primero el trasfondo conceptual, lee [servidor MCP frente a Claude skill](/es/learn/claude-skill-vs-mcp-server/) y [eDiscovery](/es/learn/ediscovery/); si estás montando el instrumental que lo rodea, el [stack de eDiscovery](/es/stacks/ediscovery-stack/) cubre las decisiones de plataforma a su alrededor.

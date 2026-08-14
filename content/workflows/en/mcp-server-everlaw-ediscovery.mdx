@@ -1,0 +1,72 @@
+---
+slug: mcp-server-everlaw-ediscovery
+canonical_slug: mcp-server-everlaw-ediscovery
+locale: en
+verticals: [legal-ops]
+title: "Answer Everlaw review-progress questions from Claude via MCP"
+artifact_type: mcp-server
+tools_used: [everlaw, claude]
+roles: [legal-ops-manager]
+difficulty: advanced
+time_to_setup: "2-4 hours"
+human_tested: false
+last_updated: "2026-08-14"
+---
+
+[Everlaw](/en/tools/everlaw/) ships its own hosted MCP server, so the interesting question is no longer whether to connect [Claude](/en/tools/claude/) to your matters — it is what the hosted server leaves you unable to ask. The answer is review management: assignment groups, the coding schema, and how far through a batch the review team actually is. The scaffold at `apps/web/public/artifacts/mcp-server-everlaw-ediscovery/` fills that gap and nothing else.
+
+## Start with the official server
+
+Everlaw documents a hosted MCP server at `https://api.everlaw.com/v1/mcp` — server name `everlaw-mcp`, version 0.1.0, protocol revision 2025-11-25, as published in its developer reference on 9 July 2026. It is a standards-compliant OAuth 2.0 authorization server advertising RFC 9728 protected-resource metadata, which means a compliant client connects with no setup beyond the resource URL. Every action runs with the signed-in user's permissions: the server cannot see anything the user could not see in the Everlaw web UI.
+
+It registers eight tools. `GetProjects`, `GetProjectBinders`, `GetProjectMetadataFields`, `GetProjectProcessedUploads` and `GetProjectDatasets` enumerate a project. `PostProjectSearch`, `GetProjectSearchResult` and `DescribeProjectSearchTerm` run searches across 24 search terms and page through the matches, with optional per-document metadata, text download links, and AI-extracted values.
+
+Connect that server first. For document-finding work it is better than anything you would build: it inherits per-user permissions, it needs no credential provisioning, and Everlaw maintains it.
+
+## The gap this scaffold fills
+
+Two of the search terms `PostProjectSearch` accepts cannot be constructed from the eight tools. `ASSIGNED` requires an `assignmentGroup.id`, an `assignmentId`, or a `userId`. `CODED` requires a `labelId` — a category or code id. Everlaw's own reference for those terms sends the reader to `GetProjectAssignmentGroups`, `GetProjectCodes`, `GetProjectUsers` and `GetProjectGroups`, and all four are REST operations rather than tools on the hosted server.
+
+The practical effect: an agent connected only to the hosted server can find every document containing "indemnification" in a Bates range, and cannot tell you that a second-level privilege batch exists, let alone how much of it is uncoded. Review-status questions are the ones legal-ops managers field several times a day, and they are precisely the ones the hosted server cannot reach.
+
+The scaffold registers five read-only tools over the REST API to close that loop. `list_assignment_groups` returns groups, assignment counts, and assignee ids. `list_codes` returns categories and codes with their mutual-exclusivity flags. `review_progress` returns reviewed and not-reviewed document counts with a percentage per group. `list_search_term_reports` returns report names, owners, and term counts. `resolve_assignee_names` maps user ids to reviewer names and is disabled by default.
+
+It deliberately registers no search tool, no document-fetch tool, and no document-text tool. Those exist on the hosted server, running under the signed-in user's permissions, which is a safer home for them than an organization API key.
+
+## How review_progress computes a number Everlaw does not publish
+
+Everlaw has no review-progress endpoint. The counts in `src/everlaw_ediscovery_mcp/server.py` come from running the `ASSIGNED` term twice per group — once with `reviewStatus: "REVIEWED"`, once with `"NOT_REVIEWED"` — and reading `numDocs` off each response.
+
+The choice worth naming is the aggregation level. The scaffold queries at `ALL_IN_GROUP`, two searches per group, rather than per assignment. Every `PostProjectSearch` call materializes a saved search object that appears in the project's search history with an `app.everlaw.com` URL, and Everlaw caps the number of user-visible objects the API can create, returning 422 when you cross it. A 12-assignee group costs 2 searches at group level and 24 at assignment level, for a breakdown nobody asked for.
+
+## When not to use this
+
+Skip it if you have not connected the hosted server yet. Almost every question a matter team asks is a document question, and building credential infrastructure to answer the smaller category first is backwards.
+
+Skip it if your organization runs fewer than roughly four concurrent matters, or if review-status lookups run fewer than about fifteen a week. Setup costs 2 to 4 hours: an Organization Admin generates the API key, someone maps the four required permissions, in-house counsel reviews the blast radius of an org-scoped credential, and the four verification steps in `README.md` need running against a project whose numbers you can confirm by hand. That does not pay back at low volume — use Everlaw's own dashboards.
+
+Skip it if you cannot get an Organization Admin to provision a scoped key. An Everlaw API key is not tied to a user account and grants access equivalent to an Organization Admin, bounded only by the per-endpoint permissions granted to it. If the only key you can get is an unscoped one, the security review will fail, and it should.
+
+Skip it if a protective order governs how matter data is transmitted or processed. Assignment-group names and coding categories describe review strategy. Confirm with counsel before routing them through a Claude session.
+
+## Failure modes and their guards
+
+**An org-scoped key reads across matters.** One credential reaches every project in the organization, including matters under different protective orders. *Guard:* set `EVERLAW_ALLOWED_PROJECTS` to explicit numeric ids. Verification step 2 in `README.md` asks for a project outside the allowlist and expects a refusal with no HTTP request made.
+
+**403 is ambiguous by design.** Everlaw returns an identical 403 whether a project does not exist or the caller lacks access, so project ids cannot be enumerated. An agent reads that as a typo and retries with a different id. *Guard:* `raise_for_everlaw()` rewrites the 403 to say the two cases are indistinguishable and to check the key's permissions rather than the number.
+
+**Scheduled polling exhausts the object cap.** `review_progress` writes two saved searches per group per call. Hourly polling across 10 groups is 480 saved searches a day, into a capped bucket, cluttering the search history the review team uses. *Guard:* the tool description says so, the README forbids putting it behind a polling loop, and 422 is translated into an explanation of the cap rather than a generic error.
+
+**"Reviewed" means different things per group.** Each assignment group carries its own review criteria, so the percentage follows the group creator's definition and is not a synonym for "coded." Two groups on one project can disagree about the same number. *Guard:* every `review_progress` response carries a `_note` field stating it, and verification step 4 asks you to reconcile one group against the UI before quoting any figure.
+
+**Rate limits are shared per credential.** Everlaw enforces 25 requests per second per authenticating user account and returns 429 above it. *Guard:* the client paces at 8 requests per second with a four-way concurrency gate and exponential backoff, and the README tells you to give a nightly export job its own key.
+
+## The alternatives, and when they win
+
+**The hosted server alone** wins whenever the questions are about documents rather than batches. It is free, permission-inheriting, and vendor-maintained. Add this scaffold only once you can name the review-status questions it cannot answer.
+
+**Everlaw's own analytics** win for reviewer-level productivity reporting. `GetProjectAnalytics` sits in the `SECURITY_READ` scope group and needs org-admin access; the scaffold excludes it on purpose, because per-reviewer activity data raises supervision questions a chat tool should not answer by accident.
+
+**The [Relativity equivalent](/en/workflows/mcp-server-relativity-ediscovery/)** is the pattern to copy if you run both platforms — with the reverse trade-off, since Relativity has no hosted MCP server and the whole surface is yours to build.
+
+Everlaw prices by data volume rather than seats, so nothing here changes your bill. The cost is the 2 to 4 hours of setup and the standing obligation to keep an org-scoped credential narrow. If you want the conceptual background first, read [MCP server vs Claude skill](/en/learn/claude-skill-vs-mcp-server/) and [e-discovery](/en/learn/ediscovery/); if you are assembling the surrounding tooling, the [e-discovery stack](/en/stacks/ediscovery-stack/) covers the platform choices around it.

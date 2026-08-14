@@ -1,0 +1,72 @@
+---
+slug: mcp-server-everlaw-ediscovery
+canonical_slug: mcp-server-everlaw-ediscovery
+locale: fr
+verticals: [legal-ops]
+title: "Answer Everlaw review-progress questions from Claude via MCP"
+artifact_type: mcp-server
+tools_used: [everlaw, claude]
+roles: [legal-ops-manager]
+difficulty: advanced
+time_to_setup: "2-4 hours"
+human_tested: false
+last_updated: "2026-08-14"
+---
+
+[Everlaw](/fr/tools/everlaw/) publie son propre serveur MCP hébergé, si bien que la question intéressante n'est plus de savoir s'il faut connecter [Claude](/fr/tools/claude/) à vos dossiers, mais ce que ce serveur vous empêche de demander. La réponse tient à la gestion de la revue : les groupes d'affectation, le schéma de codage et l'avancement réel de l'équipe de revue sur un lot. Le scaffold situé dans `apps/web/public/artifacts/mcp-server-everlaw-ediscovery/` comble ce manque, et rien d'autre.
+
+## Commencez par le serveur officiel
+
+Everlaw documente un serveur MCP hébergé à l'adresse `https://api.everlaw.com/v1/mcp` — nom de serveur `everlaw-mcp`, version 0.1.0, révision de protocole 2025-11-25, d'après sa référence développeur publiée le 9 juillet 2026. C'est un serveur d'autorisation OAuth 2.0 conforme au standard, qui publie des métadonnées de ressource protégée RFC 9728 : un client conforme s'y connecte sans autre configuration que l'URL de la ressource. Chaque action s'exécute avec les droits de l'utilisateur authentifié : le serveur ne voit rien que cet utilisateur ne verrait pas dans l'interface web d'Everlaw.
+
+Il enregistre huit outils. `GetProjects`, `GetProjectBinders`, `GetProjectMetadataFields`, `GetProjectProcessedUploads` et `GetProjectDatasets` énumèrent un projet. `PostProjectSearch`, `GetProjectSearchResult` et `DescribeProjectSearchTerm` exécutent des recherches sur 24 termes de recherche et paginent les résultats, avec au choix les métadonnées par document, des liens de téléchargement du texte et des valeurs extraites par IA.
+
+Connectez ce serveur d'abord. Pour retrouver des documents, il vaut mieux que tout ce que vous construiriez : il hérite des droits par utilisateur, ne demande aucun provisionnement d'identifiants, et Everlaw l'entretient.
+
+## Le manque que ce scaffold comble
+
+Deux des termes de recherche acceptés par `PostProjectSearch` ne peuvent pas être construits à partir de ces huit outils. `ASSIGNED` exige un `assignmentGroup.id`, un `assignmentId` ou un `userId`. `CODED` exige un `labelId` — l'identifiant d'une catégorie ou d'un code. La référence d'Everlaw pour ces termes renvoie elle-même le lecteur vers `GetProjectAssignmentGroups`, `GetProjectCodes`, `GetProjectUsers` et `GetProjectGroups`, et ces quatre-là sont des opérations REST, pas des outils du serveur hébergé.
+
+L'effet concret : un agent connecté au seul serveur hébergé retrouve tout document contenant « indemnisation » dans une plage Bates, et ne peut pas vous dire qu'un lot de privilège de second niveau existe, encore moins quelle part reste non codée. Les questions sur l'état de la revue sont celles qu'un responsable Legal Ops traite plusieurs fois par jour, et ce sont précisément celles que le serveur hébergé n'atteint pas.
+
+Le scaffold enregistre cinq outils en lecture seule sur l'API REST pour boucler la chaîne. `list_assignment_groups` renvoie les groupes, le nombre d'affectations et les identifiants des affectataires. `list_codes` renvoie les catégories et les codes avec leurs indicateurs d'exclusivité mutuelle. `review_progress` renvoie le nombre de documents revus et non revus, avec un pourcentage par groupe. `list_search_term_reports` renvoie les noms de rapports, leurs propriétaires et le nombre de termes. `resolve_assignee_names` traduit les identifiants utilisateur en noms de relecteurs et reste désactivé par défaut.
+
+Il n'enregistre volontairement aucun outil de recherche, de récupération de document ni de texte de document. Ceux-là existent déjà sur le serveur hébergé, sous les droits de l'utilisateur authentifié, ce qui en est un hébergement plus sûr qu'une clé d'API d'organisation.
+
+## Comment review_progress calcule un chiffre qu'Everlaw ne publie pas
+
+Everlaw n'a pas d'endpoint d'avancement de revue. Les comptages dans `src/everlaw_ediscovery_mcp/server.py` proviennent de l'exécution du terme `ASSIGNED` deux fois par groupe — une fois avec `reviewStatus: "REVIEWED"`, une fois avec `"NOT_REVIEWED"` — et de la lecture de `numDocs` dans chaque réponse.
+
+Le choix qui mérite d'être nommé est le niveau d'agrégation. Le scaffold interroge au niveau `ALL_IN_GROUP`, deux recherches par groupe, plutôt que par affectation. Chaque appel à `PostProjectSearch` matérialise un objet de recherche enregistrée qui apparaît dans l'historique de recherche du projet avec une URL `app.everlaw.com`, et Everlaw plafonne le nombre d'objets visibles par l'utilisateur que l'API peut créer, en renvoyant 422 au-delà. Un groupe de 12 affectataires coûte 2 recherches au niveau du groupe et 24 au niveau de l'affectation, pour un détail que personne n'a demandé.
+
+## Quand ne pas l'utiliser
+
+Passez votre chemin si vous n'avez pas encore connecté le serveur hébergé. Presque toutes les questions d'une équipe dossier portent sur des documents, et monter une infrastructure d'identifiants pour traiter d'abord la catégorie la plus petite, c'est prendre le problème à l'envers.
+
+Passez votre chemin si votre organisation suit moins de quatre dossiers simultanés environ, ou si les consultations d'état de revue restent sous une quinzaine par semaine. La mise en place coûte 2 à 4 heures : un administrateur d'organisation génère la clé d'API, quelqu'un cartographie les quatre permissions nécessaires, la direction juridique examine le rayon d'action d'un identifiant à portée d'organisation, et les quatre étapes de vérification du `README.md` doivent tourner contre un projet dont vous pouvez recalculer les chiffres à la main. À faible volume, cela ne se rentabilise pas : utilisez les tableaux de bord d'Everlaw.
+
+Passez votre chemin si vous n'obtenez pas d'un administrateur d'organisation une clé restreinte. Une clé d'API Everlaw n'est rattachée à aucun compte utilisateur et accorde un accès équivalent à celui d'un administrateur d'organisation, borné uniquement par les permissions par endpoint qui lui sont accordées. Si la seule clé disponible est une clé sans restriction, la revue de sécurité échouera, et c'est normal.
+
+Passez votre chemin si une ordonnance de protection encadre la façon dont les données du dossier sont transmises ou traitées. Les noms des groupes d'affectation et les catégories de codage décrivent la stratégie de revue. Validez-le avec la direction juridique avant de les faire transiter par une session Claude.
+
+## Modes de défaillance et garde-fous
+
+**Une clé à portée d'organisation lit d'un dossier à l'autre.** Un seul identifiant atteint tous les projets de l'organisation, y compris des dossiers soumis à des ordonnances de protection différentes. *Garde-fou :* renseignez `EVERLAW_ALLOWED_PROJECTS` avec des identifiants numériques explicites. L'étape 2 de vérification du `README.md` demande un projet hors liste et attend un refus, sans qu'aucune requête HTTP ne soit émise.
+
+**Le 403 est ambigu à dessein.** Everlaw renvoie un 403 identique que le projet n'existe pas ou que l'appelant n'y ait pas accès, afin que les identifiants de projet ne soient pas énumérables. Un agent y lit une faute de frappe et retente avec un autre identifiant. *Garde-fou :* `raise_for_everlaw()` réécrit le 403 pour signaler que les deux cas sont indiscernables et qu'il faut vérifier les permissions de la clé, pas le numéro.
+
+**Un sondage planifié épuise le plafond d'objets.** `review_progress` écrit deux recherches enregistrées par groupe et par appel. Un sondage horaire sur 10 groupes fait 480 recherches enregistrées par jour, dans un quota plafonné, et encombre l'historique de recherche dont se sert l'équipe de revue. *Garde-fou :* la description de l'outil le dit, le README interdit de le placer dans une boucle de sondage, et le 422 est traduit en explication du plafond plutôt qu'en erreur générique.
+
+**« Revu » ne veut pas dire la même chose d'un groupe à l'autre.** Chaque groupe d'affectation porte ses propres critères de revue : le pourcentage suit donc la définition de son créateur et n'est pas synonyme de « codé ». Deux groupes d'un même projet peuvent diverger sur le même chiffre. *Garde-fou :* chaque réponse de `review_progress` porte un champ `_note` qui l'indique, et l'étape 4 de vérification vous demande de rapprocher un groupe de l'interface avant de citer le moindre chiffre.
+
+**Les limites de débit se partagent par identifiant.** Everlaw applique 25 requêtes par seconde par compte utilisateur authentifié et renvoie 429 au-delà. *Garde-fou :* le client se cadence à 8 requêtes par seconde avec un verrou de concurrence à quatre voies et un backoff exponentiel, et le README vous dit de donner sa propre clé à tout export nocturne.
+
+## Les alternatives, et quand elles l'emportent
+
+**Le serveur hébergé seul** l'emporte dès lors que les questions portent sur des documents et non sur des lots. Il est gratuit, hérite des droits et est maintenu par l'éditeur. N'ajoutez ce scaffold qu'une fois capable de nommer les questions d'état de revue auxquelles il ne répond pas.
+
+**Les analytics propres à Everlaw** l'emportent pour le reporting de productivité par relecteur. `GetProjectAnalytics` relève du groupe de portée `SECURITY_READ` et exige un accès administrateur d'organisation ; le scaffold l'exclut délibérément, parce que les données d'activité par relecteur soulèvent des questions de supervision qu'un outil de chat ne devrait pas trancher par accident.
+
+**L'[équivalent Relativity](/fr/workflows/mcp-server-relativity-ediscovery/)** est le modèle à copier si vous exploitez les deux plateformes — avec l'arbitrage inverse, puisque Relativity n'a pas de serveur MCP hébergé et que toute la surface est à construire.
+
+Everlaw facture au volume de données et non au siège : rien de tout cela ne change votre facture. Le coût, ce sont les 2 à 4 heures de mise en place et l'obligation permanente de garder restreint un identifiant à portée d'organisation. Si vous voulez d'abord le fond conceptuel, lisez [serveur MCP contre Claude skill](/fr/learn/claude-skill-vs-mcp-server/) et [eDiscovery](/fr/learn/ediscovery/) ; si vous montez l'outillage autour, le [stack eDiscovery](/fr/stacks/ediscovery-stack/) traite les choix de plateforme qui l'entourent.
