@@ -73,7 +73,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:revops] rollworks — material (rollworks.com 301s to adroll.com, brand folded into AdRoll ABM) → slug: rollworks
 - refresh:C: [type:tool] [vertical:recruiting] seekout — material (now publishes $149/mo self-serve Recruit Core (entry says custom / no public price)) → slug: seekout
 - refresh:C: [type:tool] [vertical:legal-ops] sirionlabs — material (sirionlabs.com 301s to sirion.ai; acquisition by Haveli Investments Jan 2026 to confirm) → slug: sirionlabs
-- refresh:C: [type:comparison] [vertical:revops] best-abm-platforms — material (rollworks rebranded to AdRoll ABM 2025-08-27 [roundup option]; terminus acquired by DemandScience Oct 2024 and standalone platform retired, terminus.com 301s to demandscience.com [roundup option]) → claimed: refresh 2026-08-14T21:05:00Z
+- refresh:C: [type:comparison] [vertical:revops] best-abm-platforms — material (rollworks rebranded to AdRoll ABM 2025-08-27 [roundup option]; terminus acquired by DemandScience Oct 2024 and standalone platform retired, terminus.com 301s to demandscience.com [roundup option]) → slug: best-abm-platforms
 - refresh:C: [type:tool] [vertical:revops] influ2 — material (body names RollWorks as a live competitor brand; renamed AdRoll ABM 2025-08-27 — the tool page was Tier-A verified so the pricing sweep will never surface this)
 - refresh:A: [type:tool] [vertical:revops] 11x — pricing never verified (no pricing_checked field; SLA 60d) → slug: 11x
 - refresh:A: [type:tool] [vertical:revops] 1mind — pricing never verified (no pricing_checked field; SLA 60d) → slug: 1mind
