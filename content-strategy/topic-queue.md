@@ -270,27 +270,27 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] sense — pricing never verified (no pricing_checked field; SLA 60d) → slug: sense
 - refresh:A: [type:tool] [vertical:revops] sierra — pricing never verified (no pricing_checked field; SLA 60d) → slug: sierra
 - refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-04, material — sirionlabs.com 301s to sirion.ai; acquisition by Haveli Investments Jan 2026 to confirm — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:revops] slack — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:customer-success] smartkarrot — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:revops] smartlead — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:recruiting] smartrecruiters — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:customer-success] sprig — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:legal-ops] supio — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:recruiting] testgorilla — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:customer-success] totango — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:revops] unify — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:customer-success] userflow — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:revops] usergems — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:customer-success] userpilot — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:customer-success] velaris — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:recruiting] vervoe — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:revops] vidyard — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:revops] vitally — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:revops] warmly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:recruiting] wellfound — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:recruiting] workable — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:revops] zapier — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
-- refresh:A: [type:tool] [vertical:customer-success] zendesk — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:revops] slack — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:customer-success] smartkarrot — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:revops] smartlead — pricing never verified (no pricing_checked field; SLA 60d) → slug: smartlead
+- refresh:A: [type:tool] [vertical:recruiting] smartrecruiters — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:customer-success] sprig — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:legal-ops] supio — pricing never verified (no pricing_checked field; SLA 60d) → slug: supio
+- refresh:A: [type:tool] [vertical:recruiting] testgorilla — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:customer-success] totango — pricing never verified (no pricing_checked field; SLA 60d) → slug: totango
+- refresh:A: [type:tool] [vertical:revops] unify — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:customer-success] userflow — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:revops] usergems — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:customer-success] userpilot — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:B: item below
+- refresh:A: [type:tool] [vertical:customer-success] velaris — pricing never verified (no pricing_checked field; SLA 60d) → slug: velaris
+- refresh:A: [type:tool] [vertical:recruiting] vervoe — pricing never verified (no pricing_checked field; SLA 60d) → slug: vervoe
+- refresh:A: [type:tool] [vertical:revops] vidyard — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:B: item below
+- refresh:A: [type:tool] [vertical:revops] vitally — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:revops] warmly — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:recruiting] wellfound — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:B: item below
+- refresh:A: [type:tool] [vertical:recruiting] workable — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-15, pricing/positioning moved — superseded by the refresh:C: item below
+- refresh:A: [type:tool] [vertical:revops] zapier — pricing never verified (no pricing_checked field; SLA 60d) → slug: zapier
+- refresh:A: [type:tool] [vertical:customer-success] zendesk — pricing never verified (no pricing_checked field; SLA 60d) → slug: zendesk
 - refresh: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (juicebox refreshed 2026-07-18 > stack's last_updated 2026-07-12) → slug: ai-augmented-recruiting-stack
 - refresh: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03) → slug: ai-augmented-recruiting-stack
 - refresh: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03) → slug: ai-native-crm-stack
@@ -415,6 +415,20 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:recruiting] loxo — material (now publishes Core $149/user/mo and Professional $199/user/mo billed annually plus Boost credit add-ons; entry says custom / no public price; found by tier-A verify 2026-08-14)
 - refresh:C: [type:tool] [vertical:revops] lusha — material (ships an official MCP server (docs.lusha.com/mcp-docs) so mcp_available false is stale; pricing page 403s to WebFetch and curl and renders only a consent shell in-browser, so the tier list needs a browser-verified pass; found by tier-A verify 2026-08-14)
 - refresh:C: [type:tool] [vertical:revops] make — material (Make MCP Server now shipped so mcp_available false is stale; pricing verified unchanged at Core $9; found by tier-A verify 2026-08-14)
+- refresh:C: [type:tool] [vertical:revops] slack — material (Slack shipped an official remote MCP server at mcp.slack.com, GA 2026-02-17 with OAuth + admin-managed connections, so mcp_available false is stale; pricing structure Free/Pro/Business+/Enterprise+ unchanged but the body needs the agent-access framing)
+- refresh:C: [type:tool] [vertical:customer-success] smartkarrot — material (no longer quote-only -- smartkarrot.com/pricing now publishes Basic at $15,000/year for 5 users, with Growth/Pro/Enterprise still contact-sales; entry says pricing_model custom / pricing_starts_at null)
+- refresh:C: [type:tool] [vertical:recruiting] smartrecruiters — material (no longer quote-only -- Essential now publishes "Starting at $14,995" while Professional/High Volume/Complete stay request-pricing; entry says custom / null and pricing_url still points at /contact-us/)
+- refresh:C: [type:tool] [vertical:customer-success] sprig — material (published pricing withdrawn -- sprig.com/pricing is now demo-gated with zero dollar figures and no free tier shown, only "pricing scales with your research program"; entry says freemium / $175)
+- refresh:C: [type:tool] [vertical:recruiting] testgorilla — material (Core is now $142/mo ($1,704 annual) against the entry's $75 -- a 89% move -- and Plus starts from $400/mo; a $0 Free plan with 10 credits/mo also means pricing_model flat should be freemium)
+- refresh:C: [type:tool] [vertical:revops] unify — material (pricing fully restructured to Free $0 / Base $20 per seat/mo with 800 credits / Pro $60 per seat/mo with 2,400 credits / Business custom; entry says usage-based / $700)
+- refresh:C: [type:tool] [vertical:customer-success] userflow — material (entry's $240 flat entry price does not appear anywhere on the live pricing page, which returns $10/$15/$20/$25/$30/$100/$425/$500 in raw HTML and 403s to a plain fetch; needs a rendered read before any number is published)
+- refresh:C: [type:tool] [vertical:revops] usergems — material (no longer quote-only -- usergems.com/pricing now publishes Core $3,000/mo ($36k/yr), Advanced $6,250/mo ($75k/yr) and Elite $12,500/mo ($150k/yr), with only Enterprise on contact; entry says custom / null and pricing_url points at /contact)
+- refresh:B: [type:tool] [vertical:customer-success] userpilot — pricing patch (Starter $299/mo holds, but Growth now publishes "From $849/mo" and both tiers carry hard caps -- Starter 3 seats / 2,000 MAU, Growth 15 seats / up to 100k MAU; the six Pricing sections still treat everything above entry as quote-only. Frontmatter is correct, do not bump last_updated)
+- refresh:B: [type:tool] [vertical:revops] vidyard — pricing patch (frontmatter freemium / $59 still holds -- $0 and $59 both present on the live page -- but the Teams tier moved from a published $99/user/mo to "Custom pricing", the page now surfaces $24 and $29 figures the body does not explain, and a Video Agent add-on line is unreflected; needs a rendered read, do not bump last_updated)
+- refresh:C: [type:tool] [vertical:revops] vitally — material (Vitally ships an official hosted MCP server so mcp_available false is stale; pricing verified unchanged 2026-08-15 -- Tech-Touch/Hybrid-Touch/High-Touch all still Request Pricing -- so this is a body/agent-access re-author, not a pricing patch)
+- refresh:C: [type:tool] [vertical:revops] warmly — material (the free tier is gone and warmly.ai/p/pricing now sells three annual products -- AI Web-Deanonymization $10,000/yr, Inbound Chat $20,000/yr, AI Inbound Autopilot $30,000/yr, with quarterly options and $10,000/yr add-ons; entry says freemium / $0)
+- refresh:B: [type:tool] [vertical:recruiting] wellfound — pricing patch (freemium / $0 both still hold, but the named tiers are entirely replaced -- Reach now runs Explore $0 / Starter $135 per seat/mo / Growth $199 per seat/mo / Scale custom, plus Autopilot at $500/mo per open role with a 10% placement fee; the body still names a "Recruit Pro -- $349/month" tier that no longer exists. Do not bump last_updated)
+- refresh:C: [type:tool] [vertical:recruiting] workable — material (Standard is now $299/mo against the entry's $169 -- a 77% move -- with Premier $599/mo and Enterprise $719/mo; the whole ladder needs rewriting)
 
 ## Tools
 
