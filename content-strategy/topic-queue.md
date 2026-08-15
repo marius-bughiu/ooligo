@@ -270,27 +270,27 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] sense — pricing never verified (no pricing_checked field; SLA 60d) → slug: sense
 - refresh:A: [type:tool] [vertical:revops] sierra — pricing never verified (no pricing_checked field; SLA 60d) → slug: sierra
 - refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing never verified (no pricing_checked field; SLA 60d) → skip: verified 2026-08-04, material — sirionlabs.com 301s to sirion.ai; acquisition by Haveli Investments Jan 2026 to confirm — requeued as refresh:C: below
-- refresh:A: [type:tool] [vertical:revops] slack — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] smartkarrot — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] smartlead — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] smartrecruiters — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] sprig — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] supio — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] testgorilla — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] totango — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] unify — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] userflow — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] usergems — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] userpilot — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] velaris — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] vervoe — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] vidyard — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] vitally — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] warmly — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] wellfound — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] workable — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] zapier — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] zendesk — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] slack — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] smartkarrot — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:revops] smartlead — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] smartrecruiters — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] sprig — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:legal-ops] supio — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] testgorilla — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] totango — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:revops] unify — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] userflow — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:revops] usergems — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] userpilot — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] velaris — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] vervoe — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:revops] vidyard — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:revops] vitally — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:revops] warmly — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] wellfound — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:recruiting] workable — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:revops] zapier — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
+- refresh:A: [type:tool] [vertical:customer-success] zendesk — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-15T05:00:00Z
 - refresh: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (juicebox refreshed 2026-07-18 > stack's last_updated 2026-07-12) → slug: ai-augmented-recruiting-stack
 - refresh: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (claude refreshed 2026-07-08 > stack's last_updated 2026-05-03) → slug: ai-augmented-recruiting-stack
 - refresh: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (clay refreshed 2026-07-09 > stack's last_updated 2026-05-03) → slug: ai-native-crm-stack
