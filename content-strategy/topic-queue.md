@@ -328,7 +328,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh: [type:tool] [vertical:revops] sales-navigator — pricing 63d stale (last_updated 2026-05-03, SLA 60d) → slug: sales-navigator
 - refresh: [type:tool] [vertical:revops] salesloft — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: salesloft
 - refresh: [type:tool] [vertical:recruiting] sense — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: sense
-- refresh: [type:tool] [vertical:legal-ops] spellbook — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → claimed: refresh 2026-08-15T05:12:00Z
+- refresh: [type:tool] [vertical:legal-ops] spellbook — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: spellbook
 - refresh: [type:tool] [vertical:legal-ops] thomson-reuters-cocounsel — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
 - refresh: [type:tool] [vertical:revops] zoominfo — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
 - refresh:C: [type:tool] [vertical:revops] aisdr — material (pricing restructured — Solo $250/mo is the new floor (entry says $900 flat), tiers Solo/Explore/Scale; found by tier-A verify 2026-07-26) → slug: aisdr
