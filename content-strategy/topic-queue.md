@@ -429,6 +429,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:revops] warmly — material (the free tier is gone and warmly.ai/p/pricing now sells three annual products -- AI Web-Deanonymization $10,000/yr, Inbound Chat $20,000/yr, AI Inbound Autopilot $30,000/yr, with quarterly options and $10,000/yr add-ons; entry says freemium / $0)
 - refresh:B: [type:tool] [vertical:recruiting] wellfound — pricing patch (freemium / $0 both still hold, but the named tiers are entirely replaced -- Reach now runs Explore $0 / Starter $135 per seat/mo / Growth $199 per seat/mo / Scale custom, plus Autopilot at $500/mo per open role with a 10% placement fee; the body still names a "Recruit Pro -- $349/month" tier that no longer exists. Do not bump last_updated)
 - refresh:C: [type:tool] [vertical:recruiting] workable — material (Standard is now $299/mo against the entry's $169 -- a 77% move -- with Premier $599/mo and Enterprise $719/mo; the whole ladder needs rewriting)
+- refresh:C: [type:tool] [vertical:revops] smartlead — material (pricing verified unchanged 2026-08-15 against smartlead.ai/pricing.md — Base $39 / Pro $94 / Unlimited Smart $174 / Unlimited Prime $379 all hold — but mcp_available false and ai_native false are both stale: Smartlead runs an official MCP server (llms.txt states "116+ tools across 6 categories") and ships 7 named SmartAgents. Also fix the load-bearing claim at lemlist.mdx:35 that neither Smartlead nor Instantly has shipped an MCP server)
 
 ## Tools
 
