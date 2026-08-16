@@ -329,8 +329,8 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh: [type:tool] [vertical:revops] salesloft — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: salesloft
 - refresh: [type:tool] [vertical:recruiting] sense — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: sense
 - refresh: [type:tool] [vertical:legal-ops] spellbook — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → slug: spellbook
-- refresh: [type:tool] [vertical:legal-ops] thomson-reuters-cocounsel — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
-- refresh: [type:tool] [vertical:revops] zoominfo — pricing 64d stale (last_updated 2026-05-02, SLA 60d)
+- refresh: [type:tool] [vertical:legal-ops] thomson-reuters-cocounsel — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → claimed: refresh 2026-08-16T05:40:00Z
+- refresh: [type:tool] [vertical:revops] zoominfo — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → claimed: refresh 2026-08-16T05:40:00Z
 - refresh:C: [type:tool] [vertical:revops] aisdr — material (pricing restructured — Solo $250/mo is the new floor (entry says $900 flat), tiers Solo/Explore/Scale; found by tier-A verify 2026-07-26) → slug: aisdr
 - refresh:C: [type:tool] [vertical:customer-success] amplitude — material (Plus tier restructured from $49/mo flat to usage-scaled "starts at $0"; Free now 2M events/mo; found by tier-A verify 2026-07-26) → slug: amplitude
 - refresh:C: [type:tool] [vertical:recruiting] ashby — material (Foundations now publishes $400/mo (entry has null); MCP server now available; found by tier-A verify 2026-07-26)
@@ -430,8 +430,8 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:B: [type:tool] [vertical:recruiting] wellfound — pricing patch (freemium / $0 both still hold, but the named tiers are entirely replaced -- Reach now runs Explore $0 / Starter $135 per seat/mo / Growth $199 per seat/mo / Scale custom, plus Autopilot at $500/mo per open role with a 10% placement fee; the body still names a "Recruit Pro -- $349/month" tier that no longer exists. Do not bump last_updated)
 - refresh:C: [type:tool] [vertical:recruiting] workable — material (Standard is now $299/mo against the entry's $169 -- a 77% move -- with Premier $599/mo and Enterprise $719/mo; the whole ladder needs rewriting)
 - refresh:C: [type:tool] [vertical:revops] smartlead — material (pricing verified unchanged 2026-08-15 against smartlead.ai/pricing.md — Base $39 / Pro $94 / Unlimited Smart $174 / Unlimited Prime $379 all hold — but mcp_available false and ai_native false are both stale: Smartlead runs an official MCP server (llms.txt states "116+ tools across 6 categories") and ships 7 named SmartAgents. Also fix the load-bearing claim at lemlist.mdx:35 that neither Smartlead nor Instantly has shipped an MCP server)
-- refresh:A: [type:tool] [vertical:legal-ops] thomson-reuters-cocounsel — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] zoominfo — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] thomson-reuters-cocounsel — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-16T05:40:00Z
+- refresh:A: [type:tool] [vertical:revops] zoominfo — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-08-16T05:40:00Z
 
 ## Tools
 
