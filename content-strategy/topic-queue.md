@@ -333,7 +333,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh: [type:tool] [vertical:revops] zoominfo — pricing 64d stale (last_updated 2026-05-02, SLA 60d) → skip: verified 2026-08-16, positioning moved — superseded by the refresh:C: item below
 - refresh:C: [type:tool] [vertical:revops] aisdr — material (pricing restructured — Solo $250/mo is the new floor (entry says $900 flat), tiers Solo/Explore/Scale; found by tier-A verify 2026-07-26) → slug: aisdr
 - refresh:C: [type:tool] [vertical:customer-success] amplitude — material (Plus tier restructured from $49/mo flat to usage-scaled "starts at $0"; Free now 2M events/mo; found by tier-A verify 2026-07-26) → slug: amplitude
-- refresh:C: [type:tool] [vertical:recruiting] ashby — material (Foundations now publishes $400/mo (entry has null); MCP server now available; found by tier-A verify 2026-07-26) → claimed: refresh 2026-08-16T17:10:37Z
+- refresh:C: [type:tool] [vertical:recruiting] ashby — material (Foundations now publishes $400/mo (entry has null); MCP server now available; found by tier-A verify 2026-07-26) → slug: ashby
 - refresh:C: [type:tool] [vertical:revops] attio — material (MCP server now available on all paid tiers; published seat price needs USD re-verification (page served EUR); found by tier-A verify 2026-07-26)
 - refresh:C: [type:tool] [vertical:recruiting] bamboohr — material (now publishes Core $10 / Pro $17 / Elite $25 per employee/mo (entry says 6); $250/mo flat floor under 25 employees; found by tier-A verify 2026-07-26)
 - refresh:C: [type:tool] [vertical:recruiting] beamery — material (pricing verified unchanged (custom/contact-sales) but body L53 carries banned vocab "turnkey" — needs body fix plus stamp; found by tier-A verify 2026-07-26)
