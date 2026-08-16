@@ -3308,3 +3308,260 @@ Selection this run was round-robined across source types (comparisons → workfl
 
 - **41 EN internal links (366 across all 6 locales) written without a locale prefix** — `](/tools/hirevue)` instead of `](/en/tools/hirevue/)`. There is no `/tools/` route, so all of them are 404s. EN files: `tools/en/sapia-ai.mdx` (9), `micro1.mdx` (7), `apriora.mdx` (6), `fetcher.mdx` (6), `seekout.mdx` (6), `onit.mdx` (4), `brightflag.mdx` (2), `hebbia.mdx` (1).
 - `tools/*/dealhub.mdx` links to `learn/cpq-configure-price-quote` twice in the same body (all 6 locales) — pre-existing, violates the dedupe guardrail.
+
+
+## 2026-08-16
+
+### Auto-inserted this run (high confidence): 50 EN links across 24 entries (250 locale mirrors)
+
+- `inserted` [tools:luminance] → [tools:spellbook]: wrapped "Spellbook" in body (x5 occurrences, src ob=0, need 3)
+- `inserted` [tools:everlaw] → [tools:relativity]: wrapped "Relativity" in body (x4 occurrences, src ob=0, need 3)
+- `inserted` [tools:kustomer] → [tools:zendesk]: wrapped "Zendesk" in body (x4 occurrences, src ob=0, need 3)
+- `inserted` [tools:regie-ai] → [tools:outreach]: wrapped "Outreach" in body (x4 occurrences, src ob=0, need 3)
+- `inserted` [tools:regie-ai] → [tools:salesloft]: wrapped "Salesloft" in body (x4 occurrences, src ob=0, need 3)
+- `inserted` [tools:zendesk] → [tools:intercom]: wrapped "Intercom" in body (x4 occurrences, src ob=0, need 3)
+- `inserted` [tools:hebbia] → [tools:harvey]: wrapped "Harvey" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:kustomer] → [tools:intercom]: wrapped "Intercom" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:luminance] → [tools:harvey]: wrapped "Harvey" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:metaview] → [tools:ashby]: wrapped "Ashby" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:metaview] → [tools:greenhouse]: wrapped "Greenhouse" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:metaview] → [tools:lever]: wrapped "Lever" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:regie-ai] → [tools:aisdr]: wrapped "AiSDR" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:userflow] → [tools:pendo]: wrapped "Pendo" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:userpilot] → [tools:pendo]: wrapped "Pendo" in body (x3 occurrences, src ob=0, need 3)
+- `inserted` [tools:fathom] → [tools:gong]: wrapped "Gong" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:fathom] → [tools:hubspot]: wrapped "HubSpot" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:fathom] → [tools:salesforce]: wrapped "Salesforce" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:front] → [tools:zendesk]: wrapped "Zendesk" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:gem] → [tools:greenhouse]: wrapped "Greenhouse" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:greenhouse] → [tools:workday]: wrapped "Workday" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:harvey] → [tools:legora]: wrapped "Legora" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:harvey] → [tools:spellbook]: wrapped "Spellbook" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:heap] → [tools:catalyst]: wrapped "Catalyst" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:heap] → [tools:gainsight]: wrapped "Gainsight" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:heap] → [tools:hubspot]: wrapped "HubSpot" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:hebbia] → [tools:draftwise]: wrapped "DraftWise" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:hebbia] → [tools:luminance]: wrapped "Luminance" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:hireez] → [tools:seekout]: wrapped "SeekOut" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:ironclad] → [tools:linksquares]: wrapped "LinkSquares" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:logikcull] → [tools:relativity]: wrapped "Relativity" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:logikcull] → [learn:ediscovery]: wrapped "eDiscovery" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:luminance] → [tools:litera]: wrapped "Litera" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:outreach] → [tools:apollo]: wrapped "Apollo" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:outreach] → [tools:salesloft]: wrapped "Salesloft" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:rocketlane] → [tools:gainsight]: wrapped "Gainsight" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:sapia-ai] → [tools:workday]: wrapped "Workday" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:seekout] → [tools:linkedin-recruiter]: wrapped "LinkedIn Recruiter" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:userflow] → [tools:salesforce]: wrapped "Salesforce" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:userpilot] → [tools:amplitude]: wrapped "Amplitude" in body (x2 occurrences, src ob=0, need 3)
+- `inserted` [tools:apriora] → [tools:chatgpt]: wrapped "ChatGPT" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:apriora] → [tools:micro1]: wrapped "micro1" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:apriora] → [tools:smartrecruiters]: wrapped "SmartRecruiters" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:findem] → [tools:seekout]: wrapped "SeekOut" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:front] → [tools:churnzero]: wrapped "ChurnZero" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:gem] → [tools:ashby]: wrapped "Ashby" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:gem] → [tools:hireez]: wrapped "hireEZ" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:harvey] → [tools:chatgpt]: wrapped "ChatGPT" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:ironclad] → [tools:concord]: wrapped "Concord" in body (x1 occurrences, src ob=0, need 3)
+- `inserted` [tools:ironclad] → [tools:contractpodai]: wrapped "ContractPodAi" in body (x1 occurrences, src ob=0, need 3)
+
+### Blocked by the matcher, not by the content — German compound hyphenation (17)
+
+These are high-confidence in EN and present in every translation, but the mirror check requires a non-alphanumeric character after the brand name, and German writes `Salesforce-Integration`, `Slack-Thread`, `eDiscovery-Markt`. Relaxing the trailing boundary to allow a hyphen unblocks all 17 and is safe — `[Salesforce](/de/tools/salesforce/)-Integration` renders correctly. Every prior run's "target name absent from one translation" drop list was likely this same artifact.
+
+- `blocked-compound` [tools:everlaw] → [learn:ediscovery]: "eDiscovery" in EN body x2 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:everlaw] → [tools:ironclad]: "Ironclad" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:front] → [tools:hubspot]: "HubSpot" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:front] → [tools:salesforce]: "Salesforce" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:front] → [tools:slack]: "Slack" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:icertis] → [tools:ironclad]: "Ironclad" in EN body x2 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:luminance] → [tools:ironclad]: "Ironclad" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:metaview] → [tools:notion]: "Notion" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:outreach] → [tools:salesforce]: "Salesforce" in EN body x2 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:productboard] → [tools:gong]: "Gong" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:productboard] → [tools:hubspot]: "HubSpot" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:productboard] → [tools:intercom]: "Intercom" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:productboard] → [tools:salesforce]: "Salesforce" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:productboard] → [tools:slack]: "Slack" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:thomson-reuters-cocounsel] → [tools:casetext]: "Casetext" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [tools:zoominfo] → [tools:clay]: "Clay" in EN body x1 (src ob=0, need 3) — de:compound
+- `blocked-compound` [workflows:forecast-meeting-prep-skill] → [tools:slack]: "Slack" in EN body x1 (src ob=0, need 2) — de:compound
+
+### Dropped this run — target genuinely absent from at least one translation (5)
+
+- `dropped` [tools:relativity] → [learn:ediscovery]: "eDiscovery" in EN body x1 (src ob=0, need 3) — ja:absent, de:compound
+- `dropped` [workflows:salesforce-data-cleanup-skill] → [tools:slack]: "Slack" in EN body x1 (src ob=0, need 2) — ja:absent, de:compound
+- `dropped` [workflows:stage-progression-validator-skill] → [learn:forecast-accuracy]: "Forecast accuracy" in EN body x1 (src ob=1, need 1) — es:absent, pt-BR:absent, ja:absent, fr:absent, de:absent
+- `dropped` [workflows:weekly-pipeline-report-skill] → [tools:boostup]: "BoostUp" in EN body x1 (src ob=1, need 1) — ja:absent
+- `dropped` [workflows:weekly-pipeline-report-skill] → [tools:gong]: "Gong" in EN body x1 (src ob=1, need 1) — ja:absent
+
+### Deferred — ambiguous brand name, needs manual placement (8)
+
+- `ambiguous` [tools:delighted] → [tools:vitally]: "Vitally" in body x2, unlinked (src ob=2, need 1)
+- `ambiguous` [tools:front] → [tools:vitally]: "Vitally" in body x1, unlinked (src ob=0, need 3)
+- `ambiguous` [tools:heap] → [tools:vitally]: "Vitally" in body x2, unlinked (src ob=0, need 3)
+- `ambiguous` [tools:productboard] → [tools:vitally]: "Vitally" in body x1, unlinked (src ob=0, need 3)
+- `ambiguous` [tools:rocketlane] → [tools:vitally]: "Vitally" in body x2, unlinked (src ob=0, need 3)
+- `ambiguous` [tools:userpilot] → [tools:vitally]: "Vitally" in body x2, unlinked (src ob=0, need 3)
+- `ambiguous` [tools:zendesk] → [tools:vitally]: "Vitally" in body x2, unlinked (src ob=0, need 3)
+- `ambiguous` [workflows:competitive-battlecard-skill] → [tools:notion]: "Notion" in body x2, unlinked (src ob=0, need 2)
+
+### Deferred to a future run (high confidence in principle — name in body, unlinked, ≥1 shared vertical; not inserted due to the 50-link run cap, the per-target cap-2, or the per-entry cap-3) — 125
+
+- `deferred-high` [tools:apriora] → [learn:illinois-ai-video-interview-act]: "Illinois AI Video Interview Act" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:apriora] → [tools:workable]: "Workable" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:apriora] → [tools:workday]: "Workday" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:attio] → [tools:salesforce]: "Salesforce" in body x3, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:brightflag] → [tools:ironclad]: "Ironclad" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:brightflag] → [tools:juro]: "Juro" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:brightflag] → [tools:spellbook]: "Spellbook" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:chorus] → [tools:gong]: "Gong" in body x2, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:chorus] → [tools:salesforce]: "Salesforce" in body x2, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:delighted] → [tools:gainsight]: "Gainsight" in body x2, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:delighted] → [tools:hubspot]: "HubSpot" in body x2, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:delighted] → [tools:salesforce]: "Salesforce" in body x2, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:delighted] → [tools:slack]: "Slack" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:demandbase] → [tools:salesforce]: "Salesforce" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:eightfold] → [tools:workday]: "Workday" in body x2, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:eve-legal] → [tools:harvey]: "Harvey" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:eve-legal] → [tools:supio]: "Supio" in body x2, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:evenup] → [tools:supio]: "Supio" in body x2, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:everlaw] → [tools:harvey]: "Harvey" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:everlaw] → [tools:spellbook]: "Spellbook" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:fathom] → [tools:chorus]: "Chorus" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:front] → [tools:gainsight]: "Gainsight" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:front] → [tools:intercom]: "Intercom" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:gem] → [tools:lever]: "Lever" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:gem] → [tools:seekout]: "SeekOut" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:gong] → [tools:fathom]: "Fathom" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:gong] → [tools:granola]: "Granola" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:greenhouse] → [tools:ashby]: "Ashby" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:harvey] → [tools:thomson-reuters-cocounsel]: "Thomson Reuters CoCounsel" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:heap] → [tools:amplitude]: "Amplitude" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:heap] → [tools:churnzero]: "ChurnZero" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:heap] → [tools:mixpanel]: "Mixpanel" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:heap] → [tools:salesforce]: "Salesforce" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:hebbia] → [tools:kira-systems]: "Kira Systems" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:hebbia] → [tools:spellbook]: "Spellbook" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:hebbia] → [tools:thomson-reuters-cocounsel]: "Thomson Reuters CoCounsel" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:hightouch] → [tools:chatgpt]: "ChatGPT" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:hightouch] → [tools:claude]: "Claude" in body x2, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:hightouch] → [tools:gemini]: "Gemini Enterprise" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:hightouch] → [tools:salesforce]: "Salesforce" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:icertis] → [tools:harvey]: "Harvey" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:icertis] → [tools:spellbook]: "Spellbook" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:imanage] → [tools:chatgpt]: "ChatGPT" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:imanage] → [tools:claude]: "Claude" in body x2, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:imanage] → [tools:definely]: "Definely" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:imanage] → [tools:draftwise]: "DraftWise" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:imanage] → [tools:harvey]: "Harvey" in body x3, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:imanage] → [tools:litera]: "Litera" in body x1, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:imanage] → [tools:netdocuments]: "NetDocuments" in body x2, unlinked (src ob=1, need 2)
+- `deferred-high` [tools:ironclad] → [tools:harvey]: "Harvey" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:ironclad] → [tools:icertis]: "Icertis" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:ironclad] → [tools:slack]: "Slack" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:ironclad] → [tools:spellbook]: "Spellbook" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:kustomer] → [tools:help-scout]: "Help Scout" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:lexisnexis-protege] → [tools:harvey]: "Harvey" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:lexisnexis-protege] → [tools:legora]: "Legora" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:lexisnexis-protege] → [tools:thomson-reuters-cocounsel]: "Thomson Reuters CoCounsel" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:linksquares] → [tools:slack]: "Slack" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:logikcull] → [tools:reveal]: "Reveal" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:luminance] → [tools:kira-systems]: "Kira Systems" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:luminance] → [tools:legora]: "Legora" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:micro1] → [learn:illinois-ai-video-interview-act]: "Illinois AI Video Interview Act" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:outreach] → [learn:ai-sdr]: "AI SDR" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:outreach] → [tools:artisan]: "Artisan" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:outreach] → [tools:slack]: "Slack" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:productboard] → [tools:catalyst]: "Catalyst" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:productboard] → [tools:churnzero]: "ChurnZero" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:productboard] → [tools:claude]: "Claude" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:productboard] → [tools:gainsight]: "Gainsight" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:productboard] → [tools:pendo]: "Pendo" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:pylon] → [tools:claude]: "Claude" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:pylon] → [tools:hubspot]: "HubSpot" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:pylon] → [tools:salesforce]: "Salesforce" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:pylon] → [tools:slack]: "Slack" in body x4, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:regie-ai] → [tools:6sense]: "6sense" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:regie-ai] → [tools:artisan]: "Artisan" in body x3, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:regie-ai] → [tools:cognism]: "Cognism" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:regie-ai] → [tools:demandbase]: "Demandbase" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:regie-ai] → [tools:sales-navigator]: "LinkedIn Sales Navigator" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:regie-ai] → [tools:salesforce]: "Salesforce" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:regie-ai] → [tools:zoominfo]: "ZoomInfo" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:relativity] → [tools:logikcull]: "Logikcull" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:rocketlane] → [tools:catalyst]: "Catalyst" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:rocketlane] → [tools:churnzero]: "ChurnZero" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:rocketlane] → [tools:glean]: "Glean" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:rocketlane] → [tools:hubspot]: "HubSpot" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:rocketlane] → [tools:salesforce]: "Salesforce" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:sapia-ai] → [tools:avature]: "Avature" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:seekout] → [tools:chatgpt]: "ChatGPT" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:seekout] → [tools:claude]: "Claude" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:seekout] → [tools:workday]: "Workday" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:thomson-reuters-cocounsel] → [tools:harvey]: "Harvey" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:thomson-reuters-cocounsel] → [tools:spellbook]: "Spellbook" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:userflow] → [tools:amplitude]: "Amplitude" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:userflow] → [tools:hubspot]: "HubSpot" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:userflow] → [tools:intercom]: "Intercom" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:userpilot] → [tools:appcues]: "Appcues" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:userpilot] → [tools:churnzero]: "ChurnZero" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:userpilot] → [tools:gainsight]: "Gainsight" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:wellfound] → [tools:linkedin-recruiter]: "LinkedIn Recruiter" in body x1, unlinked (src ob=2, need 1)
+- `deferred-high` [tools:zendesk] → [tools:catalyst]: "Catalyst" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:zendesk] → [tools:gainsight]: "Gainsight" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:zendesk] → [tools:salesforce]: "Salesforce" in body x2, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:zoominfo] → [tools:apollo]: "Apollo" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [tools:zoominfo] → [tools:chorus]: "Chorus" in body x1, unlinked (src ob=0, need 3)
+- `deferred-high` [workflows:competitive-battlecard-skill] → [tools:claude]: "Claude" in body x5, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:competitive-battlecard-skill] → [tools:gong]: "Gong" in body x8, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:competitive-battlecard-skill] → [tools:salesforce]: "Salesforce" in body x4, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:forecast-meeting-prep-skill] → [tools:clari]: "Clari" in body x3, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:forecast-meeting-prep-skill] → [tools:claude]: "Claude" in body x4, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:forecast-meeting-prep-skill] → [tools:gong]: "Gong" in body x3, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:forecast-meeting-prep-skill] → [tools:salesforce]: "Salesforce" in body x3, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:nps-verbatim-triage-skill] → [tools:claude]: "Claude" in body x8, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:onboarding-plan-generator-skill] → [tools:claude]: "Claude" in body x7, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:pipeline-review-prompt-pack] → [tools:claude]: "Claude" in body x5, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:salesforce-data-cleanup-skill] → [tools:claude]: "Claude" in body x5, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:salesforce-data-cleanup-skill] → [tools:salesforce]: "Salesforce" in body x4, unlinked (src ob=0, need 2)
+- `deferred-high` [workflows:stage-progression-validator-skill] → [tools:clari]: "Clari" in body x1, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:stage-progression-validator-skill] → [tools:claude]: "Claude" in body x3, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:stage-progression-validator-skill] → [tools:gong]: "Gong" in body x12, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:stage-progression-validator-skill] → [tools:salesforce]: "Salesforce" in body x12, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:weekly-pipeline-report-skill] → [tools:clari]: "Clari" in body x5, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:weekly-pipeline-report-skill] → [tools:claude]: "Claude" in body x6, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:weekly-pipeline-report-skill] → [tools:hubspot]: "HubSpot" in body x11, unlinked (src ob=1, need 1)
+- `deferred-high` [workflows:weekly-pipeline-report-skill] → [tools:slack]: "Slack" in body x4, unlinked (src ob=1, need 1)
+
+### Below floor with no candidate at all (17)
+
+- comparisons:gem-vs-eightfold (ob=1, need 1)
+- comparisons:gem-vs-findem (ob=1, need 1)
+- learn:churn-rate-calculation (ob=1, need 1)
+- tools:6sense (ob=1, need 2)
+- tools:beamery (ob=2, need 1)
+- tools:chatgpt (ob=1, need 2)
+- tools:codesignal (ob=1, need 2)
+- tools:common-room (ob=2, need 1)
+- tools:contractpodai (ob=0, need 3)
+- tools:fetcher (ob=0, need 3)
+- tools:juro (ob=0, need 3)
+- tools:linear (ob=1, need 2)
+- tools:make (ob=2, need 1)
+- tools:mycase (ob=1, need 2)
+- tools:notion (ob=0, need 3)
+- tools:onit (ob=0, need 3)
+- tools:zapier (ob=2, need 1)
+
+### Below-floor summary (EN graph, post-insert; outbound = deduped body links only, matching prior runs)
+
+- Outbound < floor: tools 49, comparisons 2, workflows 8, learn 1, stacks 0 (pre-insert: tools 59, comparisons 2, workflows 8, learn 1, stacks 0).
+- Inbound < floor (needs OTHER entries to link in; backlog for freshness sweeps): tools 48, comparisons 148, workflows 30, learn 31, stacks 11.
+- Floor used is the one in `internal-link-prompt.md` (tools 3/2, others 2/1), matching every prior run. ARCHITECTURE.md §Cross-linking rules is stricter (tool page → 3 alternative tools + 1 comparison + 2 workflows + 2 learn = 8 outbound, by target type). Under the ARCHITECTURE floor essentially the whole catalog is below budget; the prompt says ARCHITECTURE wins, so this discrepancy needs a human decision — either relax ARCHITECTURE to the operational floor or plan a much larger link build-out.
+
+### Flagged — broken internal links, still not fixed (out of this routine's insert scope, carried from 2026-08-02)
+
+- **61 EN internal links (366 across all 6 locales) written without a locale prefix** — `](/tools/hirevue)` instead of `](/en/tools/hirevue/)`. There is no `/tools/` route, so all of them are 404s. EN files: `tools/en/sapia-ai.mdx` (14), `apriora.mdx` (11), `micro1.mdx` (10), `fetcher.mdx` (10), `seekout.mdx` (8), `onit.mdx` (5), `brightflag.mdx` (2), `hebbia.mdx` (1). This now also *blocks* the audit: those 7 entries read as outbound=0, but every high-confidence target is already linked (brokenly), so the dedupe guardrail correctly refuses to insert a second link to the same target. `tools:fetcher` and `tools:onit` are in the "no candidate at all" list purely for this reason. Repairing the prefixes would clear their floor with no new links at all.
+- **10 EN links (60 across all 6 locales) are locale-prefixed but use `/comparisons/` instead of the real `/vs/` route** — `](/en/comparisons/best-clm-platforms)`. `apps/web/src/pages/[locale]/` has no `comparisons` route, so these are 404s too. Distinct from the class above and not overlapping it. EN files: `comparisons/en/best-ai-tools-2026.mdx`, `churnzero-vs-vitally.mdx`, `fetcher-vs-gem.mdx`, `gumloop-vs-n8n.mdx`, `karat-vs-codesignal.mdx`, `unify-vs-11x.mdx`, `learn/en/signal-driven-vs-autonomous-ai-sdr.mdx`, `tools/en/legora.mdx`.
+- `tools/*/dealhub.mdx` links to `learn/cpq-configure-price-quote` twice in the same body (all 6 locales) — pre-existing, violates the dedupe guardrail.
