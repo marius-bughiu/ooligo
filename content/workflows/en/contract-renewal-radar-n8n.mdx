@@ -1,0 +1,84 @@
+---
+slug: contract-renewal-radar-n8n
+canonical_slug: contract-renewal-radar-n8n
+locale: en
+verticals: [legal-ops]
+title: Catch vendor renewal notice windows before they close with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, ironclad, docusign-iam, slack]
+roles: [legal-ops]
+difficulty: intermediate
+time_to_setup: 120min
+human_tested: false
+last_updated: "2026-08-16"
+---
+
+An n8n flow that reads your contract repository every weekday, computes the date each vendor agreement must be cancelled or renegotiated by — the notice deadline, not the expiration date — pulls seat utilization and quoted price change from your own tables, and posts a renew / renegotiate / terminate brief to the owner before that date passes. Costs about $0.05 to $0.07 per brief in Claude inference and roughly 22 n8n executions a month.
+
+The workflow ships in `apps/web/public/artifacts/contract-renewal-radar-n8n/contract-renewal-radar-n8n.json` (15 nodes, one schedule trigger). The three Postgres tables it needs are in the sibling `schema.sql`, and credential setup plus a seven-step verification sequence are in `_README.md`.
+
+## When to use
+
+You manage somewhere north of 40 vendor agreements, most of them auto-renewing, and they live in a repository with structured dates — Ironclad, Docusign Agreement Manager, or an equivalent that exposes expiration and renewal metadata over an API. Someone owns vendor spend and is accountable when a contract rolls at a price nobody agreed to. The win is not the alert; your CLM already sends alerts. The win is that the alert arrives keyed to the notice deadline, carries the utilization and price-change numbers the owner would otherwise go hunting for, and states a recommendation, so the decision happens in one message instead of three weeks of scheduling.
+
+## When NOT to use
+
+Skip this if your notice periods are not recorded anywhere machine-readable. The flow can compute a deadline from an expiration date and a notice period; it cannot read the notice clause out of a PDF, and a repository where that field is empty on most records will produce a radar built almost entirely on the 90-day default assumption. Extracting those clauses first is a different project and it is the one you actually need. Skip it if you have fewer than about 40 agreements, where a spreadsheet with four calendar reminders per contract genuinely wins. Skip it if procurement already runs a renewal calendar that people follow — this replaces a missing process, not a working one. And skip it if your notice clauses are written in business days rather than calendar days and you are not willing to shorten the alert tiers to compensate; the flow counts calendar days, which makes its deadline later than the real one.
+
+## Setup
+
+Run `schema.sql` first. It creates `vendor_context` (the spend and usage your CLM does not hold), `renewal_radar_log` (the audit trail and the deduplication key), and `renewal_decisions` (written by humans, and the only table your success metric can honestly read). Then import the JSON, wire the four placeholder credentials per the README, and confirm the workflow timezone matches the one your notice deadlines are governed by.
+
+The configuration that actually matters is a handful of constants at the top of two Code nodes. In `Normalize + Compute Notice Window`, `RENEWAL_FIELD_NAMES` maps the display names of your Ironclad record fields to the flow's internal shape — Ironclad record metadata field ids are per-tenant, so this is the one setting nobody can ship a working default for. `DEFAULT_NOTICE_DAYS` is 90 and `TIERS` fires nudges at 90, 60, 30 and 7 days before the deadline. In `Score + Route`, the utilization bands (0.40 and 0.70), the price-uplift threshold (10%), and the escalation floor ($50,000 a year) decide what gets recommended and who hears about it.
+
+Expect to tune those thresholds twice. Ship with the defaults, watch a quarter of routing decisions against what your team actually decided, and move the bands to match.
+
+## What the flow does
+
+`Daily Radar Run — 07:00 Weekdays` fires. `Load Radar State` reads which contracts were already nudged and at which tier. `Ironclad — Record Schema` resolves your tenant's field ids against `RENEWAL_FIELD_NAMES`, then `Ironclad — List Records` walks the executed-contract repository at `/public/api/v1/records` under the `public.records.readRecords` scope. `Docusign — List Agreements` does the same against the Agreement Manager API, whose Iris extraction returns `expiration_date`, `renewal_type`, `renewal_notice_date` and `total_agreement_value` as provisions. `Merge Contract Sources` appends both; disabling either node is how you run a single repository.
+
+`Normalize + Compute Notice Window` is where the real work happens, and it is deliberately boring arithmetic rather than a model call. It maps both sources into one shape, then computes `notice_deadline` as expiration minus the notice period, on UTC calendar-date boundaries so that daylight saving cannot move a legal date. Contracts inside the 90-day horizon get a tier; everything else is dropped. `New Tier Only` then discards any contract already notified at its current tier, which is what keeps this from posting the same 40 contracts every weekday.
+
+`Load Spend + Usage` pulls licensed and active seats, last-term and quoted-renewal values from `vendor_context`. `Claude — Renewal Brief` makes one Messages API call against `claude-sonnet-5` with adaptive thinking at medium effort, returning a JSON brief with a recommendation, a rationale capped at 60 words, up to three negotiation points, and an explicit list of fields it needed and did not receive. The system prompt forbids any figure not present in the supplied JSON, which is the failure mode that makes AI-drafted commercial briefs dangerous.
+
+`Score + Route` computes the recommendation deterministically from utilization and price change, then compares the model's answer to it. The arithmetic decides the route; the model writes the prose. Disagreement is itself a routing signal — it forces the contract to legal with both recommendations shown side by side. `Needs Legal Escalation` splits to `#legal-ops-renewals` or `#vendor-renewals`, and both branches terminate at `Upsert Radar Log`, which upserts on `contract_id` so a re-run after a partial failure is safe.
+
+## Cost reality
+
+Per brief: one Sonnet 5 call at 5 to 8k input tokens and 800 to 1,500 output tokens, plus adaptive thinking billed as output, so $0.05 to $0.07 at list pricing of $3 per million input and $15 per million output. A 400-contract portfolio typically pushes 30 to 40 contracts across a tier boundary monthly, which is $2 to $3 of inference.
+
+The n8n side is worth understanding because it inverts the usual per-item economics. The fan-out across contracts happens inside a single workflow run, so a weekday cron costs about 22 executions a month against the 2,500 included in n8n Cloud Starter at €24/month — under 1% of the entry tier, with workflows and users unlimited on every Cloud plan as of 2026.
+
+Against that, a single auto-renewal you did not intend on a mid-size contract is four figures at minimum. The economics are not the interesting part of this flow; the operational discipline is.
+
+## Success metric
+
+Track the share of renewal decisions recorded in `renewal_decisions` where `decided_on` is on or before `notice_deadline`. The query is at the bottom of `schema.sql`. Your baseline is whatever fraction currently gets decided before the window closes, which for most teams starting this is not a number anybody has ever measured — capture it for a quarter before claiming improvement.
+
+Do not track alerts sent. A flow that posts 40 messages nobody reads scores perfectly on that metric and has changed nothing. The secondary number worth watching is how many contracts arrive at their 7-day tier still undecided; if that count is not falling by the second quarter, the problem is ownership, not tooling.
+
+## vs alternatives
+
+Against the renewal alerts built into Ironclad and Docusign: those fire reliably and cost nothing extra, but they notify on a date and stop there. They cannot reach seat utilization sitting in a vendor admin console or a price quote sitting in an email, and they do not produce a recommendation, so the owner still has to assemble the decision themselves. That assembly is the step that slips. If your team consistently acts on the native alert, use the native alert.
+
+Against a SaaS management platform — the Zylo, Productiv and Vendr class — those buy you usage telemetry and renewal tracking as a product, which is genuinely more than this flow gives you on the usage side. They also cost real money, require their own integration project, and still hand the owner a dashboard rather than a decision. This flow is the right pick when you already have the contract data and the gap is the last mile.
+
+Against a DIY script on a cron: same logic, and you then own the retries, the credential rotation, the pagination, and the observability. The specific reason to build this in n8n is the per-node retry semantics on the Anthropic call and the visual execution log — when a new contract shape breaks the Normalize node, you can see which record did it.
+
+## Watch-outs
+
+**A missing notice period is the one value that silently breaks the whole flow.** Guard: `Normalize + Compute Notice Window` treats a null or negative notice period as `DEFAULT_NOTICE_DAYS` (90) rather than zero, and stamps `notice_source: 'assumed'`. Defaulting to zero would compute the notice deadline as the expiration date and mark the contract safe right up until it renews. Every card built on an assumed value says so on its first line, and assumed contracts are force-routed to legal regardless of value.
+
+**Ironclad record field ids are per-tenant, so a hardcoded mapping fails silently on someone else's instance.** Guard: the flow calls the record-schema endpoint at runtime and throws `schema_field_missing` if it cannot resolve the expiration or notice-period field. A loud failure at import is correct here; the alternative is a radar that runs clean and finds nothing.
+
+**Daily re-notification trains people to mute the channel, which produces exactly the missed deadline the flow exists to prevent.** Guard: `renewal_radar_log.last_tier_notified` is read by the `New Tier Only` node, so each contract posts once per tier boundary — four messages over 90 days, not sixty.
+
+**The model can produce a fluent brief on a contract whose usage data never loaded.** Guard: `Score + Route` computes the recommendation from arithmetic and treats the model's answer as advisory; when `context_complete` is false the deterministic path returns `renegotiate` and never `renew`, because absent data is not evidence that the current terms are fine. Disagreement between the two sets `model_agrees: false` and forces escalation with both answers shown.
+
+**Alert fatigue's quieter cousin: a brief that arrives with nobody's name on it.** Guard: `owner_email` is carried through from the repository and rendered on the owner-channel card. Contracts with no owner on file still post, but they land in the escalation channel — an unowned renewal is a legal-ops problem before it is a budget problem.
+
+## Stack
+
+n8n orchestrates. [Claude](/en/tools/claude/) Sonnet 5 drafts the brief through the Anthropic Messages API. [Ironclad](/en/tools/ironclad/) and [Docusign](/en/tools/docusign-iam/) are the contract repositories; either alone is sufficient. Postgres holds the spend and usage context, the radar log, and the decision record. [Slack](/en/tools/slack/) receives the owner nudges and the legal escalations.
+
+This is the operational layer on top of [contract lifecycle management](/en/learn/contract-lifecycle-management/) — the repository has to be populated and the notice periods have to be in it before any of this runs. Onboarding new vendors through a [vendor due diligence workflow](/en/learn/vendor-due-diligence-workflow/) is what keeps those fields populated going forward; this flow is what covers the agreements you signed before anyone was doing that.

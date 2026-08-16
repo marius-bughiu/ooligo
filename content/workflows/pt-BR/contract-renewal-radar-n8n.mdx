@@ -1,0 +1,84 @@
+---
+slug: contract-renewal-radar-n8n
+canonical_slug: contract-renewal-radar-n8n
+locale: pt-BR
+verticals: [legal-ops]
+title: "Detecte as janelas de aviso prévio de renovação de fornecedores antes que fechem com n8n"
+artifact_type: n8n-flow
+tools_used: [n8n, claude, ironclad, docusign-iam, slack]
+roles: [legal-ops]
+difficulty: intermediate
+time_to_setup: 120min
+human_tested: false
+last_updated: "2026-08-16"
+---
+
+Um flow n8n que lê seu repositório de contratos todo dia útil, calcula a data em que cada acordo com fornecedor precisa ser cancelado ou renegociado — o prazo de aviso prévio, não a data de vencimento —, puxa a utilização de licenças e a variação de preço cotada das suas próprias tabelas, e posta um brief de renovar / renegociar / encerrar para o responsável antes que essa data passe. Custa cerca de US$ 0,05 a US$ 0,07 por brief em inferência do Claude e aproximadamente 22 execuções de n8n por mês.
+
+O workflow vem em `apps/web/public/artifacts/contract-renewal-radar-n8n/contract-renewal-radar-n8n.json` (15 nodes, um trigger agendado). As três tabelas Postgres que ele precisa estão no arquivo irmão `schema.sql`, e a configuração de credenciais mais uma sequência de verificação de sete passos estão no `_README.md`.
+
+## Quando usar
+
+Você gerencia mais de 40 acordos com fornecedores, a maioria com renovação automática, e eles vivem em um repositório com datas estruturadas: Ironclad, Docusign Agreement Manager ou equivalente que exponha metadados de vencimento e renovação via API. Alguém é dono do gasto com fornecedores e responde quando um contrato renova a um preço que ninguém aprovou. O ganho não é o alerta; seu CLM já manda alertas. O ganho é que o alerta chega vinculado ao prazo de aviso prévio, traz os números de utilização e variação de preço que o responsável teria que caçar sozinho, e apresenta uma recomendação, de modo que a decisão acontece em uma única mensagem em vez de três semanas de agendamento.
+
+## Quando NÃO usar
+
+Pule isso se seus prazos de aviso prévio não estiverem registrados em nenhum lugar legível por máquina. O flow consegue calcular um prazo a partir de uma data de vencimento e um período de aviso prévio; ele não consegue ler a cláusula de aviso dentro de um PDF, e um repositório onde esse campo está vazio na maioria dos registros vai produzir um radar construído quase inteiramente sobre a premissa padrão de 90 dias. Extrair essas cláusulas primeiro é outro projeto e é o que você realmente precisa. Pule se você tem menos de uns 40 acordos, onde uma planilha com quatro lembretes de calendário por contrato ganha com folga. Pule se compras já opera um calendário de renovações que as pessoas seguem: isso substitui um processo ausente, não um que funciona. E pule se suas cláusulas de aviso prévio são escritas em dias úteis e você não estiver disposto a encurtar as faixas de alerta para compensar; o flow conta dias corridos, o que torna o prazo dele posterior ao real.
+
+## Setup
+
+Rode o `schema.sql` primeiro. Ele cria `vendor_context` (o gasto e uso que seu CLM não guarda), `renewal_radar_log` (a trilha de auditoria e a chave de deduplicação) e `renewal_decisions` (escrita por pessoas, e a única tabela que sua métrica de sucesso pode ler com honestidade). Depois importe o JSON, conecte as quatro credenciais placeholder conforme o README e confirme que o timezone do workflow bate com o que rege seus prazos de aviso prévio.
+
+A configuração que realmente importa são algumas constantes no topo de dois nodes Code. Em `Normalize + Compute Notice Window`, `RENEWAL_FIELD_NAMES` mapeia os nomes visíveis dos seus campos de registro do Ironclad para a estrutura interna do flow: os ids de campo de metadados de registro do Ironclad são específicos por tenant, então esse é o único ajuste para o qual ninguém consegue entregar um default funcional. `DEFAULT_NOTICE_DAYS` é 90 e `TIERS` dispara avisos a 90, 60, 30 e 7 dias antes do prazo. Em `Score + Route`, as faixas de utilização (0,40 e 0,70), o limite de aumento de preço (10%) e o piso de escalonamento (US$ 50.000 por ano) decidem o que é recomendado e quem fica sabendo.
+
+Espere ajustar esses limites duas vezes. Suba com os defaults, observe um trimestre de decisões de roteamento contra o que seu time de fato decidiu, e mova as faixas para bater.
+
+## O que o flow faz
+
+`Daily Radar Run — 07:00 Weekdays` dispara. `Load Radar State` lê quais contratos já receberam aviso e em qual faixa. `Ironclad — Record Schema` resolve os ids de campo do seu tenant contra `RENEWAL_FIELD_NAMES`, e então `Ironclad — List Records` percorre o repositório de contratos executados em `/public/api/v1/records` sob o scope `public.records.readRecords`. `Docusign — List Agreements` faz o mesmo contra a Agreement Manager API, cuja extração Iris devolve `expiration_date`, `renewal_type`, `renewal_notice_date` e `total_agreement_value` como provisions. `Merge Contract Sources` junta as duas fontes; desativar qualquer um dos nodes é como você opera com um repositório só.
+
+`Normalize + Compute Notice Window` é onde o trabalho real acontece, e é aritmética deliberadamente sem graça em vez de uma chamada a modelo. Ele mapeia as duas fontes para uma estrutura única e então calcula `notice_deadline` como vencimento menos o período de aviso prévio, sobre limites de data de calendário em UTC para que o horário de verão não consiga mover uma data legal. Contratos dentro do horizonte de 90 dias recebem uma faixa; todo o resto é descartado. `New Tier Only` então descarta qualquer contrato já notificado na faixa atual, que é o que impede de postar os mesmos 40 contratos todo dia útil.
+
+`Load Spend + Usage` puxa licenças contratadas e ativas, e os valores do período anterior e da renovação cotada de `vendor_context`. `Claude — Renewal Brief` faz uma chamada à Messages API contra `claude-sonnet-5` com thinking adaptativo em esforço médio, devolvendo um brief JSON com uma recomendação, uma justificativa limitada a 60 palavras, até três pontos de negociação e uma lista explícita dos campos que ele precisou e não recebeu. O system prompt proíbe qualquer número que não esteja presente no JSON fornecido, que é o modo de falha que torna perigosos os briefs comerciais redigidos por IA.
+
+`Score + Route` calcula a recomendação de forma determinística a partir da utilização e da variação de preço, e então compara a resposta do modelo com ela. A aritmética decide a rota; o modelo escreve o texto. A discordância é em si um sinal de roteamento: ela força o contrato para o jurídico com as duas recomendações lado a lado. `Needs Legal Escalation` divide para `#legal-ops-renewals` ou `#vendor-renewals`, e ambos os ramos terminam em `Upsert Radar Log`, que faz upsert em `contract_id` para que uma reexecução após falha parcial seja segura.
+
+## A realidade do custo
+
+Por brief: uma chamada ao Sonnet 5 com 5.000 a 8.000 tokens de entrada e 800 a 1.500 de saída, mais o thinking adaptativo cobrado como saída, então US$ 0,05 a US$ 0,07 no preço de tabela de US$ 3 por milhão de entrada e US$ 15 por milhão de saída. Um portfólio de 400 contratos costuma empurrar de 30 a 40 contratos para cruzar um limite de faixa por mês, o que dá US$ 2 a US$ 3 de inferência.
+
+Vale entender o lado do n8n porque ele inverte a economia usual por item. O fan-out entre contratos acontece dentro de uma única execução do workflow, então um cron em dias úteis custa cerca de 22 execuções por mês contra as 2.500 incluídas no n8n Cloud Starter a 24 EUR/mês: menos de 1% do plano de entrada, com workflows e usuários ilimitados em todos os planos Cloud desde 2026.
+
+Contra isso, uma única renovação automática não intencional em um contrato de porte médio custa no mínimo quatro dígitos. A economia não é a parte interessante deste flow; a disciplina operacional é.
+
+## Métrica de sucesso
+
+Acompanhe a proporção de decisões de renovação registradas em `renewal_decisions` onde `decided_on` é igual ou anterior a `notice_deadline`. A query está no final do `schema.sql`. Sua linha de base é a fração que hoje é decidida antes da janela fechar, que para a maioria dos times começando isso não é um número que alguém já tenha medido: capture por um trimestre antes de alegar melhoria.
+
+Não acompanhe alertas enviados. Um flow que posta 40 mensagens que ninguém lê tira nota máxima nessa métrica e não mudou nada. O número secundário que vale observar é quantos contratos chegam à faixa de 7 dias ainda sem decisão; se essa contagem não estiver caindo no segundo trimestre, o problema é de responsabilidade, não de ferramenta.
+
+## Contra as alternativas
+
+Contra os alertas de renovação nativos do Ironclad e do Docusign: eles disparam de forma confiável e não custam nada a mais, mas notificam em uma data e param aí. Eles não alcançam a utilização de licenças que vive num console de admin do fornecedor nem uma cotação que vive num email, e não produzem uma recomendação, então o responsável ainda precisa montar a decisão sozinho. Essa montagem é o passo que escorrega. Se seu time age de forma consistente sobre o alerta nativo, use o alerta nativo.
+
+Contra uma plataforma de gestão de SaaS — a categoria Zylo, Productiv e Vendr —: elas compram telemetria de uso e rastreio de renovações como produto, o que é genuinamente mais do que este flow entrega no lado do uso. Elas também custam dinheiro de verdade, exigem seu próprio projeto de integração, e ainda assim entregam ao responsável um dashboard em vez de uma decisão. Este flow é a escolha certa quando você já tem os dados de contrato e a lacuna é o último quilômetro.
+
+Contra um script próprio num cron: mesma lógica, e aí você assume os retries, a rotação de credenciais, a paginação e a observabilidade. A razão concreta para construir isso em n8n é a semântica de retry por node na chamada à Anthropic e o log visual de execução: quando a estrutura de um contrato novo quebra o node Normalize, você consegue ver qual registro causou.
+
+## Pontos de atenção
+
+**Um período de aviso prévio ausente é o único valor que quebra o flow em silêncio.** Guarda: `Normalize + Compute Notice Window` trata um período de aviso nulo ou negativo como `DEFAULT_NOTICE_DAYS` (90) em vez de zero, e carimba `notice_source: 'assumed'`. Usar zero como default calcularia o prazo de aviso como a data de vencimento e marcaria o contrato como seguro até o dia exato em que ele renova. Todo card construído sobre um valor presumido diz isso na primeira linha, e contratos presumidos são roteados ao jurídico à força, independente do valor.
+
+**Os ids de campo de registro do Ironclad são específicos por tenant, então um mapeamento fixo falha em silêncio na instância de outra pessoa.** Guarda: o flow chama o endpoint de schema de registros em tempo de execução e lança `schema_field_missing` se não conseguir resolver o campo de vencimento ou o de período de aviso. Uma falha barulhenta na importação é o certo aqui; a alternativa é um radar que roda limpo e não acha nada.
+
+**A renotificação diária treina as pessoas a silenciar o canal, o que produz exatamente o prazo perdido que o flow existe para evitar.** Guarda: o node `New Tier Only` lê `renewal_radar_log.last_tier_notified`, então cada contrato posta uma vez por limite de faixa — quatro mensagens em 90 dias, não sessenta.
+
+**O modelo consegue produzir um brief fluente sobre um contrato cujos dados de uso nunca carregaram.** Guarda: `Score + Route` calcula a recomendação por aritmética e trata a resposta do modelo como consultiva; quando `context_complete` é falso, o caminho determinístico devolve `renegotiate` e nunca `renew`, porque ausência de dados não é evidência de que os termos atuais estão bons. A discordância entre os dois seta `model_agrees: false` e força o escalonamento mostrando as duas respostas.
+
+**O primo silencioso da fadiga de alertas: um brief que chega sem o nome de ninguém.** Guarda: `owner_email` é carregado do repositório e renderizado no card do canal do responsável. Contratos sem responsável registrado ainda postam, mas caem no canal de escalonamento: uma renovação sem dono é um problema de Legal Ops antes de ser um problema de orçamento.
+
+## Stack
+
+n8n orquestra. [Claude](/pt-BR/tools/claude/) Sonnet 5 redige o brief pela Messages API da Anthropic. [Ironclad](/pt-BR/tools/ironclad/) e [Docusign](/pt-BR/tools/docusign-iam/) são os repositórios de contratos; qualquer um deles sozinho é suficiente. Postgres guarda o contexto de gasto e uso, o log do radar e o registro de decisões. [Slack](/pt-BR/tools/slack/) recebe os avisos aos responsáveis e os escalonamentos ao jurídico.
+
+Esta é a camada operacional sobre a [gestão do ciclo de vida de contratos](/pt-BR/learn/contract-lifecycle-management/): o repositório precisa estar populado e os períodos de aviso prévio precisam estar nele antes de qualquer coisa disso rodar. Integrar novos fornecedores por um [workflow de due diligence de fornecedores](/pt-BR/learn/vendor-due-diligence-workflow/) é o que mantém esses campos populados daqui pra frente; este flow é o que cobre os acordos que você assinou antes de alguém estar fazendo isso.

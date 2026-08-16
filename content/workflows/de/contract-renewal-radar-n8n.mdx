@@ -1,0 +1,84 @@
+---
+slug: contract-renewal-radar-n8n
+canonical_slug: contract-renewal-radar-n8n
+locale: de
+verticals: [legal-ops]
+title: "Kündigungsfristen bei Lieferantenverträgen mit n8n erkennen, bevor sie ablaufen"
+artifact_type: n8n-flow
+tools_used: [n8n, claude, ironclad, docusign-iam, slack]
+roles: [legal-ops]
+difficulty: intermediate
+time_to_setup: 120min
+human_tested: false
+last_updated: "2026-08-16"
+---
+
+Ein n8n Workflow, der Ihr Vertragsrepository an jedem Werktag ausliest, für jeden Lieferantenvertrag das Datum berechnet, bis zu dem gekündigt oder nachverhandelt werden muss — die Kündigungsfrist, nicht das Vertragsende —, Lizenznutzung und angebotene Preisänderung aus Ihren eigenen Tabellen zieht und dem verantwortlichen Owner ein Briefing mit der Empfehlung verlängern / nachverhandeln / beenden zustellt, bevor dieses Datum verstreicht. Kostet rund 0,05 bis 0,07 USD pro Briefing an Claude Inferenz und etwa 22 n8n Executions pro Monat.
+
+Der Workflow liegt in `apps/web/public/artifacts/contract-renewal-radar-n8n/contract-renewal-radar-n8n.json` (15 Nodes, ein Schedule Trigger). Die drei benötigten Postgres Tabellen stehen in der Nachbardatei `schema.sql`, das Einrichten der Credentials sowie eine siebenstufige Verifikationssequenz in der `_README.md`.
+
+## Wann Sie das einsetzen
+
+Sie verwalten mehr als etwa 40 Lieferantenverträge, überwiegend mit automatischer Verlängerung, und diese liegen in einem Repository mit strukturierten Datumsfeldern — Ironclad, Docusign Agreement Manager oder ein Äquivalent, das Ablauf- und Verlängerungsmetadaten über eine API bereitstellt. Jemand verantwortet die Lieferantenausgaben und muss geradestehen, wenn ein Vertrag sich zu einem Preis verlängert, dem niemand zugestimmt hat. Der Gewinn ist nicht die Benachrichtigung; Ihr CLM benachrichtigt bereits. Der Gewinn ist, dass die Benachrichtigung an die Kündigungsfrist gekoppelt ankommt, die Nutzungs- und Preisänderungszahlen mitbringt, die der Owner sonst selbst zusammensuchen müsste, und eine Empfehlung ausspricht. Die Entscheidung fällt damit in einer Nachricht statt in drei Wochen Terminfindung.
+
+## Wann Sie das NICHT einsetzen
+
+Lassen Sie es, wenn Ihre Kündigungsfristen nirgendwo maschinenlesbar erfasst sind. Der Workflow kann eine Frist aus Ablaufdatum und Kündigungsfrist berechnen; er kann die Kündigungsklausel nicht aus einem PDF lesen, und ein Repository, in dem dieses Feld bei den meisten Datensätzen leer ist, erzeugt ein Radar, das fast vollständig auf der Standardannahme von 90 Tagen beruht. Diese Klauseln zuerst zu extrahieren ist ein eigenes Projekt und genau das, was Sie tatsächlich brauchen. Lassen Sie es bei weniger als etwa 40 Verträgen, wo eine Tabelle mit vier Kalendererinnerungen pro Vertrag klar gewinnt. Lassen Sie es, wenn der Einkauf bereits einen Verlängerungskalender führt, an den sich die Leute halten: Dies ersetzt einen fehlenden Prozess, keinen funktionierenden. Und lassen Sie es, wenn Ihre Kündigungsklauseln in Werktagen statt Kalendertagen formuliert sind und Sie die Alarmstufen nicht entsprechend verkürzen wollen; der Workflow zählt Kalendertage, wodurch seine Frist später liegt als die tatsächliche.
+
+## Einrichtung
+
+Führen Sie zuerst `schema.sql` aus. Es legt `vendor_context` an (die Ausgaben- und Nutzungsdaten, die Ihr CLM nicht hält), `renewal_radar_log` (Audit Trail und Deduplizierungsschlüssel) sowie `renewal_decisions` (von Menschen geschrieben und die einzige Tabelle, die Ihre Erfolgsmetrik ehrlich auslesen kann). Importieren Sie danach das JSON, verdrahten Sie die vier Platzhalter-Credentials gemäß README und prüfen Sie, dass die Zeitzone des Workflows der entspricht, nach der sich Ihre Kündigungsfristen richten.
+
+Die Konfiguration, auf die es wirklich ankommt, sind einige Konstanten am Anfang zweier Code Nodes. In `Normalize + Compute Notice Window` bildet `RENEWAL_FIELD_NAMES` die Anzeigenamen Ihrer Ironclad Record Felder auf die interne Struktur des Workflows ab: Die Ironclad Feld-IDs für Record Metadaten sind mandantenspezifisch, deshalb ist dies die einzige Einstellung, für die niemand einen funktionierenden Standardwert ausliefern kann. `DEFAULT_NOTICE_DAYS` steht auf 90, und `TIERS` löst Hinweise 90, 60, 30 und 7 Tage vor der Frist aus. In `Score + Route` entscheiden die Nutzungsbänder (0,40 und 0,70), die Schwelle für Preiserhöhungen (10%) und die Eskalationsgrenze (50.000 USD pro Jahr) darüber, was empfohlen wird und wer davon erfährt.
+
+Rechnen Sie damit, diese Schwellen zweimal nachzujustieren. Starten Sie mit den Standardwerten, beobachten Sie ein Quartal lang die Routing-Entscheidungen im Vergleich zu dem, was Ihr Team tatsächlich entschieden hat, und verschieben Sie die Bänder entsprechend.
+
+## Was der Workflow tut
+
+`Daily Radar Run — 07:00 Weekdays` löst aus. `Load Radar State` liest, welche Verträge bereits gemeldet wurden und in welcher Stufe. `Ironclad — Record Schema` löst die Feld-IDs Ihres Mandanten gegen `RENEWAL_FIELD_NAMES` auf, danach durchläuft `Ironclad — List Records` das Repository abgeschlossener Verträge unter `/public/api/v1/records` mit dem Scope `public.records.readRecords`. `Docusign — List Agreements` tut dasselbe gegen die Agreement Manager API, deren Iris Extraktion `expiration_date`, `renewal_type`, `renewal_notice_date` und `total_agreement_value` als Provisions zurückgibt. `Merge Contract Sources` hängt beide Quellen aneinander; einen der beiden Nodes zu deaktivieren ist der Weg, mit nur einem Repository zu arbeiten.
+
+`Normalize + Compute Notice Window` ist die Stelle, an der die eigentliche Arbeit passiert, und das ist bewusst schlichte Arithmetik statt eines Modellaufrufs. Der Node bildet beide Quellen auf eine Struktur ab und berechnet dann `notice_deadline` als Ablaufdatum minus Kündigungsfrist, auf UTC Kalendertagsgrenzen, damit die Sommerzeit ein juristisches Datum nicht verschieben kann. Verträge innerhalb des 90-Tage-Horizonts erhalten eine Stufe, alles andere entfällt. `New Tier Only` verwirft anschließend jeden Vertrag, der in seiner aktuellen Stufe bereits gemeldet wurde — das ist es, was verhindert, dass dieselben 40 Verträge jeden Werktag erneut gepostet werden.
+
+`Load Spend + Usage` zieht lizenzierte und aktive Seats sowie die Werte der letzten Laufzeit und des angebotenen Verlängerungspreises aus `vendor_context`. `Claude — Renewal Brief` macht einen Aufruf der Messages API gegen `claude-sonnet-5` mit adaptivem Thinking auf mittlerem Effort und liefert ein JSON Briefing mit einer Empfehlung, einer auf 60 Wörter begrenzten Begründung, bis zu drei Verhandlungspunkten und einer expliziten Liste der Felder, die es benötigt und nicht erhalten hat. Der System Prompt verbietet jede Zahl, die nicht im übergebenen JSON steht — das ist der Fehlermodus, der KI-verfasste kommerzielle Briefings gefährlich macht.
+
+`Score + Route` berechnet die Empfehlung deterministisch aus Nutzung und Preisänderung und vergleicht dann die Antwort des Modells damit. Die Arithmetik entscheidet über den Weg, das Modell schreibt den Text. Uneinigkeit ist selbst ein Routing-Signal: Sie zwingt den Vertrag zur Rechtsabteilung, mit beiden Empfehlungen nebeneinander. `Needs Legal Escalation` verzweigt nach `#legal-ops-renewals` oder `#vendor-renewals`, und beide Zweige enden bei `Upsert Radar Log`, das auf `contract_id` upsertet, sodass ein erneuter Lauf nach einem Teilausfall gefahrlos ist.
+
+## Die Kostenrealität
+
+Pro Briefing: ein Sonnet 5 Aufruf mit 5.000 bis 8.000 Input Tokens und 800 bis 1.500 Output Tokens, dazu adaptives Thinking, das als Output abgerechnet wird — also 0,05 bis 0,07 USD bei Listenpreisen von 3 USD je Million Input und 15 USD je Million Output. Ein Portfolio von 400 Verträgen schiebt typischerweise 30 bis 40 Verträge pro Monat über eine Stufengrenze, was 2 bis 3 USD Inferenz ergibt.
+
+Die n8n Seite lohnt das Verständnis, weil sie die übliche Pro-Element-Ökonomie umdreht. Der Fan-out über die Verträge passiert innerhalb eines einzigen Workflow-Laufs, ein Werktags-Cron kostet also etwa 22 Executions pro Monat gegenüber den 2.500 im n8n Cloud Starter für 24 EUR/Monat — unter 1% des Einstiegstarifs, bei unbegrenzten Workflows und Nutzern in allen Cloud Tarifen seit 2026.
+
+Dem gegenüber steht eine einzige ungewollte automatische Verlängerung bei einem mittelgroßen Vertrag, die mindestens vierstellig kostet. Die Ökonomie ist nicht der interessante Teil dieses Workflows, die operative Disziplin ist es.
+
+## Erfolgsmetrik
+
+Messen Sie den Anteil der in `renewal_decisions` erfassten Verlängerungsentscheidungen, bei denen `decided_on` am oder vor `notice_deadline` liegt. Die Query steht am Ende von `schema.sql`. Ihre Ausgangsbasis ist der Anteil, der heute vor Fristablauf entschieden wird — für die meisten Teams, die hiermit starten, eine Zahl, die noch nie jemand gemessen hat. Erfassen Sie sie ein Quartal lang, bevor Sie eine Verbesserung behaupten.
+
+Messen Sie nicht die Zahl versendeter Benachrichtigungen. Ein Workflow, der 40 Nachrichten postet, die niemand liest, erreicht bei dieser Metrik die Bestnote und hat nichts verändert. Die zweite Zahl, die sich zu beobachten lohnt, ist, wie viele Verträge ihre 7-Tage-Stufe noch unentschieden erreichen. Sinkt dieser Wert bis zum zweiten Quartal nicht, liegt das Problem bei der Verantwortlichkeit, nicht beim Tool.
+
+## Im Vergleich zu den Alternativen
+
+Gegenüber den in Ironclad und Docusign eingebauten Verlängerungshinweisen: Die laufen zuverlässig und kosten nichts extra, aber sie benachrichtigen zu einem Datum und hören dort auf. Sie erreichen weder die Lizenznutzung in einer Admin-Konsole des Anbieters noch ein Angebot, das in einer E-Mail liegt, und sie liefern keine Empfehlung — der Owner muss die Entscheidung also weiterhin selbst zusammenbauen. Genau dieser Zusammenbau ist der Schritt, der liegen bleibt. Wenn Ihr Team konsequent auf den nativen Hinweis reagiert, nutzen Sie den nativen Hinweis.
+
+Gegenüber einer SaaS Management Plattform — der Kategorie Zylo, Productiv und Vendr: Diese kaufen Ihnen Nutzungstelemetrie und Verlängerungsverfolgung als Produkt ein, was auf der Nutzungsseite tatsächlich mehr ist, als dieser Workflow bietet. Sie kosten aber echtes Geld, verlangen ein eigenes Integrationsprojekt und übergeben dem Owner am Ende trotzdem ein Dashboard statt einer Entscheidung. Dieser Workflow ist die richtige Wahl, wenn Sie die Vertragsdaten bereits haben und die Lücke die letzte Meile ist.
+
+Gegenüber einem eigenen Skript auf einem Cron: dieselbe Logik, und Sie verantworten dann Retries, Credential Rotation, Pagination und Observability. Der konkrete Grund, dies in n8n zu bauen, ist die Retry-Semantik pro Node beim Anthropic Aufruf und das visuelle Ausführungsprotokoll: Wenn eine neue Vertragsstruktur den Normalize Node bricht, sehen Sie, welcher Datensatz es war.
+
+## Fallstricke
+
+**Eine fehlende Kündigungsfrist ist der eine Wert, der den Workflow lautlos zerstört.** Absicherung: `Normalize + Compute Notice Window` behandelt eine leere oder negative Kündigungsfrist als `DEFAULT_NOTICE_DAYS` (90) statt als Null und setzt `notice_source: 'assumed'`. Ein Standardwert von Null würde die Kündigungsfrist auf das Ablaufdatum legen und den Vertrag bis zu dem Tag als sicher ausweisen, an dem er sich verlängert. Jede auf einem angenommenen Wert beruhende Karte sagt das in ihrer ersten Zeile, und angenommene Verträge werden unabhängig vom Wert zwingend an die Rechtsabteilung geleitet.
+
+**Ironclad Record Feld-IDs sind mandantenspezifisch, eine fest verdrahtete Zuordnung scheitert auf einer fremden Instanz also lautlos.** Absicherung: Der Workflow ruft den Record Schema Endpunkt zur Laufzeit auf und wirft `schema_field_missing`, wenn er das Ablauf- oder Kündigungsfristfeld nicht auflösen kann. Ein lautes Scheitern beim Import ist hier richtig; die Alternative ist ein Radar, das sauber läuft und nichts findet.
+
+**Tägliche Wiederholungsmeldungen erziehen die Leute dazu, den Kanal stummzuschalten, und erzeugen damit genau die verpasste Frist, die der Workflow verhindern soll.** Absicherung: Der Node `New Tier Only` liest `renewal_radar_log.last_tier_notified`, jeder Vertrag wird also einmal pro Stufengrenze gepostet — vier Nachrichten in 90 Tagen, nicht sechzig.
+
+**Das Modell kann ein flüssiges Briefing zu einem Vertrag verfassen, dessen Nutzungsdaten nie geladen wurden.** Absicherung: `Score + Route` berechnet die Empfehlung arithmetisch und behandelt die Modellantwort als beratend; ist `context_complete` falsch, liefert der deterministische Pfad `renegotiate` und niemals `renew`, denn fehlende Daten sind kein Beleg dafür, dass die aktuellen Konditionen in Ordnung sind. Uneinigkeit zwischen beiden setzt `model_agrees: false` und erzwingt die Eskalation mit beiden Antworten.
+
+**Der stillere Verwandte der Alarmmüdigkeit: ein Briefing, das ohne Namen ankommt.** Absicherung: `owner_email` wird aus dem Repository durchgereicht und auf der Karte im Owner-Kanal angezeigt. Verträge ohne hinterlegten Owner werden trotzdem gepostet, landen aber im Eskalationskanal — eine Verlängerung ohne Verantwortlichen ist ein Legal Ops Problem, bevor sie ein Budgetproblem ist.
+
+## Stack
+
+n8n orchestriert. [Claude](/de/tools/claude/) Sonnet 5 verfasst das Briefing über die Anthropic Messages API. [Ironclad](/de/tools/ironclad/) und [Docusign](/de/tools/docusign-iam/) sind die Vertragsrepositories; jedes für sich genügt. Postgres hält den Ausgaben- und Nutzungskontext, das Radar-Log und die Entscheidungshistorie. [Slack](/de/tools/slack/) empfängt die Owner-Hinweise und die Eskalationen an die Rechtsabteilung.
+
+Dies ist die operative Schicht über dem [Contract Lifecycle Management](/de/learn/contract-lifecycle-management/): Das Repository muss befüllt sein und die Kündigungsfristen müssen darin stehen, bevor irgendetwas davon läuft. Neue Lieferanten über einen [Vendor Due Diligence Workflow](/de/learn/vendor-due-diligence-workflow/) aufzunehmen hält diese Felder künftig befüllt; dieser Workflow deckt die Verträge ab, die Sie unterschrieben haben, bevor das jemand getan hat.
