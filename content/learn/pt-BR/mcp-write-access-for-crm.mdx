@@ -1,0 +1,120 @@
+---
+slug: mcp-write-access-for-crm
+canonical_slug: mcp-write-access-for-crm
+locale: pt-BR
+type: framework
+title: Acesso de escrita via MCP ao seu CRM
+verticals: [revops]
+related_tools: [salesforce, hubspot, claude]
+related_workflows: [crm-agent-access-audit-skill, mcp-server-salesforce-revops]
+target_questions:
+  - "devemos deixar o agente de AI de um fornecedor escrever no nosso CRM?"
+  - "quais scopes de MCP devemos conceder a um fornecedor de GTM?"
+  - "como auditamos o que um agente de AI alterou no Salesforce?"
+  - "é seguro dar acesso de escrita no HubSpot para um MCP server?"
+last_updated: "2026-08-17"
+---
+
+Conceda leitura primeiro e trate cada scope de escrita como uma decisão própria, com um responsável nomeado, um raio de impacto delimitado e um log que você consiga de fato ler depois. Para a maioria dos times de GTM, a sequência defensável é somente leitura nos primeiros 30 dias, depois criar-e-atualizar sobre um subconjunto nomeado de objetos, e nunca deletar nem escrever em massa a partir de uma sessão de agente que também ingere conteúdo inbound. O problema não é que os agentes sejam pouco confiáveis. É que os scopes de escrita do CRM são concedidos num grão mais grosso do que as decisões que você quer autorizar, e a trilha de auditoria que permitiria desfazer uma rodada ruim é um add-on pago nas duas plataformas principais.
+
+Esta página é o framework de decisão: o que você está de fato concedendo, as quatro perguntas que filtram cada nível, a escada a subir e o registro de concessão a manter. Ela pressupõe que você já sabe o que é um MCP server — se não, comece por [O que é um MCP server](/pt-BR/learn/mcp-server-explained/).
+
+## O que um scope de escrita realmente concede
+
+Sob a revisão 2025-11-25 do Model Context Protocol, um MCP server age como resource server de OAuth 2.1 e anuncia os próprios scopes. O client os descobre. Isso importa mais do que parece: a estratégia de seleção de scopes da especificação diz que, quando o challenge `401` do server não traz o parâmetro `scope`, o client pede todos os scopes listados em `scopes_supported`. Um client de AI de propósito geral não tem conhecimento de domínio para sub-selecionar, então pede o pacote inteiro e deixa o recorte para a tela de consentimento. **A decomposição em tools feita pelo fornecedor é a sua granularidade de permissão**, e você a herda tendo querido ou não.
+
+As duas plataformas de CRM decompuseram em direções opostas.
+
+A Salesforce dividiu a superfície por verbo em servers hospedados separados, GA em 29 de abril de 2026: `platform/sobject-reads` (ler e consultar, sem mutações), `platform/sobject-mutations` (criar e atualizar, sem deletar), `platform/sobject-deletes` e `platform/sobject-all` (CRUD completo). Cada server fica inativo até um admin ligá-lo, e a Salesforce criou um scope de OAuth dedicado, `mcp_api`, justamente para que conectar um agente não exija entregar o scope `api`, que dá acesso completo às Platform APIs.
+
+O HubSpot foi pelo caminho oposto. Seu server remoto em `mcp.hubspot.com` chegou a GA em 13 de abril de 2026 com um único tool de escrita, `manage_crm_objects`, cobrindo criar e atualizar em contatos, empresas, deals, tickets, line items, produtos e atividades. Não existe configuração em que um agente possa registrar uma ligação mas não alterar o valor de um deal — são o mesmo tool. Quotes, faturas, pedidos, carrinhos, assinaturas, segmentos e os objetos de marketing e conteúdo continuam somente leitura.
+
+Então o primeiro movimento em qualquer avaliação é pedir ao fornecedor a lista de tools e a lista de scopes antes da demo, não depois. Se a superfície de escrita é um tool que abrange seis objetos, sua pergunta de política deixa de ser "quais campos" — passa a ser "concedemos isso, afinal?".
+
+## O filtro das quatro perguntas
+
+Passe cada scope de escrita proposto por estas perguntas antes de concedê-lo. Um scope que falha em qualquer uma delas fica sem concessão.
+
+1. **Reversibilidade.** Se o agente escrever o valor errado, você consegue restaurar o valor anterior sem restaurar um backup? Histórico de campos e logs de atividade tornam uma sobrescrita reversível na mão. Um registro deletado ou uma duplicata mesclada, não.
+2. **Raio de impacto por chamada.** Quantos registros uma única chamada de tool consegue tocar? Fixe o teto na quantidade de registros que seu analista de ops corrigiria à mão em uma hora — um default de `[200]` para um time de RevOps de duas pessoas — e recuse qualquer tool de bulk ou de query-e-atualiza que não tenha parâmetro de limite.
+3. **Autor do registro.** Quando a escrita cai, o nome de quem fica lá? Se a resposta for "de quem configurou a conexão", a trilha de auditoria atribui ações do agente a uma pessoa que estava dormindo naquele momento.
+4. **Observabilidade.** Existe um log que distinga uma escrita do agente de uma escrita humana, por quanto tempo ele é retido e a sua edição o inclui? Responda isso antes de conceder, não depois do primeiro incidente.
+
+## A escada de escrita
+
+Suba um nível por vez, com um período fixo de permanência em cada um. Os níveis mapeiam para configuração real da plataforma, não para uma metáfora de maturidade.
+
+**Nível 0 — somente leitura.** O default e o estado de repouso correto para qualquer fornecedor que você rode há menos de 30 dias. Salesforce: ative só o `platform/sobject-reads`. HubSpot: conceda scopes de leitura e recuse `manage_crm_objects` na tela de consentimento. Quase todo o valor que os times esperam de um agente sobre o CRM — perguntas de pipeline, pesquisa de contas, preparação de reuniões, relatórios de higiene — está disponível aqui com risco de escrita zero.
+
+**Nível 1 — escritas aditivas em objetos do próprio agente.** Tarefas, notas e atividades registradas. A propriedade que define este nível é que o agente cria linhas novas e nunca sobrescreve um campo que uma pessoa preencheu. No Salesforce isso é `platform/sobject-mutations` com permissões de objeto limitadas a Task, Event e objetos de atividade customizados. No HubSpot este nível não existe como concessão separada: `manage_crm_objects` inclui escritas em deals e contatos no mesmo tool, então chegar ao Nível 1 no HubSpot significa aceitar permissões de Nível 2 e aplicar o recorte pelas permissões de objeto e propriedade do próprio usuário que conecta.
+
+**Nível 2 — criar e atualizar em objetos padrão nomeados.** Contatos, empresas e deals ou oportunidades, com segurança em nível de campo excluindo tudo que alimente remuneração ou o forecast do board — valor, data de fechamento, etapa e owner — até você ter rodado 30 dias limpos no Nível 2 sobre os campos restantes. O Salesforce aplica isso pela segurança em nível de campo do permission set do usuário conectado; os tools de MCP respeitam permissões de objeto, segurança em nível de campo e regras de sharing, então o permission set é a superfície de controle real, não a escolha do server.
+
+**Nível 3 — deletar, bulk e metadata.** `platform/sobject-deletes`, `platform/sobject-all` e os servers que alcançam o Setup. Conceda isso à sessão interativa de um admin humano para uma migração delimitada e revogue no mesmo dia. Não é uma concessão permanente para o agente de um fornecedor.
+
+## Isolamento por conta de serviço, e por que você não pode ter
+
+O instinto está certo — dê ao agente uma identidade própria em vez da de uma pessoa — mas as plataformas só suportam isso pela metade.
+
+Os MCP servers hospedados da Salesforce suportam apenas o authorization code flow. Não há fluxo machine-to-machine nem conexão por conta de serviço; uma pessoa se autentica e concede o acesso. Portanto toda escrita do agente cai sob um usuário real do Salesforce, com as permissões desse usuário e o nome desse usuário no histórico do registro. A versão praticável do isolamento é um usuário de integração dedicado e nomeado, com o próprio permission set, o próprio External Client App, uma app policy restrita a esse permission set, restrições de IP em App Authorization e um tempo de vida de token reduzido em relação ao default de um ano do External Client App. Valide o acesso resultante com o `runAs` do Apex antes de apontar produção para ele.
+
+O HubSpot declara a mesma herança de forma direta: todas as ações respeitam as permissões existentes do usuário que conecta, e usuários só conseguem ver e modificar registros que já alcançam. O controle, então, é o usuário a partir do qual você conecta. Conectar de uma conta de super-admin entrega ao agente alcance de escrita de super-admin em um clique.
+
+A regra que decorre dos dois: **nunca conecte um MCP server de CRM a partir da sessão de um administrador.** Crie o usuário primeiro, delimite-o, depois conecte.
+
+## Não existe dry run — três substitutos
+
+Nem o server hospedado da Salesforce nem o do HubSpot trazem modo dry-run ou de prévia para escritas, e o MCP não define nenhuma primitiva de dry run. Três coisas fazem as vezes disso:
+
+- **Sandbox primeiro.** A Salesforce publica um caminho de sandbox para seus servers hospedados (`/platform/mcp/v1/sandbox/...`) ao lado do de produção. Rode o agente contra um sandbox com dados representativos durante todo o período de permanência antes de apontá-lo para produção.
+- **Propor-depois-aplicar.** Mantenha o agente em `platform/sobject-reads` e faça-o emitir a mudança pretendida como IDs de registro mais valores antes/depois em nível de campo. Uma pessoa ou um processo com scope separado aplica o lote. Isso preserva quase todo o throughput e tira a autoridade de escrita do contexto do modelo por completo.
+- **Confirmação do lado do client.** A especificação do MCP diz que sempre deveria haver uma pessoa no loop com capacidade de negar a invocação de um tool, e que os clients deveriam mostrar ao usuário os inputs do tool antes de chamar o server. Verifique se o seu client faz as duas coisas de verdade — é um `SHOULD`, não um `MUST`, e os clients variam.
+
+Uma coisa que não é controle: as annotations de tools. A especificação é explícita ao dizer que clients devem tratar annotations como não confiáveis a menos que venham de um server confiável, então um `readOnlyHint` na definição de um tool é documentação, não enforcement. Somente leitura tem que ser aplicado na camada de scope, server e permission set, ou não está aplicado.
+
+## A trilha de auditoria, e o que ela custa
+
+A própria orientação de segurança da Salesforce é identificar o tráfego do agente no Event Log File Browser filtrando `API_CLIENT_CATEGORY` por `SALESFORCE_HOSTED_MCP`, e depois revisar `STATUS_CODE` para erros e `USER_NAME` e `CLIENT_IP` para anomalias. Isso funciona, com duas ressalvas que vale precificar antes de assinar: Event Monitoring exige Salesforce Shield ou o add-on de Event Monitoring fora da Developer Edition — só os eventos de login e logout são expostos gratuitamente — e os event log files vêm por default com cerca de um dia de retenção sem o add-on de retenção estendida.
+
+A API de atividade de conta e audit log do HubSpot é exclusiva de Enterprise, as visões dentro do produto mostram 30 dias, e ela não captura eventos de leitura, então um agente que exfiltra sem escrever não deixa rastro ali.
+
+Os dois fatos apontam para o mesmo lado: se a linha de orçamento da auditoria não sobreviveu à conversa de orçamento, o scope de escrita também não deveria sobreviver.
+
+## A prompt injection é a razão do teto de raio de impacto
+
+O caso concreto é o ForcedLeak. A Noma Security reportou à Salesforce em 28 de julho de 2025 e divulgou em 25 de setembro de 2025 com score CVSS de 9.4. Instruções do atacante ficaram embutidas em envios comuns do formulário Web-to-Lead, permaneceram inertes no CRM e executaram depois, quando um funcionário perguntou ao Agentforce sobre o lead — encadeadas com uma fraqueza no allowlist de Content Security Policy envolvendo um domínio expirado e comprável, para exfiltrar dados do CRM. A Salesforce liberou o Trusted URLs enforcement para Agentforce e Einstein em 8 de setembro de 2025.
+
+O ForcedLeak não foi uma vulnerabilidade de MCP, e citá-lo como tal seria errado. É a mesma classe de falha, e esse é justamente o ponto: qualquer agente que lê campos que um terceiro pode escrever está executando input não confiável, e um scope de escrita transforma isso de um problema de divulgação em um problema de integridade de dados. A regra operativa é que um agente cujo contexto inclui campos controláveis por um atacante — payloads de web-to-lead, corpos de email inbound, envios de formulário, transcrições de chat, currículos enviados — não tem scope de escrita na mesma sessão. Separe o trabalho de ler-conteúdo-não-confiável e o de escrever-no-CRM em duas conexões com duas identidades.
+
+## O registro de concessão
+
+Mantenha um destes por scope concedido, no mesmo lugar do seu registro de fornecedores. Leva cinco minutos e é o artefato que torna a revisão anual possível.
+
+```
+Vendor / server:      [vendor] — [server id, e.g. platform/sobject-mutations]
+Level granted:        [0-3]
+Objects + fields:     [explicit list; note excluded fields]
+Connecting identity:  [named integration user, not an admin]
+Blast radius cap:     [max records per call]
+Token lifetime:       [duration; ECA default is 1 year]
+Audit source:         [ELF filter / Account Activity API] — retention [N days]
+Untrusted-input rule: [does this session read outsider-writable fields? Y/N]
+Granted by / date:    [name] / [date]
+Review date:          [date + 90 days]
+Revocation steps:     [deactivate server / uninstall app / disable user]
+```
+
+## Pontos de atenção
+
+- **Um prompt de reconsentimento é uma mudança de scope.** O HubSpot não deixa você escolher scopes à mão; eles são determinados pelos tools presentes no server no momento da instalação mais o que o usuário conceder. Quando o HubSpot adiciona tools, as instalações existentes mostram `REQUIRES_REAUTHORIZATION` e a correção é desconectar e reconectar — o que reconcede contra o novo conjunto de tools, maior. **Guarda:** trate cada prompt de reautorização como um ticket de controle de mudanças e releia a tela de consentimento em vez de passar direto.
+- **Servers que você ativou para um piloto continuam ativados.** Os servers da Salesforce ficam inativos por default, o que protege você no dia um e não no dia noventa. **Guarda:** coloque o passo de desativação nos critérios de saída do piloto, e audite os servers ativos na data de revisão de 90 dias do registro de concessão.
+- **Configurações de dados sensíveis mudam a superfície em silêncio.** Com o Sensitive Data ativado no HubSpot, objetos de atividade e dados de conversas ficam bloqueados através do MCP server. **Guarda:** confirme a quais objetos o agente realmente chega no seu próprio portal, em vez de fazer isso pela documentação, porque a superfície efetiva difere conforme a configuração da conta.
+- **O usuário que conecta sofre desvio.** Permission sets são ampliados por um motivo não relacionado e o alcance do agente se amplia junto. **Guarda:** o usuário de integração tem exatamente um permission set, e esse permission set está atribuído a exatamente um usuário, de modo que uma ampliação não chegue como efeito colateral.
+
+## Relacionado
+
+- **[O que é um MCP server](/pt-BR/learn/mcp-server-explained/)** — a introdução que este framework pressupõe; leia antes se "suporte a MCP" na página de um fornecedor ainda for uma afirmação pouco familiar
+- **[Política de uso de AI para equipes de RevOps](/pt-BR/learn/ai-policy-for-revops-teams/)** — a política de uma página que envolve isto; este framework é a seção para a qual ela aponta quando trata de scopes de escrita no CRM
+- **[Agentic CRM](/pt-BR/learn/agentic-crm/)** — a categoria que torna esta decisão inevitável, já que a premissa de um agentic CRM é que o software é o autor principal do registro
+- **[Workflow de Due Diligence de Fornecedores](/pt-BR/learn/vendor-due-diligence-workflow/)** — a revisão de segurança e privacidade que roda antes desta decisão de concessão
+- **[Salesforce](/pt-BR/tools/salesforce/)** e **[HubSpot](/pt-BR/tools/hubspot/)** — as duas plataformas cuja decomposição em tools fixa a sua granularidade de permissão

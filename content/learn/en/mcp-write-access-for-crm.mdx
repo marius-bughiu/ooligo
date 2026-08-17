@@ -1,0 +1,120 @@
+---
+slug: mcp-write-access-for-crm
+canonical_slug: mcp-write-access-for-crm
+locale: en
+type: framework
+title: MCP write access for your CRM
+verticals: [revops]
+related_tools: [salesforce, hubspot, claude]
+related_workflows: [crm-agent-access-audit-skill, mcp-server-salesforce-revops]
+target_questions:
+  - "should we let a vendor's AI agent write to our CRM?"
+  - "what MCP scopes should we grant a GTM vendor?"
+  - "how do we audit what an AI agent changed in Salesforce?"
+  - "is it safe to give an MCP server write access to HubSpot?"
+last_updated: "2026-08-17"
+---
+
+Grant read first and treat every write scope as its own decision with a named owner, a bounded blast radius, and a log you can actually read afterwards. For most GTM teams the defensible sequence is read-only for the first 30 days, then create-and-update on a named subset of objects, and never delete or bulk-write from an agent session that also ingests inbound content. The problem is not that agents are unreliable. It is that CRM write scopes are granted at a coarser grain than the decisions you want to authorize, and the audit trail that would let you unwind a bad run is a paid add-on on both major platforms.
+
+This page is the decision framework: what you are actually granting, the four questions that gate each level, the ladder to climb, and the grant record to keep. It assumes you already know what an MCP server is — if not, start with [MCP server explained](/en/learn/mcp-server-explained/).
+
+## What a write scope actually grants
+
+Under the 2025-11-25 revision of the Model Context Protocol, an MCP server acts as an OAuth 2.1 resource server and advertises its own scopes. The client discovers them. That matters more than it sounds: the spec's scope-selection strategy says that when the server's `401` challenge carries no `scope` parameter, the client requests every scope listed in `scopes_supported`. A general-purpose AI client has no domain knowledge with which to sub-select, so it asks for the lot and leaves the narrowing to the consent screen. **The vendor's tool decomposition is your permission granularity**, and you inherit it whether or not you wanted it.
+
+The two CRM platforms decomposed it in opposite directions.
+
+Salesforce split the surface by verb across separate hosted servers, GA on 29 April 2026: `platform/sobject-reads` (read and query, no mutations), `platform/sobject-mutations` (create and update, no delete), `platform/sobject-deletes`, and `platform/sobject-all` (full CRUD). Every server is inactive until an admin turns it on, and Salesforce created a dedicated `mcp_api` OAuth scope specifically so that connecting an agent does not require handing over the `api` scope that grants full Platform API access.
+
+HubSpot went the other way. Its remote server at `mcp.hubspot.com` reached GA on 13 April 2026 with a single write tool, `manage_crm_objects`, covering create and update across contacts, companies, deals, tickets, line items, products, and activities. There is no configuration in which an agent can log a call but not change a deal amount — they are the same tool. Quotes, invoices, orders, carts, subscriptions, segments, and the marketing and content objects stay read-only.
+
+So the first move in any evaluation is to ask the vendor for the tool list and the scope list before the demo, not after. If the write surface is one tool spanning six objects, your policy question is no longer "which fields" — it is "do we grant this at all."
+
+## The four-question gate
+
+Run each proposed write scope through these before granting it. A scope that fails any one of them stays ungranted.
+
+1. **Reversibility.** If the agent writes the wrong value, can you restore the prior value without a backup restore? Field history and activity logs make an overwrite reversible by hand. A deleted record or a merged duplicate is not.
+2. **Blast radius per call.** How many records can a single tool call touch? Set the ceiling at the number of records your ops analyst could hand-correct in one hour — a default of `[200]` for a two-person RevOps team — and refuse any bulk or query-then-update tool that has no ceiling parameter.
+3. **Writer of record.** When the write lands, whose name is on it? If the answer is "whoever set up the connection," the audit trail attributes agent actions to a human who was asleep at the time.
+4. **Observability.** Is there a log that distinguishes an agent write from a human write, how long is it retained, and does your edition include it? Answer this before granting, not after the first incident.
+
+## The write ladder
+
+Climb one level at a time, with a fixed dwell period at each. The levels map to real platform configuration, not to a maturity metaphor.
+
+**Level 0 — read-only.** The default and the correct resting state for any vendor you have run for under 30 days. Salesforce: activate `platform/sobject-reads` only. HubSpot: grant read scopes and decline `manage_crm_objects` at the consent screen. Most of the value teams expect from a CRM agent — pipeline questions, account research, meeting prep, hygiene reporting — is available here at zero write risk.
+
+**Level 1 — additive writes to agent-owned objects.** Tasks, notes, and logged activities. The defining property is that the agent creates new rows and never overwrites a field a human set. On Salesforce this is `platform/sobject-mutations` with object permissions limited to Task, Event, and custom activity objects. On HubSpot this level does not exist as a separate grant: `manage_crm_objects` includes deal and contact writes in the same tool, so reaching Level 1 on HubSpot means accepting Level 2 permissions and enforcing the narrowing through the connecting user's own object and property permissions instead.
+
+**Level 2 — create and update on named standard objects.** Contacts, companies, and deals or opportunities, with field-level security excluding anything that feeds compensation or the board forecast — amount, close date, stage, and owner — until you have run 30 days clean at Level 2 on the remaining fields. Salesforce enforces this through field-level security on the connected user's permission set; the MCP tools respect object permissions, field-level security, and sharing rules, so the permission set is the real control surface, not the server choice.
+
+**Level 3 — delete, bulk, and metadata.** `platform/sobject-deletes`, `platform/sobject-all`, and the Setup-reaching servers. Grant this to a human admin's interactive session for a scoped migration and revoke it the same day. It is not a standing grant for a vendor agent.
+
+## Service-account isolation, and why you cannot have it
+
+The instinct is right — give the agent its own identity rather than a person's — but the platforms only half-support it.
+
+Salesforce hosted MCP servers support the authorization code flow only. There is no machine-to-machine flow and no service-account connection; a human authenticates and grants access. Every agent write therefore lands under a real Salesforce user, with that user's permissions and that user's name in the record history. The workable version of isolation is a dedicated named integration user with its own permission set, its own External Client App, an app policy restricted to that permission set, IP restrictions under App Authorization, and a token lifetime cut down from the one-year External Client App default. Validate the resulting access with Apex `runAs` before you point production at it.
+
+HubSpot states the same inheritance directly: all actions respect the connecting user's existing permissions, and users can only view and modify records they can already reach. The control is therefore the user you connect from. Connecting from a super-admin account hands the agent super-admin write reach in one click.
+
+The rule that falls out of both: **never connect a CRM MCP server from an administrator's session.** Create the user first, scope it, then connect.
+
+## There is no dry run — three substitutes
+
+Neither Salesforce's nor HubSpot's hosted server ships a dry-run or preview mode for writes, and MCP defines no dry-run primitive. Three things stand in for it:
+
+- **Sandbox first.** Salesforce publishes a sandbox path for its hosted servers (`/platform/mcp/v1/sandbox/...`) alongside production. Run the agent against a sandbox with representative data for the full dwell period before pointing it at production.
+- **Propose-then-apply.** Keep the agent on `platform/sobject-reads` and have it emit the intended change as record IDs plus field-level before/after values. A human or a separately scoped process applies the batch. This preserves most of the throughput and moves the write authority out of the model's context entirely.
+- **Client-side confirmation.** The MCP specification says there should always be a human in the loop able to deny a tool invocation, and that clients should show tool inputs to the user before calling the server. Verify your client actually does both — it is a `SHOULD`, not a `MUST`, and clients vary.
+
+One thing that is not a control: tool annotations. The spec is explicit that clients must treat annotations as untrusted unless they come from a trusted server, so a `readOnlyHint` on a tool definition is documentation, not enforcement. Read-only has to be enforced at the scope, server, and permission-set layer or it is not enforced.
+
+## The audit trail, and what it costs
+
+Salesforce's own security guidance is to identify agent traffic in the Event Log File Browser by filtering `API_CLIENT_CATEGORY` for `SALESFORCE_HOSTED_MCP`, then review `STATUS_CODE` for errors and `USER_NAME` and `CLIENT_IP` for anomalies. That works, with two caveats worth pricing before you sign: Event Monitoring requires Salesforce Shield or the Event Monitoring add-on outside Developer Edition — only login and logout events are exposed free — and event log files default to roughly one day of retention without the extended-retention add-on.
+
+HubSpot's account activity and audit-log API is Enterprise-only, the in-app views show 30 days, and it does not capture read events at all, so an agent that exfiltrates without writing leaves no trace in it.
+
+Both facts point the same way: if the audit line item did not survive the budget conversation, the write scope should not survive it either.
+
+## Prompt injection is the reason for the blast-radius cap
+
+The concrete case is ForcedLeak. Noma Security reported it to Salesforce on 28 July 2025 and disclosed it on 25 September 2025 with a CVSS score of 9.4. Attacker instructions were embedded in ordinary Web-to-Lead form submissions, sat inertly in the CRM, and executed later when an employee asked Agentforce about the lead — chained with a Content Security Policy allowlist weakness involving an expired, purchasable domain to exfiltrate CRM data. Salesforce shipped Trusted URLs enforcement for Agentforce and Einstein on 8 September 2025.
+
+ForcedLeak was not an MCP vulnerability, and citing it as one would be wrong. It is the same failure class, which is the point: any agent that reads fields an outsider can write is executing untrusted input, and a write scope turns that from a disclosure problem into a data-integrity problem. The operative rule is that an agent whose context includes attacker-controllable fields — web-to-lead payloads, inbound email bodies, form fills, chat transcripts, uploaded resumes — does not hold a write scope in the same session. Split the read-untrusted-content job and the write-to-CRM job into two connections with two identities.
+
+## The grant record
+
+Keep one of these per granted scope, in the same place as your vendor register. It takes five minutes and it is the artifact that makes the annual review possible.
+
+```
+Vendor / server:      [vendor] — [server id, e.g. platform/sobject-mutations]
+Level granted:        [0-3]
+Objects + fields:     [explicit list; note excluded fields]
+Connecting identity:  [named integration user, not an admin]
+Blast radius cap:     [max records per call]
+Token lifetime:       [duration; ECA default is 1 year]
+Audit source:         [ELF filter / Account Activity API] — retention [N days]
+Untrusted-input rule: [does this session read outsider-writable fields? Y/N]
+Granted by / date:    [name] / [date]
+Review date:          [date + 90 days]
+Revocation steps:     [deactivate server / uninstall app / disable user]
+```
+
+## Watch-outs
+
+- **A re-consent prompt is a scope change.** HubSpot does not let you hand-pick scopes; they are determined by the tools present in the server at install time plus what the user grants. When HubSpot adds tools, existing installs show `REQUIRES_REAUTHORIZATION` and the fix is to disconnect and reconnect — which re-grants against the new, larger tool set. **Guard:** treat every reauthorization prompt as a change-control ticket and re-read the consent screen instead of clicking through it.
+- **Servers you activated for a pilot stay activated.** Salesforce servers are inactive by default, which protects you on day one and not on day ninety. **Guard:** put the deactivation step in the pilot's exit criteria, and audit active servers at the 90-day review date on the grant record.
+- **Sensitive-data settings silently change the surface.** With HubSpot's Sensitive Data enabled, activity objects and conversation data are blocked through the MCP server. **Guard:** confirm which objects the agent can actually reach in your own portal rather than from the docs, since the effective surface differs by account configuration.
+- **The connecting user drifts.** Permission sets get widened for an unrelated reason and the agent's reach widens with them. **Guard:** the integration user gets exactly one permission set, and that permission set is assigned to exactly one user, so a widening change cannot arrive as a side effect.
+
+## Related
+
+- **[MCP server explained](/en/learn/mcp-server-explained/)** — the primer this framework assumes; read it first if "MCP support" on a vendor page is still an unfamiliar claim
+- **[AI policy for RevOps teams](/en/learn/ai-policy-for-revops-teams/)** — the surrounding one-page policy; this framework is the section it points to for CRM write scopes
+- **[Agentic CRM](/en/learn/agentic-crm/)** — the category that makes this decision unavoidable, since an agentic CRM's premise is that software is the primary author of the record
+- **[Vendor due diligence workflow](/en/learn/vendor-due-diligence-workflow/)** — the security and privacy review that runs before this grant decision
+- **[Salesforce](/en/tools/salesforce/)** and **[HubSpot](/en/tools/hubspot/)** — the two platforms whose tool decomposition sets your permission granularity
