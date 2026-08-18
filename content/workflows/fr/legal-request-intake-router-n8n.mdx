@@ -1,0 +1,102 @@
+---
+slug: legal-request-intake-router-n8n
+canonical_slug: legal-request-intake-router-n8n
+locale: fr
+verticals: [legal-ops]
+title: "Orienter chaque demande juridique entrante vers la bonne voie avec n8n"
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack, ironclad]
+roles: [legal-ops-manager, in-house-counsel]
+difficulty: intermediate
+time_to_setup: 120min
+human_tested: false
+last_updated: "2026-08-18"
+---
+
+Un flow n8n qui donne à la direction juridique une porte d'entrée unique. Les demandes arrivent par un formulaire ou une boîte partagée, sont classées contre une taxonomie de douze types et atterrissent dans l'une de cinq voies : modèle en libre-service, revue par playbook, avocat, bloquée sur le demandeur, ou escalade au GC. Un balayage horaire suit l'horloge du SLA en heures ouvrées ; un rapport le lundi matin dit ce que la direction a réellement reçu. Coûte environ 0,011 à 0,017 USD par demande en inférence Claude.
+
+Le workflow se trouve dans `apps/web/public/artifacts/legal-request-intake-router-n8n/legal-request-intake-router-n8n.json` — 26 nœuds répartis sur trois branches ayant chacune son propre trigger. Les trois tables Postgres dont il a besoin sont dans le `schema.sql` voisin, et la configuration des credentials ainsi qu'une séquence de vérification en six étapes sont dans le `_README.md`.
+
+## Quand l'utiliser
+
+Votre équipe juridique traite bien plus de 30 demandes par mois et ne peut pas dire, sans ouvrir un tableur, combien sont arrivées la semaine dernière ni sur quoi elles portaient. Les demandes vous parviennent par le canal dont le demandeur s'est souvenu sur le moment : 87 % des demandes juridiques arrivent par email, d'après l'étude sur l'intake de Checkbox, le reste par téléphone ou en personne. Une part significative de ce qui atterrit est du travail que le demandeur terminerait seul si quelqu'un lui indiquait un modèle.
+
+Le gain n'est pas la classification. Le gain, c'est qu'une demande obtient un premier contact en moins de dix minutes avec une voie nommée et une échéance annoncée, et qu'à la fin de la semaine vous avez une réponse défendable à la question « à quoi le juridique passe-t-il son temps ? ». C'est cette seconde moitié qui justifie de le construire. Le State of the Industry Report 2026 de CLOC, appuyé sur 135 directions juridiques au chiffre d'affaires médian de 13 milliards USD, a relevé une charge de travail en hausse sur la conformité réglementaire (63 % des directions) et la cybersécurité (58 %), pendant que les deux soupapes habituelles se resserraient : seuls 47 % anticipent une hausse des dépenses juridiques internes (contre 65 % l'année précédente) et 32 % anticipent une croissance des effectifs d'avocats. Quand on ne peut pas recruter pour sortir du problème, l'argumentaire pour davantage de moyens doit se construire sur des données de demande que vous ne collectez pas aujourd'hui.
+
+Ce flow est la couche au-dessus de l'automatisation par type de contrat. Il décide *à quel* pipeline appartient une demande ; le [flow de tri des NDA](/fr/workflows/nda-intake-triage-n8n/) fait le travail au niveau des clauses une fois qu'un NDA a été identifié comme tel.
+
+## Quand NE PAS l'utiliser
+
+Passez votre chemin en dessous d'environ 30 demandes par mois. Les deux heures de mise en place sont le petit coût ; codifier un catalogue de services et peupler l'annuaire des demandeurs est le vrai coût, et il ne s'amortit pas à ce volume. Une boîte partagée et une rotation hebdomadaire est la meilleure réponse.
+
+Passez votre chemin si vous n'avez ni modèles ni playbook écrits. La voie libre-service pointe vers l'URL d'un modèle, et la voie playbook suppose qu'un relecteur dispose d'une position écrite à laquelle se référer. Sans cela, chaque demande part chez un avocat et vous avez construit une file d'attente coûteuse. Écrivez d'abord le catalogue : c'est le vrai projet, et ce flow est ce qui le rend visible ensuite.
+
+Passez votre chemin pour tout intake qui doit être couvert par le secret professionnel dès le premier contact : enquêtes internes, alertes de lanceurs d'alerte, et tout ce qui est déjà sous litigation hold. Cela nécessite un canal distinct qui contourne entièrement l'automatisation. Le garde-fou de privilège du flow attrape celles qui arrivent par erreur à la porte principale, mais un canal que vous avez délibérément fait passer par un classifieur est un canal qu'il faudra défendre plus tard.
+
+Passez votre chemin si le problème du juridique est la capacité et non l'orientation. Le routeur rend la file lisible et la demande mesurable. Il ne fabrique pas d'avocats, et une équipe déjà à 100 % d'utilisation verra le même backlog avec de meilleures étiquettes.
+
+## Mise en place
+
+Exécutez `schema.sql` en premier. Il crée `requester_directory` (qui demande et sur le papier de qui), `legal_request_log` (la piste d'audit et l'horloge du SLA) et `legal_sla_policy` (une ligne par voie, préchargée avec les quatre horloges par défaut). Importez ensuite le JSON, reliez les cinq credentials placeholder selon le README et, avant toute chose, réglez le fuseau horaire du workflow. L'export part avec `Europe/London`, et chaque expression cron ainsi que l'arithmétique des heures ouvrées dans `Compute Breach Tier` lisent ce réglage unique. Le régler de travers ne lève aucune erreur ; cela décale silencieusement chaque échéance.
+
+La configuration qui décide du comportement tient en quelques constantes dans deux nœuds Code. Dans `Apply Routing Policy` : `CONFIDENCE_FLOOR` est à 0,75, `VALUE_ESCALATION_USD` à 250 000 USD, et `WALK_AWAY_FLAGS` liste les six catégories qui forcent une escalade au GC quelle que soit la conclusion du modèle. Réglez `VALUE_ESCALATION_USD` sur ce que votre matrice de délégation de signature indique déjà, pas sur un chiffre rond. Dans `Normalize Request`, `PRIVILEGE_PATTERNS` est un jeu de huit expressions régulières qui détournent une demande vers le canal du GC sans le moindre appel API.
+
+Prévoyez d'ajuster les heures de SLA une fois. Elles vivent dans la table `legal_sla_policy` et non dans un nœud, donc les changer est un UPDATE SQL et non une modification du workflow.
+
+## Ce que fait le flow
+
+`Intake Form Webhook` et `Intake Mailbox Poll — legal@` sont les deux points d'entrée ; `Normalize Request` est le seul nœud à savoir qu'il y en a deux. Il aplatit les deux formes en une enveloppe unique, plafonne le corps à 4 000 caractères et pose un booléen `privilege_hit`. Une demande sans demandeur identifiable est signalée d'office plutôt que devinée : il n'y a personne à qui envoyer une réponse.
+
+`Privileged-Content Gate` agit sur ce booléen. Sa branche vraie part directement vers `#legal-gc-escalations` et le modèle ne voit jamais le contenu. Cet ordre est le point central : pour une assignation ou une enquête, un aller-retour de classification est un problème de privilège, pas une économie de latence.
+
+`Requester Context` recherche l'expéditeur d'abord par adresse exacte puis par domaine, de sorte qu'une exception nommée l'emporte sur la valeur par défaut de l'organisation. `Merge Requester Context` attribue à une ligne absente `risk_posture: 'unknown'` au lieu de `'standard'` : ce seul mot est ce qui empêche un expéditeur non reconnu de recevoir une réponse juridique automatisée.
+
+`Claude — Classify + Route` envoie l'enveloppe à Sonnet 5 avec un system prompt qui nomme douze types de demande, trois voies candidates, neuf indicateurs de risque et une liste fixe de champs qu'un relecteur devrait sinon aller chercher. Il renvoie du JSON strict avec un `lane`, un `confidence` et une justification de moins de 300 caractères. Sonnet 5 plutôt que Haiku parce que l'erreur coûteuse est une demande de niveau avocat coincée dans une réponse automatique de libre-service, pas l'écart de prix par appel.
+
+`Apply Routing Policy` est la ceinture de sécurité, et c'est délibérément du JavaScript ordinaire et non un second prompt. Cinq surcharges se déclenchent par ordre de priorité : un indicateur de risque de la liste walk-away force `gc_escalation` ; une valeur déclarée au niveau ou au-dessus du seuil d'escalade force `lawyer` ; une confiance inférieure à 0,75 rétrograde `self_serve` en `playbook` ; une posture de risque non standard fait de même ; et des champs manquants nommés orientent vers `awaiting_requester`. Chaque surcharge inscrit son motif sur la ligne d'audit, ce qui permet de mesurer quels garde-fous méritent leur place. Un échec de parsing — la régression classique après toute modification du prompt est que le modèle enveloppe son JSON dans des fences markdown — est capturé et escaladé à un humain sans lecture préalable. Les garde-fous vivent ici et non dans le prompt, parce qu'un garde-fou qui n'existe que dans le prompt est contournable par n'importe quel texte que le demandeur colle dans le formulaire.
+
+`Lane Switch` se déploie en cinq branches, avec `gc_escalation` en sortie de repli plutôt qu'un abandon silencieux. Les cinq convergent vers `Write Intake Log`, qui insère une ligne clé `source_message_id` avec `ON CONFLICT DO NOTHING` : n8n réessaie sur les erreurs Postgres transitoires, et une ligne dupliquée compterait deux fois chaque chiffre du rapport hebdomadaire. La voie libre-service écrit elle aussi sa ligne. Une réponse en libre-service non journalisée est du travail invisible, et le travail invisible est exactement ce que ce flow existe pour supprimer.
+
+La deuxième branche balaie toutes les heures en jours ouvrés, calcule les heures *ouvrées* écoulées contre le SLA de chaque voie et escalade à 50 %, 100 % et 150 % de l'horloge, en basculant vers le canal du GC au troisième niveau. `Record Escalation Tier` réécrit le niveau **après** la publication Slack, si bien qu'une publication en échec produit une relance dupliquée à l'heure suivante plutôt qu'un silence. La troisième branche agrège la semaine et publie un rapport qui dit quoi faire de chaque chiffre, et pas seulement quel est le chiffre.
+
+## La réalité des coûts
+
+L'inférence Claude est le coût variable dominant. Une demande se sérialise en environ 2 400 à 3 800 tokens d'entrée — la taxonomie de douze types et les règles de voie dominent, le texte libre du demandeur ajoutant 200 à 800 — et la réponse structurée se situe entre 250 et 400 tokens de sortie. Au tarif catalogue Sonnet 5 de 3 USD par million de tokens d'entrée et 15 USD par million en sortie, cela fait **0,011 à 0,017 USD par demande**. À 400 demandes par mois, 4,40 à 6,80 USD. À 2 000, 22 à 34 USD.
+
+Les exécutions n8n sont l'autre poste. La branche d'intake représente une exécution par demande ; le balayage SLA à dix passages par jour ouvré fait environ 220 par mois ; le rapport environ quatre. Donc 400 demandes par mois font environ 620 exécutions, dans le plan Starter de n8n Cloud (20 € par mois, 2 500 exécutions). À 2 000 demandes par mois vous êtes à environ 2 220 et devriez passer sur Pro (50 € par mois, 10 000 exécutions) pour la marge et la concurrence. L'auto-hébergement sur un petit VPS encaisse l'un comme l'autre sans plafond d'exécutions.
+
+En face : la version manuelle de ce travail, c'est un coordinateur qui lit chaque demande, décide où elle va, et la relance. À une estimation de 6 à 10 minutes par demande pour lire-classer-orienter-accuser réception et un taux chargé de coordinateur de 60 à 90 USD de l'heure, cela fait 6 à 15 USD de temps humain par demande — des chiffres explicitement marqués comme estimations et non comme benchmarks mesurés. Le rapport entre les deux n'est pas ce qui compte. Ce qui compte, c'est que le jugement du coordinateur se dépense sur les 20 à 30 % de demandes où l'orientation est réellement ambiguë au lieu du NDA qui arrive pour la quarantième fois.
+
+## Indicateurs de réussite
+
+Suivez trois chiffres par semaine, tous les trois déjà dans le rapport.
+
+**Couverture de l'intake** — la part du travail juridique qui est réellement passée par la porte d'entrée. Approchez-la par le ratio des lignes `source = 'form'` sur `source = 'email'`, et visez moins de 30 % d'email au jour 90. La couverture est l'indicateur qui décide si quoi que ce soit d'autre ici est réel ; un routeur qui voit la moitié du travail produit un rapport de demande qui se trompe avec assurance.
+
+**Durabilité du libre-service** — parmi les demandes traitées par un modèle, le pourcentage où la même personne n'est pas revenue sous sept jours. Visez 85 % ou mieux. C'est le contrepoids honnête à un taux de déflexion, qui ne mesure que le fait d'avoir dit non rapidement.
+
+**Premier contact sous dix minutes, quelle que soit la voie.** S'il dérive, la cause est un appel API lent ou des exécutions n8n en file, pas la logique d'orientation. Consultez la liste des exécutions avant de toucher au moindre seuil.
+
+## Face aux alternatives
+
+**Face à la boîte partagée et au tableur.** Le statu quo ne coûte rien à exploiter et ne produit aucune donnée. Il fonctionne bien en dessous d'environ 30 demandes par mois et se dégrade d'une manière précise au-dessus : la file reste gérable pendant que le *reporting* devient une fiction, parce que personne ne remplit un tableur pendant une semaine chargée. Si vous voulez seulement une orientation plus rapide, une rotation et un bon répondeur automatique vous emmènent presque au bout. Construisez ceci le jour où l'on demande au juridique de justifier ses effectifs et où la réponse honnête est que vous ne savez pas ce que vous avez fait le trimestre dernier.
+
+**Face à un produit de porte d'entrée juridique.** [Checkbox](/fr/tools/checkbox/) et [Streamline AI](/fr/tools/streamline-ai/) vendent exactement cela sous forme de produit, avec constructeur de formulaires, concepteur de workflow et reporting déjà inclus. Les deux sont sur devis — aucun ne publiait de prix d'entrée lors de la vérification tarifaire d'août 2026 —, ce qui les place dans un cycle d'achat entreprise plutôt que dans un après-midi. Ce sont les meilleurs choix si legal ops a du budget et pas de soutien en ingénierie, et si une taxonomie façonnée par l'éditeur correspond à votre mix de demandes. Ce flow est le meilleur choix quand vos règles d'orientation encodent quelque chose de spécifique à votre activité — un seuil de délégation de signature, une business unit qui exige toujours un avocat, un type de contrepartie que vous refusez de traiter en libre-service — parce que ces règles vivent dans un nœud Code qui vous appartient et non dans un écran de configuration qu'il faut négocier.
+
+**Face à une file de tickets que vous possédez déjà.** Jira Service Management, ServiceNow ou Zendesk peuvent recevoir un formulaire de demande juridique dès aujourd'hui, sans coût de licence supplémentaire si la DSI en exploite déjà un. Ce qu'ils orientent, ce sont des champs de formulaire : le demandeur choisit « revue de contrat », et le ticket part dans la file de revue de contrats. Cela fonctionne exactement aussi bien que l'auto-classification de vos demandeurs, laquelle est précisément ce que les données d'intake montrent de façon constante comme peu fiable — l'indice de type dans ce flow est transmis au modèle explicitement étiqueté comme auto-déclaré et possiblement faux. Prenez le système de tickets si votre mix de demandes est étroit et que votre formulaire peut l'énumérer. Prenez ceci quand l'information décisive tient dans un paragraphe de texte libre.
+
+## Points de vigilance
+
+**Le libre-service devient un mur de déflexion.** Mode de défaillance : les demandeurs reçoivent un lien vers un modèle, le modèle ne répond pas à leur vraie question, et ils contournent le juridique par messages directs — où le travail se fait toujours mais cesse d'être compté. Garde-fou : la requête de recontact du rapport hebdomadaire compte les réponses en libre-service où la même personne est revenue sous sept jours, et signale au-delà de 15 %. La réponse Slack en libre-service se termine aussi par une porte de sortie explicite : répondez dans le fil et cela part dans la file de revue, sans nouveau formulaire.
+
+**La dérive de la taxonomie oriente le travail nouveau vers les avocats.** Mode de défaillance : une nouvelle réglementation ou gamme de produits engendre des demandes qui n'entrent dans aucun des douze types, atterrissent en `other` et tombent par défaut dans la voie avocat, de sorte que la file grossit pendant que le modèle a l'air de fonctionner. Garde-fou : le rapport classe `request_type = 'other'` et signale au-delà de 10 % du volume, en précisant qu'il s'agit d'un type manquant dans la taxonomie et non d'un défaut du modèle. Ajoutez-le au system prompt dans `Claude — Classify + Route`.
+
+**Du contenu couvert par le privilège atteint l'API.** Mode de défaillance : quelqu'un transfère un fil contenant du contexte contentieux avec un contrat de routine en pièce jointe, et le fil entier part dans une requête d'inférence. Garde-fou : `PRIVILEGE_PATTERNS` détourne huit catégories avant tout appel API, et `Normalize Request` plafonne le corps à 4 000 caractères pour qu'un long fil transféré soit tronqué de toute façon. Associez le flow à une [politique d'IA pour les équipes juridiques](/fr/learn/ai-policy-for-legal-teams/) écrite qui autorise explicitement ce flux de données, et rejouez le test de vérification 4 du README après chaque modification de ces motifs.
+
+**L'horloge du SLA compte les mauvaises heures.** Mode de défaillance : le temps écoulé est calculé en heures calendaires, les alertes de dépassement se déclenchent la nuit et le week-end pour des demandes confortablement dans leur fenêtre, et l'équipe coupe le canal en quinze jours. Garde-fou : `Compute Breach Tier` ne compte que du lundi au vendredi entre `BUSINESS_START` et `BUSINESS_END`, et le balayage lui-même est limité par cron aux heures ouvrées des jours ouvrés. Le test de vérification 6 du README existe précisément pour attraper un décalage de fuseau horaire entre le réglage du workflow et ces constantes.
+
+**La norme de canal ne s'installe jamais.** Mode de défaillance : le formulaire existe, et les gens écrivent quand même directement au GC, parce que la première demande part toujours comme elle est toujours partie. Garde-fou : le trigger sur la boîte `legal-intake@` les rattrape, et le seuil de part d'email du rapport rend l'écart visible comme un chiffre et non comme une impression. Associez-le à des répondeurs automatiques sur les boîtes individuelles des avocats pendant les 30 premiers jours. Si la part d'email dépasse encore 30 % au jour 90, le problème est organisationnel et aucune modification de nœud ne le réglera.
+
+## Stack
+
+[n8n](/fr/tools/n8n/) pour l'orchestration, [Claude](/fr/tools/claude/) Sonnet 5 pour la classification, [Slack](/fr/tools/slack/) pour chaque file et le rapport hebdomadaire, [Ironclad](/fr/tools/ironclad/) ou votre propre CLM pour l'enregistrement du dossier de la voie playbook, Postgres pour l'annuaire, le journal et la politique de SLA, et Gmail pour la boîte filet de sécurité. Les concepts derrière les règles d'orientation sont dans [legal intake](/fr/learn/legal-intake/), et la place de tout cela sur la courbe de maturité est dans le [modèle de maturité legal ops](/fr/learn/legal-ops-maturity-model/). Une fois la demande orientée, la [SOP de revue de contrats](/fr/learn/contract-review-sop/) gouverne ce que la voie playbook fait réellement.

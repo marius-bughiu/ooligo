@@ -1,0 +1,1122 @@
+{
+  "name": "Legal Request Intake Router",
+  "nodes": [
+    {
+      "id": "b7e1c3a5-0001-4c20-9d10-000000000001",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "legal-intake",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Intake Form Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        200
+      ],
+      "webhookId": "PLACEHOLDER_WEBHOOK_ID_LEGAL_INTAKE",
+      "notes": "The front door. Point your Slack Workflow Builder form, your web form, or a Salesforce outbound flow at this URL. Expected body: {submission_id, requester_email, business_unit, request_type_hint, summary, detail, claimed_value_usd, needed_by, counterparty}. Only submission_id and requester_email are load-bearing; Normalize Request defaults the rest."
+    },
+    {
+      "id": "b7e1c3a5-0002-4c20-9d10-000000000002",
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "-label:legal-intake-processed"
+        },
+        "options": {}
+      },
+      "name": "Intake Mailbox Poll — legal@",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        440
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — legal-intake@"
+        }
+      },
+      "notes": "The catch net for people who email legal instead of using the form — which, on day one, is most of them. Runs against a dedicated legal-intake@ mailbox, not an individual lawyer’s inbox. Disable this node once form coverage is above your target and you want to force the channel."
+    },
+    {
+      "id": "b7e1c3a5-0003-4c20-9d10-000000000003",
+      "parameters": {
+        "jsCode": "// Two entry shapes in, one envelope out. Everything downstream reads this shape\n// and nothing downstream knows which trigger fired.\nconst FALLBACK_UNIT = 'unknown';\n\n// Subjects/bodies matching these never reach the model — see Privileged-Content Gate.\nconst PRIVILEGE_PATTERNS = [\n  /\\blitigation\\b/i, /\\bprivileged\\b/i, /attorney[- ]client/i,\n  /\\bsubpoena\\b/i, /\\bwhistleblow/i, /internal investigation/i,\n  /\\bregulator(y)? (inquiry|request|notice)\\b/i, /\\bdata breach\\b/i,\n];\n\nconst out = [];\n\nfor (const item of $input.all()) {\n  const j = item.json;\n  let envelope;\n\n  if (j.headers || j.body) {\n    // Webhook form submission.\n    const b = j.body || j;\n    envelope = {\n      source: 'form',\n      source_message_id: String(b.submission_id || `form-${b.requester_email}-${b.needed_by || 'na'}`),\n      requester_email: String(b.requester_email || '').trim().toLowerCase(),\n      business_unit_claimed: b.business_unit || null,\n      request_type_hint: b.request_type_hint || null,\n      subject: b.summary || '(no summary)',\n      body_text: String(b.detail || b.summary || ''),\n      counterparty: b.counterparty || null,\n      claimed_value_usd: Number.isFinite(Number(b.claimed_value_usd)) ? Number(b.claimed_value_usd) : null,\n      needed_by: b.needed_by || null,\n      has_attachment: Boolean(b.attachment_url),\n    };\n  } else {\n    // Gmail message.\n    const headers = j.payload?.headers || [];\n    const header = (name) => (headers.find((h) => h.name.toLowerCase() === name) || {}).value || '';\n    const from = header('from');\n    const emailMatch = from.match(/<([^>]+)>/);\n    envelope = {\n      source: 'email',\n      source_message_id: String(j.id),\n      requester_email: (emailMatch ? emailMatch[1] : from).trim().toLowerCase(),\n      business_unit_claimed: null,\n      request_type_hint: null,\n      subject: header('subject') || '(no subject)',\n      body_text: String(j.snippet || ''),\n      counterparty: null,\n      claimed_value_usd: null,\n      needed_by: null,\n      has_attachment: Boolean(j.payload?.parts?.some((p) => p.filename)),\n    };\n  }\n\n  // Hard cap on what can ever leave this workflow. A forwarded 40-message thread\n  // is the common way privileged content reaches an API call by accident.\n  envelope.body_text = envelope.body_text.slice(0, 4000);\n  envelope.business_unit = envelope.business_unit_claimed || FALLBACK_UNIT;\n  envelope.received_at = new Date().toISOString();\n  envelope.privilege_hit = PRIVILEGE_PATTERNS.some(\n    (re) => re.test(envelope.subject) || re.test(envelope.body_text),\n  );\n\n  if (!envelope.requester_email) {\n    // No requester means no one to answer. Route it to a human rather than guess.\n    envelope.privilege_hit = true;\n    envelope.privilege_reason = 'no_requester_identified';\n  }\n\n  out.push({ json: envelope });\n}\n\nreturn out;"
+      },
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        320
+      ],
+      "notes": "The only node that knows there are two entry points. Also enforces the 4,000-character body cap — the single most effective guard against a forwarded thread carrying privileged context into an API request."
+    },
+    {
+      "id": "b7e1c3a5-0004-4c20-9d10-000000000004",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "privilege-gate",
+              "leftValue": "={{ $json.privilege_hit }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Privileged-Content Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -660,
+        320
+      ],
+      "notes": "TRUE output skips the model entirely and goes straight to the GC channel. This is deliberate: for litigation, investigations, and regulator contact the cost of a classification round-trip is a privilege problem, not a latency problem. FALSE continues to normal routing."
+    },
+    {
+      "id": "b7e1c3a5-0005-4c20-9d10-000000000005",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT business_unit, region, risk_posture, default_assignee\nFROM requester_directory\nWHERE (match_type = 'email'  AND lower(match_value) = lower($1))\n   OR (match_type = 'domain' AND lower($1) LIKE '%' || lower(match_value))\nORDER BY match_type ASC\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.requester_email }}"
+        }
+      },
+      "name": "Requester Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -440,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — Legal Ops"
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "ORDER BY match_type ASC puts an exact email match ahead of a domain match (‘domain’ sorts after ‘email’), so a named exception beats the org-wide default. alwaysOutputData keeps the branch alive when the requester is unknown — Merge Requester Context then defaults the posture to ‘unknown’, which blocks the self-serve lane."
+    },
+    {
+      "id": "b7e1c3a5-0006-4c20-9d10-000000000006",
+      "parameters": {
+        "jsCode": "// Joins the directory row back onto the envelope. The envelope is the\n// authority on what was asked; the directory is the authority on who asked.\nconst envelope = $('Normalize Request').first().json;\nconst row = $input.first()?.json || {};\nconst found = Boolean(row.business_unit);\n\nreturn [{\n  json: {\n    ...envelope,\n    business_unit: row.business_unit || envelope.business_unit_claimed || 'unknown',\n    region: row.region || null,\n    // 'unknown' is not the same as 'standard'. An unrecognised requester never\n    // gets a self-serve answer, because we cannot tell whose paper they are on.\n    risk_posture: found ? row.risk_posture : 'unknown',\n    default_assignee: row.default_assignee || null,\n    requester_known: found,\n  },\n}];"
+      },
+      "name": "Merge Requester Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        420
+      ],
+      "notes": "Defaults a missing directory row to risk_posture = ‘unknown’ rather than ‘standard’. That one word is what stops an unrecognised sender from receiving an automated self-serve answer."
+    },
+    {
+      "id": "b7e1c3a5-0007-4c20-9d10-000000000007",
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"claude-sonnet-5\",\n  max_tokens: 1200,\n  system: \"You are the intake router for a corporate legal department. Classify one inbound request and propose a lane. You never answer the legal question itself.\\n\\nREQUEST TYPES (choose exactly one): nda, vendor_contract, customer_contract, dpa_privacy, employment, marketing_review, ip_trademark, corporate_entity, dispute_pre_litigation, regulatory_licensing, policy_question, other.\\n\\nLANES:\\n- self_serve: the requester can finish this themselves with a standard template or a published policy answer. Only for nda on standard paper, marketing_review of routine copy, and policy_question already covered by published guidance.\\n- playbook: standard-paper review a trained reviewer can complete against a written playbook without a lawyer's judgment.\\n- lawyer: needs a lawyer. Anything novel, negotiated, adversarial, or where the playbook has no position.\\n\\nRISK FLAGS (emit any that apply): litigation, regulator, employment_termination, m_and_a, data_breach, public_sector_counterparty, non_standard_indemnity, unlimited_liability, ip_assignment.\\n\\nMISSING FIELDS: name any field a reviewer would have to ask for before starting — counterparty, contract_value, effective_date, business_justification, signed_by_date, jurisdiction. Empty array if the request is actionable as written.\\n\\nReturn STRICT JSON only, no prose and no markdown fences:\\n{\\\"request_type\\\":string,\\\"lane\\\":string,\\\"confidence\\\":number between 0 and 1,\\\"risk_flags\\\":string[],\\\"missing_fields\\\":string[],\\\"rationale\\\":string under 300 characters}\",\n  messages: [{\n    role: \"user\",\n    content: \"Requester: \" + $json.requester_email\n      + \"\\nBusiness unit: \" + $json.business_unit\n      + \"\\nRisk posture: \" + $json.risk_posture\n      + \"\\nRequester in directory: \" + $json.requester_known\n      + \"\\nRequest type hint (self-declared, may be wrong): \" + ($json.request_type_hint || \"none\")\n      + \"\\nCounterparty: \" + ($json.counterparty || \"not stated\")\n      + \"\\nClaimed value (USD): \" + ($json.claimed_value_usd === null ? \"not stated\" : $json.claimed_value_usd)\n      + \"\\nNeeded by: \" + ($json.needed_by || \"not stated\")\n      + \"\\nAttachment present: \" + $json.has_attachment\n      + \"\\n\\nSubject: \" + $json.subject\n      + \"\\n\\nBody:\\n\" + $json.body_text\n  }]\n}) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Claude — Classify + Route",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        420
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_ANTHROPIC_CRED_ID",
+          "name": "Anthropic — x-api-key"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "notes": "Sonnet 5 rather than Haiku: the expensive error here is a misrouted lawyer-grade request sitting in a self-serve reply, not the per-call price difference. neverError keeps a 4xx/5xx on the item so Apply Routing Policy can catch it and escalate rather than the execution dying silently."
+    },
+    {
+      "id": "b7e1c3a5-0008-4c20-9d10-000000000008",
+      "parameters": {
+        "jsCode": "// The safety belt. Claude proposes; this node disposes. Every override is\n// stamped onto the log row so you can measure how often each guard fires and\n// retire the ones that never do.\nconst ctx = $('Merge Requester Context').first().json;\nconst raw = $input.first().json;\n\nconst WALK_AWAY_FLAGS = [\n  'litigation', 'regulator', 'employment_termination',\n  'm_and_a', 'data_breach', 'public_sector_counterparty',\n];\nconst CONFIDENCE_FLOOR = 0.75;     // below this, no self-serve answer goes out\nconst VALUE_ESCALATION_USD = 250000; // claimed annual value that forces a lawyer\n\nconst SLA_BY_LANE = {\n  self_serve: null,\n  playbook: 16,\n  lawyer: 40,\n  awaiting_requester: 8,\n  gc_escalation: 8,\n};\n\nfunction parseModel(payload) {\n  // The model is asked for bare JSON, but markdown fences are the classic\n  // regression after any prompt edit. Strip them, then parse.\n  const text = payload?.content?.[0]?.text;\n  if (typeof text !== 'string') throw new Error('no text block in response');\n  const cleaned = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\n  const parsed = JSON.parse(cleaned);\n  if (!parsed.lane || !parsed.request_type) throw new Error('missing lane or request_type');\n  return parsed;\n}\n\nlet model;\nlet lane;\nlet overrideReason = null;\n\ntry {\n  model = parseModel(raw);\n  lane = model.lane;\n} catch (err) {\n  // Never fail open. An unparseable classification is a lawyer-lane request.\n  return [{\n    json: {\n      ...ctx,\n      request_type: 'other',\n      model_lane: null,\n      lane: 'gc_escalation',\n      override_reason: 'parser_error: ' + err.message,\n      confidence: 0,\n      risk_flags: ['parser_error'],\n      missing_fields: [],\n      rationale: 'Classification could not be parsed. Routed to a human unread.',\n      sla_business_hours: SLA_BY_LANE.gc_escalation,\n      assignee: null,\n    },\n  }];\n}\n\nconst flags = Array.isArray(model.risk_flags) ? model.risk_flags : [];\nconst missing = Array.isArray(model.missing_fields) ? model.missing_fields : [];\nconst confidence = Number(model.confidence);\nconst safeConfidence = Number.isFinite(confidence) ? confidence : 0;\n\n// Overrides in priority order. First match wins and stops.\nif (flags.some((f) => WALK_AWAY_FLAGS.includes(f))) {\n  lane = 'gc_escalation';\n  overrideReason = 'walk_away_flag:' + flags.filter((f) => WALK_AWAY_FLAGS.includes(f)).join('|');\n} else if (Number(ctx.claimed_value_usd) >= VALUE_ESCALATION_USD) {\n  lane = 'lawyer';\n  overrideReason = 'claimed_value_over_' + VALUE_ESCALATION_USD;\n} else if (lane === 'self_serve' && safeConfidence < CONFIDENCE_FLOOR) {\n  lane = 'playbook';\n  overrideReason = 'confidence_below_' + CONFIDENCE_FLOOR;\n} else if (lane === 'self_serve' && ctx.risk_posture !== 'standard') {\n  lane = 'playbook';\n  overrideReason = 'risk_posture_' + ctx.risk_posture;\n} else if (missing.length > 0 && lane !== 'lawyer') {\n  lane = 'awaiting_requester';\n  overrideReason = 'missing_fields:' + missing.join('|');\n}\n\nreturn [{\n  json: {\n    ...ctx,\n    request_type: model.request_type,\n    model_lane: model.lane,\n    lane,\n    override_reason: overrideReason,\n    confidence: safeConfidence,\n    risk_flags: flags,\n    missing_fields: missing,\n    rationale: String(model.rationale || '').slice(0, 300),\n    sla_business_hours: SLA_BY_LANE[lane] ?? null,\n    assignee: lane === 'self_serve' ? null : ctx.default_assignee,\n  },\n}];"
+      },
+      "name": "Apply Routing Policy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        420
+      ],
+      "notes": "Five overrides in priority order, plus a parse-failure catch that routes to the GC lane. The overrides live here rather than in the prompt because prompt-only guardrails are bypassable by whatever text the requester pastes in."
+    },
+    {
+      "id": "b7e1c3a5-0009-4c20-9d10-000000000009",
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r-self",
+                    "leftValue": "={{ $json.lane }}",
+                    "rightValue": "self_serve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "self_serve"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r-play",
+                    "leftValue": "={{ $json.lane }}",
+                    "rightValue": "playbook",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "playbook"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r-law",
+                    "leftValue": "={{ $json.lane }}",
+                    "rightValue": "lawyer",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lawyer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r-wait",
+                    "leftValue": "={{ $json.lane }}",
+                    "rightValue": "awaiting_requester",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "awaiting_requester"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "gc_escalation"
+        }
+      },
+      "name": "Lane Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
+        420
+      ],
+      "notes": "Switch rather than chained IFs so each lane’s topology stays visually obvious on the canvas. The fallback output is gc_escalation, not a silent drop — anything the policy node produced that is not one of the four named lanes goes to a human."
+    },
+    {
+      "id": "b7e1c3a5-0010-4c20-9d10-000000000010",
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.requester_email.split(\"@\")[0], text: \"Legal here — this looks like a *\" + $json.request_type.replace(/_/g, \" \") + \"* request you can finish yourself.\\n\\n\" + $json.rationale + \"\\n\\nSelf-serve template: \" + (\"https://intranet.example.com/legal/templates/\" + $json.request_type) + \"\\n\\nIf that is wrong, reply in this thread and it goes to the review queue — no new form.\" }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "name": "Slack — Self-Serve Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        60
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notes": "Posts to the requester by Slack handle derived from their email local part. Replace that expression with a users.lookupByEmail call if your handles do not match. The escape hatch in the last line is load-bearing: a self-serve lane with no way back is a deflection wall, and the weekly report measures exactly that."
+    },
+    {
+      "id": "b7e1c3a5-0011-4c20-9d10-000000000011",
+      "parameters": {
+        "method": "POST",
+        "url": "https://na1.ironcladapp.com/public/api/v1/workflows",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  template: \"legal-playbook-review\",\n  attributes: {\n    requestType: $json.request_type,\n    requesterEmail: $json.requester_email,\n    businessUnit: $json.business_unit,\n    counterparty: $json.counterparty || \"not stated\",\n    claimedValueUsd: $json.claimed_value_usd,\n    intakeSummary: $json.subject,\n    routerRationale: $json.rationale\n  }\n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "CLM — Open Playbook Matter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_CLM_CRED_ID",
+          "name": "Ironclad — API Token"
+        }
+      },
+      "notes": "Ironclad shown; swap the URL and body for your CLM or matter-management system. The template id and attribute names are per-tenant — this is the one setting nobody can ship a working default for. Disable this node to run the router without a CLM; the Slack queue post and the audit row still work."
+    },
+    {
+      "id": "b7e1c3a5-0012-4c20-9d10-000000000012",
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: \"#legal-queue\", text: \":page_facing_up: *\" + $json.request_type.replace(/_/g, \" \") + \"* — \" + $json.business_unit + \"\\nFrom: \" + $json.requester_email + \"  |  SLA: \" + $json.sla_business_hours + \" business hours\\n\" + $json.rationale + ($json.override_reason ? \"\\n_Routed here by policy override: \" + $json.override_reason + \"_\" : \"\") }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "name": "Slack — Playbook Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notes": "The reviewer queue. Posting the override reason inline is what lets a reviewer notice that the guards are miscalibrated — an override that fires on every request is a threshold to change, not a rule to obey."
+    },
+    {
+      "id": "b7e1c3a5-0013-4c20-9d10-000000000013",
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: \"#legal-lawyer-queue\", text: \":scales: *\" + $json.request_type.replace(/_/g, \" \") + \"* — \" + $json.business_unit + \"\\nFrom: \" + $json.requester_email + \"  |  SLA: \" + $json.sla_business_hours + \" business hours\\nAssignee: \" + ($json.assignee ? \"<@\" + $json.assignee + \">\" : \"_unassigned — no default in the directory_\") + \"\\nFlags: \" + ($json.risk_flags.length ? $json.risk_flags.join(\", \") : \"none\") + \"\\n\" + $json.rationale }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "name": "Slack — Lawyer Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        540
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notes": "An unassigned request says so out loud rather than sitting silently. That single line is usually what surfaces a stale requester_directory."
+    },
+    {
+      "id": "b7e1c3a5-0014-4c20-9d10-000000000014",
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.requester_email.split(\"@\")[0], text: \"Legal here — I can start on this as soon as you fill in: *\" + $json.missing_fields.join(\", \").replace(/_/g, \" \") + \"*.\\n\\nReply in this thread with those and it goes straight into the queue. The SLA clock starts when you do.\" }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "name": "Slack — Ask For Missing Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        780
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notes": "Names the specific fields rather than saying “incomplete”. The status is awaiting_requester, which the SLA sweep tracks on its own 8-hour clock — a request blocked on the business is still a request legal owes an answer on."
+    },
+    {
+      "id": "b7e1c3a5-0015-4c20-9d10-000000000015",
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: \"#legal-gc-escalations\", text: \":rotating_light: Escalated at intake — *no model classification was run*\\nFrom: \" + $json.requester_email + \"\\nSubject: \" + $json.subject + \"\\nReason: \" + ($json.privilege_reason || \"privileged / litigation / regulator pattern matched at intake\") }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "name": "Slack — GC Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -440,
+        140
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notes": "Fed by the privilege gate and by the policy node’s walk-away overrides and parse-failure catch. Says plainly that no model saw the content, so the reader knows the summary in front of them is the raw subject line and nothing more."
+    },
+    {
+      "id": "b7e1c3a5-0016-4c20-9d10-000000000016",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO legal_request_log (\n    source_message_id, source, requester_email, business_unit, risk_posture,\n    request_type, lane, model_lane, override_reason, confidence,\n    sla_business_hours, risk_flags, missing_fields, claimed_value_usd,\n    assignee, status, first_touch_at, received_at\n) VALUES (\n    $1, $2, $3, $4, $5,\n    $6, $7, $8, $9, $10,\n    $11, $12::text[], $13::text[], $14,\n    $15, $16, now(), $17\n)\nON CONFLICT (source_message_id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ $json.source_message_id }},{{ $json.source }},{{ $json.requester_email }},{{ $json.business_unit }},{{ $json.risk_posture }},{{ $json.request_type }},{{ $json.lane }},{{ $json.model_lane }},{{ $json.override_reason }},{{ $json.confidence }},{{ $json.sla_business_hours }},{{ \"{\" + $json.risk_flags.join(\",\") + \"}\" }},{{ \"{\" + $json.missing_fields.join(\",\") + \"}\" }},{{ $json.claimed_value_usd }},{{ $json.assignee }},{{ $json.lane === \"awaiting_requester\" ? \"awaiting_requester\" : \"open\" }},{{ $json.received_at }}"
+        }
+      },
+      "name": "Write Intake Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1140,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — Legal Ops"
+        }
+      },
+      "notes": "ON CONFLICT (source_message_id) DO NOTHING makes the insert idempotent. n8n retries on transient Postgres errors, and a duplicate row would double-count every number in the weekly demand report. Every lane converges here, including self-serve — an unlogged self-serve answer is invisible work."
+    },
+    {
+      "id": "b7e1c3a5-0017-4c20-9d10-000000000017",
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $('Normalize Request').first().json.source_message_id }}"
+      },
+      "name": "Mark Email Processed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1360,
+        420
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CRED_ID",
+          "name": "Gmail — legal-intake@"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "notes": "Only meaningful for email-sourced items; form submissions have no Gmail id, so this fails harmlessly and continues. Swap markAsRead for addLabels with the legal-intake-processed label if you prefer the trigger filter in Intake Mailbox Poll to do the deduplication."
+    },
+    {
+      "id": "b7e1c3a5-0018-4c20-9d10-000000000018",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9-18 * * 1-5"
+            }
+          ]
+        }
+      },
+      "name": "SLA Sweep — Hourly Weekdays",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        1040
+      ],
+      "notes": "Timezone comes from workflow settings.timezone (Europe/London in this export). Change it there, not here. Business hours only: sweeping overnight and at weekends produces breach alerts nobody can act on and teaches the team to mute the channel."
+    },
+    {
+      "id": "b7e1c3a5-0019-4c20-9d10-000000000019",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT r.id, r.source_message_id, r.requester_email, r.business_unit,\n       r.request_type, r.lane, r.assignee, r.received_at,\n       r.last_escalated_tier, p.sla_business_hours, p.escalation_channel\nFROM legal_request_log r\nJOIN legal_sla_policy p ON p.lane = r.lane\nWHERE r.status <> 'closed'\n  AND p.sla_business_hours IS NOT NULL\n  AND r.received_at > now() - interval '90 days';",
+        "options": {}
+      },
+      "name": "Find Open Requests",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -880,
+        1040
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — Legal Ops"
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "The 90-day floor stops a forgotten request from 2024 escalating forever. Anything older than that is a data-hygiene problem, not an SLA breach — close it or reopen it deliberately."
+    },
+    {
+      "id": "b7e1c3a5-0020-4c20-9d10-000000000020",
+      "parameters": {
+        "jsCode": "// Calendar hours are not business hours. Counting elapsed wall-clock time is\n// the single most common reason an SLA alert fires at 3am on a Sunday for a\n// request that is comfortably inside its window.\nconst BUSINESS_START = 9;   // local hour, inclusive\nconst BUSINESS_END = 18;    // local hour, exclusive\nconst HOURS_PER_DAY = BUSINESS_END - BUSINESS_START;\nconst TIERS = [\n  { tier: 1, at: 0.5,  label: 'halfway' },\n  { tier: 2, at: 1.0,  label: 'breached' },\n  { tier: 3, at: 1.5,  label: 'badly overdue' },\n];\n\nfunction businessHoursBetween(startIso, end) {\n  let cursor = new Date(startIso);\n  let hours = 0;\n  // Step an hour at a time. At the volumes this sweep sees (open requests, not\n  // all requests) the loop is cheap and the arithmetic stays legible.\n  while (cursor < end && hours < 2000) {\n    const day = cursor.getUTCDay();\n    const hour = cursor.getUTCHours();\n    if (day >= 1 && day <= 5 && hour >= BUSINESS_START && hour < BUSINESS_END) hours += 1;\n    cursor = new Date(cursor.getTime() + 3600 * 1000);\n  }\n  return hours;\n}\n\nconst now = new Date();\nconst out = [];\n\nfor (const item of $input.all()) {\n  const r = item.json;\n  if (!r.id) continue; // empty sweep\n\n  const elapsed = businessHoursBetween(r.received_at, now);\n  const ratio = elapsed / r.sla_business_hours;\n\n  const due = TIERS.filter((t) => ratio >= t.at).pop();\n  if (!due) continue;\n  if (due.tier <= (r.last_escalated_tier || 0)) continue; // already shouted at this tier\n\n  out.push({\n    json: {\n      ...r,\n      elapsed_business_hours: elapsed,\n      breach_tier: due.tier,\n      breach_label: due.label,\n      escalate_to: due.tier >= 3 ? '#legal-gc-escalations' : r.escalation_channel,\n    },\n  });\n}\n\nreturn out;"
+      },
+      "name": "Compute Breach Tier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        1040
+      ],
+      "notes": "Three escalation tiers at 50%, 100%, and 150% of the lane SLA, and the last_escalated_tier check is what stops the same request being posted every hour for a week. Tier 3 jumps channel to the GC — an alert that stays in the queue nobody is reading is not an escalation."
+    },
+    {
+      "id": "b7e1c3a5-0021-4c20-9d10-000000000021",
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.escalate_to, text: \":hourglass: *\" + $json.breach_label.toUpperCase() + \"* — \" + $json.request_type.replace(/_/g, \" \") + \" for \" + $json.business_unit + \"\\n\" + $json.elapsed_business_hours + \" of \" + $json.sla_business_hours + \" business hours used  |  \" + ($json.assignee ? \"<@\" + $json.assignee + \">\" : \"unassigned\") + \"\\nFrom: \" + $json.requester_email }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "name": "Slack — SLA Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -440,
+        1040
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notes": "Names the assignee and the elapsed-versus-allowed hours rather than saying “overdue”. An escalation a reader cannot act on in one glance gets muted within a fortnight."
+    },
+    {
+      "id": "b7e1c3a5-0022-4c20-9d10-000000000022",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE legal_request_log\nSET last_escalated_tier = $2\nWHERE id = $1;",
+        "options": {
+          "queryReplacement": "={{ $json.id }},{{ $json.breach_tier }}"
+        }
+      },
+      "name": "Record Escalation Tier",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -220,
+        1040
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — Legal Ops"
+        }
+      },
+      "notes": "Written after the Slack post, not before. If the post fails the tier is not recorded and the next hourly sweep tries again — the failure mode you want is a duplicate nudge, not a silent miss."
+    },
+    {
+      "id": "b7e1c3a5-0023-4c20-9d10-000000000023",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "name": "Weekly Demand Report — Mon 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        1480
+      ],
+      "notes": "Timezone comes from workflow settings.timezone. This report is the reason the router is worth building: routing saves hours, but the demand data is what changes headcount and playbook decisions."
+    },
+    {
+      "id": "b7e1c3a5-0024-4c20-9d10-000000000024",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH window AS (\n    SELECT * FROM legal_request_log\n    WHERE received_at >= now() - interval '7 days'\n),\nrecontact AS (\n    SELECT w.id\n    FROM window w\n    JOIN legal_request_log later\n      ON lower(later.requester_email) = lower(w.requester_email)\n     AND later.id <> w.id\n     AND later.received_at BETWEEN w.received_at AND w.received_at + interval '7 days'\n    WHERE w.lane = 'self_serve'\n)\nSELECT\n    (SELECT count(*) FROM window)                                        AS total_requests,\n    (SELECT count(*) FROM window WHERE lane = 'self_serve')              AS self_serve,\n    (SELECT count(*) FROM window WHERE lane = 'playbook')                AS playbook,\n    (SELECT count(*) FROM window WHERE lane = 'lawyer')                  AS lawyer,\n    (SELECT count(*) FROM window WHERE lane = 'gc_escalation')           AS gc_escalation,\n    (SELECT count(*) FROM window WHERE lane = 'awaiting_requester')      AS awaiting_requester,\n    (SELECT count(DISTINCT id) FROM recontact)                           AS self_serve_recontacts,\n    (SELECT count(*) FROM window WHERE source = 'email')                 AS arrived_by_email,\n    (SELECT count(*) FROM window WHERE request_type = 'other')           AS type_other,\n    (SELECT count(*) FROM window WHERE confidence < 0.75)                AS low_confidence,\n    (SELECT count(*) FROM window WHERE override_reason IS NOT NULL)      AS overridden,\n    (SELECT count(*) FROM window WHERE risk_posture = 'unknown')         AS unknown_requester,\n    (SELECT string_agg(t, ', ') FROM (\n        SELECT request_type || ' (' || count(*) || ')' AS t\n        FROM window GROUP BY request_type ORDER BY count(*) DESC LIMIT 5\n    ) top5)                                                              AS top_request_types,\n    (SELECT string_agg(u, ', ') FROM (\n        SELECT business_unit || ' (' || count(*) || ')' AS u\n        FROM window GROUP BY business_unit ORDER BY count(*) DESC LIMIT 5\n    ) top5u)                                                             AS top_business_units;",
+        "options": {}
+      },
+      "name": "Aggregate Demand",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -880,
+        1480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "PLACEHOLDER_POSTGRES_CRED_ID",
+          "name": "Postgres — Legal Ops"
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "The recontact CTE is the honest half of the report: it counts self-serve answers where the same person came back inside seven days. That number, not the deflection rate, tells you whether self-serve worked."
+    },
+    {
+      "id": "b7e1c3a5-0025-4c20-9d10-000000000025",
+      "parameters": {
+        "jsCode": "// Turns the aggregate row into a report that states what to do about each\n// number, not just what the number is. A dashboard nobody acts on is a cost.\nconst RECONTACT_CEILING = 0.15;   // above this, the self-serve templates are wrong\nconst OTHER_CEILING = 0.10;       // above this, the taxonomy is missing a type\nconst EMAIL_CEILING = 0.30;       // above this, the form has not landed\n\nconst d = $input.first().json;\nconst total = Number(d.total_requests) || 0;\n\nif (!total) {\n  return [{ json: { report: ':chart_with_upwards_trend: *Legal demand — last 7 days*\\nNo requests logged. If that is a surprise, check the intake webhook and the legal-intake@ poll before assuming a quiet week.' } }];\n}\n\nconst pct = (v) => Math.round((Number(v) / total) * 100);\nconst share = (v) => Number(v) / total;\n\nconst lines = [];\nlines.push(':chart_with_upwards_trend: *Legal demand — last 7 days*');\nlines.push(`*${total}* requests  |  self-serve ${pct(d.self_serve)}%  ·  playbook ${pct(d.playbook)}%  ·  lawyer ${pct(d.lawyer)}%  ·  GC ${pct(d.gc_escalation)}%  ·  awaiting requester ${pct(d.awaiting_requester)}%`);\nlines.push(`Top types: ${d.top_request_types || 'n/a'}`);\nlines.push(`Top business units: ${d.top_business_units || 'n/a'}`);\nlines.push('');\n\nconst actions = [];\n\nconst recontactRate = Number(d.self_serve) ? Number(d.self_serve_recontacts) / Number(d.self_serve) : 0;\nif (recontactRate > RECONTACT_CEILING) {\n  actions.push(`:warning: ${Math.round(recontactRate * 100)}% of self-serve answers came back within 7 days (ceiling ${RECONTACT_CEILING * 100}%). The template is not answering the question — read five of them before touching the router.`);\n}\nif (share(d.type_other) > OTHER_CEILING) {\n  actions.push(`:warning: ${pct(d.type_other)}% classified as \"other\" (ceiling ${OTHER_CEILING * 100}%). That is a missing request type in the taxonomy, not a model failure. Add it to the system prompt.`);\n}\nif (share(d.arrived_by_email) > EMAIL_CEILING) {\n  actions.push(`:warning: ${pct(d.arrived_by_email)}% still arrived by email rather than the form (ceiling ${EMAIL_CEILING * 100}%). Channel discipline, not automation, is the gap.`);\n}\nif (share(d.unknown_requester) > 0.20) {\n  actions.push(`:warning: ${pct(d.unknown_requester)}% of requesters were not in requester_directory, so none of them could be self-served. Whoever owns the directory has a backlog.`);\n}\nif (share(d.low_confidence) > 0.25) {\n  actions.push(`:mag: ${pct(d.low_confidence)}% classified below 0.75 confidence. Sample ten and check whether the requests are genuinely ambiguous or the intake form is collecting too little.`);\n}\n\nlines.push(actions.length ? '*Needs a decision this week*' : ':white_check_mark: No threshold breached this week.');\nlines.push(...actions);\nlines.push('');\nlines.push(`_Policy overrides fired on ${d.overridden} of ${total} requests. An override that fires on almost everything is a threshold to retune, not a rule that is working._`);\n\nreturn [{ json: { report: lines.join('\\n') } }];"
+      },
+      "name": "Format Demand Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        1480
+      ],
+      "notes": "Every threshold here (15% recontact, 10% other, 30% email, 20% unknown requester, 25% low confidence) is a starting value, not a finding. Ship with them, watch a quarter, move them to match what your team actually treats as a problem."
+    },
+    {
+      "id": "b7e1c3a5-0026-4c20-9d10-000000000026",
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: \"#legal-ops\", text: $json.report }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "name": "Slack — Post Demand Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -440,
+        1480
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SLACK_CRED_ID",
+          "name": "Slack — Bot Token"
+        }
+      },
+      "notes": "Posts to the legal-ops channel rather than DMing the GC. The demand report is most useful when the business units named in it can see their own numbers."
+    }
+  ],
+  "connections": {
+    "Intake Form Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intake Mailbox Poll — legal@": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Privileged-Content Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Privileged-Content Gate": {
+      "main": [
+        [
+          {
+            "node": "Slack — GC Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Requester Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requester Context": {
+      "main": [
+        [
+          {
+            "node": "Merge Requester Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Requester Context": {
+      "main": [
+        [
+          {
+            "node": "Claude — Classify + Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude — Classify + Route": {
+      "main": [
+        [
+          {
+            "node": "Apply Routing Policy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Routing Policy": {
+      "main": [
+        [
+          {
+            "node": "Lane Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lane Switch": {
+      "main": [
+        [
+          {
+            "node": "Slack — Self-Serve Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CLM — Open Playbook Matter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — Lawyer Queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — Ask For Missing Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — GC Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CLM — Open Playbook Matter": {
+      "main": [
+        [
+          {
+            "node": "Slack — Playbook Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Self-Serve Reply": {
+      "main": [
+        [
+          {
+            "node": "Write Intake Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Playbook Queue": {
+      "main": [
+        [
+          {
+            "node": "Write Intake Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Lawyer Queue": {
+      "main": [
+        [
+          {
+            "node": "Write Intake Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Ask For Missing Fields": {
+      "main": [
+        [
+          {
+            "node": "Write Intake Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — GC Escalation": {
+      "main": [
+        [
+          {
+            "node": "Write Intake Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Intake Log": {
+      "main": [
+        [
+          {
+            "node": "Mark Email Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SLA Sweep — Hourly Weekdays": {
+      "main": [
+        [
+          {
+            "node": "Find Open Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Open Requests": {
+      "main": [
+        [
+          {
+            "node": "Compute Breach Tier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Breach Tier": {
+      "main": [
+        [
+          {
+            "node": "Slack — SLA Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — SLA Escalation": {
+      "main": [
+        [
+          {
+            "node": "Record Escalation Tier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Demand Report — Mon 08:00": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Demand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Demand": {
+      "main": [
+        [
+          {
+            "node": "Format Demand Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Demand Report": {
+      "main": [
+        [
+          {
+            "node": "Slack — Post Demand Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 900,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [
+    {
+      "name": "legal-ops"
+    },
+    {
+      "name": "intake"
+    }
+  ]
+}

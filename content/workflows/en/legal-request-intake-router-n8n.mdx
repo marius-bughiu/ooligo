@@ -1,0 +1,102 @@
+---
+slug: legal-request-intake-router-n8n
+canonical_slug: legal-request-intake-router-n8n
+locale: en
+verticals: [legal-ops]
+title: Route every inbound legal request into the right lane with n8n
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack, ironclad]
+roles: [legal-ops-manager, in-house-counsel]
+difficulty: intermediate
+time_to_setup: 120min
+human_tested: false
+last_updated: "2026-08-18"
+---
+
+An n8n flow that gives the legal department one front door. Requests arrive from a form or a shared mailbox, get classified against a twelve-type taxonomy, and land in one of five lanes — self-serve template, playbook review, lawyer, blocked-on-requester, or GC escalation. An hourly sweep chases the SLA clock in business hours; a Monday morning report says what the department was actually asked for. Costs roughly $0.011 to $0.017 per request in Claude inference.
+
+The workflow ships in `apps/web/public/artifacts/legal-request-intake-router-n8n/legal-request-intake-router-n8n.json` — 26 nodes across three trigger-rooted branches. The three Postgres tables it needs are in the sibling `schema.sql`, and credential setup plus a six-step verification sequence are in `_README.md`.
+
+## When to use
+
+Your legal team fields somewhere north of 30 requests a month and cannot say, without opening a spreadsheet, how many arrived last week or what they were about. Requests reach you through whatever channel the requester happened to remember — 87% of legal requests arrive by email, per Checkbox's intake research, with the rest by phone or in person. A meaningful share of what lands is work a requester could finish alone if someone pointed them at a template.
+
+The win is not classification. The win is that a request gets a first touch in under ten minutes with a named lane and a stated deadline, and that at the end of the week you have a defensible answer to "what is legal spending its time on?" That second half is why this is worth building. CLOC's 2026 State of the Industry Report, drawing on 135 law departments with a median revenue of $13 billion, found workload rising in regulatory compliance (63% of departments) and cybersecurity (58%) while the two usual relief valves narrowed: only 47% expect inside legal spend to grow (down from 65%) and 32% expect attorney headcount growth. When you cannot hire your way out, the argument for more resourcing has to be made from demand data you do not currently collect.
+
+This flow is the layer above per-contract-type automation. It decides *which* pipeline a request belongs to; the [NDA intake triage flow](/en/workflows/nda-intake-triage-n8n/) does the clause-level work once an NDA has been identified as one.
+
+## When NOT to use
+
+Skip it below about 30 requests a month. The two-hour setup is the small cost; codifying a service catalog and populating the requester directory is the real one, and it does not pay back at that volume. A shared mailbox and a weekly rota is the better answer.
+
+Skip it if you have no written templates or playbook. The self-serve lane points at a template URL, and the playbook lane assumes a reviewer has a written position to check against. Without those, every request routes to a lawyer and you have built an expensive queue. Write the catalog first — that is the actual project, and this flow is what makes it visible afterwards.
+
+Skip it for intake that must be privileged from first contact: internal investigations, whistleblower reports, and anything already under a litigation hold. Those need a separate channel that bypasses the automation entirely. The flow's privilege gate catches the ones that arrive at the front door by mistake, but a channel you have deliberately routed through a classifier is a channel you have to defend later.
+
+Skip it if legal's problem is capacity rather than routing. The router makes the queue legible and the demand measurable. It does not make lawyers, and a team already at 100% utilization will see the same backlog with better labels on it.
+
+## Setup
+
+Run `schema.sql` first. It creates `requester_directory` (who is asking and on whose paper), `legal_request_log` (the audit trail and the SLA clock), and `legal_sla_policy` (one row per lane, seeded with the four default clocks). Then import the JSON, bind the five placeholder credentials per the README, and — before anything else — set the workflow timezone. The export ships `Europe/London`, and every cron expression plus the business-hours arithmetic in `Compute Breach Tier` reads from that one setting. Getting it wrong does not throw; it silently shifts every deadline.
+
+The configuration that decides behavior is a handful of constants in two Code nodes. In `Apply Routing Policy`: `CONFIDENCE_FLOOR` is 0.75, `VALUE_ESCALATION_USD` is $250,000, and `WALK_AWAY_FLAGS` lists the six categories that force a GC escalation regardless of what the model concluded. Set `VALUE_ESCALATION_USD` to whatever your signature-authority matrix already says rather than a round number. In `Normalize Request`, `PRIVILEGE_PATTERNS` is eight regexes that divert a request to the GC channel without an API call at all.
+
+Expect to tune the SLA hours once. They live in the `legal_sla_policy` table rather than in a node, so changing them is a SQL update and not a workflow edit.
+
+## What the flow does
+
+`Intake Form Webhook` and `Intake Mailbox Poll — legal@` are the two entry points; `Normalize Request` is the only node that knows there are two. It flattens both shapes into one envelope, caps the body at 4,000 characters, and sets a `privilege_hit` boolean. A request with no identifiable requester is force-flagged rather than guessed at — there is nobody to send an answer to.
+
+`Privileged-Content Gate` acts on that boolean. Its true branch goes straight to `#legal-gc-escalations` and the model never sees the content. That ordering is the point: for a subpoena or an investigation, a classification round trip is a privilege problem, not a latency saving.
+
+`Requester Context` looks the sender up by exact address first and email domain second, so a named exception beats the org-wide default. `Merge Requester Context` defaults a missing row to `risk_posture: 'unknown'` rather than `'standard'` — that single word is what stops an unrecognized sender receiving an automated legal answer.
+
+`Claude — Classify + Route` sends the envelope to Sonnet 5 with a system prompt naming twelve request types, three candidate lanes, nine risk flags, and a fixed list of fields a reviewer would have to chase. It returns strict JSON with a `lane`, a `confidence`, and a rationale under 300 characters. Sonnet 5 rather than Haiku because the expensive error is a lawyer-grade request sitting in a self-serve auto-reply, not the per-call price difference.
+
+`Apply Routing Policy` is the safety belt, and it is deliberately ordinary JavaScript rather than a second prompt. Five overrides fire in priority order: a walk-away risk flag forces `gc_escalation`; a claimed value at or above the escalation floor forces `lawyer`; confidence below 0.75 demotes `self_serve` to `playbook`; a non-standard risk posture does the same; and named missing fields route to `awaiting_requester`. Every override stamps its reason onto the audit row, so you can measure which guards earn their place. A parse failure — the classic regression after any prompt edit is the model wrapping its JSON in markdown fences — is caught and escalated to a human unread. The guards live here rather than in the prompt because a prompt-only guardrail is bypassable by whatever text a requester pastes into the form.
+
+`Lane Switch` fans out to five branches, with `gc_escalation` as the fallback output rather than a silent drop. All five converge on `Write Intake Log`, which inserts one row keyed on `source_message_id` with `ON CONFLICT DO NOTHING` — n8n retries on transient Postgres errors, and a duplicate row would double-count every number in the weekly report. The self-serve lane writes a row too. An unlogged self-serve answer is invisible work, and invisible work is exactly what this flow exists to stop.
+
+The second branch sweeps hourly on weekdays, computes elapsed *business* hours against each lane's SLA, and escalates at 50%, 100%, and 150% of the clock, jumping to the GC channel at the third tier. `Record Escalation Tier` writes the tier back **after** the Slack post, so a failed post produces a duplicate nudge next hour rather than a silent miss. The third branch aggregates the week and posts a report that states what to do about each number rather than only what the number is.
+
+## Cost reality
+
+Claude inference is the dominant variable cost. A request serializes to roughly 2,400–3,800 input tokens — the twelve-type taxonomy and lane rules dominate, with the requester's free text adding 200–800 — and the structured response lands at 250–400 output tokens. At Sonnet 5 list pricing of $3 per million input and $15 per million output, that is **$0.011 to $0.017 per request**. At 400 requests a month, $4.40–$6.80. At 2,000, $22–$34.
+
+n8n executions are the other line. The intake branch is one execution per request; the SLA sweep at ten weekday runs a day is about 220 a month; the report is about four. So 400 requests a month is roughly 620 executions, inside n8n Cloud's Starter plan (€20/month, 2,500 executions). At 2,000 requests a month you are at roughly 2,220 and should be on Pro (€50/month, 10,000 executions) for the headroom and the concurrency. Self-hosting on a small VPS handles either without an execution cap.
+
+Set against that: the manual version of this job is a coordinator reading each request, deciding where it goes, and chasing it. At an estimated 6–10 minutes per request for read-classify-route-acknowledge and a fully-loaded coordinator rate of $60–$90 an hour, that is $6–$15 of human time per request — figures marked as estimates, not measured benchmarks. The ratio is not the interesting part. The interesting part is that the coordinator's judgment gets spent on the 20–30% of requests where routing is genuinely ambiguous instead of on the NDA that arrives for the fortieth time.
+
+## Success metrics
+
+Track three numbers weekly, all of them already in the report.
+
+**Intake coverage** — the share of legal work that entered through the front door at all. Proxy it with the ratio of `source = 'form'` to `source = 'email'` rows, and target email below 30% by day 90. Coverage is the metric that decides whether anything else here is real; a router that sees half the work produces a demand report that is confidently wrong.
+
+**Self-serve durability** — of the requests answered with a template, the percentage where the same person did not come back within seven days. Target 85% or better. This is the honest counterweight to a deflection rate, which measures only that you said no quickly.
+
+**First touch under ten minutes, every lane.** If it drifts, the cause is a slow API call or queued n8n executions, not the routing logic. Check the execution list before touching a threshold.
+
+## vs alternatives
+
+**vs the shared mailbox and a spreadsheet.** The status quo costs nothing to run and produces no data. It works fine below roughly 30 requests a month and degrades in a specific way above it: the queue stays manageable while the *reporting* becomes fiction, because nobody backfills a spreadsheet on a busy week. If you only want faster routing, a rota and a good autoresponder gets you most of the way. Build this when someone asks legal to justify headcount and the honest answer is that you do not know what you did last quarter.
+
+**vs a legal front door product.** [Checkbox](/en/tools/checkbox/) and [Streamline AI](/en/tools/streamline-ai/) both sell exactly this as a product, with a form builder, a workflow designer, and reporting already in the box. Both are quote-gated — neither published a starting price as of their August 2026 pricing check — which puts them in an enterprise procurement cycle rather than an afternoon. They are the better choice if legal ops has budget and no engineering support, and if a vendor-shaped taxonomy fits your request mix. This flow is the better choice when your routing rules encode something specific about your business — a signature-authority threshold, a business unit that always needs a lawyer, a category of counterparty you refuse to self-serve — because those rules live in a Code node you own rather than in a configuration screen you negotiate for.
+
+**vs a ticket queue you already own.** Jira Service Management, ServiceNow, or Zendesk can all take a legal request form today, at no new licence cost if IT already runs one. What they route on is form fields: the requester picks "contract review," and the ticket goes to the contract review queue. That works precisely as well as your requesters' self-classification, which is the thing intake data consistently shows is unreliable — the request-type hint in this flow is passed to the model explicitly labelled as self-declared and possibly wrong. Use the ticket system if your request mix is narrow and your form can enumerate it. Use this when the deciding information is in a paragraph of free text.
+
+## Watch-outs
+
+**Self-serve becomes a deflection wall.** Failure mode: requesters get a template link, the template does not answer their actual question, and they route around legal into DMs — where the work still happens but stops being counted. Guard: the weekly report's recontact query counts self-serve answers where the same person came back within seven days, and flags above 15%. The self-serve Slack reply also ends with an explicit escape hatch — reply in the thread and it goes to the review queue, no new form.
+
+**Taxonomy drift routes new work to lawyers.** Failure mode: a new regulation or product line produces requests that fit none of the twelve types, land as `other`, and default into the lawyer lane, so the queue grows while the model looks like it is working. Guard: the report ranks `request_type = 'other'` and flags above 10% of volume, with the instruction that this is a missing type in the taxonomy rather than a model failure. Add it to the system prompt in `Claude — Classify + Route`.
+
+**Privileged content reaches the API.** Failure mode: someone forwards a thread containing litigation context with a routine contract attached, and the whole thread goes into an inference request. Guard: `PRIVILEGE_PATTERNS` diverts eight categories before any API call, and `Normalize Request` caps the body at 4,000 characters so a long forwarded thread is truncated regardless. Pair the flow with a written [AI policy for legal teams](/en/learn/ai-policy-for-legal-teams/) that authorizes the data flow explicitly, and re-run verification test 4 in the README after every edit to those patterns.
+
+**The SLA clock counts the wrong hours.** Failure mode: elapsed time is computed in calendar hours, breach alerts fire overnight and at weekends for requests comfortably inside their window, and the team mutes the channel within a fortnight. Guard: `Compute Breach Tier` counts only Monday–Friday between `BUSINESS_START` and `BUSINESS_END`, and the sweep itself is cron-limited to weekday business hours. Verification test 6 in the README exists specifically to catch a timezone mismatch between the workflow setting and those constants.
+
+**The channel norm never forms.** Failure mode: the form exists, and people email the GC directly anyway, because the first request is always sent the way it has always been sent. Guard: the `legal-intake@` mailbox trigger catches them, and the report's email-share threshold makes the gap visible as a number rather than a feeling. Pair it with autoresponders on individual lawyer mailboxes for the first 30 days. If email share is still above 30% at day 90, the problem is organizational and no node edit will fix it.
+
+## Stack
+
+[n8n](/en/tools/n8n/) for orchestration, [Claude](/en/tools/claude/) Sonnet 5 for classification, [Slack](/en/tools/slack/) for every queue and the weekly report, [Ironclad](/en/tools/ironclad/) or your own CLM for the playbook lane's matter record, Postgres for the directory, the log, and the SLA policy, and Gmail for the catch-net mailbox. The concepts behind the routing rules are in [legal intake](/en/learn/legal-intake/), and where this sits on the capability curve is in the [legal ops maturity model](/en/learn/legal-ops-maturity-model/). Once a request is routed, the [contract review SOP](/en/learn/contract-review-sop/) governs what the playbook lane actually does.

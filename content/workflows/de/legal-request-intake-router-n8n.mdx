@@ -1,0 +1,102 @@
+---
+slug: legal-request-intake-router-n8n
+canonical_slug: legal-request-intake-router-n8n
+locale: de
+verticals: [legal-ops]
+title: "Jede eingehende Rechtsanfrage mit n8n in die richtige Spur leiten"
+artifact_type: n8n-flow
+tools_used: [n8n, claude, slack, ironclad]
+roles: [legal-ops-manager, in-house-counsel]
+difficulty: intermediate
+time_to_setup: 120min
+human_tested: false
+last_updated: "2026-08-18"
+---
+
+Ein n8n Workflow, der der Rechtsabteilung eine einzige Eingangstür gibt. Anfragen kommen über ein Formular oder ein gemeinsames Postfach herein, werden gegen eine Taxonomie aus zwölf Typen klassifiziert und landen in einer von fünf Spuren: Self-Service-Vorlage, Playbook-Prüfung, Anwalt, blockiert beim Anfragenden oder GC-Eskalation. Ein stündlicher Sweep verfolgt die SLA-Uhr in Geschäftsstunden; ein Report am Montagmorgen sagt, was die Abteilung tatsächlich gefragt wurde. Kostet rund 0,011 bis 0,017 USD pro Anfrage an Claude Inferenz.
+
+Der Workflow liegt in `apps/web/public/artifacts/legal-request-intake-router-n8n/legal-request-intake-router-n8n.json` — 26 Nodes verteilt auf drei Zweige mit jeweils eigenem Trigger. Die drei Postgres-Tabellen, die er braucht, stehen in der danebenliegenden `schema.sql`, und das Credential-Setup samt einer sechsstufigen Verifikationssequenz steht in der `_README.md`.
+
+## Wann Sie ihn einsetzen
+
+Ihr Rechtsteam bearbeitet deutlich mehr als 30 Anfragen im Monat und kann ohne Tabellenkalkulation nicht sagen, wie viele letzte Woche eingingen oder worum es dabei ging. Anfragen erreichen Sie über den Kanal, an den sich der Anfragende gerade erinnert hat: 87% der Rechtsanfragen kommen per E-Mail, laut der Intake-Untersuchung von Checkbox, der Rest telefonisch oder persönlich. Ein relevanter Anteil dessen, was hereinkommt, ist Arbeit, die der Anfragende allein erledigen könnte, wenn ihn jemand auf eine Vorlage hinweisen würde.
+
+Der Gewinn ist nicht die Klassifikation. Der Gewinn ist, dass eine Anfrage in unter zehn Minuten eine erste Rückmeldung mit benannter Spur und erklärter Frist bekommt, und dass Sie am Ende der Woche eine belastbare Antwort auf die Frage haben, wofür die Rechtsabteilung ihre Zeit aufwendet. Diese zweite Hälfte ist der eigentliche Grund, das zu bauen. Der CLOC State of the Industry Report 2026, gestützt auf 135 Rechtsabteilungen mit einem Medianumsatz von 13 Milliarden USD, fand steigende Arbeitslast bei Regulatory Compliance (63% der Abteilungen) und Cybersecurity (58%), während sich die beiden üblichen Entlastungsventile verengten: nur 47% erwarten wachsende interne Rechtsausgaben (nach 65% im Vorjahr) und 32% erwarten Wachstum bei der Anwaltszahl. Wenn Sie sich nicht aus dem Problem herausrekrutieren können, muss das Argument für mehr Ressourcen aus Nachfragedaten kommen, die Sie derzeit nicht erheben.
+
+Dieser Workflow ist die Schicht über der Automatisierung je Vertragstyp. Er entscheidet, in *welche* Pipeline eine Anfrage gehört; der [NDA-Triage-Workflow](/de/workflows/nda-intake-triage-n8n/) macht die Arbeit auf Klauselebene, sobald ein NDA als solches erkannt wurde.
+
+## Wann Sie ihn NICHT einsetzen
+
+Lassen Sie es unter etwa 30 Anfragen im Monat. Die zwei Stunden Setup sind der kleine Aufwand; einen Servicekatalog zu kodifizieren und das Anfragendenverzeichnis zu befüllen ist der eigentliche, und der rechnet sich bei diesem Volumen nicht. Ein gemeinsames Postfach und eine wöchentliche Rotation ist die bessere Antwort.
+
+Lassen Sie es, wenn Sie keine geschriebenen Vorlagen oder Playbooks haben. Die Self-Service-Spur zeigt auf eine Vorlagen-URL, und die Playbook-Spur setzt voraus, dass ein Prüfer eine geschriebene Position zum Abgleich hat. Ohne das landet jede Anfrage bei einem Anwalt und Sie haben eine teure Warteschlange gebaut. Schreiben Sie zuerst den Katalog: das ist das eigentliche Projekt, und dieser Workflow ist das, was ihn danach sichtbar macht.
+
+Lassen Sie es für Eingänge, die vom ersten Kontakt an dem Anwaltsgeheimnis unterliegen müssen: interne Untersuchungen, Whistleblower-Meldungen und alles, was bereits unter einem Litigation Hold steht. Das braucht einen separaten Kanal, der die Automatisierung vollständig umgeht. Das Privileg-Gate des Workflows fängt diejenigen ab, die versehentlich an der Haupttür ankommen, aber ein Kanal, den Sie bewusst durch einen Klassifikator geleitet haben, ist ein Kanal, den Sie später verteidigen müssen.
+
+Lassen Sie es, wenn das Problem der Rechtsabteilung Kapazität ist und nicht Routing. Der Router macht die Warteschlange lesbar und die Nachfrage messbar. Er macht keine Anwälte, und ein Team bei 100% Auslastung sieht denselben Backlog mit besseren Etiketten.
+
+## Setup
+
+Führen Sie zuerst `schema.sql` aus. Es legt `requester_directory` an (wer fragt und auf wessen Papier), `legal_request_log` (die Audit-Spur und die SLA-Uhr) und `legal_sla_policy` (eine Zeile je Spur, vorbefüllt mit den vier Standard-Uhren). Importieren Sie dann das JSON, binden Sie die fünf Platzhalter-Credentials gemäß README, und stellen Sie vor allem anderen die Zeitzone des Workflows ein. Der Export kommt mit `Europe/London`, und jeder Cron-Ausdruck sowie die Geschäftsstunden-Arithmetik in `Compute Breach Tier` lesen aus dieser einen Einstellung. Sie falsch zu setzen wirft keinen Fehler; es verschiebt lautlos jede Frist.
+
+Die Konfiguration, die das Verhalten bestimmt, sind eine Handvoll Konstanten in zwei Code-Nodes. In `Apply Routing Policy`: `CONFIDENCE_FLOOR` steht auf 0,75, `VALUE_ESCALATION_USD` auf 250.000 USD, und `WALK_AWAY_FLAGS` listet die sechs Kategorien, die eine GC-Eskalation erzwingen, unabhängig davon, was das Modell geschlossen hat. Setzen Sie `VALUE_ESCALATION_USD` auf den Wert, den Ihre Unterschriftenrichtlinie ohnehin nennt, nicht auf eine runde Zahl. In `Normalize Request` sind `PRIVILEGE_PATTERNS` acht Regex-Ausdrücke, die eine Anfrage ganz ohne API-Aufruf in den GC-Kanal umleiten.
+
+Rechnen Sie damit, die SLA-Stunden einmal nachzujustieren. Sie liegen in der Tabelle `legal_sla_policy` und nicht in einem Node, also ist eine Änderung ein SQL-UPDATE und keine Workflow-Bearbeitung.
+
+## Was der Workflow tut
+
+`Intake Form Webhook` und `Intake Mailbox Poll — legal@` sind die beiden Eingänge; `Normalize Request` ist der einzige Node, der weiß, dass es zwei gibt. Er flacht beide Formen zu einem Envelope ab, deckelt den Body bei 4.000 Zeichen und setzt ein Boolean `privilege_hit`. Eine Anfrage ohne identifizierbaren Absender wird zwangsmarkiert statt geraten — es gibt niemanden, an den eine Antwort gehen könnte.
+
+`Privileged-Content Gate` handelt auf Basis dieses Booleans. Sein True-Zweig geht direkt nach `#legal-gc-escalations`, und das Modell sieht den Inhalt nie. Diese Reihenfolge ist der Punkt: bei einer Vorladung oder einer Untersuchung ist ein Klassifikations-Roundtrip ein Privilegproblem und keine Latenzersparnis.
+
+`Requester Context` schlägt den Absender zuerst über die exakte Adresse und danach über die Domain nach, sodass eine benannte Ausnahme den organisationsweiten Standard schlägt. `Merge Requester Context` setzt bei fehlender Zeile `risk_posture: 'unknown'` statt `'standard'` — dieses eine Wort verhindert, dass ein nicht erkannter Absender eine automatisierte Rechtsauskunft erhält.
+
+`Claude — Classify + Route` schickt den Envelope an Sonnet 5, mit einem System Prompt, der zwölf Anfragetypen, drei Kandidatenspuren, neun Risk Flags und eine feste Liste von Feldern benennt, denen ein Prüfer sonst hinterherlaufen müsste. Zurück kommt striktes JSON mit `lane`, `confidence` und einer Begründung unter 300 Zeichen. Sonnet 5 statt Haiku, weil der teure Fehler eine anwaltsreife Anfrage in einer Self-Service-Autoantwort ist und nicht der Preisunterschied je Aufruf.
+
+`Apply Routing Policy` ist der Sicherheitsgurt, und bewusst gewöhnliches JavaScript statt eines zweiten Prompts. Fünf Overrides greifen in Prioritätsreihenfolge: ein Walk-away-Risk-Flag erzwingt `gc_escalation`; ein angegebener Wert auf oder über der Eskalationsschwelle erzwingt `lawyer`; eine Confidence unter 0,75 stuft `self_serve` auf `playbook` zurück; eine nicht standardmäßige Risikoeinstufung tut dasselbe; und benannte fehlende Felder leiten nach `awaiting_requester`. Jeder Override stempelt seinen Grund in die Audit-Zeile, sodass Sie messen können, welche Schutzmechanismen ihren Platz verdienen. Ein Parse-Fehler — der klassische Rückfall nach jeder Prompt-Änderung ist, dass das Modell sein JSON in Markdown-Fences packt — wird abgefangen und ungelesen an einen Menschen eskaliert. Die Schutzmechanismen liegen hier und nicht im Prompt, weil ein Schutz, der nur im Prompt existiert, durch beliebigen Text umgangen werden kann, den ein Anfragender ins Formular kopiert.
+
+`Lane Switch` fächert in fünf Zweige auf, mit `gc_escalation` als Fallback-Ausgang statt eines stillen Verwerfens. Alle fünf laufen in `Write Intake Log` zusammen, das eine Zeile mit Schlüssel `source_message_id` und `ON CONFLICT DO NOTHING` einfügt: n8n wiederholt bei transienten Postgres-Fehlern, und eine doppelte Zeile würde jede Zahl im Wochenreport doppelt zählen. Die Self-Service-Spur schreibt ebenfalls ihre Zeile. Eine nicht protokollierte Self-Service-Antwort ist unsichtbare Arbeit, und unsichtbare Arbeit ist genau das, was dieser Workflow abstellen soll.
+
+Der zweite Zweig läuft stündlich an Werktagen, berechnet die verstrichenen *Geschäfts*stunden gegen das SLA je Spur und eskaliert bei 50%, 100% und 150% der Uhr, wobei er auf der dritten Stufe in den GC-Kanal wechselt. `Record Escalation Tier` schreibt die Stufe **nach** dem Slack-Post zurück, sodass ein fehlgeschlagener Post in der nächsten Stunde eine doppelte Erinnerung erzeugt statt eines stillen Ausfalls. Der dritte Zweig aggregiert die Woche und postet einen Report, der zu jeder Zahl sagt, was zu tun ist, und nicht nur, wie die Zahl lautet.
+
+## Die Kostenrealität
+
+Claude Inferenz ist der dominante variable Kostenblock. Eine Anfrage serialisiert zu etwa 2.400–3.800 Input-Tokens — die Taxonomie aus zwölf Typen und die Spurregeln dominieren, der Freitext des Anfragenden steuert 200–800 bei — und die strukturierte Antwort landet bei 250–400 Output-Tokens. Zum Sonnet-5-Listenpreis von 3 USD je Million Input-Tokens und 15 USD je Million Output-Tokens sind das **0,011 bis 0,017 USD je Anfrage**. Bei 400 Anfragen im Monat 4,40–6,80 USD. Bei 2.000 sind es 22–34 USD.
+
+Die n8n Executions sind die zweite Position. Der Intake-Zweig ist eine Execution je Anfrage; der SLA-Sweep mit zehn Läufen je Werktag ergibt rund 220 im Monat; der Report rund vier. 400 Anfragen im Monat sind also etwa 620 Executions und liegen im Starter-Plan von n8n Cloud (20 € im Monat, 2.500 Executions). Bei 2.000 Anfragen im Monat sind Sie bei rund 2.220 und sollten wegen Reserve und Nebenläufigkeit auf Pro wechseln (50 € im Monat, 10.000 Executions). Selbst gehostet auf einem kleinen VPS trägt beides ohne Execution-Deckel.
+
+Dagegengerechnet: die manuelle Variante dieser Arbeit ist ein Koordinator, der jede Anfrage liest, entscheidet wohin sie geht, und ihr hinterherläuft. Bei geschätzten 6–10 Minuten je Anfrage für Lesen-Klassifizieren-Weiterleiten-Bestätigen und einem vollkostenbelasteten Koordinatorensatz von 60–90 USD je Stunde sind das 6–15 USD an Personenzeit je Anfrage — Werte, die ausdrücklich als Schätzungen und nicht als gemessene Benchmarks markiert sind. Das Verhältnis ist nicht der interessante Teil. Interessant ist, dass das Urteil des Koordinators für die 20–30% der Anfragen aufgewendet wird, bei denen das Routing wirklich mehrdeutig ist, statt für das NDA, das zum vierzigsten Mal hereinkommt.
+
+## Erfolgskennzahlen
+
+Verfolgen Sie drei Zahlen wöchentlich, alle drei stehen bereits im Report.
+
+**Intake-Abdeckung** — der Anteil der Rechtsarbeit, der überhaupt durch die Eingangstür kam. Nähern Sie sich ihm über das Verhältnis von `source = 'form'`- zu `source = 'email'`-Zeilen, und zielen Sie bis Tag 90 auf unter 30% E-Mail. Abdeckung ist die Kennzahl, die entscheidet, ob irgendetwas anderes hier real ist; ein Router, der die Hälfte der Arbeit sieht, produziert einen Nachfragereport, der sich selbstsicher irrt.
+
+**Haltbarkeit des Self-Service** — von den mit einer Vorlage beantworteten Anfragen der Prozentsatz, bei dem dieselbe Person nicht innerhalb von sieben Tagen zurückkam. Zielen Sie auf 85% oder besser. Das ist das ehrliche Gegengewicht zu einer Deflection-Rate, die nur misst, dass Sie schnell Nein gesagt haben.
+
+**Erstkontakt unter zehn Minuten, in jeder Spur.** Driftet er, liegt es an einem langsamen API-Aufruf oder an eingereihten n8n Executions, nicht an der Routing-Logik. Prüfen Sie die Execution-Liste, bevor Sie an einem Schwellwert drehen.
+
+## Gegenüber den Alternativen
+
+**Gegenüber dem gemeinsamen Postfach und der Tabelle.** Der Status quo kostet nichts im Betrieb und produziert keine Daten. Er funktioniert unter etwa 30 Anfragen im Monat gut und verfällt oberhalb auf eine bestimmte Weise: die Warteschlange bleibt beherrschbar, während das *Reporting* zur Fiktion wird, weil in einer vollen Woche niemand eine Tabelle nachpflegt. Wenn Sie nur schnelleres Routing wollen, bringt eine Rotation plus ein guter Autoresponder Sie fast ans Ziel. Bauen Sie dies, wenn jemand die Rechtsabteilung auffordert, Stellen zu begründen, und die ehrliche Antwort lautet, dass Sie nicht wissen, was Sie letztes Quartal getan haben.
+
+**Gegenüber einem Legal-Front-Door-Produkt.** [Checkbox](/de/tools/checkbox/) und [Streamline AI](/de/tools/streamline-ai/) verkaufen genau das als Produkt, mit Formularbaukasten, Workflow-Designer und Reporting ab Werk. Beide sind angebotsgebunden — keines veröffentlichte zum Preis-Check im August 2026 einen Einstiegspreis —, was sie in einen Enterprise-Beschaffungszyklus setzt statt in einen Nachmittag. Sie sind die bessere Wahl, wenn Legal Ops Budget und keine Engineering-Unterstützung hat, und wenn eine anbieterseitig geschnittene Taxonomie zu Ihrem Anfragenmix passt. Dieser Workflow ist die bessere Wahl, wenn Ihre Routing-Regeln etwas Spezifisches über Ihr Geschäft kodieren — eine Unterschriftenschwelle, eine Geschäftseinheit, die immer einen Anwalt braucht, ein Typ von Gegenpartei, den Sie nicht per Self-Service bedienen wollen — weil diese Regeln in einem Code-Node liegen, der Ihnen gehört, und nicht in einer Konfigurationsmaske, die Sie erst verhandeln müssen.
+
+**Gegenüber einer Ticket-Queue, die Sie schon haben.** Jira Service Management, ServiceNow oder Zendesk können ab heute ein Formular für Rechtsanfragen entgegennehmen, ohne neue Lizenzkosten, wenn die IT ohnehin eines betreibt. Was sie routen, sind Formularfelder: der Anfragende wählt „Vertragsprüfung“, und das Ticket geht in die Vertragsprüfungs-Queue. Das funktioniert exakt so gut wie die Selbsteinordnung Ihrer Anfragenden, und genau die erweist sich in Intake-Daten durchgängig als unzuverlässig — der Typ-Hinweis in diesem Workflow wird dem Modell ausdrücklich als selbst angegeben und möglicherweise falsch übergeben. Nehmen Sie das Ticketsystem, wenn Ihr Anfragenmix schmal ist und Ihr Formular ihn aufzählen kann. Nehmen Sie dies, wenn die entscheidende Information in einem Absatz Freitext steht.
+
+## Worauf Sie achten müssen
+
+**Self-Service wird zur Abwehrmauer.** Fehlerbild: Anfragende bekommen einen Vorlagen-Link, die Vorlage beantwortet ihre eigentliche Frage nicht, und sie umgehen die Rechtsabteilung per Direktnachricht — wo die Arbeit weiterhin anfällt, aber nicht mehr gezählt wird. Schutz: die Recontact-Abfrage im Wochenreport zählt Self-Service-Antworten, bei denen dieselbe Person innerhalb von sieben Tagen zurückkam, und markiert über 15%. Die Self-Service-Antwort in Slack endet zudem mit einem ausdrücklichen Notausgang: im Thread antworten, und es geht in die Prüfwarteschlange, ohne neues Formular.
+
+**Taxonomie-Drift leitet neue Arbeit an Anwälte.** Fehlerbild: eine neue Regulierung oder Produktlinie erzeugt Anfragen, die in keinen der zwölf Typen passen, als `other` landen und per Default in die Anwaltsspur fallen, sodass die Warteschlange wächst, während das Modell zu funktionieren scheint. Schutz: der Report rankt `request_type = 'other'` und markiert über 10% des Volumens, mit dem Hinweis, dass dies ein fehlender Typ in der Taxonomie ist und kein Modellfehler. Ergänzen Sie ihn im System Prompt in `Claude — Classify + Route`.
+
+**Privilegierter Inhalt erreicht die API.** Fehlerbild: jemand leitet einen Thread mit Prozesskontext und einem angehängten Routinevertrag weiter, und der gesamte Thread geht in eine Inferenzanfrage. Schutz: `PRIVILEGE_PATTERNS` leitet acht Kategorien vor jedem API-Aufruf um, und `Normalize Request` deckelt den Body bei 4.000 Zeichen, sodass ein langer weitergeleiteter Thread ohnehin abgeschnitten wird. Kombinieren Sie den Workflow mit einer geschriebenen [KI-Richtlinie für Rechtsteams](/de/learn/ai-policy-for-legal-teams/), die den Datenfluss ausdrücklich autorisiert, und wiederholen Sie Verifikationstest 4 aus der README nach jeder Änderung an diesen Mustern.
+
+**Die SLA-Uhr zählt die falschen Stunden.** Fehlerbild: die verstrichene Zeit wird in Kalenderstunden gerechnet, Verletzungsalarme feuern nachts und am Wochenende für Anfragen, die bequem im Fenster liegen, und das Team schaltet den Kanal binnen zwei Wochen stumm. Schutz: `Compute Breach Tier` zählt nur Montag bis Freitag zwischen `BUSINESS_START` und `BUSINESS_END`, und der Sweep selbst ist per Cron auf werktägliche Geschäftsstunden begrenzt. Verifikationstest 6 in der README existiert genau dafür, eine Zeitzonen-Abweichung zwischen Workflow-Einstellung und diesen Konstanten aufzudecken.
+
+**Die Kanalnorm bildet sich nie heraus.** Fehlerbild: das Formular existiert, und die Leute schreiben trotzdem direkt an den GC, weil die erste Anfrage immer so verschickt wird, wie sie immer verschickt wurde. Schutz: der Trigger auf dem Postfach `legal-intake@` fängt sie ab, und der E-Mail-Anteilsschwellwert im Report macht die Lücke als Zahl sichtbar statt als Gefühl. Kombinieren Sie das in den ersten 30 Tagen mit Autorespondern auf den persönlichen Postfächern der Anwälte. Liegt der E-Mail-Anteil an Tag 90 noch über 30%, ist das Problem organisatorisch und keine Node-Änderung behebt es.
+
+## Stack
+
+[n8n](/de/tools/n8n/) für die Orchestrierung, [Claude](/de/tools/claude/) Sonnet 5 für die Klassifikation, [Slack](/de/tools/slack/) für jede Warteschlange und den Wochenreport, [Ironclad](/de/tools/ironclad/) oder Ihr eigenes CLM für den Matter-Datensatz der Playbook-Spur, Postgres für Verzeichnis, Log und SLA-Policy, und Gmail für das Auffangpostfach. Die Konzepte hinter den Routing-Regeln stehen in [Legal Intake](/de/learn/legal-intake/), und wo das auf der Fähigkeitskurve liegt, steht im [Legal-Ops-Reifegradmodell](/de/learn/legal-ops-maturity-model/). Sobald eine Anfrage geroutet ist, regelt die [Contract-Review-SOP](/de/learn/contract-review-sop/), was die Playbook-Spur tatsächlich tut.
