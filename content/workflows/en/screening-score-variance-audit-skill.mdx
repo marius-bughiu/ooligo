@@ -1,0 +1,88 @@
+---
+slug: screening-score-variance-audit-skill
+canonical_slug: screening-score-variance-audit-skill
+locale: en
+verticals: [recruiting]
+title: Measure your AI screener's score variance and set a defensible cutoff
+artifact_type: claude-skill
+tools_used: [claude, greenhouse, workable, hirevue]
+roles: [talent-acquisition, recruiter, recruiting-ops]
+difficulty: advanced
+time_to_setup: 2-4 hours
+human_tested: false
+last_updated: "2026-08-21"
+---
+
+A Claude Skill that re-runs a fixed candidate sample through your AI screener N times, decomposes the score movement per rubric criterion, and returns a recommended cutoff plus a manual-review band. The headline number it produces is the single-draw flip rate: the share of runs on which an identical application lands on the opposite side of your cutoff. That is the number your screener's behaviour actually turns on, and almost nobody has it.
+
+## The problem the audit exists for
+
+In June 2026, Dan Kinsky ran an unchanged resume PDF through HackerRank's newly open-sourced hiring agent 100 times. The default configuration used `gemma3:4b` at temperature 0.1 — low enough that near-identical output is the reasonable expectation. Scores came back between 66 and 99 out of 100. Against an 85-point cutoff, the same candidate with the same resume was rejected on roughly 65% of runs.
+
+The second configuration in the same teardown is the more instructive one. On `Gemini-3.1-flash-lite` across 50 runs, scores clustered between 45 and 65, and the failure rate at a 60-point cutoff dropped to 28%. Same class of instability, radically different consequence — because the cutoff sat in a different part of the score density.
+
+That is the reason a vendor-supplied reliability figure cannot answer your question. The number that decides whether a candidate's outcome is a coin flip is a joint property of the vendor's model *and* your cutoff *and* your applicant pool. It has to be measured on your side of the API.
+
+## Why setting temperature to 0 is not the fix
+
+Two facts kill the obvious mitigation.
+
+First, on the current frontier Claude models — Claude Opus 5, Opus 4.8, Opus 4.7, Sonnet 5, and Fable 5 — `temperature`, `top_p`, and `top_k` were removed from the Messages API, and a request carrying them returns a 400. If your screener runs on one of those, there is no knob. A vendor telling you they pinned temperature to zero is describing a different model than the one they are serving.
+
+Second, even where temperature 0 is available, it does not buy reproducibility. Thinking Machines Lab sampled 1,000 completions from Qwen3-235B-A22B-Instruct-2507 at temperature 0 with greedy decoding and got 80 distinct completions, first diverging at token 103. The cause is not floating-point luck: inference kernels are not batch-invariant, so the reduction tree a request runs through depends on how many other requests happened to share its batch. Their batch-invariant kernels do produce 1,000 identical completions — at roughly 1.6x the wall clock, and no hosted screening product ships them.
+
+So the score moves. The audit's job is to find out by how much, where, and whether it changes anyone's outcome.
+
+## What the skill does
+
+Six steps, driven from `SKILL.md` in the bundle.
+
+It freezes the harness first, using `references/1-harness-freeze-sheet.md` — exact model ID, prompt version, rubric version, parser version. A floating model alias that resolves to a new snapshot mid-run splits your sample into two populations without raising an error.
+
+It then frames a stratified sample per `references/2-sample-frame.md`: 40 candidates by default, 24 inside the cutoff band and 8 anchors well clear on each side. The anchors are the step teams skip, and skipping them breaks the arithmetic rather than weakening it. Reliability is between-candidate variance over total variance; sample only near the cutoff and you have truncated the numerator by construction, so the ratio collapses and the screener reads as worse than it is. The skill refuses to emit a reliability ratio with fewer than 6 anchors a side.
+
+Fifteen replications per candidate is the default. That is chosen for a stated interval, not for comfort: the 95% confidence interval on a standard deviation estimated from 15 runs spans about 0.73 to 1.58 times the estimate. At 30 runs it tightens to about 0.80 to 1.34. Use 15 for an internal cutoff decision, 30 when someone outside the team will quote the figure back at you.
+
+Then it decomposes per criterion, which is where the real findings live. The HackerRank teardown surfaced two distinct pathologies in one rubric. `technical skills` returned 8/10 on 98 of 100 runs — stable and discriminating. `projects`, the criterion with the most detailed rubric and worked examples, was the noisiest of the set. And `experience` returned 25/25 on every single run, which reads as rock-solid and is in fact dead weight: it awards full marks position-agnostically, so it never separates two candidates while padding the total's apparent reliability with a constant. The skill labels these `NOISY` and `DEAD` explicitly, because a column of identical numbers otherwise reads as precision.
+
+Finally it computes the flip rate on raw single draws and emits a cutoff plus a manual-review band at the cutoff ± 2 pooled within-candidate standard deviations, widened to the empirical rate where the score distribution clumps on rubric integers — which it usually does. The output format is scaffolded in `references/3-variance-report-template.md`.
+
+## When not to use it
+
+**Not as the bias audit.** [NYC Local Law 144](/en/learn/nyc-local-law-144/) requires an independent auditor and measures selection rates across sex, race, and ethnicity categories. That is disparate impact; this is consistency. The two audits share no statistics, and a screener can fail one while passing the other in either direction. Running this discharges nothing.
+
+**Not to prove the screener works.** Reliability is not validity. The `experience` case is the whole warning: perfectly stable, and measuring nothing. This tells you a score is noise; it cannot tell you a stable score is signal.
+
+**Not on a screener you cannot re-run without writing to the candidate record.** See the failure modes below.
+
+**Not on deterministic screeners.** Keyword filters and rules engines return the same output by construction — run three calls as a sanity check and stop.
+
+**Not once a charge or demand letter has landed.** The score history is discovery material at that point and counsel drives. A parallel internal variance study of the same decisions is a document you did not need.
+
+## Failure modes and their guards
+
+**Reporting the standard error of the mean.** It shrinks with the square root of N, it produces a reassuring figure, and it describes a procedure your screener does not run — production takes one draw and decides. Guard: the report template has no field for it, and step 5 computes flip rates from raw single draws only.
+
+**A result cache reporting zero variance.** If the screener sits behind a cache keyed on candidate ID, every replication returns the stored answer and the audit concludes the screener is perfectly stable. It is silent, and it is the likeliest way this audit produces a confidently wrong answer. Guard: the freeze sheet requires distinct request IDs and a count of distinct raw payloads before any statistic is computed. One distinct payload means you measured a cache. Prefix caching is fine and worth keeping — cached input reads bill at roughly a tenth of the input rate, and prefix reuse does not remove sampling variance.
+
+**Re-running live candidates through production.** Fifteen replications of a real applicant can write 15 score events to their record, fire 15 ATS webhooks, and send automated rejection mail 15 times. Guard: the freeze sheet's side-effect clearance is blocking — a sandbox req or a confirmed side-effect-free call path, or the audit does not start.
+
+**Auditing one req and generalizing.** Spread is a property of the rubric plus the model plus the applicant pool. Guard: the scope line in the report binds the numbers to one req, one rubric version, one model snapshot, and the expiry block names what invalidates them.
+
+## Cost and throughput
+
+The default run is 40 candidates × 15 replications = 600 evaluations. Two cost regimes, orders of magnitude apart.
+
+On your own API key, a screening prompt of roughly 6,000 input and 800 output tokens costs about $0.01 per evaluation on Claude Haiku 4.5 at $1.00 / $5.00 per million input / output tokens — about **$6** for the full run. On Claude Opus 5 at $5.00 / $25.00 per million, the same prompt runs about $0.05, or about **$30**. At 8-way concurrency and roughly 8 seconds per call, wall clock is about 10 minutes.
+
+On a per-screen vendor SKU at $2 an assessment, 600 evaluations is **$1,200**. That is why K is 40 rather than 400, and the freeze sheet carries a reduced 216-call variant (24 band candidates, 6 anchors a side, 6 runs each) with the wider interval stated in the report.
+
+## Against the alternatives
+
+**The status quo — score once, trust the number.** This is the default everywhere, and the HackerRank data is what it costs: a 65% rejection rate on an identical resume, invisible because nobody ran it twice.
+
+**A spreadsheet of exported scores.** Cheap, and it gets the two things that matter wrong. It computes the mean and its standard error, which is the statistic production never uses, and it works on totals, so it cannot separate a noisy criterion from a dead one — the distinction that determines whether you re-word a rubric line or delete it.
+
+**The vendor's reliability coefficient.** Computed on their data, their rubric, and their score distribution. The 65%-versus-28% gap between the two configurations in the same teardown is the demonstration that this cannot transfer: the decision-relevant number depends on where *your* cutoff sits in *your* density.
+
+The honest scope: this is a measurement instrument, not a clearance. It tells you how much of your screening score is the candidate and how much is the draw, and it hands you a band that stops the difference from deciding who gets an interview. Pair it with [ai-interview-compliance-audit-skill](/en/workflows/ai-interview-compliance-audit-skill/) for the obligations side, and read [ai-screening-bias](/en/learn/ai-screening-bias/) for the statistic this one deliberately does not compute.

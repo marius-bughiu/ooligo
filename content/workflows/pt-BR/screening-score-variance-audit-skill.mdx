@@ -1,0 +1,88 @@
+---
+slug: screening-score-variance-audit-skill
+canonical_slug: screening-score-variance-audit-skill
+locale: pt-BR
+verticals: [recruiting]
+title: Meça a variância de score do seu screener com AI e defina um corte defensável
+artifact_type: claude-skill
+tools_used: [claude, greenhouse, workable, hirevue]
+roles: [talent-acquisition, recruiter, recruiting-ops]
+difficulty: advanced
+time_to_setup: 2-4 hours
+human_tested: false
+last_updated: "2026-08-21"
+---
+
+Um Claude Skill que roda de novo uma amostra fixa de candidatos pelo seu screener com AI N vezes, decompõe o movimento do score por critério da rubrica e devolve um corte recomendado mais uma banda de revisão manual. O número principal que ele produz é a taxa de virada em uma única tirada: a fração de execuções em que uma candidatura idêntica cai do lado oposto do seu corte. Esse é o número do qual o comportamento do seu screener realmente depende, e quase ninguém tem.
+
+## O problema que justifica a auditoria
+
+Em junho de 2026, Dan Kinsky rodou um PDF de currículo sem alterações pelo agente de contratação recém-aberto como open source pela HackerRank, 100 vezes. A configuração padrão usava `gemma3:4b` a temperatura 0.1 — baixa o suficiente para se esperar uma saída quase idêntica. Os scores voltaram entre 66 e 99 de 100. Contra um corte de 85 pontos, o mesmo candidato com o mesmo currículo foi rejeitado em cerca de 65% das execuções.
+
+A segunda configuração da mesma análise é a mais instrutiva. Com `Gemini-3.1-flash-lite` ao longo de 50 execuções, os scores se agruparam entre 45 e 65, e a taxa de rejeição com um corte de 60 pontos caiu para 28%. A mesma classe de instabilidade, com consequência radicalmente diferente — porque o corte ficava em outra parte da densidade de scores.
+
+É por isso que um número de confiabilidade fornecido pelo fornecedor não consegue responder à sua pergunta. O número que decide se o resultado de um candidato é cara ou coroa é uma propriedade conjunta do modelo do fornecedor *e* do seu corte *e* do seu pool de candidatos. Precisa ser medido do seu lado da API.
+
+## Por que colocar a temperatura em 0 não resolve
+
+Dois fatos matam a mitigação óbvia.
+
+Primeiro, nos modelos Claude de fronteira atuais — Claude Opus 5, Opus 4.8, Opus 4.7, Sonnet 5 e Fable 5 — `temperature`, `top_p` e `top_k` foram removidos da Messages API, e uma request que os carregue devolve um 400. Se o seu screener roda em um desses, não existe botão. Um fornecedor que diga que fixou a temperatura em zero está descrevendo um modelo diferente do que está servindo.
+
+Segundo, mesmo onde temperatura 0 está disponível, ela não compra reprodutibilidade. O Thinking Machines Lab amostrou 1.000 completions do Qwen3-235B-A22B-Instruct-2507 a temperatura 0 com decodificação greedy e obteve 80 completions distintos, divergindo pela primeira vez no token 103. A causa não é azar de ponto flutuante: os kernels de inferência não são invariantes ao batch, então a árvore de redução pela qual uma request passa depende de quantas outras requests dividiram o batch com ela. Os kernels invariantes ao batch deles produzem sim 1.000 completions idênticos — a cerca de 1,6x o tempo de relógio, e nenhum produto de screening hospedado os embarca.
+
+Então o score se mexe. O trabalho da auditoria é descobrir o quanto, onde, e se isso muda o resultado de alguém.
+
+## O que o skill faz
+
+Seis passos, conduzidos pelo `SKILL.md` no bundle.
+
+Primeiro ele congela o harness, usando `references/1-harness-freeze-sheet.md` — ID exato do modelo, versão do prompt, versão da rubrica, versão do parser. Um alias de modelo flutuante que resolva para um novo snapshot no meio da execução divide sua amostra em duas populações sem levantar erro nenhum.
+
+Depois monta uma amostra estratificada conforme `references/2-sample-frame.md`: 40 candidatos por padrão, 24 dentro da banda do corte e 8 âncoras bem afastadas de cada lado. As âncoras são o passo que os times pulam, e pular quebra a aritmética em vez de apenas enfraquecê-la. Confiabilidade é variância entre candidatos sobre variância total; se você amostra só perto do corte, truncou o numerador por construção, então a razão despenca e o screener parece pior do que é. O skill se recusa a emitir uma razão de confiabilidade com menos de 6 âncoras por lado.
+
+Quinze réplicas por candidato é o padrão. Está escolhido para um intervalo declarado, não por conforto: o intervalo de confiança de 95% sobre um desvio padrão estimado a partir de 15 execuções vai de cerca de 0,73 a 1,58 vezes a estimativa. Com 30 execuções ele aperta para algo entre 0,80 e 1,34. Use 15 para uma decisão interna de corte, e 30 quando alguém de fora do time for citar o número de volta para você.
+
+Em seguida ele decompõe por critério, que é onde moram os achados de verdade. A análise da HackerRank expôs duas patologias distintas em uma única rubrica. `technical skills` devolveu 8/10 em 98 de 100 execuções — estável e discriminante. `projects`, o critério com a rubrica mais detalhada e com exemplos resolvidos, foi o mais ruidoso do conjunto. E `experience` devolveu 25/25 em absolutamente todas as execuções, o que parece sólido como rocha e na verdade é peso morto: dá nota máxima independentemente da vaga, então nunca separa dois candidatos enquanto enche a confiabilidade aparente do total com uma constante. O skill rotula esses casos como `NOISY` e `DEAD` explicitamente, porque de outro modo uma coluna de números idênticos passa por precisão.
+
+Por fim ele calcula a taxa de virada sobre tiradas individuais cruas e emite um corte mais uma banda de revisão manual no corte ± 2 desvios padrão intra-candidato agrupados, alargada para a taxa empírica quando a distribuição de scores se acumula sobre os inteiros da rubrica — o que costuma acontecer. O formato de saída está estruturado em `references/3-variance-report-template.md`.
+
+## Quando não usar
+
+**Não como a auditoria de viés.** A [NYC Local Law 144](/pt-BR/learn/nyc-local-law-144/) exige um auditor independente e mede taxas de seleção por categorias de sexo, raça e etnia. Isso é impacto adverso; isto é consistência. As duas auditorias não compartilham nenhuma estatística, e um screener pode falhar em uma e passar na outra em qualquer das duas direções. Rodar esta não cumpre aquela obrigação.
+
+**Não para provar que o screener funciona.** Confiabilidade não é validade. O caso do `experience` é o aviso inteiro: perfeitamente estável, e medindo nada. Isto diz que um score é ruído; não pode dizer que um score estável é sinal.
+
+**Não em um screener que você não consegue rodar de novo sem escrever no registro do candidato.** Veja os modos de falha abaixo.
+
+**Não em screeners determinísticos.** Filtros por palavra-chave e motores de regras devolvem a mesma saída por construção — rode três chamadas como sanity check e pare.
+
+**Não depois que uma ação judicial ou uma notificação extrajudicial chegou.** A essa altura o histórico de scores é material de discovery e o jurídico dirige. Um estudo interno paralelo de variância sobre as mesmas decisões é um documento que você não precisava.
+
+## Modos de falha e suas travas
+
+**Reportar o erro padrão da média.** Ele encolhe com a raiz quadrada de N, produz um número tranquilizador, e descreve um procedimento que o seu screener não executa — produção pega uma tirada e decide. Trava: o template do relatório não tem campo para isso, e o passo 5 calcula taxas de virada só sobre tiradas individuais cruas.
+
+**Um cache de resultado reportando variância zero.** Se o screener está atrás de um cache indexado por ID de candidato, cada réplica devolve a resposta armazenada e a auditoria conclui que o screener é perfeitamente estável. É silencioso, e é o caminho mais provável para esta auditoria produzir uma resposta confiante e errada. Trava: a folha de congelamento exige IDs de request distintos e uma contagem de payloads crus distintos antes de qualquer estatística ser calculada. Um único payload distinto significa que você mediu um cache. Cache de prefixo está ok e vale manter — leituras de input em cache são cobradas a cerca de um décimo da tarifa de input, e reusar o prefixo não elimina a variância de amostragem.
+
+**Rodar de novo candidatos vivos pela produção.** Quinze réplicas de um candidato real podem escrever 15 eventos de score no registro dele, disparar 15 webhooks no ATS e enviar e-mail automático de rejeição 15 vezes. Trava: a liberação de efeitos colaterais da folha de congelamento é bloqueante — uma vaga de sandbox ou um caminho de chamada confirmado sem efeitos colaterais, ou a auditoria não começa.
+
+**Auditar uma vaga e generalizar.** A dispersão é uma propriedade da rubrica mais o modelo mais o pool de candidatos. Trava: a linha de escopo do relatório amarra os números a uma vaga, uma versão de rubrica e um snapshot de modelo, e o bloco de validade nomeia o que os invalida.
+
+## Custo e throughput
+
+A execução padrão são 40 candidatos × 15 réplicas = 600 avaliações. Dois regimes de custo, separados por ordens de grandeza.
+
+Com a sua própria API key, um prompt de screening de cerca de 6.000 tokens de input e 800 de output custa por volta de $0,01 por avaliação no Claude Haiku 4.5, a $1,00 / $5,00 por milhão de tokens de input / output — cerca de **$6** pela execução completa. No Claude Opus 5, a $5,00 / $25,00 por milhão, o mesmo prompt sai por volta de $0,05, ou uns **$30**. Com concorrência 8 e cerca de 8 segundos por chamada, o tempo de relógio fica em torno de 10 minutos.
+
+Com um SKU de fornecedor cobrado por screening a $2 a avaliação, 600 avaliações são **$1.200**. É por isso que K é 40 e não 400, e a folha de congelamento traz uma variante reduzida de 216 chamadas (24 candidatos de banda, 6 âncoras por lado, 6 execuções cada) com o intervalo mais largo declarado no relatório.
+
+## Contra as alternativas
+
+**O status quo — pontuar uma vez e confiar no número.** É o padrão em todo lugar, e os dados da HackerRank são o preço disso: uma taxa de rejeição de 65% sobre um currículo idêntico, invisível porque ninguém rodou duas vezes.
+
+**Uma planilha de scores exportados.** Barata, e erra nas duas coisas que importam. Calcula a média e o erro padrão dela, que é a estatística que produção nunca usa, e trabalha sobre totais, então não consegue separar um critério ruidoso de um critério morto — a distinção que determina se você reescreve uma linha da rubrica ou apaga.
+
+**O coeficiente de confiabilidade do fornecedor.** Calculado sobre os dados dele, a rubrica dele e a distribuição de scores dele. A diferença entre 65% e 28% nas duas configurações da mesma análise é a demonstração de que isso não transfere: o número relevante para a decisão depende de onde o *seu* corte cai na *sua* densidade.
+
+O escopo honesto: isto é um instrumento de medição, não um atestado. Ele diz quanto do seu score de screening é o candidato e quanto é a tirada, e entrega uma banda que impede essa diferença de decidir quem consegue uma entrevista. Combine com [ai-interview-compliance-audit-skill](/pt-BR/workflows/ai-interview-compliance-audit-skill/) para o lado das obrigações, e leia [ai-screening-bias](/pt-BR/learn/ai-screening-bias/) para a estatística que este aqui deliberadamente não calcula.

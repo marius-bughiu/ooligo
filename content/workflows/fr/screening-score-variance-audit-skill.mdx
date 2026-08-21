@@ -1,0 +1,88 @@
+---
+slug: screening-score-variance-audit-skill
+canonical_slug: screening-score-variance-audit-skill
+locale: fr
+verticals: [recruiting]
+title: Mesurer la variance de score de votre screener IA et fixer un seuil défendable
+artifact_type: claude-skill
+tools_used: [claude, greenhouse, workable, hirevue]
+roles: [talent-acquisition, recruiter, recruiting-ops]
+difficulty: advanced
+time_to_setup: 2-4 hours
+human_tested: false
+last_updated: "2026-08-21"
+---
+
+Un Claude Skill qui repasse un échantillon fixe de candidats dans votre screener IA N fois, décompose le mouvement du score par critère de la grille et renvoie un seuil recommandé accompagné d'une bande de revue manuelle. Le chiffre principal qu'il produit est le taux de bascule sur un tirage unique : la part des exécutions où une candidature identique tombe du côté opposé de votre seuil. C'est de ce chiffre que dépend réellement le comportement de votre screener, et presque personne ne l'a.
+
+## Le problème qui justifie cet audit
+
+En juin 2026, Dan Kinsky a fait passer un PDF de CV inchangé 100 fois dans l'agent de recrutement que HackerRank venait de publier en open source. La configuration par défaut utilisait `gemma3:4b` à température 0.1 — assez basse pour qu'une sortie quasi identique soit l'attente raisonnable. Les scores sont revenus entre 66 et 99 sur 100. Face à un seuil de 85 points, le même candidat avec le même CV a été rejeté sur environ 65 % des exécutions.
+
+La seconde configuration de la même analyse est la plus instructive. Avec `Gemini-3.1-flash-lite` sur 50 exécutions, les scores se sont groupés entre 45 et 65, et le taux de rejet face à un seuil de 60 points est tombé à 28 %. La même classe d'instabilité, une conséquence radicalement différente — parce que le seuil se situait dans une autre partie de la densité des scores.
+
+C'est pour cela qu'un indicateur de fiabilité fourni par l'éditeur ne peut pas répondre à votre question. Le chiffre qui détermine si le sort d'un candidat relève du pile ou face est une propriété conjointe du modèle de l'éditeur *et* de votre seuil *et* de votre vivier de candidatures. Il doit être mesuré de votre côté de l'API.
+
+## Pourquoi mettre la température à 0 ne règle rien
+
+Deux faits tuent la parade évidente.
+
+D'abord, sur les modèles Claude de frontière actuels — Claude Opus 5, Opus 4.8, Opus 4.7, Sonnet 5 et Fable 5 — `temperature`, `top_p` et `top_k` ont été retirés de la Messages API, et une requête qui les transporte renvoie un 400. Si votre screener tourne sur l'un d'eux, il n'y a pas de bouton. Un éditeur qui vous dit avoir fixé la température à zéro décrit un autre modèle que celui qu'il sert.
+
+Ensuite, même là où la température 0 est disponible, elle n'achète pas la reproductibilité. Thinking Machines Lab a échantillonné 1 000 complétions de Qwen3-235B-A22B-Instruct-2507 à température 0 en décodage glouton et a obtenu 80 complétions distinctes, divergeant pour la première fois au token 103. La cause n'est pas la malchance en virgule flottante : les kernels d'inférence ne sont pas invariants au batch, donc l'arbre de réduction que traverse une requête dépend du nombre d'autres requêtes ayant partagé son batch. Leurs kernels invariants au batch produisent bien 1 000 complétions identiques — pour environ 1,6 fois le temps d'exécution, et aucun produit de screening hébergé ne les embarque.
+
+Le score bouge donc. Le travail de l'audit est de savoir de combien, à quel endroit, et si cela change le sort de quelqu'un.
+
+## Ce que fait le skill
+
+Six étapes, pilotées depuis `SKILL.md` dans le bundle.
+
+Il gèle d'abord le harnais, via `references/1-harness-freeze-sheet.md` — identifiant exact du modèle, version du prompt, version de la grille, version du parser. Un alias de modèle flottant qui bascule vers un nouveau snapshot en cours d'exécution scinde votre échantillon en deux populations sans lever la moindre erreur.
+
+Il constitue ensuite un échantillon stratifié selon `references/2-sample-frame.md` : 40 candidats par défaut, 24 à l'intérieur de la bande du seuil et 8 ancres nettement à l'écart de chaque côté. Les ancres sont l'étape que les équipes sautent, et la sauter casse l'arithmétique plutôt que de simplement l'affaiblir. La fiabilité, c'est la variance inter-candidats divisée par la variance totale ; échantillonnez uniquement près du seuil et vous avez tronqué le numérateur par construction, le ratio s'effondre et le screener se lit comme pire qu'il n'est. Le skill refuse d'émettre un ratio de fiabilité avec moins de 6 ancres par côté.
+
+Quinze réplications par candidat est la valeur par défaut. Elle est choisie pour un intervalle annoncé, pas pour le confort : l'intervalle de confiance à 95 % sur un écart-type estimé à partir de 15 exécutions s'étend d'environ 0,73 à 1,58 fois l'estimation. À 30 exécutions il se resserre à environ 0,80 à 1,34. Prenez 15 pour une décision de seuil interne, et 30 quand quelqu'un hors de l'équipe vous citera le chiffre.
+
+Il décompose ensuite par critère, et c'est là que se trouvent les vrais constats. L'analyse de HackerRank a mis au jour deux pathologies distinctes dans une seule grille. `technical skills` a rendu 8/10 sur 98 des 100 exécutions — stable et discriminant. `projects`, le critère doté de la grille la plus détaillée et d'exemples travaillés, a été le plus bruyant du lot. Et `experience` a rendu 25/25 à absolument chaque exécution, ce qui se lit comme solide comme un roc et constitue en réalité du poids mort : il attribue la note maximale indépendamment du poste, donc il ne sépare jamais deux candidats tout en gonflant la fiabilité apparente du total avec une constante. Le skill étiquette explicitement ces cas `NOISY` et `DEAD`, parce qu'une colonne de chiffres identiques se lit sinon comme de la précision.
+
+Enfin il calcule le taux de bascule sur des tirages uniques bruts et émet un seuil accompagné d'une bande de revue manuelle au seuil ± 2 écarts-types intra-candidat agrégés, élargie au taux empirique quand la distribution des scores s'agglutine sur les entiers de la grille — ce qui est le cas la plupart du temps. Le format de sortie est charpenté dans `references/3-variance-report-template.md`.
+
+## Quand ne pas l'utiliser
+
+**Pas comme audit de biais.** La [NYC Local Law 144](/fr/learn/nyc-local-law-144/) exige un auditeur indépendant et mesure les taux de sélection par catégories de sexe, de race et d'ethnicité. C'est de l'impact disparate ; ceci relève de la consistance. Les deux audits ne partagent aucune statistique, et un screener peut échouer à l'un et réussir l'autre dans les deux sens. Exécuter celui-ci ne décharge en rien de l'autre.
+
+**Pas pour prouver que le screener fonctionne.** La fiabilité n'est pas la validité. Le cas `experience` est tout l'avertissement : parfaitement stable, et ne mesurant rien. Ceci vous dit qu'un score est du bruit ; cela ne peut pas vous dire qu'un score stable est du signal.
+
+**Pas sur un screener que vous ne pouvez pas relancer sans écrire dans le dossier du candidat.** Voir les modes de défaillance ci-dessous.
+
+**Pas sur des screeners déterministes.** Les filtres par mot-clé et les moteurs de règles renvoient la même sortie par construction — lancez trois appels comme vérification de bon sens, puis arrêtez.
+
+**Pas une fois qu'une plainte ou une mise en demeure est arrivée.** À ce stade l'historique des scores est une pièce de la procédure et le juridique pilote. Une étude interne parallèle de variance sur les mêmes décisions est un document dont vous n'aviez pas besoin.
+
+## Modes de défaillance et leurs garde-fous
+
+**Rapporter l'erreur type de la moyenne.** Elle décroît en racine de N, produit un chiffre rassurant, et décrit une procédure que votre screener n'exécute pas — la production prend un tirage et décide. Garde-fou : le modèle de rapport n'a pas de champ pour cela, et l'étape 5 calcule les taux de bascule uniquement à partir de tirages uniques bruts.
+
+**Un cache de résultats qui rapporte une variance nulle.** Si le screener est derrière un cache indexé sur l'identifiant candidat, chaque réplication renvoie la réponse stockée et l'audit conclut que le screener est parfaitement stable. C'est silencieux, et c'est la voie la plus probable par laquelle cet audit produit une réponse assurée et fausse. Garde-fou : la fiche de gel exige des identifiants de requête distincts et un décompte des charges utiles brutes distinctes avant tout calcul statistique. Une seule charge utile distincte signifie que vous avez mesuré un cache. Le cache de préfixe est acceptable et mérite d'être conservé — les lectures d'input mises en cache sont facturées à environ un dixième du tarif d'input, et réutiliser le préfixe ne supprime pas la variance d'échantillonnage.
+
+**Relancer de vrais candidats dans la production.** Quinze réplications d'un candidat réel peuvent écrire 15 événements de score dans son dossier, déclencher 15 webhooks vers l'ATS et envoyer 15 fois un mail de rejet automatique. Garde-fou : la levée d'effets de bord de la fiche de gel est bloquante — un poste en sandbox ou un chemin d'appel confirmé sans effet de bord, faute de quoi l'audit ne démarre pas.
+
+**Auditer un poste et généraliser.** La dispersion est une propriété de la grille plus le modèle plus le vivier de candidatures. Garde-fou : la ligne de périmètre du rapport lie les chiffres à un poste, une version de grille et un snapshot de modèle, et le bloc d'expiration nomme ce qui les invalide.
+
+## Coût et débit
+
+L'exécution par défaut, c'est 40 candidats × 15 réplications = 600 évaluations. Deux régimes de coût, séparés par des ordres de grandeur.
+
+Avec votre propre clé API, un prompt de screening d'environ 6 000 tokens d'entrée et 800 de sortie coûte à peu près 0,01 $ par évaluation sur Claude Haiku 4.5, à 1,00 $ / 5,00 $ par million de tokens d'entrée / sortie — soit environ **6 $** pour l'exécution complète. Sur Claude Opus 5, à 5,00 $ / 25,00 $ par million, le même prompt revient à environ 0,05 $, soit environ **30 $**. À 8 appels en parallèle et environ 8 secondes par appel, le temps d'exécution avoisine 10 minutes.
+
+Avec un SKU éditeur facturé au screening à 2 $ l'évaluation, 600 évaluations font **1 200 $**. C'est la raison pour laquelle K vaut 40 et non 400, et la fiche de gel propose une variante réduite à 216 appels (24 candidats de bande, 6 ancres par côté, 6 exécutions chacun) avec l'intervalle plus large annoncé dans le rapport.
+
+## Face aux alternatives
+
+**Le statu quo — noter une fois et croire le chiffre.** C'est le comportement par défaut partout, et les données HackerRank en sont le prix : un taux de rejet de 65 % sur un CV identique, invisible parce que personne ne l'a passé deux fois.
+
+**Un tableur de scores exportés.** Bon marché, et faux sur les deux points qui comptent. Il calcule la moyenne et son erreur type, soit la statistique que la production n'utilise jamais, et il travaille sur des totaux, donc il ne peut pas séparer un critère bruyant d'un critère mort — la distinction qui détermine si vous reformulez une ligne de la grille ou si vous la supprimez.
+
+**Le coefficient de fiabilité de l'éditeur.** Calculé sur ses données, sa grille et sa distribution de scores. L'écart entre 65 % et 28 % sur les deux configurations de la même analyse est la démonstration que cela ne se transfère pas : le chiffre pertinent pour la décision dépend de l'endroit où *votre* seuil tombe dans *votre* densité.
+
+Le périmètre honnête : ceci est un instrument de mesure, pas un quitus. Il vous dit quelle part de votre score de screening est le candidat et quelle part est le tirage, et il vous remet une bande qui empêche cette différence de décider qui obtient un entretien. Associez-le à [ai-interview-compliance-audit-skill](/fr/workflows/ai-interview-compliance-audit-skill/) pour le volet obligations, et lisez [ai-screening-bias](/fr/learn/ai-screening-bias/) pour la statistique que celui-ci ne calcule délibérément pas.

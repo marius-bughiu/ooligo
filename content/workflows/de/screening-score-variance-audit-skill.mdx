@@ -1,0 +1,88 @@
+---
+slug: screening-score-variance-audit-skill
+canonical_slug: screening-score-variance-audit-skill
+locale: de
+verticals: [recruiting]
+title: Die Score-Varianz Ihres KI-Screeners messen und einen belastbaren Cutoff setzen
+artifact_type: claude-skill
+tools_used: [claude, greenhouse, workable, hirevue]
+roles: [talent-acquisition, recruiter, recruiting-ops]
+difficulty: advanced
+time_to_setup: 2-4 hours
+human_tested: false
+last_updated: "2026-08-21"
+---
+
+Ein Claude Skill, der eine feste Kandidatenstichprobe N-mal erneut durch Ihren KI-Screener schickt, die Score-Bewegung pro Rubrik-Kriterium zerlegt und einen empfohlenen Cutoff plus ein Band für die manuelle Prüfung zurückgibt. Die zentrale Kennzahl ist die Kipprate bei einer einzelnen Ziehung: der Anteil der Durchläufe, in denen eine identische Bewerbung auf der anderen Seite Ihres Cutoffs landet. Genau davon hängt das Verhalten Ihres Screeners tatsächlich ab — und fast niemand kennt diese Zahl.
+
+## Das Problem, für das dieses Audit existiert
+
+Im Juni 2026 schickte Dan Kinsky ein unverändertes Lebenslauf-PDF 100-mal durch den frisch als Open Source veröffentlichten Hiring-Agent von HackerRank. Die Standardkonfiguration nutzte `gemma3:4b` bei Temperatur 0.1 — niedrig genug, dass man nahezu identische Ausgaben erwarten darf. Die Scores lagen zwischen 66 und 99 von 100. Gegen einen Cutoff von 85 Punkten wurde derselbe Kandidat mit demselben Lebenslauf in rund 65% der Durchläufe abgelehnt.
+
+Die zweite Konfiguration derselben Analyse ist die lehrreichere. Mit `Gemini-3.1-flash-lite` über 50 Durchläufe gruppierten sich die Scores zwischen 45 und 65, und die Ablehnungsquote bei einem Cutoff von 60 Punkten fiel auf 28%. Dieselbe Art von Instabilität, radikal andere Konsequenz — weil der Cutoff in einem anderen Teil der Score-Dichte lag.
+
+Deshalb kann eine vom Anbieter gelieferte Reliabilitätskennzahl Ihre Frage nicht beantworten. Die Zahl, die darüber entscheidet, ob das Ergebnis eines Kandidaten ein Münzwurf ist, ist eine gemeinsame Eigenschaft des Anbietermodells *und* Ihres Cutoffs *und* Ihres Bewerberpools. Sie muss auf Ihrer Seite der API gemessen werden.
+
+## Warum Temperatur 0 nicht die Lösung ist
+
+Zwei Fakten erledigen die naheliegende Gegenmaßnahme.
+
+Erstens: Bei den aktuellen Claude-Frontier-Modellen — Claude Opus 5, Opus 4.8, Opus 4.7, Sonnet 5 und Fable 5 — wurden `temperature`, `top_p` und `top_k` aus der Messages API entfernt, und ein Request, der sie mitschickt, liefert einen 400 zurück. Läuft Ihr Screener auf einem davon, gibt es diesen Regler nicht. Ein Anbieter, der Ihnen sagt, er habe die Temperatur auf null fixiert, beschreibt ein anderes Modell als das, welches er ausliefert.
+
+Zweitens: Selbst dort, wo Temperatur 0 verfügbar ist, erkauft sie keine Reproduzierbarkeit. Thinking Machines Lab zog 1.000 Completions aus Qwen3-235B-A22B-Instruct-2507 bei Temperatur 0 mit Greedy-Decoding und erhielt 80 verschiedene Completions, die erstmals bei Token 103 auseinanderliefen. Die Ursache ist kein Fließkomma-Pech: Inferenz-Kernel sind nicht batch-invariant, also hängt der Reduktionsbaum, den ein Request durchläuft, davon ab, wie viele andere Requests seinen Batch geteilt haben. Ihre batch-invarianten Kernel erzeugen tatsächlich 1.000 identische Completions — bei etwa 1,6-facher Laufzeit, und kein gehostetes Screening-Produkt liefert sie aus.
+
+Der Score bewegt sich also. Die Aufgabe des Audits ist herauszufinden, um wie viel, an welcher Stelle, und ob es das Ergebnis von jemandem verändert.
+
+## Was der Skill tut
+
+Sechs Schritte, gesteuert aus `SKILL.md` im Bundle.
+
+Zuerst friert er das Harness ein, über `references/1-harness-freeze-sheet.md` — exakte Modell-ID, Prompt-Version, Rubrik-Version, Parser-Version. Ein gleitender Modell-Alias, der mitten im Lauf auf einen neuen Snapshot auflöst, zerlegt Ihre Stichprobe in zwei Populationen, ohne einen Fehler zu werfen.
+
+Dann bildet er eine geschichtete Stichprobe nach `references/2-sample-frame.md`: standardmäßig 40 Kandidaten, davon 24 innerhalb des Cutoff-Bands und 8 Anker mit deutlichem Abstand auf jeder Seite. Die Anker sind der Schritt, den Teams überspringen, und das Überspringen zerbricht die Arithmetik, statt sie nur zu schwächen. Reliabilität ist Varianz zwischen Kandidaten geteilt durch Gesamtvarianz; ziehen Sie nur nahe am Cutoff, haben Sie den Zähler per Konstruktion beschnitten, das Verhältnis bricht ein und der Screener liest sich schlechter, als er ist. Der Skill verweigert ein Reliabilitätsverhältnis bei weniger als 6 Ankern pro Seite.
+
+Fünfzehn Replikationen pro Kandidat sind der Standard. Das ist auf ein deklariertes Intervall hin gewählt, nicht aus Bequemlichkeit: Das 95%-Konfidenzintervall einer aus 15 Durchläufen geschätzten Standardabweichung reicht von etwa dem 0,73- bis zum 1,58-Fachen der Schätzung. Bei 30 Durchläufen verengt es sich auf etwa 0,80 bis 1,34. Nehmen Sie 15 für eine interne Cutoff-Entscheidung und 30, wenn jemand außerhalb des Teams die Zahl zitieren wird.
+
+Danach zerlegt er pro Kriterium, und dort liegen die eigentlichen Befunde. Die HackerRank-Analyse legte zwei verschiedene Pathologien in einer einzigen Rubrik offen. `technical skills` lieferte in 98 von 100 Durchläufen 8/10 — stabil und trennscharf. `projects`, das Kriterium mit der detailliertesten Rubrik und ausgearbeiteten Beispielen, war das lauteste im Satz. Und `experience` lieferte in ausnahmslos jedem Durchlauf 25/25, was sich grundsolide liest und tatsächlich totes Gewicht ist: Es vergibt die volle Punktzahl positionsunabhängig, trennt also nie zwei Kandidaten und polstert dabei die scheinbare Reliabilität des Gesamtwerts mit einer Konstanten. Der Skill kennzeichnet diese Fälle ausdrücklich als `NOISY` und `DEAD`, weil sich eine Spalte identischer Zahlen sonst als Präzision liest.
+
+Zuletzt berechnet er die Kipprate auf rohen Einzelziehungen und gibt einen Cutoff plus ein Band für die manuelle Prüfung aus, beim Cutoff ± 2 gepoolte Standardabweichungen innerhalb der Kandidaten, verbreitert auf die empirische Rate, wenn sich die Score-Verteilung auf den Rubrik-Ganzzahlen staut — was meist der Fall ist. Das Ausgabeformat ist in `references/3-variance-report-template.md` vorgezeichnet.
+
+## Wann Sie ihn nicht einsetzen sollten
+
+**Nicht als Bias-Audit.** [NYC Local Law 144](/de/learn/nyc-local-law-144/) verlangt einen unabhängigen Prüfer und misst Auswahlquoten über Geschlechts-, Rassen- und Ethnie-Kategorien hinweg. Das ist Disparate Impact; dies hier ist Konsistenz. Die beiden Audits teilen sich keine einzige Statistik, und ein Screener kann das eine nicht bestehen und das andere bestehen, in beide Richtungen. Dieses hier auszuführen erfüllt jene Pflicht nicht.
+
+**Nicht als Nachweis, dass der Screener funktioniert.** Reliabilität ist nicht Validität. Der `experience`-Fall ist die ganze Warnung: perfekt stabil und misst nichts. Dieser Skill sagt Ihnen, dass ein Score Rauschen ist; er kann Ihnen nicht sagen, dass ein stabiler Score Signal ist.
+
+**Nicht bei einem Screener, den Sie nicht erneut laufen lassen können, ohne in den Kandidatendatensatz zu schreiben.** Siehe die Fehlermodi unten.
+
+**Nicht bei deterministischen Screenern.** Keyword-Filter und Regelmaschinen liefern per Konstruktion dieselbe Ausgabe — drei Aufrufe als Plausibilitätsprüfung, dann aufhören.
+
+**Nicht, sobald eine Klage oder ein Anwaltsschreiben vorliegt.** Ab diesem Punkt ist die Score-Historie Beweismaterial und die Rechtsabteilung führt. Eine parallele interne Varianzstudie zu denselben Entscheidungen ist ein Dokument, das Sie nicht gebraucht hätten.
+
+## Fehlermodi und ihre Sicherungen
+
+**Den Standardfehler des Mittelwerts berichten.** Er schrumpft mit der Wurzel aus N, ergibt eine beruhigende Zahl und beschreibt ein Verfahren, das Ihr Screener nicht ausführt — die Produktion nimmt eine Ziehung und entscheidet. Sicherung: Die Report-Vorlage hat kein Feld dafür, und Schritt 5 berechnet Kippraten ausschließlich aus rohen Einzelziehungen.
+
+**Ein Result-Cache, der Varianz null meldet.** Sitzt der Screener hinter einem Cache mit Kandidaten-ID als Schlüssel, liefert jede Replikation die gespeicherte Antwort und das Audit schließt, der Screener sei perfekt stabil. Das passiert lautlos und ist der wahrscheinlichste Weg, auf dem dieses Audit eine selbstbewusst falsche Antwort produziert. Sicherung: Das Freeze-Sheet verlangt verschiedene Request-IDs und eine Zählung verschiedener Roh-Payloads, bevor irgendeine Statistik gerechnet wird. Genau ein verschiedener Payload heißt: Sie haben einen Cache gemessen. Prefix-Caching ist in Ordnung und sollte bleiben — gecachte Input-Reads werden mit etwa einem Zehntel des Input-Tarifs abgerechnet, und Prefix-Wiederverwendung beseitigt keine Sampling-Varianz.
+
+**Echte Kandidaten erneut durch die Produktion schicken.** Fünfzehn Replikationen eines realen Bewerbers können 15 Score-Ereignisse in dessen Datensatz schreiben, 15 Webhooks ins ATS feuern und 15-mal automatische Absagemails senden. Sicherung: Die Nebenwirkungsfreigabe im Freeze-Sheet ist blockierend — eine Sandbox-Stelle oder ein bestätigt nebenwirkungsfreier Aufrufpfad, sonst startet das Audit nicht.
+
+**Eine Stelle auditieren und verallgemeinern.** Die Streuung ist eine Eigenschaft der Rubrik plus des Modells plus des Bewerberpools. Sicherung: Die Scope-Zeile des Reports bindet die Zahlen an eine Stelle, eine Rubrik-Version und einen Modell-Snapshot, und der Ablaufblock benennt, was sie ungültig macht.
+
+## Kosten und Durchsatz
+
+Der Standardlauf sind 40 Kandidaten × 15 Replikationen = 600 Auswertungen. Zwei Kostenregime, um Größenordnungen auseinander.
+
+Mit eigenem API-Key kostet ein Screening-Prompt von rund 6.000 Input- und 800 Output-Tokens etwa $0,01 pro Auswertung auf Claude Haiku 4.5, bei $1,00 / $5,00 pro Million Input- / Output-Tokens — rund **$6** für den gesamten Lauf. Auf Claude Opus 5, bei $5,00 / $25,00 pro Million, kostet derselbe Prompt etwa $0,05, also rund **$30**. Bei 8-facher Parallelität und rund 8 Sekunden pro Aufruf liegt die Laufzeit bei etwa 10 Minuten.
+
+Bei einem Anbieter-SKU, der pro Screening mit $2 abrechnet, sind 600 Auswertungen **$1.200**. Deshalb ist K gleich 40 und nicht 400, und das Freeze-Sheet enthält eine reduzierte Variante mit 216 Aufrufen (24 Band-Kandidaten, 6 Anker pro Seite, je 6 Durchläufe) mit dem im Report ausgewiesenen breiteren Intervall.
+
+## Gegen die Alternativen
+
+**Der Status quo — einmal scoren und der Zahl vertrauen.** Das ist überall der Standard, und die HackerRank-Daten zeigen den Preis: eine Ablehnungsquote von 65% bei identischem Lebenslauf, unsichtbar, weil niemand ein zweites Mal gerechnet hat.
+
+**Eine Tabelle exportierter Scores.** Billig — und falsch in genau den beiden Punkten, auf die es ankommt. Sie rechnet den Mittelwert und dessen Standardfehler, also die Statistik, die die Produktion nie verwendet, und sie arbeitet auf Gesamtwerten, kann also ein lautes Kriterium nicht von einem toten trennen — die Unterscheidung, die darüber entscheidet, ob Sie eine Rubrik-Zeile umformulieren oder löschen.
+
+**Der Reliabilitätskoeffizient des Anbieters.** Gerechnet auf dessen Daten, dessen Rubrik und dessen Score-Verteilung. Die Lücke zwischen 65% und 28% bei den zwei Konfigurationen derselben Analyse ist der Beleg, dass sich das nicht übertragen lässt: Die entscheidungsrelevante Zahl hängt davon ab, wo *Ihr* Cutoff in *Ihrer* Dichte liegt.
+
+Der ehrliche Geltungsbereich: Dies ist ein Messinstrument, keine Unbedenklichkeitsbescheinigung. Es sagt Ihnen, wie viel Ihres Screening-Scores der Kandidat ist und wie viel die Ziehung, und liefert ein Band, das verhindert, dass dieser Unterschied darüber entscheidet, wer ein Interview bekommt. Kombinieren Sie es mit [ai-interview-compliance-audit-skill](/de/workflows/ai-interview-compliance-audit-skill/) für die Pflichtenseite, und lesen Sie [ai-screening-bias](/de/learn/ai-screening-bias/) für die Statistik, die dieses Audit bewusst nicht berechnet.
