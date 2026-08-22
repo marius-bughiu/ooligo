@@ -23,10 +23,15 @@ Each line carries at most one lifecycle marker, appended in place:
 
 `refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-08-16`
+`last-swept: 2026-08-23`
 
 ## Refresh queue
 
+- refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (material: ashby 2026-08-16 > stack's last_updated 2026-08-08)
+- refresh:C: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (material: attio 2026-08-17 > stack's last_updated 2026-07-12)
+- refresh:C: [type:stack] [vertical:legal-ops] enterprise-clm-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-05-23)
+- refresh:C: [type:stack] [vertical:legal-ops] legal-ops-team-of-one-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-05-23)
+- refresh:C: [type:stack] [vertical:legal-ops] mid-market-legal-ops-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-07-17)
 - refresh:C: [type:tool] [vertical:recruiting] brighthire — material (brighthire acquired by Zoom 2025-12) → slug: brighthire
 - refresh:C: [type:tool] [vertical:revops] catalyst — material (catalyst merged into Totango) → slug: catalyst
 - refresh:C: [type:tool] [vertical:legal-ops] lawgeex — material (enterprise product dismantled 2023: assets to Robin AI, clients to LegalSifter, founders to Superlegal; the earlier → skip: marker refused a *pricing* refresh and called for exactly this sunset rewrite — keep the URL, past-tense body, drop ooligo_score) → slug: lawgeex
