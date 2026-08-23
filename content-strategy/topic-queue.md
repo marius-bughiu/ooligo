@@ -28,7 +28,7 @@ Each line carries at most one lifecycle marker, appended in place:
 ## Refresh queue
 
 - refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (material: ashby 2026-08-16 > stack's last_updated 2026-08-08) → slug: ai-augmented-recruiting-stack
-- refresh:C: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (material: attio 2026-08-17 > stack's last_updated 2026-07-12)
+- refresh:C: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (material: attio 2026-08-17 > stack's last_updated 2026-07-12) → claimed: refresh 2026-08-23T21:05:00Z
 - refresh:C: [type:stack] [vertical:legal-ops] enterprise-clm-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-05-23)
 - refresh:C: [type:stack] [vertical:legal-ops] legal-ops-team-of-one-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-05-23)
 - refresh:C: [type:stack] [vertical:legal-ops] mid-market-legal-ops-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-07-17)
