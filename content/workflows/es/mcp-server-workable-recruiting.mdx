@@ -1,0 +1,78 @@
+---
+slug: mcp-server-workable-recruiting
+canonical_slug: mcp-server-workable-recruiting
+locale: es
+verticals: [recruiting]
+title: Servidor MCP de Workable para Claude
+artifact_type: mcp-server
+tools_used: [claude, workable]
+roles: [recruiter, recruiting-ops, talent-acquisition, recruiting-engineer]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+last_updated: "2026-08-23"
+---
+
+[Workable](/es/tools/workable/) aloja su propio servidor Model Context Protocol en `https://mcp.workable.com/mcp`, así que la pregunta de construirlo ya está resuelta: te conectas, no escribes uno. La pregunta abierta es cuáles de sus 94 herramientas puede tocar el asistente de tus recruiters. Workable lanzó el servidor el 2026-05-13 con 38 herramientas y lo amplió a 94 el 2026-07-20, y esa ampliación agregó acceso de escritura a evaluaciones de desempeño, gestión de cuentas y permisos, y actualización de perfiles de candidatos. El bundle de artefactos en `apps/web/public/artifacts/mcp-server-workable-recruiting/` es la respuesta a esa pregunta: un gateway de mínimo privilegio (`README.md`, `pyproject.toml`, `src/workable_gateway/policy.py`, `src/workable_gateway/server.py`) que reenvía 33 herramientas, pone 13 detrás de una aprobación humana en dos fases y rechaza las otras 48.
+
+## Cuándo usarlo
+
+Conecta el servidor alojado en cuanto los recruiters ya estén trabajando en [Claude](/es/tools/claude/) en tareas adyacentes — borradores de outbound, resúmenes de scorecards, actualizaciones para el hiring manager — y sigan saltando de vuelta a Workable para responder "en qué etapa está este candidato", "qué postulaciones no se movieron esta semana", "quién está en el loop de entrevistas de este req". La conexión es un solo comando y no cuesta nada: Workable incluye el servidor MCP sin cargo adicional en todos sus planes de suscripción.
+
+Suma el gateway encima cuando la lista de permitidos tenga que sostenerse de forma centralizada. El `settings.json` de un recruiter lo aplica su cliente, en su computadora, y él lo puede editar. Un proceso gateway se aplica una vez, desde recruiting-ops, y ejecutarlo es la diferencia entre una política y una preferencia. La población que lo necesita es un equipo de recruiting de cinco personas o más compartiendo una cuenta de Workable, en una organización donde alguien va a preguntar quién decidió que el asistente pudiera desactivar a un usuario.
+
+## Cuándo NO usarlo
+
+Sáltate el gateway — no el servidor — si tu cliente ya restringe herramientas por conector y confías en quienes lo usan. Claude Code identifica las herramientas MCP como `mcp__<server>__<tool>` y respeta `permissions.deny` en `settings.json`. El bundle incluye `claude-code-permissions.example.json`, la misma política expresada así, generada desde el mismo `policy.py`. No cuesta infraestructura y es el primer movimiento correcto. Recurre al gateway solo cuando necesites redacción de respuestas, un log de auditoría central o un token de aprobación atado a argumentos específicos — tres cosas que una deny list del lado del cliente no te da.
+
+Sáltate el workflow completo si tu cuenta de Workable es el sistema de registro de RR. HH. además del de contratación. El servidor de Workable cubre empleados, ausencias, control horario y todo el ciclo de evaluaciones de desempeño desde el mismo endpoint que los candidatos. Un asistente conectado a esa cuenta alcanza contratos laborales vía `get_employee_documents` y registros de ausencias vía `get_timeoff_balances` salvo que algo lo detenga. Si nadie es dueño todavía de esa decisión, aprueba primero la [política de IA para recruiting](/es/learn/ai-policy-for-recruiting-teams/).
+
+Y sáltatelo si un solo recruiter es todo el equipo. El conector alojado solo alcanza a esa escala; la instalación del gateway y la revisión de la política son aproximadamente un día de trabajo que compra una gobernanza que nadie está pidiendo todavía.
+
+## Instalación
+
+Las instrucciones completas están en `apps/web/public/artifacts/mcp-server-workable-recruiting/README.md`. La versión corta: `pip install -e .`, define `WORKABLE_ACCOUNT` con tu subdominio de Workable, registra el gateway con una ruta absoluta y autoriza en el navegador en la primera llamada. El servidor de Workable publica metadatos de servidor de autorización según RFC 8414 y acepta registro dinámico de clientes según RFC 7591, así que no hay client ID que aprovisionar a mano ni API key que rotar.
+
+El paso que de verdad importa va antes de todo eso: decidir con qué miembro de Workable te autorizas. Cada sesión MCP hereda el rol y las asignaciones de puestos del usuario que inició sesión — la formulación de Workable es que la IA solo puede leer y actuar sobre datos que el usuario ya está autorizado a ver. Suena a modelo de permisos hasta que notas quién instala esto primero. Los líderes de recruiting-ops son admins. Autorizarte con tu propia cuenta le entrega al gateway alcance de admin y deja la lista de permitidos como único muro en pie. Crea en su lugar un miembro de Workable dedicado con un permission set acotado; `get_permission_sets` lista los que tu cuenta tiene definidos.
+
+## Qué retener
+
+`src/workable_gateway/policy.py` clasifica las 94 herramientas en tres niveles y una lista de redacción. La función de nivel deniega por defecto, así que las 37 herramientas que Workable agregó en un solo release el 2026-07-20 se habrían quedado a oscuras hasta que un humano las clasificara — que es el comportamiento que quieres de una superficie que creció 65% en nueve semanas.
+
+**48 rechazadas de plano**, en seis grupos con una justificación cada uno. Las cuatro herramientas de gestión de miembros se van porque un agente que puede otorgar un permission set puede ampliar su propio alcance en la sesión siguiente. Las cuatro de departamentos se van porque `merge_department` no tiene inversa y los reportes de recruiting se cortan por departamento, así que una fusión mal hecha reescribe el histórico del funnel sin lanzar un error. Las cinco de aprobación — ofertas, requisiciones, ausencias — se van porque una aprobación es un acto de autoridad de una persona con nombre, y delegarla borra la evidencia de que una persona decidió. Las seis de control horario se van porque son adyacentes a la nómina y `bulk_create_time_entries` convierte una inferencia mala en un error de pago masivo. Las quince de evaluaciones de desempeño se van porque `submit_review` es definitivo; la documentación de Workable señala que un segundo envío falla, así que un agente reintentando una llamada que expiró es exactamente el riesgo. Las catorce lecturas de HRIS se van porque los documentos de empleados guardan contratos, cartas de compensación y papeles de visa o médicos.
+
+**13 detrás de una compuerta de aprobación** — las escrituras sobre candidatos y requisiciones, desde `move_candidate` y `disqualify_candidate` hasta `create_requisition`. Llamar a una sin `_gateway_confirm` devuelve un dry run en vez de una escritura. El `_gateway_token` de ese dry run es un hash del nombre de la herramienta más los argumentos exactos, así que una aprobación para "mover al candidato 41 a Onsite" no se puede reutilizar como "mover al candidato 88 a Oferta".
+
+**33 reenviadas directamente** — 32 lecturas más `add_comment`, la única escritura que es aditiva, atribuible y eliminable desde la interfaz de Workable. Encima de esas, `server.py` define tres herramientas propias: `workable_policy_report`, para que una llamada rechazada produzca "eso está bloqueado, hazlo en Workable" en lugar de un bucle de reintentos; `workable_pipeline_snapshot`, para conteos por etapa y candidatos estancados en un solo barrido paginado; y `workable_stage_move_review`, que resuelve la etapa actual del candidato para que el recruiter apruebe un diff y no una solicitud.
+
+## Decisiones de ingeniería
+
+**Fijar la cuenta en vez de dejar que el modelo elija.** Toda herramienta de Workable salvo `get_accounts` recibe un subdominio `account`, y un usuario con acceso a dos cuentas — una marca productiva y otra, o un sandbox — obtiene respuestas seguras y con pinta de correctas del tenant equivocado. El gateway inyecta `WORKABLE_ACCOUNT` en cada llamada reenviada y rechaza cualquiera donde el modelo haya puesto otra cosa. Dos cuentas significan dos procesos gateway.
+
+**Un token bucket en lugar de reintentar ante un 429.** El bucket OAuth 2.0 de Workable es de 50 solicitudes cada 10 segundos y devuelve HTTP 429 con `X-Rate-Limit-Reset` por encima de eso. "Muéstrame todos los candidatos de todos los puestos abiertos" se abre en `get_jobs` más un `get_candidates` paginado por req y agota eso en unos dos segundos, tras lo cual un asistente que reintenta se estrella contra el mismo muro. `WORKABLE_RATE_PER_SEC` tiene 4/s por defecto, bajo la tasa sostenida de 5/s, dejando margen para lo demás en el tenant que use el mismo token.
+
+**Un barrido, no una llamada por etapa.** `workable_pipeline_snapshot` pagina candidatos una vez y cuenta las etapas desde las filas, con tope en `WORKABLE_PAGE_CAP` (5 páginas, 500 candidatos). El costo es plano tenga el puesto 4 etapas o 14, y la respuesta marca `page_cap_reached` para que el modelo reporte como parcial un conteo parcial.
+
+**Redacción sobre la respuesta, no solo sobre la petición.** Bloquear `search_employees` no impide que `get_candidate` devuelva un campo de autoidentificación que tu cuenta recolecta para reportes de EEO. `policy.REDACT_FIELDS` vacía campos por nombre de clave, de forma recursiva, porque Workable anida el detalle del candidato y devuelve las filas de búsqueda detallada bajo sus propias claves.
+
+## La realidad del costo
+
+El servidor cuesta $0 — tanto el anuncio de lanzamiento como el de ampliación de Workable indican que está incluido sin cargo adicional en todos los planes de suscripción, con las tres herramientas de Advanced Search restringidas a los planes Premier+ y Enterprise. Ese es el número interesante, porque Workable cobra su propia IA de producto en créditos: los paquetes publicados hoy son 5.000 créditos por $600, 10.000 por $1.000 y 50.000 por $4.750, es decir entre $0,095 y $0,12 por crédito. Preguntarle a la IA de Workable quema créditos. Preguntarle a Claude a través del servidor MCP quema tokens de Anthropic y cero créditos de Workable. Para equipos que ya pagan asientos de Claude, mover el Q&A de recruiting a través de esa línea es una transferencia real, no un empate.
+
+En contra: unos 90 minutos para instalar el gateway y hacer las verificaciones de primera ejecución, y una revisión de política que se acerca a tres horas porque involucra a alguien dueño de la decisión sobre datos de RR. HH. El conector directo por sí solo es un comando y unos diez minutos.
+
+## Modos de falla
+
+**El asistente reintenta una escritura rechazada hasta encontrar una formulación que funcione.** Guarda: `workable_policy_report` existe para que el modelo nombre el nivel y se detenga, y cada mensaje de rechazo apunta a la interfaz de Workable en vez de sugerir otra herramienta. Pruébalo — el paso 3 del README le pide al asistente desactivar a un miembro y espera un rechazo, no un intento.
+
+**Una aprobación vieja se reutiliza contra otros argumentos.** Guarda: el `_gateway_token` hashea los argumentos, no solo el nombre de la herramienta. Editar el id del candidato después del dry run lo invalida y fuerza una aprobación nueva.
+
+**La redacción se salta un campo personalizado.** La lista de campos en `policy.py` es genérica y los atributos de autoidentificación dependen de cada cuenta. Guarda: el punto 1 de la lista de TODO del README es extraer tus claves reales con `get_account_custom_attributes` y `get_candidate_detailed_fields` antes de que esto toque una cuenta productiva. Hasta que eso esté hecho, trata la redacción como no probada.
+
+**CV y notas llegan a un tercero.** `get_candidate_files` está en el nivel ALLOW porque leer CV es el trabajo. Eso enruta datos GDPR y CCPA a través de Anthropic. Guarda: la aprobación de la política de IA y un registro de actividades de tratamiento que nombre el flujo — antes de que el conector esté vivo, no después de que alguien pregunte.
+
+## La alternativa que vale nombrar
+
+La comparación obvia es el patrón del [workflow MCP de Greenhouse](/es/workflows/mcp-server-greenhouse-recruiting/), donde el bundle es el servidor porque el proveedor no aloja ninguno. Ese no es el trade aquí. Construir tu propio servidor sobre la API REST de Workable significa reimplementar 94 endpoints y hacerte cargo del flujo OAuth para competir con algo gratis y de primera parte — no lo hagas.
+
+El trade que sí vale sopesar es un bróker. Composio y Zapier listan ambos endpoints MCP alojados de Workable, y ambos meten un segundo proveedor en la ruta sosteniendo tu token OAuth, con su propio precio por tarea o por asiento. Elige uno solo si ya estás estandarizado en él para otros conectores. Si no, el ranking es: servidor alojado de Workable más deny rules del lado del cliente para la mayoría de los equipos, y servidor alojado más este gateway cuando la lista de permitidos tenga que aplicarse en un lugar que los recruiters no puedan editar. Para el contexto de dónde cae esa línea, mira [acceso de escritura por MCP y cuándo concederlo](/es/learn/mcp-write-access-for-crm/) y [servidores MCP explicados](/es/learn/mcp-server-explained/).

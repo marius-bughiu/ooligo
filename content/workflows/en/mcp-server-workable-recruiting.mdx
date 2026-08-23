@@ -1,0 +1,78 @@
+---
+slug: mcp-server-workable-recruiting
+canonical_slug: mcp-server-workable-recruiting
+locale: en
+verticals: [recruiting]
+title: Workable MCP server for Claude
+artifact_type: mcp-server
+tools_used: [claude, workable]
+roles: [recruiter, recruiting-ops, talent-acquisition, recruiting-engineer]
+difficulty: intermediate
+time_to_setup: 90min
+human_tested: false
+last_updated: "2026-08-23"
+---
+
+[Workable](/en/tools/workable/) hosts its own Model Context Protocol server at `https://mcp.workable.com/mcp`, so the build question is settled — you connect, you do not write one. The open question is which of its 94 tools your recruiters' assistant gets to touch. Workable launched the server on 2026-05-13 with 38 tools and expanded it to 94 on 2026-07-20, and that expansion added write access across performance reviews, account and permissions management, and candidate profile updates. The artifact bundle at `apps/web/public/artifacts/mcp-server-workable-recruiting/` is the answer to that question: a least-privilege gateway (`README.md`, `pyproject.toml`, `src/workable_gateway/policy.py`, `src/workable_gateway/server.py`) that forwards 33 tools, gates 13 behind a two-phase human approval, and refuses the other 48.
+
+## When to use
+
+Connect the hosted server directly the moment recruiters are already working in [Claude](/en/tools/claude/) on adjacent tasks — outreach drafts, scorecard summaries, hiring-manager updates — and keep bouncing back into Workable to answer "what stage is this candidate at", "which applications have not moved this week", "who is on the interview loop for this req". The connection is one command and costs nothing: Workable includes the MCP server at no added charge on every subscription plan.
+
+Add the gateway on top when the allowlist has to hold centrally. A recruiter's own `settings.json` is enforced by their client, on their laptop, and they can edit it. A gateway process is enforced once, by recruiting-ops, and running it is the difference between a policy and a preference. The population that needs this is a recruiting team of five or more sharing one Workable account, in an org where somebody will eventually ask who decided the assistant could deactivate a user.
+
+## When NOT to use
+
+Skip the gateway — not the server — if your client already restricts tools per connector and you trust the people using it. Claude Code matches MCP tools as `mcp__<server>__<tool>` and honours `permissions.deny` in `settings.json`. The bundle ships `claude-code-permissions.example.json`, the same policy expressed that way, generated from the same `policy.py`. It costs no infrastructure and it is the right first move. Reach for the gateway only when you need response redaction, a central audit log, or an approval token bound to specific arguments — three things a client-side deny list does not give you.
+
+Skip the whole workflow if your Workable account is the system of record for HR as well as hiring. Workable's server covers employees, time off, time tracking, and the full performance-review lifecycle from the same endpoint as candidates. An assistant wired into that account reaches employment contracts through `get_employee_documents` and absence records through `get_timeoff_balances` unless something stops it. If nobody owns that decision yet, get the [recruiting AI policy](/en/learn/ai-policy-for-recruiting-teams/) signed off first.
+
+And skip it if a single recruiter is the whole team. The hosted connector alone is fine at that scale; the gateway's install and policy review is roughly a day of work that buys governance nobody is asking for yet.
+
+## Setup
+
+Full instructions are in `apps/web/public/artifacts/mcp-server-workable-recruiting/README.md`. The short version: `pip install -e .`, set `WORKABLE_ACCOUNT` to your Workable subdomain, register the gateway with an absolute path, and authorize in the browser on first call. Workable's server advertises RFC 8414 authorization-server metadata and accepts RFC 7591 dynamic client registration, so there is no client ID to provision by hand and no API key to rotate.
+
+The step that actually matters comes before any of that: decide which Workable member you authorize as. Every MCP session inherits the signed-in user's role and job assignments — Workable's own wording is that the AI can only read and act on data the user is already authorized to see. That sounds like a permission model until you notice who installs this first. Recruiting-ops leads are admins. Authorizing as yourself hands the gateway admin scope and makes the allowlist the only wall standing. Create a dedicated Workable member with a narrowed permission set instead; `get_permission_sets` lists what your account has defined.
+
+## What to withhold
+
+`src/workable_gateway/policy.py` sorts all 94 tools into three tiers and a redaction list. The tier function is default-deny, so the 37 tools Workable added in one release on 2026-07-20 would have stayed dark until a human classified them — which is the behaviour you want from a surface that grew by 65% in nine weeks.
+
+**48 refused outright**, in six groups with one rationale each. The four member-management tools go because an agent that can grant a permission set can widen its own reach on the next session. The four department tools go because `merge_department` has no inverse and recruiting reports are cut by department, so a bad merge rewrites funnel history without an error. The five approval tools — offers, requisitions, time off — go because an approval is an act of authority by a named person, and delegating it erases the evidence that a person decided. The six time-tracking tools go because they are payroll-adjacent and `bulk_create_time_entries` turns one bad inference into a bulk pay error. The fifteen performance-review tools go because `submit_review` is final; Workable's docs note a second submit fails, so an agent retrying a timed-out call is the exact hazard. The fourteen HRIS reads go because employee documents hold contracts, comp letters, and visa or medical paperwork.
+
+**13 behind an approval gate** — the candidate and requisition writes, from `move_candidate` and `disqualify_candidate` through `create_requisition`. Calling one without `_gateway_confirm` returns a dry run instead of a write. The `_gateway_token` in that dry run is a hash of the tool name plus the exact arguments, so an approval for "move candidate 41 to Onsite" cannot be replayed as "move candidate 88 to Offer".
+
+**33 forwarded directly** — 32 reads plus `add_comment`, the one write that is additive, attributable, and removable in the Workable UI. On top of those, `server.py` defines three tools of its own: `workable_policy_report` so a refused call produces "that is blocked, do it in Workable" rather than a retry loop, `workable_pipeline_snapshot` for stage counts and stalled candidates in one paged sweep, and `workable_stage_move_review`, which resolves the candidate's current stage so the recruiter approves a diff rather than a request.
+
+## Engineering choices
+
+**Account pinning over model choice.** Every Workable tool except `get_accounts` takes an `account` subdomain, and a user with access to two accounts — a production brand and a second one, or a sandbox — gets confident, correct-looking answers from the wrong tenant. The gateway injects `WORKABLE_ACCOUNT` on every forwarded call and rejects any call where the model supplied something else. Two accounts means two gateway processes.
+
+**A token bucket rather than retry-on-429.** Workable's OAuth 2.0 bucket is 50 requests per 10 seconds and returns HTTP 429 with `X-Rate-Limit-Reset` above it. "Show me every candidate across all open roles" fans out into `get_jobs` plus a paged `get_candidates` per req and clears that in about two seconds, after which an assistant that retries walks straight back into the wall. `WORKABLE_RATE_PER_SEC` defaults to 4/s, under the 5/s sustained rate, leaving headroom for whatever else in the tenant holds the same token.
+
+**One sweep, not one call per stage.** `workable_pipeline_snapshot` pages candidates once and counts stages from the rows, capped at `WORKABLE_PAGE_CAP` (5 pages, 500 candidates). Cost is flat whether the job has 4 stages or 14, and the response sets `page_cap_reached` so the model reports a partial count as partial.
+
+**Redaction on the response, not just the request.** Blocking `search_employees` does not stop `get_candidate` returning a self-identification field your account collects for EEO reporting. `policy.REDACT_FIELDS` blanks fields by key name, recursively, because Workable nests candidate detail and returns detailed-search rows under their own keys.
+
+## Cost reality
+
+The server is $0 — Workable's launch and expansion announcements both state it is included at no added cost across all subscription plans, with the three Advanced Search tools restricted to Premier+ and Enterprise. That is the interesting number, because Workable meters its own in-product AI in credits: the published bundles today are 5,000 credits for $600, 10,000 for $1,000, and 50,000 for $4,750, which is $0.095 to $0.12 per credit. Asking Workable's AI burns credits. Asking Claude through the MCP server burns Anthropic tokens and zero Workable credits. For teams already paying for Claude seats, moving recruiter Q&A across that line is a real transfer, not a wash.
+
+Against that: about 90 minutes for the gateway install and first-run checks, and a policy review that runs closer to three hours because it involves someone who owns the HR-data decision. The direct connector alone is one command and about ten minutes.
+
+## Failure modes
+
+**The assistant retries a refused write until it finds a phrasing that works.** Guard: `workable_policy_report` exists so the model can name the tier and stop, and every refusal string points at the Workable UI instead of suggesting an alternative tool. Test it — README step 3 asks the assistant to deactivate a member and expects a refusal, not an attempt.
+
+**A stale approval gets replayed against different arguments.** Guard: the `_gateway_token` hashes the arguments, not just the tool name. Editing the candidate id after the dry run invalidates it and forces a fresh approval.
+
+**Redaction misses a custom field.** The field list in `policy.py` is generic, and self-identification attributes are account-specific. Guard: item 1 in the README's TODO list is pulling your real attribute keys with `get_account_custom_attributes` and `get_candidate_detailed_fields` before this touches a production account. Until that is done, treat the redaction as untested.
+
+**Résumés and notes reach a third party.** `get_candidate_files` is in the ALLOW tier because reading résumés is the job. That routes GDPR and CCPA data through Anthropic. Guard: the AI policy sign-off, and a records-of-processing entry that names the flow — before the connector is live, not after somebody asks.
+
+## The alternative worth naming
+
+The obvious comparison is the [Greenhouse MCP workflow](/en/workflows/mcp-server-greenhouse-recruiting/) pattern, where the bundle is the server because the vendor does not host one. That is not the trade here. Building your own server over Workable's REST API means re-implementing 94 endpoints and owning the OAuth flow to compete with something free and first-party — do not.
+
+The trade worth weighing is a broker. Composio and Zapier both list hosted Workable MCP endpoints, and both put a second vendor in the path holding your OAuth token, on their own per-task or per-seat pricing. Pick one only if you are already standardized on it for other connectors. Otherwise the ranking is: hosted Workable server plus client-side deny rules for most teams, hosted server plus this gateway when the allowlist has to be enforced somewhere the recruiters cannot edit. For background on where that line sits, see [MCP write access, and when to grant it](/en/learn/mcp-write-access-for-crm/) and [MCP servers explained](/en/learn/mcp-server-explained/).
