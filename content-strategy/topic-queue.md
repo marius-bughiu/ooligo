@@ -31,7 +31,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (material: attio 2026-08-17 > stack's last_updated 2026-07-12) → slug: ai-native-crm-stack
 - refresh:C: [type:stack] [vertical:legal-ops] enterprise-clm-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-05-23) → slug: enterprise-clm-stack
 - refresh:C: [type:stack] [vertical:legal-ops] legal-ops-team-of-one-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-05-23) → slug: legal-ops-team-of-one-stack
-- refresh:C: [type:stack] [vertical:legal-ops] mid-market-legal-ops-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-07-17)
+- refresh:C: [type:stack] [vertical:legal-ops] mid-market-legal-ops-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-07-17) → claimed: refresh 2026-08-27T21:05:00Z
 - refresh:C: [type:tool] [vertical:recruiting] brighthire — material (brighthire acquired by Zoom 2025-12) → slug: brighthire
 - refresh:C: [type:tool] [vertical:revops] catalyst — material (catalyst merged into Totango) → slug: catalyst
 - refresh:C: [type:tool] [vertical:legal-ops] lawgeex — material (enterprise product dismantled 2023: assets to Robin AI, clients to LegalSifter, founders to Superlegal; the earlier → skip: marker refused a *pricing* refresh and called for exactly this sunset rewrite — keep the URL, past-tense body, drop ooligo_score) → slug: lawgeex
