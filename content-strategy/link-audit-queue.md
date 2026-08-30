@@ -3725,3 +3725,111 @@ The target's name is a common English word or collides with another vendor, so a
 - **59 EN internal links (354 across all 6 locales) written without a locale prefix** — `](/tools/hirevue)` instead of `](/en/tools/hirevue/)`. There is no `/tools/` route, so all of them are 404s. EN files: `tools/en/sapia-ai.mdx` (14), `apriora.mdx` (11), `micro1.mdx` (10), `fetcher.mdx` (10), `seekout.mdx` (8), `onit.mdx` (5), `hebbia.mdx` (1) — `brightflag.mdx`'s 2 cleared when that page was re-authored 2026-08-20. This also distorts the audit: those entries read as fully linked, so the dedupe guardrail refuses to insert a working second link to the same target. Repairing the prefixes would clear several floors with no new links at all.
 - **10 EN links (60 across all 6 locales) are locale-prefixed but use `/comparisons/` instead of the real `/vs/` route** — `](/en/comparisons/best-clm-platforms)`. `apps/web/src/pages/[locale]/` has no `comparisons` route, so these are 404s too. EN files: `comparisons/en/best-ai-tools-2026.mdx`, `churnzero-vs-vitally.mdx`, `fetcher-vs-gem.mdx`, `gumloop-vs-n8n.mdx`, `karat-vs-codesignal.mdx`, `unify-vs-11x.mdx`, `learn/en/signal-driven-vs-autonomous-ai-sdr.mdx`, `tools/en/legora.mdx`.
 - `tools/*/dealhub.mdx` links to `learn/cpq-configure-price-quote` twice in the same body (all 6 locales) — pre-existing, violates the dedupe guardrail.
+
+## 2026-08-30
+
+### Auto-inserted this run (high confidence): 14 EN links across 13 entries (84 locale mirrors)
+
+Every insertion is an in-prose anchor — the target's name already appeared in the body, unlinked. No sentence was authored to carry a link this run.
+
+- [tools:eve-legal] → [tools:harvey]: "Harvey and [Legora] chase in-house teams and BigLaw" (Legora already linked in the same sentence)
+- [tools:evenup] → [tools:supio]: Alternatives bullet `**Supio** — pick it when massive medical-record sets…`
+- [tools:greenhouse] → [tools:ashby]: "Greenhouse has been slow to ship native AI vs. Ashby"
+- [tools:lexisnexis-protege] → [tools:legora]: "Legora is the fastest-growing entrant to weigh"
+- [tools:logikcull] → [tools:reveal]: "Reveal acquired Logikcull in 2023"
+- [tools:relativity] → [learn:ediscovery]: "Relativity is the dominant eDiscovery platform"
+- [tools:zendesk] → [tools:vitally]: "Health-score tools like [Gainsight] and Vitally pull Zendesk ticket volume…" (Gainsight already linked)
+- [tools:zoominfo] → [tools:chorus]: "ZoomInfo SalesOS plus Chorus plus Engage"
+- [tools:zoominfo] → [tools:clay]: "[Apollo] or Clay routing usually wins on value"
+- [workflows:competitive-battlecard-skill] → [tools:salesforce]: "reconciles them against Salesforce deal outcomes"
+- [workflows:forecast-meeting-prep-skill] → [tools:gong]: vs-alternatives bullet `**Gong Forecast.**`
+- [workflows:nps-verbatim-triage-skill] → [tools:claude]: "A Claude Skill that takes a batch of open-text NPS responses"
+- [workflows:onboarding-plan-generator-skill] → [tools:claude]: "A Claude Skill that turns deal context"
+- [workflows:salesforce-data-cleanup-skill] → [tools:salesforce]: "Skill that scans Salesforce for the data garbage"
+
+Locale mirroring: 84/84 links landed. One anchor needed a per-locale override — `ja` renders eDiscovery as `eディスカバリー`, so `tools/ja/relativity.mdx` anchors the katakana form to the same target. German compounds (`eDiscovery-Plattform`, `Clay-Routing`) matched via the relaxed trailing-hyphen boundary from 2026-08-23; the link wraps only the proper noun.
+
+### Deferred — high confidence in principle, but no safe anchor (10)
+
+Nine of these are `high-rel`: the target sits in the source's `integrations` field and shares 2+ verticals, but its name never appears in the body. Inserting would mean authoring a new sentence in EN and translating it into 5 locales — outside what an automated pass should do unreviewed. The tenth (`everlaw`) has the name in the body but in a position no single link fits.
+
+- [tools:chatgpt] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:chatgpt] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:linear] → [tools:slack]: shares revops/recruiting, in `integrations`, name not in body
+- [tools:linear] → [tools:zapier]: shares revops/recruiting, in `integrations`, name not in body
+- [tools:make] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:make] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:notion] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:zapier] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:zapier] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:everlaw] → [tools:spellbook]: name in body, but only inside the compound "Spellbook/Harvey/Ironclad" — linking one of three reads wrong; link all three or none
+
+`tools:notion` is the clearest case for authoring rather than linking: the entry has **zero** body links of any kind and no unlinked mention of a sibling entry. It needs a content refresh, not a link pass.
+
+### Below outbound floor with no candidate at all (3)
+
+- [tools:evenup]: 2 outbound, floor 3 — the remaining Alternatives (Precedent, ProPlaintiff) have no catalog entries
+- [tools:mycase]: 1 outbound, floor 3 — no same-vertical target named or related
+- [workflows:pipeline-review-prompt-pack]: 1 outbound, floor 2 — no same-vertical target named or related
+
+### Medium confidence (shares ≥ 1 vertical, target name not in body) — 43
+
+- [tools:6sense] -> [tools:salesforce]: shares vertical revops, target name "Salesforce" not in body (source ob=1, need 2)
+- [tools:6sense] -> [tools:hubspot]: shares vertical revops, target name "HubSpot" not in body (source ob=1, need 2)
+- [tools:6sense] -> [tools:outreach]: shares vertical revops, target name "Outreach" not in body (source ob=1, need 2)
+- [tools:6sense] -> [tools:salesloft]: shares vertical revops, target name "Salesloft" not in body (source ob=1, need 2)
+- [tools:contractpodai] -> [tools:slack]: shares vertical legal-ops, target name "Slack" not in body (source ob=0, need 3)
+- [tools:demandbase] -> [tools:hubspot]: shares vertical revops, target name "HubSpot" not in body (source ob=2, need 1)
+- [tools:demandbase] -> [tools:outreach]: shares vertical revops, target name "Outreach" not in body (source ob=2, need 1)
+- [tools:demandbase] -> [tools:salesloft]: shares vertical revops, target name "Salesloft" not in body (source ob=2, need 1)
+- [tools:eightfold] -> [tools:greenhouse]: shares vertical recruiting, target name "Greenhouse" not in body (source ob=2, need 1)
+- [tools:eightfold] -> [tools:icims]: shares vertical recruiting, target name "iCIMS" not in body (source ob=2, need 1)
+- [tools:everlaw] -> [tools:slack]: shares vertical legal-ops, target name "Slack" not in body (source ob=2, need 1)
+- [tools:findem] -> [tools:greenhouse]: shares vertical recruiting, target name "Greenhouse" not in body (source ob=1, need 2)
+- [tools:findem] -> [tools:lever]: shares vertical recruiting, target name "Lever" not in body (source ob=1, need 2)
+- [tools:findem] -> [tools:workday]: shares vertical recruiting, target name "Workday" not in body (source ob=1, need 2)
+- [tools:findem] -> [tools:ashby]: shares vertical recruiting, target name "Ashby" not in body (source ob=1, need 2)
+- [tools:findem] -> [tools:icims]: shares vertical recruiting, target name "iCIMS" not in body (source ob=1, need 2)
+- [tools:greenhouse] -> [tools:gem]: shares vertical recruiting, target name "Gem" not in body (source ob=2, need 1)
+- [tools:greenhouse] -> [tools:metaview]: shares vertical recruiting, target name "Metaview" not in body (source ob=2, need 1)
+- [tools:greenhouse] -> [tools:hireez]: shares vertical recruiting, target name "hireEZ" not in body (source ob=2, need 1)
+- [tools:greenhouse] -> [tools:sense]: shares vertical recruiting, target name "Sense" not in body (source ob=2, need 1)
+- [tools:greenhouse] -> [tools:paradox]: shares vertical recruiting, target name "Paradox" not in body (source ob=2, need 1)
+- [tools:greenhouse] -> [tools:slack]: shares vertical recruiting, target name "Slack" not in body (source ob=2, need 1)
+- [tools:hireez] -> [tools:greenhouse]: shares vertical recruiting, target name "Greenhouse" not in body (source ob=2, need 1)
+- [tools:hireez] -> [tools:lever]: shares vertical recruiting, target name "Lever" not in body (source ob=2, need 1)
+- [tools:hireez] -> [tools:workday]: shares vertical recruiting, target name "Workday" not in body (source ob=2, need 1)
+- [tools:hireez] -> [tools:bullhorn]: shares vertical recruiting, target name "Bullhorn" not in body (source ob=2, need 1)
+- [tools:hireez] -> [tools:jobvite]: shares vertical recruiting, target name "Jobvite" not in body (source ob=2, need 1)
+- [tools:hireez] -> [tools:icims]: shares vertical recruiting, target name "iCIMS" not in body (source ob=2, need 1)
+- [tools:juro] -> [tools:slack]: shares vertical legal-ops, target name "Slack" not in body (source ob=0, need 3)
+- [tools:linksquares] -> [tools:slack]: shares vertical legal-ops, target name "Slack" not in body (source ob=1, need 2)
+- [tools:make] -> [tools:hubspot]: shares vertical revops, target name "HubSpot" not in body (source ob=2, need 1)
+- [tools:make] -> [tools:salesforce]: shares vertical revops, target name "Salesforce" not in body (source ob=2, need 1)
+- [tools:notion] -> [tools:hubspot]: shares vertical revops, target name "HubSpot" not in body (source ob=0, need 3)
+- [tools:notion] -> [tools:salesforce]: shares vertical revops, target name "Salesforce" not in body (source ob=0, need 3)
+- [tools:relativity] -> [tools:slack]: shares vertical legal-ops, target name "Slack" not in body (source ob=2, need 1)
+- [tools:thomson-reuters-cocounsel] -> [tools:ironclad]: shares vertical legal-ops, target name "Ironclad" not in body (source ob=2, need 1)
+- [tools:zapier] -> [tools:hubspot]: shares vertical revops, target name "HubSpot" not in body (source ob=2, need 1)
+- [tools:zapier] -> [tools:salesforce]: shares vertical revops, target name "Salesforce" not in body (source ob=2, need 1)
+- [comparisons:gem-vs-eightfold] -> [tools:eightfold]: shares vertical recruiting, target name "Eightfold AI" not in body (source ob=1, need 1)
+- [comparisons:gem-vs-findem] -> [tools:gem]: shares vertical recruiting, target name "Gem" not in body (source ob=1, need 1)
+- [learn:churn-rate-calculation] -> [tools:gainsight]: shares vertical customer-success, target name "Gainsight" not in body (source ob=1, need 1)
+- [learn:churn-rate-calculation] -> [tools:churnzero]: shares vertical customer-success, target name "ChurnZero" not in body (source ob=1, need 1)
+- [learn:churn-rate-calculation] -> [tools:totango]: shares vertical customer-success, target name "Totango" not in body (source ob=1, need 1)
+
+### Below-floor summary (EN graph, post-insert; outbound = deduped body links only, matching prior runs)
+
+- Outbound < floor: tools 19, comparisons 2, workflows 1, learn 1, stacks 0 (pre-insert: tools 24, comparisons 2, workflows 6, learn 1, stacks 0).
+- Inbound < floor (needs OTHER entries to link in; backlog for freshness sweeps): tools 47, comparisons 153, workflows 49, learn 33, stacks 13.
+- Run stayed well under the 50-link cap: the pool is genuinely small now. After this run only 10 high-confidence candidates remain across the whole catalog, and every one of them needs authored prose or a human anchor decision.
+- Floor used is the one in `internal-link-prompt.md` (tools 3/2, others 2/1), matching every prior run. ARCHITECTURE.md §Cross-linking rules is stricter (tool page → 3 alternative tools + 1 comparison + 2 workflows + 2 learn = 8 outbound, by target type). Under the ARCHITECTURE floor essentially the whole catalog is below budget; the prompt says ARCHITECTURE wins, so this discrepancy still needs a human decision — either relax ARCHITECTURE to the operational floor or plan a much larger link build-out. Carried unresolved since 2026-08-02.
+- ARCHITECTURE.md also states "Validator runs in CI; PRs failing the link budget are blocked." That is not true today: `npm run validate:config` only AJV-validates `content/verticals.json` and `content/locales.json` against `content/.schema/`. Nothing in `packages/pipeline` reads MDX or checks a link budget, so the routine's Step 5 gate cannot catch a bad insertion. This run verified its own 84 links independently (all resolve to an existing file in the matching locale, all trailing-slash, no duplicate target within an entry). A real MDX link validator is the missing piece.
+
+### Flagged — broken internal links, still not fixed (out of this routine's insert scope, carried from 2026-08-02)
+
+- **59 EN internal links (354 across all 6 locales) written without a locale prefix** — `](/tools/hirevue)` instead of `](/en/tools/hirevue/)`. There is no `/tools/` route, so all of them are 404s. EN files: `tools/en/sapia-ai.mdx` (14), `apriora.mdx` (11), `fetcher.mdx` (10), `micro1.mdx` (10), `seekout.mdx` (8), `onit.mdx` (5), `hebbia.mdx` (1). Unchanged in count from 2026-08-23. This also distorts the audit: those entries read as fully linked, so the dedupe guardrail refuses to insert a working second link to the same target. Repairing the prefixes would clear several floors with no new links at all.
+- **13 EN links use `/comparisons/` instead of the real `/vs/` route** — `](/en/comparisons/best-clm-platforms)`. `apps/web/src/pages/[locale]/` has no `comparisons` route, so these are 404s too. **Up from 10 on 2026-08-23**: `tools/en/onit.mdx` (2) and `tools/en/hebbia.mdx` (1) are new. Full list: `comparisons/en/best-ai-tools-2026.mdx` (3), `tools/en/onit.mdx` (2), `tools/en/hebbia.mdx` (1), `tools/en/legora.mdx` (1), `comparisons/en/churnzero-vs-vitally.mdx` (1), `fetcher-vs-gem.mdx` (1), `gumloop-vs-n8n.mdx` (1), `karat-vs-codesignal.mdx` (1), `unify-vs-11x.mdx` (1), `learn/en/signal-driven-vs-autonomous-ai-sdr.mdx` (1).
+- **5 EN links point at entries that do not exist** (new class, not previously flagged): `tools/en/mutiny.mdx` → `/en/tools/clearbit/`; `workflows/en/hiring-funnel-anomaly-n8n.mdx` → `/en/tools/datapeople/`; `workflows/en/matter-status-digest-claude.mdx` → `/en/stacks/legal-ops/`; `workflows/en/offer-prep-claude-skill.mdx` → `/en/tools/claude-code/` (twice in the same body, so it also violates the dedupe guardrail). These are separate from the link-rot sweep, which checks external URLs.
+- **27 locale-prefixed links are missing the trailing slash** (`](/en/tools/gong)`), and one is malformed as `](/en/tools/gong.)`. `astro.config.mjs` sets `trailingSlash: "always"`, so each takes a 308 redirect rather than resolving directly — not a 404, but a wasted hop on an internal link. (The 59 locale-less links above are also slash-less; these 27 are the distinct, otherwise-valid class.)
+- **The repeat-link note needs correcting.** Prior runs flagged `tools/*/dealhub.mdx` → `learn/cpq-configure-price-quote` (x2) as a lone pre-existing dedupe violation. It is still there, but it is not an exception: **310 of 848 EN entries link the same target more than once in one body — 684 duplicated (entry, target) pairs** (592 at x2, 80 at x3, 8 at x4, 3 at x5, 1 at x7), spread across tools 101, learn 101, workflows 53, comparisons 29, stacks 26. Repeat-linking is the catalog's de-facto house style, so "never link the same target twice" reads as a rule the corpus has never followed. This routine still honours it for its own insertions (this run added 0 duplicates), but the guardrail should either be enforced catalog-wide by a real validator or relaxed in the prompt to "don't add a *second* link to a target this pass already linked." Needs a human decision.
