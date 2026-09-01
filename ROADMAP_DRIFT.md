@@ -168,3 +168,199 @@ Every locale's tool count in the roadmap table is also stale (120/52/52/3/3/3 �
 - **GSC properties (Phase 2)** — no service-account/config in the repo or `~/.config/ooligo/`. Are per-locale properties set up outside the repo, or genuinely not started?
 - **pt-BR "20 stale" translations** — file parity is now complete, but the old note flagged 20 stale pt-BR entries. Were those refreshed, or just counted? Worth a back-translation QA spot-check before checking the Phase 2 box.
 - With all 6 locales at parity and all 3 verticals clearing the floor, the live catalog is at ~50% of the Phase 7 6,000-page goal **before** a 4th vertical exists. Is the next lever a 4th vertical (Phase 7) or deepening the existing three?
+
+## 2026-09-01 — Quarterly drift report
+
+*Generated 2026-09-01. Source of truth: ROADMAP.md (unmodified by this routine).*
+
+ROADMAP.md was last touched `23bc003d` (2026-06-06) — five days after the previous drift report, and only to mark the Customer Success vertical shipped. Most of the June report's suggested edits were applied to the §Locales table and §Public metrics; the Phase-2 and Phase-7 checkbox suggestions were not. Those carry over below.
+
+### Headline numbers
+
+- **Total EN content pages: 865** (tools 272 / comparisons 228 / workflows 127 / learn 191 / stacks 47). Roadmap's most recent claim (§Public metrics, "612 EN canonical"): **delta +253 (+41.3%)**.
+- **Quarter-over-quarter**: 504 EN pages at the 2026-06-01 report → 865 today, **+361 (+71.6%)** across 855 commits since 2026-06-01.
+- **Total pages × 6 locales: 5,190 content pages**; **5,281 built pages** in the current `apps/web/dist` (adds 6 locales × 11 hub/legal routes + 4 vertical landings × 6 + 404/design). Roadmap §Public metrics claims **3,758 built**; **delta +1,523**.
+- **Verticals at full parity** (≥40 tools, ≥1 stack, ≥10 workflows, ≥30 learn): **all four — RevOps, Legal Ops, Recruiting, Customer Success.** Per-vertical EN membership:
+
+  | Vertical | Tools | Comparisons | Workflows | Learn | Stacks | Floor |
+  |---|---|---|---|---|---|---|
+  | RevOps | 100 | 98 | 53 | 77 | 19 | PASS |
+  | Legal Ops | 91 | 77 | 33 | 51 | 14 | PASS |
+  | Recruiting | 90 | 75 | 29 | 47 | 10 | PASS |
+  | Customer Success | 66 | 35 | 22 | 38 | 10 | PASS |
+
+  (Tools multi-tag, so the column sums past 272.) No content carries a vertical outside the four in `content/verticals.json`.
+- **Locales at full parity with EN: all 6** (en, es, pt-BR, ja, fr, de) — 865 files each, **0 basename diffs** vs EN across all five entity types, **0 files** whose locale `last_updated` trails its EN counterpart.
+- Type/format breakdown: comparisons 173 pairwise / 31 alternatives / 24 roundup; workflows 68 claude-skill / 25 n8n-flow / 19 mcp-server / 7 cursor-rule / 5 prompt / 2 sop / 1 agent-template; learn 132 definition / 49 framework / 10 how-to.
+
+### Phase-by-phase
+
+#### Phase 1 — Engine + Flagship
+
+Goal "~250 indexed pages in EN/RevOps" is comfortably met: **347 EN/RevOps pages**. Every "first N" floor in this phase is now understated by 2–4×; the June report's suggested bumps were not applied, so the same items drift further.
+
+- Item: "First 50 tool entries (RevOps stack: … — full count now 50 tagged)"
+  - Status in roadmap: [x]
+  - Repo reality: **100** RevOps-tagged tools (272 tools total)
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +100% over the parenthetical)
+  - Suggestion: bump the parenthetical to "now 100 tagged".
+- Item: "First 100 comparison pages (auto-generated from tool pairs)"
+  - Status in roadmap: [x]
+  - Repo reality: **228** comparisons (173 pairwise / 31 alternatives / 24 roundup)
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +128%)
+  - Suggestion: note actual is 228.
+- Item: "First 30 workflow library entries (real, tested artifacts — Claude Skills, n8n flows, Cursor rules)"
+  - Status in roadmap: [x]
+  - Repo reality: **127** workflows; the artifact mix has outgrown the parenthetical (mcp-server is now the third-largest type at 19, ahead of cursor-rule at 7)
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +323%)
+  - Suggestion: note actual is 127 and add MCP servers to the artifact-type list.
+- Item: "First 50 learn/glossary entries"
+  - Status in roadmap: [x]
+  - Repo reality: **191** learn entries
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +282%)
+  - Suggestion: note actual is 191.
+- Item: "RevOps vertical landing page + 5 curated stack pages"
+  - Status in roadmap: [x]
+  - Repo reality: **19** RevOps-tagged stacks (47 total); landing route `apps/web/src/pages/[locale]/r/[vertical].astro` renders all four verticals
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +280%)
+  - Suggestion: bump "5 curated stack pages" to 19 (47 total).
+- Item: "Sitemap, hreflang, schema.org markup" — [x]; `@astrojs/sitemap` wired in `astro.config.mjs`, hreflang emitted from `BaseLayout.astro`. Drift: NONE.
+
+#### Phase 2 — Localization online
+
+- Item: "All EN content translated to ES + PT-BR (ES: 68 missing; pt-BR: 100 missing + 20 stale — translation queue drain in progress)"
+  - Status in roadmap: [ ]
+  - Repo reality: ES and pt-BR are both at **865/865 files, 0 slug diffs, 0 stale** by `last_updated` comparison against EN. So are ja, fr, and de.
+  - Drift: ACHIEVEMENT — PROBABLY-DONE-NOT-CHECKED. **Repeat finding**: flagged in the 2026-06-01 report and still unapplied. The "68 missing / 100 missing + 20 stale" parenthetical has been wrong for two quarters.
+  - Suggestion: check the box; delete the parenthetical.
+- Item: "Per-locale Google Search Console properties"
+  - Status in roadmap: [ ]
+  - Repo reality: no `~/.config/ooligo/` directory; `content-strategy/gsc-candidates.json` is still the empty stub (`generated_at: null`, all three candidate arrays empty), so the weekly `gsc-harvest` routine has never had credentials to run against.
+  - Drift: NONE (correctly pending) — and now a bottleneck: the freshness and topic-refill routines both consume `gsc-candidates.json`, so they are running blind. Not repo-observable whether properties exist in the GSC UI.
+  - Suggestion: leave unchecked; this is the highest-leverage unblock in the phase list.
+
+#### Phase 3 — Vertical 2: Legal Ops
+
+Goal "~1,500 pages" exceeded more than 3× (5,190 content pages live).
+
+- Item: "30 Legal-Ops-specific tools added to catalog (… — now 40 tagged across the vertical)"
+  - Status in roadmap: [x]
+  - Repo reality: **91** Legal-Ops-tagged tools
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +128% over "40")
+  - Suggestion: bump parenthetical to "now 91 tagged".
+- Item: "20 Legal-Ops-specific workflows"
+  - Status in roadmap: [x]
+  - Repo reality: **33**
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +65%)
+  - Suggestion: note actual is 33.
+- Item: "30 Legal-Ops-specific learn entries"
+  - Status in roadmap: [x]
+  - Repo reality: **51**
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +70%)
+  - Suggestion: note actual is 51.
+- Item: "Auto-translate to ES/PT-BR" — [x]; reality is all 5 non-EN locales, not just ES/pt-BR. Drift: ACHIEVEMENT (minor wording). Suggestion: reword to "all 5 non-EN locales".
+
+#### Phase 4 — Vertical 3: Recruiting / TA
+
+Goal "~2,500 pages" exceeded (5,190 content pages).
+
+- Item: "40 Recruiting-specific tools (… — now 53 tagged across the vertical)"
+  - Status in roadmap: [x]
+  - Repo reality: **90** Recruiting-tagged tools
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +70% over "53")
+  - Suggestion: bump parenthetical to "now 90 tagged".
+- Item: "20 Recruiting-specific workflows"
+  - Status in roadmap: [x]
+  - Repo reality: **29**
+  - Drift: ACHIEVEMENT (minor, +45%)
+- Item: "30 Recruiting-specific learn entries"
+  - Status in roadmap: [x]
+  - Repo reality: **47**
+  - Drift: ACHIEVEMENT (UNDERCLAIMED, +57%)
+  - Suggestion: note actual is 47.
+
+#### Phase 5 — Locale-native newsletters
+
+- All six items are unchecked and none is repo-observable. What the repo *does* show: a single beehiiv publication (`apps/web/functions/api/subscribe.ts` reads one `BEEHIIV_PUBLICATION_ID`), with the vertical carried as a UTM tag plus a `vertical` custom field for later segmentation. `content/verticals.json` declares four `newsletter_id`s (`revops-en`, `legal-ops-en`, `recruiting-en`, `customer-success-en`) but nothing in the repo maps them to distinct beehiiv publications or sends.
+  - Drift: AMBIGUOUS — the success criterion ("track live") isn't defined in repo terms. One publication with segmentation may or may not satisfy "5 newsletter tracks live"; that's a definition the roadmap doesn't give.
+  - **Repeat finding**: "EN/RevOps (already live)" is annotated as live but left unchecked — same contradiction as last quarter, still unreconciled.
+  - Suggestion: define what counts as a "track" (separate publication vs segmented send), then either check EN/RevOps or drop the "(already live)" annotation. Note Phase 5 also predates the Customer Success vertical — there are now four EN verticals but only three EN newsletter rows.
+
+#### Phase 6 — Monetization layer
+
+- Item: "AdSense in-article slots live (publisher ID configured)"
+  - Status in roadmap: [x]
+  - Repo reality: `apps/web/src/components/AdSlot.astro` present; `adsbygoogle` present throughout the built output. Confirmed.
+  - Drift: NONE.
+- Item: "Affiliate links live on every tool/comparison page"
+  - Status in roadmap: [ ]
+  - Repo reality: the *plumbing* is done — `affiliate_link` is in `content/.schema/tool.schema.json` and `content.config.ts`, and `tools/[slug].astro` renders a `rel="sponsored"` CTA plus a localized disclosure whenever the field is set. **Zero** of 272 EN tool entries set it, so the CTA falls back to `website` everywhere.
+  - Drift: NONE (correctly pending), but worth splitting: the engineering is shipped, only the affiliate program data is missing.
+  - Suggestion: consider splitting into "affiliate rendering shipped [x]" / "affiliate programs joined + links populated [ ]".
+- Items "Premium directory listings", "Paid workflow library subscription", "First sponsored newsletter slots booked" — not repo-observable; consistent with §Public metrics zeros. Drift: NONE.
+- Item: "Discord community (free track + paid track)" — [ ]; **no `discord` reference anywhere in `apps/web/src` or `content-strategy/`**. Correctly pending.
+
+#### Phase 7 — Vertical 4 + scale
+
+- Item: "Customer Success vertical shipped … config, landing page, 44 tools, 36 learn entries, 22 workflows, 19 comparisons, 4 stacks tagged, all 6 locales"
+  - Status in roadmap: [x]
+  - Repo reality: **66 tools, 38 learn, 22 workflows, 35 comparisons, 10 stacks** — workflows match exactly, learn is +2, but tools (+50%), comparisons (+84%) and stacks (+150%) have all grown since the 2026-06-06 edit.
+  - Drift: ACHIEVEMENT (UNDERCLAIMED)
+  - Suggestion: restate as "66 tools, 38 learn entries, 22 workflows, 35 comparisons, 10 stacks".
+- Item: "Add DE locale (or FR — to be decided based on which language showed strongest organic signal in GA4 segment data)"
+  - Status in roadmap: [ ]
+  - Repo reality: de, fr **and** ja are all at full 865-page parity with EN. The §Locales table below already calls all six "Launched" — this checkbox contradicts the roadmap's own table.
+  - Drift: ACHIEVEMENT — PROBABLY-DONE-NOT-CHECKED. **Repeat finding** from 2026-06-01, still unapplied.
+  - Suggestion: check the box and reword — no decision is pending; all three shipped.
+- Item: "6,000+ indexed pages total"
+  - Status in roadmap: [ ]
+  - Repo reality: **5,281 built pages** (88% of goal) in the current `dist`. Indexed ≠ built, and with no GSC access this routine cannot measure indexation at all.
+  - Drift: NONE (pending, on track). At this quarter's rate (+361 EN pages ≈ +2,166 built pages), the *built* threshold is one quarter away.
+- Item: "Marketing Ops vertical (still on deck)"
+  - Status in roadmap: [ ]
+  - Repo reality: no `marketing-ops` vertical in `content/verticals.json`; no content tagged to it. Correctly pending.
+  - Drift: NONE.
+- Item: "First $10K MRR milestone" — [ ]; §Public metrics shows $0. Drift: NONE.
+
+### Locale status
+
+| Locale | Roadmap claim | Actual EN parity |
+|---|---|---|
+| en | Launched, 186 tools | Canonical — 865 pages, **272 tools** |
+| es | Launched, 186 tools | 865/865 = **100%** (272 tools); 0 slug diffs, 0 stale |
+| pt-BR | Launched, 186 tools | 865/865 = **100%** (272 tools); 0 slug diffs, 0 stale |
+| ja | Launched, 186 tools | 865/865 = **100%** (272 tools); 0 slug diffs, 0 stale |
+| fr | Launched, 186 tools | 865/865 = **100%** (272 tools); 0 slug diffs, 0 stale |
+| de | Launched, 186 tools | 865/865 = **100%** (272 tools); 0 slug diffs, 0 stale |
+
+The **Status column is now correct** for all six (last quarter's biggest correction was applied). Only the tool counts are stale: 186 → 272 across the board.
+
+### CORRECTIONS.md signal
+
+- Open corrections this quarter: **0**. The `## Log` section is still empty — the only `###` heading in the file is the template inside §Log format.
+- Recurring error classes (≥3 in quarter): **none**.
+- Action: nothing to escalate. Per CONTENT_PIPELINE.md §Correction loop, no class has reached the 3-entry threshold that would trigger a pipeline/voice doc amendment. `content-strategy/corrections-review-log.md` records the same for Q1 2026. See `ooligo-corrections-review` quarterly run.
+- Standing observation (second quarter running): zero reader corrections against 5,281 live pages is more plausibly a reporting-channel problem than a quality result. The only intake paths are a GitHub issue label and an email address in `CORRECTIONS.md`; neither is surfaced on the pages themselves.
+
+### Suggested ROADMAP.md edits
+
+- [ ] **§Public metrics — "Content pages live"**: change "612 EN canonical (tools 186 / comparisons 148 / workflows 99 / learn 161 / stacks 18); 3,758 built pages" to "865 EN canonical (tools 272 / comparisons 228 / workflows 127 / learn 191 / stacks 47); 5,281 built pages across all 6 locales at full parity".
+- [ ] **§Locales table — tool counts**: 186 → 272 for all six rows. (Status column is already correct.)
+- [ ] **§Public metrics — bump `*as of 2026-06-06*`** to the date these edits land. It is 87 days old today — three days from the 90-day staleness threshold.
+- [ ] **Phase 2 — check "All EN content translated to ES + PT-BR"** and delete the "ES: 68 missing; pt-BR: 100 missing + 20 stale" parenthetical. *(Carried over unapplied from 2026-06-01.)*
+- [ ] **Phase 7 — check "Add DE locale (or FR…)"** and reword: de, fr and ja are all launched at full parity; no decision is pending. *(Carried over unapplied from 2026-06-01.)*
+- [ ] Phase 1 — bump parentheticals: tools "50 tagged" → "100 tagged (RevOps)", comparisons "100" → "228", workflows "30" → "127", learn "50" → "191", stack pages "5" → "19 (47 total)". Add MCP servers to the workflow artifact-type list.
+- [ ] Phase 3 — bump "now 40 tagged" → "now 91 tagged"; note 33 workflows / 51 learn; reword "Auto-translate to ES/PT-BR" → "all 5 non-EN locales".
+- [ ] Phase 4 — bump "now 53 tagged" → "now 90 tagged"; note 29 workflows / 47 learn.
+- [ ] Phase 7 — restate the Customer Success line as "66 tools, 38 learn entries, 22 workflows, 35 comparisons, 10 stacks".
+- [ ] Phase 5 — add an EN/Customer Success row (four EN verticals, three EN newsletter rows), and reconcile "EN/RevOps (already live)" with its unchecked box.
+- [ ] Phase 6 — consider splitting the affiliate item: rendering + disclosure are shipped, the link data is not.
+- [ ] §Operating principles — the "no half-finished verticals" floor (≥40 tools, ≥10 workflows, ≥30 learn, ≥1 stack) is cleared by all four verticals with the *smallest* now at 66 tools. The floor no longer discriminates; consider raising it or restating it as a launch gate rather than a standing bar.
+
+### Open questions for the user
+
+- **GSC properties (Phase 2)** remain the one hard blocker this routine can see. `gsc-candidates.json` has never been populated, which means the weekly harvest, the freshness routine, and topic-refill are all running without search data. Are the properties set up outside the repo, or genuinely not started?
+- **What counts as a Phase-5 "newsletter track"?** One beehiiv publication with a `vertical` custom field, or five separate publications? The repo can support the first today; the second would need work. The phase can't be scored until this is defined.
+- **Phase 7's "6,000+ indexed pages"** — built pages will cross 6,000 next quarter at the current rate, but indexed is a different number and nothing in the repo measures it. Should this item be restated as "6,000+ *live* pages", with indexation tracked separately once GSC is wired?
+- **Corrections intake**: two quarters, zero entries, 5,281 live pages. Worth adding a per-page "report an error" link so the loop has a chance to fire?
+- The catalog grew 72% this quarter with no new vertical. Marketing Ops is still the only named item left on the Phase 7 deck — is a fifth vertical the next lever, or is the 6,000-page/indexation goal better served by depth in the existing four?
