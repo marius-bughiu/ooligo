@@ -585,7 +585,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - [type:tool] [vertical:revops] [evidence:hn] new entry: heyreach — LinkedIn outreach at agency scale ($13M ARR, $79/sender); the channel-shift answer to AI-saturated email inboxes, with a real deplatforming risk to document → slug: heyreach
 - [type:tool] [vertical:revops] [evidence:hn] new entry: folk — the lightweight pole in the "replace the heavyweight CRM" decision that dominates HN's current CRM discussion → slug: folk
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: sybill — published $79/user/mo with no seat minimum; the catalog has no sub-$100 conversation-intelligence + CRM-autofill option → slug: sybill
-- [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: everstage — sales commissions; catalog has captivateiq with zero comparisons and no second pole
+- [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: everstage — sales commissions; catalog has captivateiq with zero comparisons and no second pole → claimed: new 2026-09-03T09:02:59Z
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: champify — champion/job-change tracking at $6K-$12K/yr; catalog has usergems with zero comparisons
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: traction-complete — Salesforce-native routing, matching and account hierarchies; catalog has leandata with only a Chili Piper pairing
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: trumpet — digital sales room; catalog has dock with zero comparisons and no second pole
