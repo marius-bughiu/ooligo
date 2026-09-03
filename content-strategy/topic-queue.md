@@ -583,7 +583,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - [type:tool] [vertical:revops] [evidence:changelog] new entry: hyperbound — AI sales roleplay; Gong shipped Dry Run in Jul 2026, so buy-vs-bundle against the CI incumbent is now a live question → slug: hyperbound
 - [type:tool] [vertical:revops] [evidence:changelog] new entry: nue — Salesforce-native revenue lifecycle/CPQ; Salesforce CPQ end-of-sale makes 2026 the forced migration-decision year → slug: nue
 - [type:tool] [vertical:revops] [evidence:hn] new entry: heyreach — LinkedIn outreach at agency scale ($13M ARR, $79/sender); the channel-shift answer to AI-saturated email inboxes, with a real deplatforming risk to document → slug: heyreach
-- [type:tool] [vertical:revops] [evidence:hn] new entry: folk — the lightweight pole in the "replace the heavyweight CRM" decision that dominates HN's current CRM discussion → claimed: new 2026-09-03T05:02:58Z
+- [type:tool] [vertical:revops] [evidence:hn] new entry: folk — the lightweight pole in the "replace the heavyweight CRM" decision that dominates HN's current CRM discussion → slug: folk
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: sybill — published $79/user/mo with no seat minimum; the catalog has no sub-$100 conversation-intelligence + CRM-autofill option
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: everstage — sales commissions; catalog has captivateiq with zero comparisons and no second pole
 - [type:tool] [vertical:revops] [evidence:comparison-gap] new entry: champify — champion/job-change tracking at $6K-$12K/yr; catalog has usergems with zero comparisons
