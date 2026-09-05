@@ -23,10 +23,15 @@ Each line carries at most one lifecycle marker, appended in place:
 
 `refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-08-23`
+`last-swept: 2026-09-06`
 
 ## Refresh queue
 
+- refresh:C: [type:stack] [vertical:revops] ai-agent-ops-stack — cascade (material: gumloop 2026-09-03 > stack's last_updated 2026-08-03)
+- refresh:C: [type:stack] [vertical:recruiting] ai-sourcing-stack — cascade (material: hireez 2026-09-04, greenhouse 2026-09-03 > stack's last_updated 2026-07-29)
+- refresh:C: [type:stack] [vertical:recruiting] hiring-integrity-stack — cascade (material: greenhouse 2026-09-03 > stack's last_updated 2026-08-09)
+- refresh:C: [type:stack] [vertical:recruiting] interview-intelligence-stack — cascade (material: greenhouse 2026-09-03 > stack's last_updated 2026-07-31)
+- refresh:C: [type:stack] [vertical:recruiting] technical-hiring-stack — cascade (material: greenhouse 2026-09-03, hackerrank 2026-09-03 > stack's last_updated 2026-07-30)
 - refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (material: ashby 2026-08-16 > stack's last_updated 2026-08-08) → slug: ai-augmented-recruiting-stack
 - refresh:C: [type:stack] [vertical:revops] ai-native-crm-stack — cascade (material: attio 2026-08-17 > stack's last_updated 2026-07-12) → slug: ai-native-crm-stack
 - refresh:C: [type:stack] [vertical:legal-ops] enterprise-clm-stack — cascade (material: spellbook 2026-08-15 > stack's last_updated 2026-05-23) → slug: enterprise-clm-stack
