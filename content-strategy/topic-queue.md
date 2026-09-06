@@ -27,7 +27,7 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:C: [type:stack] [vertical:revops] ai-agent-ops-stack — cascade (material: gumloop 2026-09-03 > stack's last_updated 2026-08-03) → claimed: refresh 2026-09-06T00:10:30Z
+- refresh:C: [type:stack] [vertical:revops] ai-agent-ops-stack — cascade (material: gumloop 2026-09-03 > stack's last_updated 2026-08-03) → slug: ai-agent-ops-stack
 - refresh:C: [type:stack] [vertical:recruiting] ai-sourcing-stack — cascade (material: hireez 2026-09-04, greenhouse 2026-09-03 > stack's last_updated 2026-07-29)
 - refresh:C: [type:stack] [vertical:recruiting] hiring-integrity-stack — cascade (material: greenhouse 2026-09-03 > stack's last_updated 2026-08-09)
 - refresh:C: [type:stack] [vertical:recruiting] interview-intelligence-stack — cascade (material: greenhouse 2026-09-03 > stack's last_updated 2026-07-31)
