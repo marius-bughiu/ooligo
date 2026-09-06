@@ -3833,3 +3833,171 @@ Nine of these are `high-rel`: the target sits in the source's `integrations` fie
 - **5 EN links point at entries that do not exist** (new class, not previously flagged): `tools/en/mutiny.mdx` → `/en/tools/clearbit/`; `workflows/en/hiring-funnel-anomaly-n8n.mdx` → `/en/tools/datapeople/`; `workflows/en/matter-status-digest-claude.mdx` → `/en/stacks/legal-ops/`; `workflows/en/offer-prep-claude-skill.mdx` → `/en/tools/claude-code/` (twice in the same body, so it also violates the dedupe guardrail). These are separate from the link-rot sweep, which checks external URLs.
 - **27 locale-prefixed links are missing the trailing slash** (`](/en/tools/gong)`), and one is malformed as `](/en/tools/gong.)`. `astro.config.mjs` sets `trailingSlash: "always"`, so each takes a 308 redirect rather than resolving directly — not a 404, but a wasted hop on an internal link. (The 59 locale-less links above are also slash-less; these 27 are the distinct, otherwise-valid class.)
 - **The repeat-link note needs correcting.** Prior runs flagged `tools/*/dealhub.mdx` → `learn/cpq-configure-price-quote` (x2) as a lone pre-existing dedupe violation. It is still there, but it is not an exception: **310 of 848 EN entries link the same target more than once in one body — 684 duplicated (entry, target) pairs** (592 at x2, 80 at x3, 8 at x4, 3 at x5, 1 at x7), spread across tools 101, learn 101, workflows 53, comparisons 29, stacks 26. Repeat-linking is the catalog's de-facto house style, so "never link the same target twice" reads as a rule the corpus has never followed. This routine still honours it for its own insertions (this run added 0 duplicates), but the guardrail should either be enforced catalog-wide by a real validator or relaxed in the prompt to "don't add a *second* link to a target this pass already linked." Needs a human decision.
+
+## 2026-09-06
+
+### Auto-inserted this run (high confidence): 0
+
+No EN link was inserted, and therefore no locale mirror was written. Four independent reasons, any one of which is sufficient:
+
+1. **No high-confidence candidate has a usable anchor.** The pass found 9 high-confidence pairs across 5 source entries. Every one of them qualifies only through clause (2) of the confidence model — the target sits in the source's `integrations` field and shares 2+ verticals — and in all 9 the target's name never appears in the source body. Inserting means authoring a new EN sentence and translating it into 5 locales. That is content authoring, not link insertion, and Step 3 says never to force an unnatural anchor.
+2. **The anti-spam guardrail is already breached by the candidate set itself.** The 9 pairs point at only 3 distinct targets: `tools:slack` (×5), `tools:notion` (×3), `tools:zapier` (×1). The guardrail caps a single target at fewer than 3 insertions per catalog pass, so at most 2 Slack and 2 Notion links could be written, and nothing in the data picks *which* 2 — an arbitrary choice on already-thin evidence.
+3. **The set is unchanged from 2026-08-30.** The same 9 pairs were deferred last week for the same reason. Nothing in the 76 EN entries touched since then produced a new anchor.
+4. **Step 5's validation gate cannot verify an insertion.** See the flagged section below — `npm run validate:config` does not read MDX.
+
+`npm run validate:config` was run anyway as a baseline: both config files pass, 2/2.
+
+### Deferred — high confidence in principle, no anchor in the body (9, unchanged from 2026-08-30)
+
+- [tools:chatgpt] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:chatgpt] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:linear] → [tools:slack]: shares revops/recruiting, in `integrations`, name not in body
+- [tools:linear] → [tools:zapier]: shares revops/recruiting, in `integrations`, name not in body
+- [tools:make] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:make] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:notion] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:zapier] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:zapier] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+
+`tools:notion` remains the sharpest case: **zero** body links of any kind, floor 3. The one time a sibling entry's name does appear in its body it is `Slack-search archaeology` — a hyphenated compound, and the sentence is about Slack search being *bad*, so the link would also be a poor read. It needs a content refresh, not a link pass.
+
+### The confidence model is miscalibrated for this catalog (recommendation)
+
+**15 of the 20 outbound-gap entries carry exactly one vertical.** Clause (1) of the high-confidence rule requires ≥ 2 shared verticals, so for three quarters of the gap list a high-confidence candidate is unreachable *by construction*, no matter what the body says. The rule promotes the weakest evidence (a frontmatter list, needing authored prose) and excludes the strongest (a name already sitting unlinked in prose).
+
+Measured size of the exclusion: **29 target names appear verbatim and unlinked in the body of a gap entry while sharing exactly 1 vertical** — `assembled` 7, `enterpret` 13, `everstage` 6, `eightfold` 1, `everlaw` 1, `findem` 1.
+
+The honest caveat: 25 of those 29 sit inside comma- or slash-separated vendor enumerations (`Zendesk, Intercom, Salesforce Service Cloud, Gladly, Kustomer, Gorgias and Dixa`), where linking every name is link-stuffing. Only 4 are clean standalone prose anchors:
+
+- [tools:assembled] → [tools:claude]: "An intraday manager asking Claude why chat SLA broke on Tuesday afternoon…"
+- [tools:enterpret] → [tools:slack]: "Each posts to Slack, opens a ticket or writes a document."
+- [tools:everstage] → [tools:cursor]: "agent access from Claude or Cursor means building against the API yourself"
+- [tools:everstage] → [tools:salesforce]: "A Data Connector Agent that prepares Salesforce data for commission processing"
+
+Two more are clean but were caught by the enumeration heuristic because an already-linked sibling sits beside them: [tools:eightfold] → [tools:gem] ("sourcers often prefer Gem or [hireEZ]") and [tools:findem] → [tools:gem] ("Newer than Gem and [SeekOut]").
+
+**Proposed rule change for `internal-link-prompt.md` Step 3** — replace clause (1)'s flat `≥ 2 verticals` with: *high confidence = (≥ 2 shared verticals AND named in a relationship field) OR (≥ 1 shared vertical AND the target's name appears verbatim, unlinked, outside a vendor enumeration)*, where "vendor enumeration" is ≥ 2 commas or slashes within ±70 characters. That converts ~6 genuine in-prose anchors per run into auto-inserts and still writes no new prose. This needs a human decision — it is a change to the routine's contract, not something an autonomous pass should apply to itself.
+
+### Below outbound floor with no candidate at all (1)
+
+- [workflows:pipeline-review-prompt-pack]: 1 outbound, floor 2 — no same-vertical target named in the body or in a relationship field
+
+(`tools:evenup` and `tools:mycase`, listed here on 2026-08-30, now have same-category same-vertical candidates and have moved to the medium list.)
+
+### Medium confidence (shares ≥ 1 vertical, and either named in a relationship field or same `category`) — 83
+
+Capped at the 6 strongest per source entry. `inbody` marks a target whose name already sits unlinked in the source body — those are the ones worth doing first in a manual pass.
+
+- [tools:6sense] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:outreach]: shares vertical revops; named in relationship field; name "Outreach" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:salesloft]: shares vertical revops; named in relationship field; name "Salesloft" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:influ2]: shares vertical revops; same category; name "Influ2" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:rollworks]: shares vertical revops; same category; name "AdRoll ABM (formerly RollWorks)" not in body (source ob=1, need=2)
+- [tools:assembled] -> [tools:gladly]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:intercom]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:kustomer]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:salesforce]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:zendesk]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:slack]: shares vertical customer-success; named in relationship field; name "Slack" not in body (source ob=1, need=2)
+- [tools:demandbase] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:outreach]: shares vertical revops; named in relationship field; name "Outreach" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:salesloft]: shares vertical revops; named in relationship field; name "Salesloft" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:influ2]: shares vertical revops; same category; name "Influ2" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:rollworks]: shares vertical revops; same category; name "AdRoll ABM (formerly RollWorks)" not in body (source ob=2, need=1)
+- [tools:eightfold] -> [tools:greenhouse]: shares vertical recruiting; named in relationship field; name "Greenhouse" not in body (source ob=2, need=1)
+- [tools:eightfold] -> [tools:icims]: shares vertical recruiting; named in relationship field; name "iCIMS" not in body (source ob=2, need=1)
+- [tools:enterpret] -> [tools:amplitude]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:front]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:glean]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:gong]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:intercom]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:kustomer]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:evenup] -> [tools:alexi]: shares vertical legal-ops; same category; name "Alexi" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:claude-for-legal]: shares vertical legal-ops; same category; name "Claude for Legal" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:clearbrief]: shares vertical legal-ops; same category; name "Clearbrief" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:gc-ai]: shares vertical legal-ops; same category; name "GC AI" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:harvey]: shares vertical legal-ops; same category; name "Harvey" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:ivo]: shares vertical legal-ops; same category; name "Ivo" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:casepoint]: shares vertical legal-ops; same category; name "Casepoint" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:disco]: shares vertical legal-ops; same category; name "DISCO" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:exterro]: shares vertical legal-ops; same category; name "Exterro" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:logikcull]: shares vertical legal-ops; same category; name "Logikcull" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:microsoft-purview-ediscovery]: shares vertical legal-ops; same category; name "Microsoft Purview eDiscovery" not in body (source ob=2, need=1)
+- [tools:everstage] -> [tools:hubspot]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:pipedrive]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:salesforce]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:slack]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:findem] -> [tools:gem]: shares vertical recruiting; same category; **name in body, unlinked** (source ob=1, need=2)
+- [tools:findem] -> [tools:ashby]: shares vertical recruiting; named in relationship field; name "Ashby" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:greenhouse]: shares vertical recruiting; named in relationship field; name "Greenhouse" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:icims]: shares vertical recruiting; named in relationship field; name "iCIMS" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:lever]: shares vertical recruiting; named in relationship field; name "Lever" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:workday]: shares vertical recruiting; named in relationship field; name "Workday" not in body (source ob=1, need=2)
+- [tools:juro] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:agiloft]: shares vertical legal-ops; same category; name "Agiloft" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:concord]: shares vertical legal-ops; same category; name "Concord" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:conga-clm]: shares vertical legal-ops; same category; name "Conga CLM" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:contractpodai]: shares vertical legal-ops; same category; name "Leah (formerly ContractPodAi)" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:contractworks]: shares vertical legal-ops; same category; name "ContractWorks" not in body (source ob=0, need=3)
+- [tools:linksquares] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:agiloft]: shares vertical legal-ops; same category; name "Agiloft" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:concord]: shares vertical legal-ops; same category; name "Concord" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:conga-clm]: shares vertical legal-ops; same category; name "Conga CLM" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:contractpodai]: shares vertical legal-ops; same category; name "Leah (formerly ContractPodAi)" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:contractworks]: shares vertical legal-ops; same category; name "ContractWorks" not in body (source ob=1, need=2)
+- [tools:make] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:make] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=2, need=1)
+- [tools:make] -> [tools:tines]: shares vertical legal-ops, recruiting, revops; same category; name "Tines" not in body (source ob=2, need=1)
+- [tools:make] -> [tools:workato]: shares vertical legal-ops, recruiting, revops; same category; name "Workato" not in body (source ob=2, need=1)
+- [tools:mycase] -> [tools:filevine]: shares vertical legal-ops; same category; name "Filevine" not in body (source ob=1, need=2)
+- [tools:notion] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=0, need=3)
+- [tools:notion] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=0, need=3)
+- [tools:notion] -> [tools:guru]: shares vertical legal-ops, recruiting, revops; same category; name "Guru" not in body (source ob=0, need=3)
+- [tools:relativity] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:casepoint]: shares vertical legal-ops; same category; name "Casepoint" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:disco]: shares vertical legal-ops; same category; name "DISCO" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:everlaw]: shares vertical legal-ops; same category; name "Everlaw" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:exterro]: shares vertical legal-ops; same category; name "Exterro" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:microsoft-purview-ediscovery]: shares vertical legal-ops; same category; name "Microsoft Purview eDiscovery" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:ironclad]: shares vertical legal-ops; named in relationship field; name "Ironclad" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:alexi]: shares vertical legal-ops; same category; name "Alexi" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:claude-for-legal]: shares vertical legal-ops; same category; name "Claude for Legal" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:clearbrief]: shares vertical legal-ops; same category; name "Clearbrief" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:eve-legal]: shares vertical legal-ops; same category; name "Eve" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:evenup]: shares vertical legal-ops; same category; name "EvenUp" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:tines]: shares vertical legal-ops, recruiting, revops; same category; name "Tines" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:workato]: shares vertical legal-ops, recruiting, revops; same category; name "Workato" not in body (source ob=2, need=1)
+
+### Below-floor summary (EN graph, 894 entries)
+
+Outbound counts here include body links plus schema-implied edges (a comparison to its `tool_a`/`tool_b`, a workflow to its `tools_used`, a stack to its `tools`, a learn entry to its `related_*`), and — new this run — links written without a locale prefix, which prior runs did not count. That reclassification alone moved `fetcher`, `micro1`, `onit`, `sapia-ai` and `seekout` out of the outbound-gap list; they are not newly linked, their links are simply broken rather than absent. See the flagged section.
+
+- **Outbound < floor: 20** — tools 19, workflows 1, comparisons 0, learn 0, stacks 0.
+- **Inbound < floor: 353** — comparisons 210, tools 69, workflows 29, learn 31, stacks 14. Not fixable from the entry's own side; backlog for the freshness sweeps.
+- **322 entries have zero inbound edges**, of which 210 are comparisons — **91% of the 230-entry comparison corpus is orphaned.** This is the single largest structural gap in the graph and it has been roughly flat for four runs. A comparison page earns its floor only when a learn or workflow page links in, and the routines that touch learn/workflow bodies are not doing it. Worth a dedicated pass rather than another week of the same audit.
+- Floor used is `internal-link-prompt.md`'s (tools 3/2, others 2/1).
+
+### ARCHITECTURE.md conflict (still unresolved, carried forward)
+
+`internal-link-prompt.md` Step 2 says ARCHITECTURE.md wins on any disagreement. It disagrees materially, and the routine has never operated on it:
+
+- **ARCHITECTURE.md §Cross-linking rules is a *composition* floor, by target type** — a tool page needs 3 alternative tools + 1 comparison + 2 workflows + 2 learn = 8 outbound, not 3. It also states no inbound requirement at all, whereas the prompt's floor is half inbound.
+- Measured against the ARCHITECTURE floor: **823 of 894 entries are below budget (92%)** — tools 297/297, comparisons 224/230, learn 166/191, workflows 110/127, stacks 26/49. Every single tool page fails.
+- A 3-links-per-entry auto-pass cannot close a catalog-wide 8-link composition gap. Either ARCHITECTURE.md is aspirational and should be restated as the operating floor the prompt uses, or the content plan needs a link-composition workstream. **This needs a human decision; four consecutive runs have flagged it and nothing has changed.**
+- ARCHITECTURE.md also claims "Validator runs in CI; PRs failing the link budget are blocked." That is false. `npm run validate:config` runs `packages/pipeline/src/validators/validate-config.ts`, which AJV-validates exactly two files — `content/verticals.json` and `content/locales.json` — against `content/.schema/`. Nothing in `packages/pipeline` reads MDX or computes a link budget. Step 5 of this routine names that command as its safety gate; the gate is a no-op for content changes.
+
+### Flagged — broken internal links (out of this routine's insert scope)
+
+Re-measured this run across all 6 locales. Routes come from `apps/web/src/pages/[locale]/`: `tools`, `learn`, `stacks`, `workflows`, `vs`, `r`. `astro.config.mjs` sets `trailingSlash: "always"` and configures no redirects.
+
+- **354 links written without a locale prefix (59 EN)** — `](/tools/hirevue)` instead of `](/en/tools/hirevue/)`. There is no locale-less route, so all 354 are 404s. EN files: `tools/en/sapia-ai.mdx` (14), `apriora.mdx` (11), `fetcher.mdx` (10), `micro1.mdx` (10), `seekout.mdx` (8), `onit.mdx` (5), `hebbia.mdx` (1). Unchanged in count since 2026-08-23.
+- **144 links use `/comparisons/` instead of the real `/vs/` route (24 EN)** — 404s, and **this class is actively regressing**. Diffing `content/*/en/*.mdx` from the last commit before 2026-08-31 to HEAD: **12 new `/en/comparisons/` links were added this week alone**, across `atlassian-rovo.mdx` (2), `guru.mdx` (2), `onyx.mdx` (2), `attention.mdx`, `avoma.mdx`, `gong.mdx`, `hyperbound.mdx`, `kustomer.mdx`, `rilla.mdx` — all of them written by `refresh(tools)` and `content(tools)` commits dated 2026-09-02 and 2026-09-05. The authoring and refresh routines are generating a route that does not exist. **Repairing the existing 144 without fixing whatever emits `/comparisons/` will just refill the backlog.** Full EN spread: `comparisons/en/best-ai-tools-2026.mdx` (3), `tools/en/gong.mdx` (3), `tools/en/onyx.mdx` (2), `tools/en/guru.mdx` (2), `tools/en/atlassian-rovo.mdx` (2), and 12 files with 1 each.
+- **33 links point at entries that do not exist (6 EN)** — `tools/en/mutiny.mdx` → `/en/tools/clearbit/`; `workflows/en/hiring-funnel-anomaly-n8n.mdx` → `/en/tools/datapeople/`; `workflows/en/matter-status-digest-claude.mdx` → `/en/stacks/legal-ops/`; `workflows/en/offer-prep-claude-skill.mdx` → `/en/tools/claude-code/` (twice in one body, so also a dedupe violation); `workflows/en/reference-check-summary-skill.mdx` → `/en/tools/gong.` (trailing period swallowed into the URL).
+- **156 locale-prefixed links are missing the trailing slash (26 EN)** — a 308 redirect rather than a 404, but a wasted hop. EN: `tools/en/amazon-connect-talent.mdx` (9), `tools/en/sirionlabs.mdx` (8), `learn/en/gtm-ai-pilot-evaluation.mdx` (4), `learn/en/ai-contract-review-accuracy.mdx` (4), `workflows/en/deal-room-generator-skill.mdx` (1).
+- **1 link to an undefined vertical** — `workflows/en/mcp-server-salesforce-revops.mdx` → `/en/r/cs/`. `content/verticals.json` defines `revops`, `legal-ops`, `recruiting`, `customer-success`; there is no `cs`.
+
+Total: **688 broken or degraded internal links across the 6 locales**, none of them insertion-related, none fixable inside this routine's mandate. They are also the reason the graph has been undercounting outbound edges: 5 entries left the gap list this run purely because locale-less links were finally counted. **A one-off repair pass would do more for the link graph than any number of these weekly insertion audits** — the defect classes are mechanical and every one of them is a deterministic find-and-replace.
