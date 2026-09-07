@@ -225,3 +225,89 @@ Third month with no ranking signal. Refresh prioritization this month therefore 
 - **Sponsors booked**: ____
 - **MRR**: ____
 - **Notes / decisions for next month**: ____
+
+## 2026-08
+
+*Bracketed: 2026-08-01 to 2026-08-31. Generated 2026-09-07.*
+
+> **The month the engine doubled.** July was the maintenance inversion; August ran both lanes flat out. **517 commits** (July: 264) producing **165 net-new EN pages against 72 full-page refreshes** — authoring reclaimed the lead 2.3:1 by page count, and the net-new figure is triple July's 50. Footprint crossed **862 EN / 5,172 built pages**, putting the Phase 7 "6,000+ pages" target within one month's reach. Authoring reconciles exactly for the second month running. The month's real signal is what is *missing*: **zero `feat(`, zero `fix(`, zero `docs:` commits** — no product or engineering work shipped at all, and GSC is dark for the fourth consecutive month.
+
+### Shipped
+
+**New pages (convention-tagged, exact): 165 EN** (× 6 locales = 990 files).
+
+- Tools: 49 | Comparisons: 51 | Workflows: 19 | Learn: 22 | Stacks: 24
+- Legal Ops: 65 | RevOps: 41 | Customer Success: 27 | Recruiting: 22 | Cross: 10
+
+Legal Ops was the month's centre of gravity (39% of new pages). Customer Success — shipped as a vertical in June — took 27 pages, its first substantial build-out. Stacks nearly doubled as an entity type (+24 against a 23-page base).
+
+**Refreshed pages: 71 unique EN** (× 6 locales = 426 files), from **72 full-page `refresh(` commits** — 1 page refreshed twice (see Anomalies).
+
+- Tools: 36 | Comparisons: 22 | Stacks: 9 | Learn: 5
+- By tier tag: tier C 66 | tier B 5 | tier A 1 | untagged 0 — the tier convention held for every commit this month (July had 36 untagged)
+- By vertical: RevOps 31 | Legal Ops 19 | Recruiting 17 | Customer Success 5
+
+**Pricing verification: 4 `refresh(tools): verify pricing` tier-A batch commits, ~50 tools stamped** (batches of 4, 21, 11, 14). Frontmatter-only `pricing_checked` writes, excluded from the 72 above. Down sharply from July's 48 commits / ~57 tools — the two-clock backfill has drained and the tier-A clock is now firing in small cohorts rather than en masse, which is what the July retro asked for.
+
+- Maintenance commits: **18** `chore:` —
+  - topic-refill: 3 | freshness: 4 | link-rot: 5 | internal-links: 5 | gsc-harvest: 0 | traffic-retro: 1
+- Queue bookkeeping: **255** `chore(queue):` commits (169 `[new]` claims, 77 `[refresh]` claims, 9 corrections/notes). Up 4× from July's 62.
+- Engineering: **1** `style(tools)`, **1** `chore(strategy)`. **Zero `feat(`, `fix(`, `docs:`, or `Revert`.**
+
+Internal-link passes decayed steadily through the month: 50 → 50 → 50 → 39 → **14** links inserted per weekly pass. The first three hit an apparent 50-link cap; the last two fell below it. July's trajectory was the opposite (5 → 3 → 45 → 48). Read as saturation, not failure — but worth confirming the pass is out of opportunities rather than out of budget.
+
+### Catalog footprint at month end
+
+| Entity | EN | × 6 locales |
+|---|---|---|
+| Tools | 269 | 1,614 |
+| Comparisons | 228 | 1,368 |
+| Workflows | 127 | 762 |
+| Learn | 191 | 1,146 |
+| Stacks | 47 | 282 |
+| **Total** | **862** | **5,172** |
+
+Delta vs. July-end (697 EN): **+165 EN** — Tools +49, Comparisons +51, Workflows +19, Learn +22, Stacks +24. Every type matches its `content(` commit count exactly once the single non-convention commit is excluded; no reconciliation gap, second consecutive clean month.
+
+Per-vertical entity counts remain unavailable — `content-strategy/pillar-index.json` is still a zero-filled stub (`generated_at: null`), **fourth consecutive month**. It also still declares only three verticals (`revops`, `legal-ops`, `recruiting`); Customer Success shipped in June and took 27 pages this month with no key in the index at all.
+
+### Ranking signal (GSC)
+
+Skipped — `content-strategy/gsc-candidates.json` is unchanged and empty (`generated_at: null`; `refresh_candidates`, `gap_candidates`, `already_optimized` all `[]`). Phase 2 "per-locale Google Search Console properties" remains unchecked. `monthly-retro: no GSC data, ranking section skipped`.
+
+**Fourth consecutive month with no ranking signal**, and the cost compounds: 71 pages were refreshed this month and 236 over the last two months, all selected by internal SLA clocks (freshness cascade + `pricing_checked`) with zero evidence about which pages rank, which queries they win, or whether any of them draw impressions. `gsc-harvest` has now run 0 times in two months. At 862 EN pages the catalog is large enough that untargeted refresh is a materially expensive default.
+
+### Roadmap
+
+- **`ROADMAP.md` was not touched in August.** Last edit remains 2026-06-06 (`docs(roadmap): mark Customer Success vertical shipped`). No `- [x]` flipped in this bracket. Third consecutive untouched month.
+- Phase 2 — Localization: 5/7, unchanged. Pending: ES/pt-BR drain (stale — on-disk parity is clean at 862/locale), per-locale GSC properties.
+- Phase 5 — Locale-native newsletters: 0/6, unchanged. Untouched since creation.
+- Phase 6 — Monetization: 1/6, unchanged. July's direct-sold ad work still has no covering checkbox.
+- Phase 7 — Vertical 4 + scale: 1/5, unchanged. Pending: Marketing Ops vertical, DE/FR locale decision, 6,000+ pages, first $10K MRR. **Built-page count is now 5,172 against the 6,000 target** (was 4,182) — at August's +990 built-pages/month rate the page target clears in September.
+- New phase entries: none.
+- Out of bracket but relevant: a quarterly `chore: roadmap drift report 2026-09-01` landed on Sept 1, appending to `ROADMAP_DRIFT.md`. That routine is designed to surface exactly the staleness flagged below; whether its suggestions get applied is next month's question.
+
+### Anomalies
+
+- **Zero engineering commits all month.** No `feat(`, no `fix(`, no `docs:`, no `Revert` in 517 commits. The content engine ran unattended and the product did not change. This is the single largest structural fact about August: the site shipped 165 pages and nothing else. Notable against July, which carried 4 `fix(`, 2 `feat(`, 2 `docs:` — including the direct-sold ads feature and the 29-dead-link repair batch.
+- **Freshness sweep missed the 08-30 slot.** Weekly sweeps ran 08-02, 08-09, 08-16, 08-23 — then nothing. Link-rot and internal-link both ran their full five passes including 08-30. A single lane skipped one week; no stated reason in the log. SLA numbers themselves were healthy and low all month (4 → 1 → 2 → 5 entries past SLA, versus July's 232 spike), so the backfill genuinely cleared.
+- **Persistent dead links crept back up.** Link-rot sweeps ran 5/3/3/5/**6** persistent across the month, ending higher than they started, with 6 dead and 2 flaky on 08-30. July's lesson — the sweep detects but never repairs, and needs a `fix(` batch to actually clear — went unlearned, because no `fix(` commits shipped at all (see above). Small numbers, but the ratchet is pointed the wrong way.
+- **`plugin-admob-maui-article.md` is still in the repo root**, second month flagged. A .NET MAUI AdMob article, unrelated to the AI-ops catalog, not under `content/`, not localized, in no entity index. Landed 2026-07-26 and untouched since. The retro does not edit the rest of the tree.
+- **Three pages were claimed twice.** `mcp-server-zoominfo-gtm-revops` (claimed 08-01, shipped 08-07), `mcp-server-leandata-routing` (claimed 08-02, shipped 08-09), and `waterfall-enrichment` (claimed 08-05, shipped 08-07) each took an initial claim that produced nothing, then a second claim days later that shipped. This is the documented 2-hour stale-claim reclaim working as intended, not data loss — it explains the 169 `[new]` claims against 165 shipped pages. Worth watching only if the abandonment rate rises.
+- **One `content(` commit off-convention.** `content(comparisons): qualify aiR bundling on microsoft-purview-ediscovery-vs-relativity` is a correction to an existing page, not a new one. Excluded from the 165; a naive `^content\(` matcher would overcount comparisons by 1. Same failure mode as July's `content(pipeline)` commit — the prefix is still doing double duty for page-creation and page-editing.
+- **1 page refreshed twice** — `ai-augmented-recruiting-stack` (also a July double-refresh). Duplicate spend on the same page for the second month running; the cascade trigger is not checking recent refresh history. Down from 9 double-refreshes in July, so the tier wave that caused most of them was a one-off.
+- **`pillar-index.json` has no Customer Success key.** The vertical shipped in June, took 27 pages in August, and the per-vertical index does not model it. Even once the stub is populated it will under-report the catalog.
+- **ROADMAP public metrics are now three months stale and diverging fast.** The table reads "612 EN canonical (tools 186 / comparisons 148 / workflows 99 / learn 161 / stacks 18); 3,758 built pages … *as of 2026-06-06*" against an actual **862 EN / 269 tools / 5,172 built** — a 41% understatement of EN pages and 38% of built pages. The Locales table lists 186 tools per locale against 269. The retro is append-only and does not edit ROADMAP.
+- **Translation-only commits: 0** (July: 0, June: 0, May: 10). The single-session multi-locale architecture continues to hold at 3× the throughput.
+- **Locale parity: clean.** At month end all six locales are at identical counts for every entity type (tools 269, comparisons 228, workflows 127, learn 191, stacks 47). No missing locales among the 165 pages shipped.
+- **Queue health: 260 available items** (206 new, 54 refresh) against a 100-item floor, 1 active claim, 107 skipped, 646 published. Three refills added +119/+20/+48; a `chore(strategy)` commit on 08-18 introduced a per-section floor for the refill. At August's ~38 new pages/week the queue holds ~5.4 weeks of runway — steady against July's 5.5.
+
+### Manual fill (user)
+
+- **GA4** — sessions / new users / countries top 5: ____
+- **beehiiv** — subscribers added / unsubscribed / clicks: ____
+- **Newsletter sends + open rate**: ____
+- **Discord / community signups**: ____
+- **Sponsors booked**: ____
+- **MRR**: ____
+- **Notes / decisions for next month**: ____
