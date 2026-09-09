@@ -1,0 +1,95 @@
+---
+slug: agent-tool-access-stack
+canonical_slug: agent-tool-access-stack
+locale: fr
+verticals: [revops, legal-ops, recruiting, customer-success]
+title: "Agent tool access stack — le broker de credentials entre vos agents et votre SaaS"
+tools: [composio, tines, n8n, slack]
+use_case: "Une équipe ops qui laisse ses agents écrire dans de vrais systèmes SaaS, où chaque token est brokerisé, cadré en scopes et révocable par une seule équipe, au lieu d'être collé dans le workflow qui en avait besoin."
+difficulty: advanced
+related_workflows:
+  - crm-agent-access-audit-skill
+last_updated: "2026-09-09"
+---
+
+Le **21 mai 2026**, Composio a annoncé que des attaquants avaient exfiltré de ses systèmes environ **5 241 clés d'API et 5 001 tokens OAuth GitHub**, ainsi que des volumes plus faibles de tokens Jira, Slack, HubSpot, Linear, Notion, Google Calendar et Gmail. Le vecteur initial était un unique token OAuth Gmail compromis, appartenant à un employé de Composio, qui a donné à l'attaquant l'accès à la boîte mail et, de là, la capacité d'intercepter les emails de connexion par magic link.
+
+C'est tout l'argument de ce stack, et il coupe des deux côtés. Le credential — pas le modèle — constitue le rayon d'impact. Un broker concentre ce risque à un seul endroit, ce qui est mauvais le jour où le broker est compromis et bon tous les autres jours de l'année, parce que le risque concentré est le seul que vous pouvez inventorier, cadrer et révoquer. L'alternative que font tourner la plupart des équipes ops aujourd'hui est pire : un personal access token collé dans un workflow il y a dix-huit mois par quelqu'un qui a depuis changé d'équipe, sans aucune trace de ce qu'il peut atteindre.
+
+La règle qu'impose ce stack : **le système qui détient le token n'est pas le système qui décide que l'écriture peut avoir lieu.**
+
+## Comment les pièces s'emboîtent
+
+- **[Composio](/fr/tools/composio/) est le broker.** Il exécute le flux OAuth, stocke et rafraîchit le token, et expose l'application comme outil appelable sur environ 1 000 intégrations, plus un endpoint MCP hébergé via Sessions auquel Claude Desktop ou Cursor se connectent directement. Votre code d'agent ne voit jamais un credential. L'unité qui compte est le tool call à **0,0003 $** pièce, ce qui en fait l'appel authentifié le moins cher du segment de deux ordres de grandeur.
+- **[Tines](/fr/tools/tines/) est la couche d'exécution et d'audit, et c'est le composant qui rend le stack défendable.** Un modèle peut planifier le travail, mais c'est une story Tines versionnée qui l'exécute, et chaque étape atterrit dans un enregistrement que vous pouvez remettre à un auditeur. Tines permet aussi de construire des serveurs MCP *à l'intérieur* de la plateforme, ce qui est la façon de cadrer ce qu'un modèle donné peut toucher sans renégocier des scopes chez le fournisseur. C'est là que vit la porte d'approbation.
+- **[n8n](/fr/tools/n8n/) est la couche d'action en volume et planifiée.** Tines facture comme une plateforme enterprise ; n8n facture **50 €/mois en engagement annuel pour 10 000 exécutions**, comptées par exécution complète et non par étape. Les synchronisations nocturnes, les backfills et tout ce qui est à fort volume et faible conséquence vont ici, sur leur propre credential, pas sur celui que détient votre agent interactif.
+- **[Slack](/fr/tools/slack/) est la surface d'approbation et l'alarme.** La porte n'est réelle que si un humain la voit là où il travaille déjà, et l'avis de révocation n'est utile que s'il atterrit à un endroit surveillé.
+
+### Passages de relais nommés
+
+1. **Un agent décide qu'il a besoin de Salesforce → il appelle un outil Composio, pas Salesforce.** Composio résout le compte connecté, injecte le token côté serveur, exécute et comptabilise un tool call. L'agent n'a jamais détenu le credential et ne peut pas le rejouer.
+2. **L'appel porte un scope d'écriture → l'exécutant n'est pas Composio, c'est Tines.** Les chemins de lecture passent directement par le broker. Les chemins d'écriture sont transmis à une story Tines, si bien que ce qui modifie votre CRM est versionné et journalisé, plutôt que généré par le modèle à l'exécution.
+3. **La story Tines atteint la porte d'approbation → elle publie dans Slack l'écriture proposée**, avec l'enregistrement qu'elle va modifier et les valeurs des champs. Un humain approuve ou refuse ; la décision est inscrite dans le même enregistrement d'audit que l'action.
+4. **Un job planifié se déclenche → n8n l'exécute sur un compte connecté distinct**, avec ses propres scopes. Quand le credential de l'enrichissement nocturne est compromis, il ne peut ni envoyer d'email ni toucher aux contrats, parce qu'il n'a jamais reçu ces scopes.
+5. **Chaque trimestre, [l'audit d'accès des agents au CRM](/fr/workflows/crm-agent-access-audit-skill/) énumère chaque connexion détenant un scope d'écriture** et la rapproche d'un responsable nommé. Tout ce qui est sans propriétaire est révoqué dans Composio, ce qui l'invalide partout d'un coup.
+
+## Pourquoi cette combinaison
+
+Parce qu'elle sépare la garde de l'autorité. Composio répond à « qui détient le token ». Tines répond à « qui a dit que cette écriture pouvait avoir lieu ». Ce sont deux questions différentes, et tout stack qui les fusionne dans un seul outil — une plateforme d'automatisation qui stocke ses propres credentials, un framework d'agents avec un fichier `.env` — ne peut pas répondre à la seconde après coup.
+
+La raison secondaire est le compteur. Le prix par appel de Composio est assez bas pour que vous puissiez router *tout* par là, y compris les lectures que vous laisseriez sinon l'agent faire directement. Un broker dont le prix par appel est assez élevé pour encourager les exceptions aura des exceptions, et les exceptions sont ce qui vous compromet.
+
+## La bifurcation Composio-ou-Arcade
+
+La vraie décision de ce stack est le choix du broker, et les deux options ont retenu des architectures opposées.
+
+**Composio détient une connexion au niveau de la plateforme.** L'étendue est l'argument : environ 1 000 intégrations contre les quelque 80 serveurs MCP propriétaires d'Arcade.dev, à 0,0003 $ par tool call.
+
+**Arcade.dev brokerise l'OAuth par utilisateur au moment de l'appel** — l'agent agit comme l'utilisateur final précis qui a fait la demande, dans les scopes que cet utilisateur a accordés, si bien que le token en jeu lui appartient plutôt que d'être une clé de plateforme unique. Les deux événements sont facturés séparément : **25 $/mois de frais de plateforme, 0,10 $ par auth event et 0,01 $ par tool call**, avec un palier gratuit de 2 000 de chaque. L'offre Enterprise ajoute le déploiement en VPC ou air-gapped, le SSO, le RBAC, les logs d'audit et l'accès à une registry privée. Arcade a levé une **Série A de 60 M$ en juin 2026** (menée par SYN Ventures, avec Morgan Stanley et Wipro, 72 M$ au total) et a racheté la registry MCP **Smithery le 5 août 2026**.
+
+**Le choix :** si votre exigence d'audit est « prouver quel humain a autorisé cette écriture précise », achetez Arcade et payez la prime de 33x par appel — Composio ne peut pas répondre à cette question, parce que le token appartient à la plateforme. Si votre exigence est l'étendue et le volume sur des applications pour lesquelles personne n'a encore écrit de serveur MCP, achetez Composio et reportez la charge de l'attribution sur l'enregistrement d'audit de Tines. Ne faites pas tourner les deux. Deux brokers, ce sont deux magasins de tokens et deux procédures de révocation.
+
+## La réalité des coûts
+
+Une équipe ops de 10 personnes, environ 500 000 tool calls par mois, un agent interactif et une poignée de jobs planifiés :
+
+- **Composio Pro** — 29 $/mois incluant 29 $ de crédit d'usage, puis 0,0003 $ par tool call. À ce volume, environ **150 $/mois, près de 1 800 $/an**.
+- **Tines** — aucun prix payant publié au-dessus de l'édition gratuite. Le suivi de Vendr sur 62 achats jusqu'à février 2026 place la médiane à **52 228 $/an**, dans une fourchette de 26 750 $ à 157 499 $, avec une bande petites équipes autour de **18 000–36 000 $**. Budgétez un plancher proche de **30 000 $/an**.
+- **[n8n](/fr/tools/n8n/) Pro** — **50 €/mois facturé annuellement**, soit environ **600 €/an**. La Community Edition auto-hébergée est gratuite si vous l'exploitez.
+- **[Slack](/fr/tools/slack/)** — déjà sur votre facture. Ne le rachetez pas pour ça.
+
+**Environ 32 000–40 000 $ par an, et Tines en représente plus de 90 %.** Cette seule ligne est la décision : vous payez environ 30 000 $ par an pour un enregistrement d'audit. Si personne ne l'a demandé — pas d'audit SOC 2, pas de données réglementées, pas de question du conseil sur qui a autorisé une écriture — le montage honnête est Composio plus n8n pour **moins de 2 500 $/an**, en acceptant que votre preuve soit des logs d'exécution plutôt qu'une piste d'audit.
+
+Les coûts cachés sont au nombre de deux : enregistrer votre propre client OAuth par fournisseur (une journée de travail, et ce qui fait que la révocation vous appartient au lieu d'être un ticket de support) et écrire le runbook de rotation avant le lancement, pas après la prochaine divulgation.
+
+## Variantes et quand permuter
+
+- **Remplacez Composio par Arcade quand l'exigence est l'attribution.** Le déclencheur est une phrase précise qui apparaît dans une revue de sécurité ou un DPA : l'écriture doit être attribuable à un humain nommé. L'OAuth par utilisateur y répond structurellement ; une clé de plateforme n'y répondra jamais.
+- **Abandonnez Tines et faites tourner n8n seul en dessous d'environ 5 000 $ de budget.** Vous gardez la porte d'approbation — n8n en a une — et vous perdez l'enregistrement d'audit et le cadrage MCP dans la plateforme. La règle : faites cette permutation quand vos écritures sont réversibles. Gardez Tines quand elles ne le sont pas, ce qui en pratique signifie contrats, offres, factures et tout ce qu'un client voit.
+- **Auto-hébergez n8n Community quand les tokens ne peuvent pas quitter votre infrastructure.** La résidence des données et certaines revues de sécurité excluent totalement un broker tiers. Vous reprenez alors la maintenance d'auth que le broker avait été acheté pour supprimer, ce qui est une ligne permanente et non un coût unique.
+- **Utilisez [Zapier](/fr/tools/zapier/) MCP au lieu d'un broker quand vous payez déjà Zapier et que le volume reste sous environ 1 000 appels par mois.** Il est inclus dans tous les plans, et chaque appel MCP consomme 2 tasks — soit environ 0,069 $ par appel sur le plan Team à 69 $/mois. C'est acceptable à 500 appels et indéfendable à 500 000.
+
+## Ce que ce stack ne remplace pas
+
+- **Ce n'est pas une politique IA.** Il applique des décisions sur l'agent autorisé à toucher tel système ; il ne les prend pas. Écrivez la règle d'abord — voir [politique IA pour les équipes RevOps](/fr/learn/ai-policy-for-revops-teams/).
+- **Ce n'est pas un plan d'identité pour les agents eux-mêmes.** Délivrer aux agents une identité d'entreprise, appliquer l'accès conditionnel et plafonner leur dépense est un achat différent et bien plus large : c'est l'[enterprise AI rollout stack](/fr/stacks/enterprise-ai-rollout-stack/).
+- **Il ne construit pas les agents.** Une équipe réduite qui met en place ses premiers agents permanents veut d'abord l'[AI agent ops stack](/fr/stacks/ai-agent-ops-stack/), et celui-ci ensuite, une fois que quelque chose écrit dans un système qui compte.
+- **Il ne rend pas l'agent juste.** Le cadrage en scopes et la journalisation limitent les dégâts d'une mauvaise réponse. Ils ne réduisent pas la fréquence à laquelle vous en obtenez une.
+- **Ce n'est pas un gestionnaire de secrets pour votre propre infrastructure.** Composio brokerise des tokens SaaS tiers. Les mots de passe de votre base de données et vos clés de signature restent où ils sont.
+
+## Points de vigilance, chacun avec sa parade
+
+- **Le broker détient vos tokens, et ce broker a déjà été compromis.** **Parade :** enregistrez votre propre client OAuth par fournisseur pour que la révocation soit une action que vous exécutez et non un ticket que vous ouvrez ; gardez les scopes d'écriture sur GitHub, Salesforce et tout dépôt de PII ou de contrats hors des paliers Free et Pro ; routez les connexions capables d'écrire via le proxy KMS de l'offre Enterprise ; et répétez le runbook de rotation une fois avant le lancement.
+- **Les trigger events sont facturés 10x les tool calls — 0,003 $ contre 0,0003 $.** Un trigger en polling sur une boîte mail active facture que votre agent agisse ou non sur l'événement. **Parade :** préférez les webhooks au polling et réglez le contrôle de dépense du plan Pro avant la mise en production du premier trigger, pas après la première facture.
+- **Arcade possède désormais la registry dans laquelle elle publie.** Le catalogue de Smithery est contrôlé par une entreprise qui vend le runtime en dessous, et Arcade exploite en plus son propre benchmark de qualité MCP. **Parade :** tenez votre propre allowlist de versions de serveurs épinglées et installez depuis celle-ci, plutôt que de résoudre depuis un catalogue public à l'exécution. C'est de l'hygiène de chaîne d'approvisionnement que vous voudriez de toute façon, quel que soit le propriétaire de la registry.
+- **L'édition gratuite de Tines n'est pas un pilote.** Trois workflows actifs et une allocation IA unique de 50 $ s'épuisent vite dès qu'un agent est dans la boucle. **Parade :** limitez l'essai à un workflow parcouru de bout en bout, porte d'approbation et export d'audit compris, plutôt qu'à trois à moitié construits.
+- **Tines ne publie aucun prix payant, votre premier devis est donc une position de départ.** **Parade :** obtenez un devis écrit de Torq ou Swimlane avant de négocier. Les données de Vendr montrent 17 % d'économie moyenne sur le premier devis.
+- **Une porte d'approbation sur chaque écriture devient une porte d'approbation sur rien.** Des relecteurs qui voient quarante demandes par jour cessent de les lire. **Parade :** filtrez par classe de scope et non par appel — approuvez automatiquement les mises à jour de champs réversibles et retenez tout ce qui envoie, signe, paie ou supprime.
+
+## Règles d'adéquation
+
+**Le bon choix quand :** vous avez entre environ 20 et 500 employés, au moins un agent écrit déjà dans un système de référence, et plus d'une équipe construit des agents. Le stack rentabilise son prix la première fois que quelqu'un demande quel agent a modifié une opportunité closed-won et que la réponse est un enregistrement plutôt qu'une supposition.
+
+**Le mauvais choix quand :** vous avez moins d'environ cinq intégrations, où écrire des clients d'API directs pour les trois applications qui comptent vraiment demande moins de travail que le broker ; quand chaque écriture d'agent est encore initiée par un humain et réversible, où un log d'exécution suffit ; ou quand vous achetez déjà l'[enterprise AI rollout stack](/fr/stacks/enterprise-ai-rollout-stack/), dont les plans d'identité et de gouvernance recouvrent l'essentiel de celui-ci et coûtent un ordre de grandeur de plus.
+
+**Si vous ne pouvez faire qu'une chose :** lancez [l'audit d'accès des agents au CRM](/fr/workflows/crm-agent-access-audit-skill/) sur ce que vous avez aujourd'hui. La plupart des équipes découvrent un token doté d'un scope d'écriture et sans propriétaire avant d'avoir terminé, et le révoquer ne coûte rien.
