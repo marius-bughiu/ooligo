@@ -1,0 +1,100 @@
+---
+slug: internal-ops-portal-stack
+canonical_slug: internal-ops-portal-stack
+locale: fr
+verticals: [revops, legal-ops, recruiting, customer-success]
+title: "Stack de portail ops interne — intake et validations pour une équipe ops d'une seule personne"
+tools: [retool, n8n, notion, slack]
+use_case: "Une équipe ops d'une ou deux personnes qui construit son propre intake de demandes, son routage de validations et son système de référence au lieu d'acheter un outil vertical de ticketing ou de gestion des demandes."
+difficulty: intermediate
+related_workflows:
+  - legal-request-intake-router-n8n
+last_updated: "2026-09-12"
+en_verified: "2026-09-12"
+material_change_at: "2026-09-12"
+---
+
+Le stack de la personne ops qui reçoit toutes les demandes internes : exceptions de remise, accès aux outils, référencement de fournisseurs, changements d'effectifs, demandes de contrat. Aujourd'hui, ces demandes arrivent en DM Slack, sont validées d'un emoji pouce levé et ne laissent aucune trace de qui a dit oui. Le choix consiste à acheter un outil vertical par type de demande ou à construire une seule surface d'intake et de validation pour toutes. Cette page décrit la voie de la construction, qui repose sur une règle de conception : **[n8n](/fr/tools/n8n/) est la seule chose qui modifie le statut d'une demande.** [Notion](/fr/tools/notion/) le stocke, [Slack](/fr/tools/slack/) capte les décisions avec un valideur identifié, et [Retool](/fr/tools/retool/) donne à l'opérateur un seul écran sur l'ensemble.
+
+## Comment les pièces s'articulent
+
+**Slack est la porte d'entrée et la surface de décision.** Les demandeurs n'ouvrent jamais un autre outil. Une demande part d'un formulaire Slack Workflow Builder qui poste vers un webhook n8n, ou d'une URL n8n Form Trigger pour les personnes extérieures au workspace. Les validations reviennent dans Slack via l'opération **Send and Wait for Response** du nœud Slack de n8n, avec le type de réponse Approval. Activez **Capture Who Responded** et les boutons deviennent des boutons interactifs Slack natifs : le valideur décide en un clic dans Slack plutôt que sur une page de navigateur. **Restrict Who Can Approve** limite les boutons à des utilisateurs nommés ; toute autre personne qui clique reçoit un avis privé « non autorisé » pendant que le workflow continue d'attendre. La sortie du nœud contient la décision, l'horodatage ainsi que l'ID, le nom, le nom d'utilisateur et l'email de la personne qui a répondu. Cet enregistrement est la piste d'audit que le processus à l'emoji n'a jamais eue.
+
+**n8n est la machine à états.** Chaque type de demande est un workflow : valider la saisie, calculer le niveau de validation (une remise au-delà de 15 % part chez la finance, en dessous chez le responsable commercial), créer l'enregistrement dans Notion, envoyer la demande de validation, attendre, réécrire la décision, exécuter l'action en aval (mettre à jour le champ du CRM, ajouter l'utilisateur au groupe Okta, créer le fournisseur dans l'ERP) et répondre au demandeur dans son fil. n8n facture à l'exécution, pas à l'étape : un flux de validation de 12 étapes représente donc une exécution, quelle que soit la durée de l'attente. Ce mode de comptage explique pourquoi l'orchestration se trouve ici et non dans un outil facturé à la tâche.
+
+**Notion est le système de référence.** Une base de données Notion par famille de demandes, avec des propriétés pour le statut, le demandeur, le valideur, le niveau, l'horodatage de la décision et le permalien Slack du message de validation. Chaque type de demande renvoie vers sa page de SOP dans le même workspace, de sorte que la règle appliquée au demandeur se trouve à côté de la trace de son application. Les demandeurs voient le statut dans leur fil Slack ; seule l'équipe ops a besoin de travailler dans Notion.
+
+**Retool est la console de l'opérateur.** Au-delà de trois types de demande, la personne ops a besoin d'une file unique pour tous : ancienneté par rapport au SLA, réaffectation, rejet en masse, réouverture et contexte issu d'autres systèmes sur le même écran (l'historique de facturation du client à côté de la demande de remise, les groupes actuels du salarié à côté de la demande d'accès). Retool lit Notion via son API REST et lit les autres systèmes directement. Il **n'écrit qu'en appelant des webhooks n8n**, jamais dans Notion, ce qui maintient n8n comme unique écrivain.
+
+Les passages de relais, dans l'ordre :
+
+1. Le demandeur soumet le formulaire → l'exécution n8n démarre → l'enregistrement Notion est créé avec le statut `Submitted`.
+2. n8n calcule le niveau → le message de validation Slack part chez le valideur → statut Notion `Pending approval` avec le permalien du message.
+3. Le valideur clique sur Approve → n8n reprend avec l'identité de la personne qui a répondu → Notion reçoit le valideur et la date de décision → l'action en aval s'exécute → le fil du demandeur reçoit le résultat.
+4. La fenêtre de validation expire → n8n reprend sur sa branche de timeout → le valideur suppléant est notifié → statut Notion `Escalated`.
+5. L'opérateur réaffecte ou rouvre dans Retool → Retool appelle le webhook n8n → n8n écrit dans Notion et poste dans Slack.
+
+## Pourquoi cette combinaison
+
+La raison porteuse est l'écrivain unique. Un processus de demandes échoue quand son statut vit à trois endroits qui se contredisent : le fil Slack dit validé, le tracker dit en attente et le champ du CRM n'a jamais été modifié. Ici, les changements de statut se produisent dans une seule couche, chaque changement est une exécution n8n que vous pouvez ouvrir et rejouer, et chaque décision porte un ID utilisateur Slack plutôt qu'un emoji. Le demandeur ne paie rien, ni en attention ni en licences, puisqu'il ne quitte jamais Slack. Et la personne ops construit chaque nouveau type de demande comme un workflow n8n et une base Notion de plus, pas comme un fournisseur de plus.
+
+## Réalité des coûts
+
+Slack et Notion sont supposés déjà sous licence ; le coût incrémental correspond aux licences de l'équipe ops et aux deux outils de construction. Prix catalogue vérifiés le 2026-09-12.
+
+- **Slack** : Pro coûte 7,25 $ par utilisateur et par mois en facturation annuelle (8,75 $ en mensuel) ; Business+ coûte 15 $ (18 $ en mensuel). Coût incrémental pour ce stack : 0 $. Le branchement conditionnel dans Workflow Builder exige un forfait payant.
+- **n8n Cloud** : Starter à 20 €/mois en facturation annuelle avec 2 500 exécutions ; Pro à 50 €/mois avec 10 000 exécutions et l'historique des workflows. Le contrat médian n8n selon Vendr est de 700 $/an, soit le niveau Pro.
+- **Notion** : Business coûte 20 $ par membre et par mois en facturation annuelle (24 $ en mensuel). Une ou deux licences ops représentent 240–480 $/an si elles ne sont pas déjà couvertes.
+- **Retool** : Free couvre jusqu'à 5 utilisateurs et 500 exécutions de workflow. Team coûte 10 $ par builder et 5 $ par utilisateur interne et par mois en facturation annuelle. Business, à 50 $ par builder et 15 $ par utilisateur interne, est le niveau où arrivent les audit logs, les contrôles de permissions et le SSO personnalisé.
+
+Trois configurations, toutes estimées à partir des prix catalogue :
+
+- **Minimale** (Retool Free, n8n Starter) : environ **240 €/an** en incrémental.
+- **Standard** (Retool Team avec un builder et quatre utilisateurs à 30 $/mois, n8n Pro, deux licences Notion) : environ **1 500–1 600 $/an**.
+- **Gouvernée** (Retool Business avec un builder et quatre utilisateurs à 110 $/mois, n8n Pro, deux licences Notion) : environ **2 500 $/an**.
+
+La marche d'escalier est le forfait Business de n8n : le SSO et les environnements adossés à Git coûtent 667 €/mois et imposent l'auto-hébergement. Si la sécurité exige le SSO sur la couche d'orchestration, le stack coûte plus de 8 000 € par an avant tout le reste.
+
+Le coût caché est le temps de construction. Notre estimation : trois à cinq jours pour le premier type de demande (l'app Slack, le signing secret, le schéma Notion, le premier workflow et la page de console), puis environ une journée par type supplémentaire, puis deux à quatre heures par mois pour le maintenir en état de marche.
+
+## Règles de choix
+
+**Ce stack est le bon choix quand :**
+
+- Une ou deux personnes gèrent les demandes internes d'une entreprise de 100–1 000 personnes
+- Le volume est de 50–500 demandes par mois sur trois types de demande ou plus
+- La plupart des demandes se terminent par une écriture dans un système que vous maîtrisez : un champ du CRM, un groupe d'identité, un enregistrement du SIRH
+- Quelqu'un dans l'équipe lit du JSON, écrit du SQL et sait déboguer un nœud HTTP en échec
+- L'entreprise tourne déjà sur Slack et Notion
+
+**Ce stack est le mauvais choix quand :**
+
+- Les demandes sont des tickets IT avec SLA, inventaire d'actifs et base de connaissances. Achetez Jira Service Management : Free couvre jusqu'à 3 agents pour 0 $ et Standard coûte 20 $ par agent et par mois, les demandeurs étant gratuits. Le coût logiciel n'est pas la raison de construire ce stack ; l'adéquation l'est.
+- Le volume est inférieur à une vingtaine de demandes par mois, avec un seul valideur et aucune écriture en aval. Slack Workflow Builder suffit à lui seul.
+- Les demandes de contrat dominent. Elles exigent l'intake, le redlining et le référentiel d'un CLM ; voir le [stack Legal Ops pour juriste seul](/fr/stacks/legal-ops-team-of-one-stack/).
+- Personne dans l'équipe ne sait maintenir un workflow n8n. La première panne silencieuse devient une demande dont personne ne sait qu'elle est bloquée.
+
+## Variantes courantes
+
+**Retirez Retool tant qu'il y a trois types de demande ou moins.** Une vue tableau Notion groupée par statut est une console viable pour un opérateur seul. Règle pour l'ajout : intégrez Retool quand l'opérateur a besoin des données d'un autre système sur le même écran que la demande, ou d'actions en masse sur plusieurs types de demande.
+
+**Remplacez Notion par [Airtable](/fr/tools/airtable/)** quand les demandeurs doivent voir et modifier leurs propres enregistrements en dehors de Slack. Airtable Interfaces donne à chaque demandeur une vue filtrée sans lui confier toute la base. Règle pour le remplacement : choisissez Airtable quand l'enregistrement de la demande est un objet sur lequel le demandeur travaille pendant plusieurs jours (une checklist de référencement fournisseur), et non quelque chose qu'il soumet une fois avant d'attendre.
+
+**Remplacez n8n par [Zapier](/fr/tools/zapier/)** quand le builder ne lit pas le JSON et que chaque flux reste sous cinq étapes environ. Zapier compte chaque étape comme une tâche : un flux de validation de 12 étapes à 300 demandes par mois représente 3 600 tâches contre 300 exécutions sur n8n. Règle pour le remplacement : flux courts, builder non technique et aucune exigence d'auto-hébergement.
+
+## Ce que ce stack ne remplace PAS
+
+- **La gestion des services IT.** L'inventaire des actifs, la gestion des incidents et le reporting SLA relèvent d'un service desk.
+- **Un CLM.** Le stack route une demande de contrat ; il ne fait pas de redlining, ne stocke pas les contrats signés et ne suit pas les obligations.
+- **La gouvernance des identités.** Il sait demander et valider un accès ; il ne mène pas de revues ni de certifications trimestrielles des accès.
+- **Les achats et le contrôle des dépenses.** Une validation ici n'émet pas de bon de commande et ne déplace pas d'argent.
+- **Un journal d'audit immuable.** L'historique des pages Notion et les journaux d'exécution n8n sont modifiables et ont des limites de rétention. Si un auditeur exige une preuve de validation infalsifiable, exportez chaque décision vers un stockage que l'équipe ops ne peut pas modifier.
+
+## Points de vigilance
+
+- **Le modèle data sources de Notion casse les anciennes intégrations.** L'API Notion 2025-09-03 a scindé les bases de données en data sources, et les intégrations construites sur l'ancienne API échouent sur les bases comportant plus d'une source. Garde-fou : construisez sur le nœud Notion actuel de n8n, qui dispose d'une ressource Data Source, limitez chaque base de demandes à une seule data source et relancez une soumission de test après tout changement de schéma dans Notion.
+- **Les validations Slack exigent un endpoint HTTPS public.** Slack envoie le clic du bouton vers `https://<your-n8n-instance>/webhook-waiting-slack` ; un n8n derrière un VPN ne le reçoit jamais. Garde-fou : utilisez n8n Cloud ou n'exposez que ce chemin, et collez le signing secret de l'app Slack dans le credential, sinon chaque clic est rejeté comme non signé.
+- **Une validation sans réponse attend indéfiniment si vous ne dites pas le contraire.** Garde-fou : réglez **Limit Wait Time** sur l'étape send-and-wait (48 heures, After Time Interval) et routez la branche de timeout vers le valideur suppléant et le statut `Escalated`.
+- **Les limites de débit de Notion bloquent les reprises de données.** Les connexions disposent de 180 requêtes par minute sur Free et Plus et de 600 sur Business et Enterprise, sous un plafond partagé par workspace, et l'excédent renvoie HTTP 429. Garde-fou : activez Retry On Fail avec un délai entre les tentatives sur chaque nœud Notion et lancez les reprises par lots en dehors des heures ouvrées.
+- **Les propriétés rich text sont plafonnées à 2 000 caractères.** Une longue justification collée dans une propriété fait échouer l'écriture. Garde-fou : réservez la propriété à un résumé d'une ligne et ajoutez le texte complet sous forme de blocs dans le corps de la page.
+- **Un second écrivain fait diverger le statut sans bruit.** Le jour où quelqu'un branche Retool directement sur Notion, la console et le flux de validation commencent à se contredire. Garde-fou : donnez à Retool un jeton d'intégration Notion limité à la lecture du contenu, et faites passer chaque écriture par un webhook n8n.
