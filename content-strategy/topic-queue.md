@@ -23,10 +23,11 @@ Each line carries at most one lifecycle marker, appended in place:
 
 `refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-09-06`
+`last-swept: 2026-09-13`
 
 ## Refresh queue
 
+- refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (material: modernloop 2026-09-10 > stack's last_updated 2026-08-23)
 - refresh:C: [type:stack] [vertical:revops] ai-agent-ops-stack — cascade (material: gumloop 2026-09-03 > stack's last_updated 2026-08-03) → slug: ai-agent-ops-stack
 - refresh:C: [type:stack] [vertical:recruiting] ai-sourcing-stack — cascade (material: hireez 2026-09-04, greenhouse 2026-09-03 > stack's last_updated 2026-07-29) → slug: ai-sourcing-stack
 - refresh:C: [type:stack] [vertical:recruiting] hiring-integrity-stack — cascade (material: greenhouse 2026-09-03 > stack's last_updated 2026-08-09) → slug: hiring-integrity-stack
