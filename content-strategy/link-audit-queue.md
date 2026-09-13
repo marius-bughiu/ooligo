@@ -4001,3 +4001,139 @@ Re-measured this run across all 6 locales. Routes come from `apps/web/src/pages/
 - **1 link to an undefined vertical** — `workflows/en/mcp-server-salesforce-revops.mdx` → `/en/r/cs/`. `content/verticals.json` defines `revops`, `legal-ops`, `recruiting`, `customer-success`; there is no `cs`.
 
 Total: **688 broken or degraded internal links across the 6 locales**, none of them insertion-related, none fixable inside this routine's mandate. They are also the reason the graph has been undercounting outbound edges: 5 entries left the gap list this run purely because locale-less links were finally counted. **A one-off repair pass would do more for the link graph than any number of these weekly insertion audits** — the defect classes are mechanical and every one of them is a deterministic find-and-replace.
+
+## 2026-09-13
+
+### Auto-inserted this run (high confidence): 1
+
+- [tools:scribe] → [tools:slack]: shares revops/legal-ops/recruiting/customer-success (4); "Slack" appeared verbatim and unlinked in the "wiki page nobody updates" paragraph ("…new hires ask in Slack instead of reading it"). Anchor is the bare name at the existing mention point; mirrored to the same sentence in de/es/fr/ja/pt-BR with the locale-prefixed route. Scribe goes 2 → 3 outbound and clears the floor. Slack is the only target used this run (1 of the 2 allowed per target).
+
+The ±70-char enumeration heuristic proposed on 2026-09-06 would have flagged this mention (two commas nearby), but they are clause commas in a narrative sentence, not a vendor list. It was checked by hand. If that heuristic is ever adopted, it needs a "names within the comma window" test, not a raw comma count.
+
+`npm run validate:config` passed before and after the insert (2/2). It still validates only verticals.json and locales.json, so it gives no signal on MDX changes.
+
+### Deferred — high confidence in principle, integrations-only, no body anchor (9)
+
+- [tools:chatgpt] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:chatgpt] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:make] → [tools:airtable]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:make] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:make] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:notion] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:zapier] → [tools:airtable]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:zapier] → [tools:notion]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+- [tools:zapier] → [tools:slack]: shares revops/legal-ops/recruiting, in `integrations`, name not in body
+
+Compared with 2026-09-06: `linear` dropped off the list because it is no longer below floor. `make → airtable` and `zapier → airtable` are new (airtable was added 2026-09-06). The set still resolves to three targets (slack ×4, notion ×3, airtable ×2). Adding any of them means authoring a new sentence in 6 locales, which is out of scope for a link pass. `tools:notion` (0 outbound) and `tools:juro` (0 outbound) remain the two entries a content refresh should fix.
+
+### Below outbound floor with no candidate at all (1)
+
+- [workflows:pipeline-review-prompt-pack]: 1 outbound, floor 2. No same-vertical target is named in the body or in a relationship field (unchanged).
+
+### Graph snapshot
+
+943 EN entries (tools 342, comparisons 232, workflows 127, learn 191, stacks 51; the uncommitted `showpad` authoring files were excluded). Outbound < floor: 19 after this run (tools 18, workflows 1). Inbound < floor: 302; zero inbound: 266 (comparisons 139, tools 55, workflows 28, learn 28, stacks 16).
+
+This run counted `/vs/` and `/comparisons/` body links as inbound to the comparison, and counted `integrations` as inbound to the target. The inbound totals are therefore not directly comparable with the 353 / 322 reported on 2026-09-06. Read the trend from next week on.
+
+Degraded internal links in EN bodies only (the six-locale total is roughly 6×): 49 without a locale prefix, 36 on the nonexistent `/comparisons/` route (the real route is `/vs/`), 4 to missing entries, 76 without a trailing slash. These are still unresolved.
+
+The standing flags from 2026-09-06 are unchanged: ARCHITECTURE.md §Cross-linking rules still states a stricter composition floor than this routine's 3/2, and still claims a CI link-budget gate that does not exist. The proposed 1-vertical in-prose rule is still awaiting a human decision.
+
+### Medium confidence (shares ≥ 1 vertical, and either named in a relationship field or same `category`) — 93
+
+Capped at the 6 strongest per source entry. **name in body, unlinked** marks the ones worth doing first in a manual pass.
+
+- [tools:6sense] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:outreach]: shares vertical revops; named in relationship field; name "Outreach" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:salesloft]: shares vertical revops; named in relationship field; name "Salesloft" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:influ2]: shares vertical revops; same category; name "Influ2" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:rollworks]: shares vertical revops; same category; name "AdRoll ABM (formerly RollWorks)" not in body (source ob=1, need=2)
+- [tools:assembled] -> [tools:gladly]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:assembled] -> [tools:intercom]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:assembled] -> [tools:kustomer]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:assembled] -> [tools:salesforce]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:assembled] -> [tools:zendesk]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:claude]: shares vertical customer-success; name in body; **name in body, unlinked** (source ob=1, need=2)
+- [tools:chattermill] -> [tools:asknicely]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=2, need=1)
+- [tools:chattermill] -> [tools:claude]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:chattermill] -> [tools:delighted]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=2, need=1)
+- [tools:chattermill] -> [tools:freshdesk]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=2, need=1)
+- [tools:chattermill] -> [tools:gladly]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=2, need=1)
+- [tools:chattermill] -> [tools:glean]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=2, need=1)
+- [tools:demandbase] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:outreach]: shares vertical revops; named in relationship field; name "Outreach" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:salesloft]: shares vertical revops; named in relationship field; name "Salesloft" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:influ2]: shares vertical revops; same category; name "Influ2" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:rollworks]: shares vertical revops; same category; name "AdRoll ABM (formerly RollWorks)" not in body (source ob=2, need=1)
+- [tools:eightfold] -> [tools:gem]: shares vertical recruiting; name in body; name in body, inside a vendor enumeration (source ob=2, need=1)
+- [tools:eightfold] -> [tools:greenhouse]: shares vertical recruiting; named in relationship field; name "Greenhouse" not in body (source ob=2, need=1)
+- [tools:eightfold] -> [tools:icims]: shares vertical recruiting; named in relationship field; name "iCIMS" not in body (source ob=2, need=1)
+- [tools:enterpret] -> [tools:amplitude]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:enterpret] -> [tools:front]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:enterpret] -> [tools:glean]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:enterpret] -> [tools:gong]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:enterpret] -> [tools:intercom]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:enterpret] -> [tools:kustomer]: shares vertical customer-success; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:evenup] -> [tools:alexi]: shares vertical legal-ops; same category; name "Alexi" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:claude-for-legal]: shares vertical legal-ops; same category; name "Claude for Legal" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:clearbrief]: shares vertical legal-ops; same category; name "Clearbrief" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:gc-ai]: shares vertical legal-ops; same category; name "GC AI" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:harvey]: shares vertical legal-ops; same category; name "Harvey" not in body (source ob=2, need=1)
+- [tools:evenup] -> [tools:ivo]: shares vertical legal-ops; same category; name "Ivo" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:spellbook]: shares vertical legal-ops; name in body; name in body, inside a vendor enumeration (source ob=2, need=1)
+- [tools:everlaw] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:casepoint]: shares vertical legal-ops; same category; name "Casepoint" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:disco]: shares vertical legal-ops; same category; name "DISCO" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:exterro]: shares vertical legal-ops; same category; name "Exterro" not in body (source ob=2, need=1)
+- [tools:everlaw] -> [tools:logikcull]: shares vertical legal-ops; same category; name "Logikcull" not in body (source ob=2, need=1)
+- [tools:everstage] -> [tools:hubspot]: shares vertical revops; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:everstage] -> [tools:pipedrive]: shares vertical revops; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:everstage] -> [tools:salesforce]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:slack]: shares vertical revops; named in relationship field; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:everstage] -> [tools:claude]: shares vertical revops; name in body; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:everstage] -> [tools:cursor]: shares vertical revops; name in body; **name in body, unlinked** (source ob=1, need=2)
+- [tools:findem] -> [tools:gem]: shares vertical recruiting; same category; name in body, inside a vendor enumeration (source ob=1, need=2)
+- [tools:findem] -> [tools:ashby]: shares vertical recruiting; named in relationship field; name "Ashby" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:greenhouse]: shares vertical recruiting; named in relationship field; name "Greenhouse" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:icims]: shares vertical recruiting; named in relationship field; name "iCIMS" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:lever]: shares vertical recruiting; named in relationship field; name "Lever" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:workday]: shares vertical recruiting; named in relationship field; name "Workday" not in body (source ob=1, need=2)
+- [tools:juro] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:agiloft]: shares vertical legal-ops; same category; name "Agiloft" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:concord]: shares vertical legal-ops; same category; name "Concord" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:conga-clm]: shares vertical legal-ops; same category; name "Conga CLM" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:contractpodai]: shares vertical legal-ops; same category; name "Leah (formerly ContractPodAi)" not in body (source ob=0, need=3)
+- [tools:juro] -> [tools:contractworks]: shares vertical legal-ops; same category; name "ContractWorks" not in body (source ob=0, need=3)
+- [tools:linksquares] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:agiloft]: shares vertical legal-ops; same category; name "Agiloft" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:concord]: shares vertical legal-ops; same category; name "Concord" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:conga-clm]: shares vertical legal-ops; same category; name "Conga CLM" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:contractpodai]: shares vertical legal-ops; same category; name "Leah (formerly ContractPodAi)" not in body (source ob=1, need=2)
+- [tools:linksquares] -> [tools:contractworks]: shares vertical legal-ops; same category; name "ContractWorks" not in body (source ob=1, need=2)
+- [tools:make] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:make] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=2, need=1)
+- [tools:make] -> [tools:activepieces]: shares vertical revops/legal-ops/recruiting; same category; name "Activepieces" not in body (source ob=2, need=1)
+- [tools:make] -> [tools:tines]: shares vertical revops/legal-ops/recruiting; same category; name "Tines" not in body (source ob=2, need=1)
+- [tools:make] -> [tools:workato]: shares vertical revops/legal-ops/recruiting; same category; name "Workato" not in body (source ob=2, need=1)
+- [tools:notion] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=0, need=3)
+- [tools:notion] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=0, need=3)
+- [tools:notion] -> [tools:guru]: shares vertical revops/legal-ops/recruiting; same category; name "Guru" not in body (source ob=0, need=3)
+- [tools:relativity] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:casepoint]: shares vertical legal-ops; same category; name "Casepoint" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:disco]: shares vertical legal-ops; same category; name "DISCO" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:everlaw]: shares vertical legal-ops; same category; name "Everlaw" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:exterro]: shares vertical legal-ops; same category; name "Exterro" not in body (source ob=2, need=1)
+- [tools:relativity] -> [tools:microsoft-purview-ediscovery]: shares vertical legal-ops; same category; name "Microsoft Purview eDiscovery" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:ironclad]: shares vertical legal-ops; named in relationship field; name "Ironclad" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:alexi]: shares vertical legal-ops; same category; name "Alexi" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:claude-for-legal]: shares vertical legal-ops; same category; name "Claude for Legal" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:clearbrief]: shares vertical legal-ops; same category; name "Clearbrief" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:eve-legal]: shares vertical legal-ops; same category; name "Eve" not in body (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:evenup]: shares vertical legal-ops; same category; name "EvenUp" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:activepieces]: shares vertical revops/legal-ops/recruiting; same category; name "Activepieces" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:tines]: shares vertical revops/legal-ops/recruiting; same category; name "Tines" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:workato]: shares vertical revops/legal-ops/recruiting; same category; name "Workato" not in body (source ob=2, need=1)
