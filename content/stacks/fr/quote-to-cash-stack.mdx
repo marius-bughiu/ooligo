@@ -1,0 +1,99 @@
+---
+slug: quote-to-cash-stack
+canonical_slug: quote-to-cash-stack
+locale: fr
+verticals: [revops]
+title: "Stack quote-to-cash — reconstruire hors du Salesforce CPQ historique"
+tools: [salesforce, nue, dealhub, pandadoc, captivateiq]
+use_case: "Une entreprise SaaS standardisée sur Salesforce qui remplace le package géré Salesforce CPQ par une chaîne devis, order form, facturation et commissions qui garde Salesforce comme système de référence."
+difficulty: advanced
+related_workflows:
+  - deal-desk-pricing-skill
+last_updated: "2026-09-21"
+en_verified: "2026-09-21"
+material_change_at: "2026-09-21"
+---
+
+Salesforce a cessé de vendre Salesforce CPQ aux nouveaux clients en mars 2025. Rien n'a été coupé : la page de fin de commercialisation de Salesforce indique elle-même que les clients existants peuvent continuer à l'utiliser, ajouter des utilisateurs et renouveler, et aucune date de fin de vie n'a été annoncée. Ce qui s'est arrêté, c'est le développement de fonctionnalités. Pour une équipe RevOps dont la logique de devis vit dans des années de règles de prix `SBQQ__`, un projet « un jour peut-être » devient une décision avec une échéance que vous fixez vous-même. Cette page décrit la reconstruction qui garde [Salesforce](/fr/tools/salesforce/) comme système de référence et remplace le package géré qui l'entoure. Elle repose sur une règle de conception : **chaque étape du deal a exactement un outil autorisé à l'écrire.** Salesforce détient les enregistrements, le moteur de devis possède le prix et l'état de l'abonnement, la couche documentaire possède la signature, et le moteur de commissions ne fait que lire.
+
+La place du moteur de devis est un embranchement, pas une paire. Vous achetez [Nue](/fr/tools/nue/) **ou** [DealHub](/fr/tools/dealhub/), jamais les deux. Le choix par défaut est Nue ; la règle pour DealHub figure dans Variantes courantes.
+
+## Comment les pièces s'articulent
+
+**Salesforce est l'enregistrement, pas le moteur.** Account, Opportunity, Product2 et Pricebook2 restent où ils sont, et tous les systèmes en aval continuent de les lire. Ce qui part, c'est le package géré CPQ : ses objets de devis, de ligne de devis, d'abonnement et de prix contractuel, plus Salesforce Billing, construit sur ce package et qui part avec lui. La migration réussit ou échoue selon le nombre d'autres systèmes qui lisaient discrètement ces objets `SBQQ__`.
+
+**Nue est le moteur de devis et de cycle de vie.** Nue est un package géré qui tourne dans Salesforce sur des objets standard (Quote, Order, Opportunity, Product et Price Book) : pas de second CRM à synchroniser, pas de décalage nocturne. Le rep configure et chiffre le deal dans Nue ; les approbations sont routées dans Nue (qui a racheté l'éditeur d'approbations Approvals Pro en mars 2025). Après la signature, le Lifecycle Manager de Nue fait vivre l'abonnement à travers avenants, co-terms, upgrades et renouvellements avec prorata, mesure l'usage, les commits et les crédits, et facture via Billing and Collections ou transmet les factures à NetSuite ou Stripe. La raison pour laquelle c'est le choix par défaut ici : il garde le catalogue et l'abonnement dans le modèle de données de Salesforce, précisément ce qu'une équipe Salesforce CPQ cherche à ne pas perdre.
+
+**PandaDoc est l'order form et la signature.** Une fois le devis approuvé, le rep génère l'order form dans [PandaDoc](/fr/tools/pandadoc/) depuis l'Opportunity : tableau de prix rempli à partir des produits de l'Opportunity, conditions issues de la bibliothèque de contenu, encaissement à la signature pour les deals payés par carte. Le package Salesforce de PandaDoc boucle la boucle : avec le **Change Opportunity Status Trigger** activé et le statut du document mappé sur l'étape, un document Completed fait passer l'Opportunity en Closed Won et fixe la date de clôture à aujourd'hui. PandaDoc devient ainsi le seul outil qui écrit Closed Won, et Closed Won est l'événement qu'écoute tout ce qui est en aval.
+
+**CaptivateIQ transforme le booking en commission.** [CaptivateIQ](/fr/tools/captivateiq/) synchronise les données d'Opportunity, d'étape et de propriétaire depuis Salesforce selon un calendrier ou en temps réel, et calcule les versements à partir des valeurs réservées. Il n'écrit rien en retour dans le deal. Il a sa place dans ce stack parce que c'est le système en aval le plus susceptible de lire aujourd'hui des champs `SBQQ__`, et celui où un champ cassé coûte le plus de confiance : la paie d'un rep.
+
+Les passages de relais, dans l'ordre :
+
+1. L'Opportunity atteint l'étape de proposition → le rep construit le devis dans Nue sur le price book Salesforce → les remises au-dessus du seuil partent vers l'approbateur dans Nue.
+2. Devis approuvé → les lignes de devis arrivent dans les produits de l'Opportunity → le rep génère l'order form PandaDoc depuis l'Opportunity.
+3. L'acheteur signe, le statut PandaDoc passe à Completed → le Change Opportunity Status Trigger met l'étape en Closed Won et la date de clôture à aujourd'hui.
+4. Closed Won → Nue active la commande et crée l'abonnement → la première facture est émise dans Nue Billing ou synchronisée avec NetSuite.
+5. Closed Won et montants réservés → synchronisation CaptivateIQ → commission calculée pour la période. Un avenant ou une résiliation ultérieure dans Nue modifie les valeurs réservées, et la synchronisation CaptivateIQ suivante recalcule ou applique le clawback.
+
+## Pourquoi cette combinaison
+
+La raison porteuse : la migration ne touche qu'une couche. Votre price book, l'historique des Opportunities, les rapports et les définitions d'étape sur lesquels la finance clôture le trimestre restent dans Salesforce. Les objets qui changent sont le devis, l'abonnement et la facture, et ils migrent dans un seul moteur au lieu d'être répartis entre CPQ et Salesforce Billing. La couche documentaire et le moteur de commissions lisent des données Opportunity standard, donc ils survivent aussi au prochain changement de moteur. Le successeur de Salesforce lui-même, Revenue Cloud Advanced, est aussi une reconstruction : un autre produit, avec un autre modèle de données, et la page de Salesforce décrit les passages de CPQ à Revenue Cloud comme des migrations, en général de 3 à 6 mois. Rester chez l'éditeur n'évite pas le projet ; cela choisit seulement qui le mène.
+
+## Coûts réels
+
+Salesforce Sales Cloud est supposé déjà sous licence ; le coût incrémental, c'est le moteur, la couche documentaire et les commissions. Aucun des moteurs ne publie de prix, sauf celui de Salesforce. Chiffres vérifiés le 2026-09-21.
+
+- **Nue** : pas de prix publié. Le contrat annuel médian selon Vendr est de **67 167 $**, dans une fourchette de 14 700–382 500 $ ; l'écart suit le périmètre du catalogue et de la facturation, pas le nombre de licences.
+- **DealHub** (s'il prend la place du moteur) : médiane Vendr **44 297 $**, fourchette 14 839–118 130 $ ; les prix par licence rapportés par les acheteurs se situent entre 60 et 100 $ par utilisateur et par mois.
+- **PandaDoc** : Business coûte **49 $ par licence et par mois** en facturation annuelle, et l'intégration Salesforce est un add-on payant sur ce forfait. Le contrat médian selon Vendr est de 14 868 $.
+- **CaptivateIQ** : par licence, chaque bénéficiaire de commission comptant pour une licence, plus des frais de mise en place uniques. Médiane Vendr **36 120 $**, fourchette 12 021–100 181 $.
+- **La comparaison maison** : Revenue Cloud Growth est affiché à 150 $ et Revenue Cloud Advanced à 200 $ par utilisateur et par mois, en facturation annuelle, en plus de Sales Cloud. Quarante utilisateurs qui font des devis sur Advanced représentent 96 000 $ par an au prix catalogue, avant l'implémentation.
+
+Trois configurations pour une entreprise SaaS de 40 reps et 150 bénéficiaires de commission, estimations à partir des médianes Vendr et des prix catalogue :
+
+- **Par défaut** (Nue, PandaDoc Business pour 40 licences à 23 520 $ plus l'add-on Salesforce, CaptivateIQ) : environ **127 000–135 000 $/an**.
+- **Voie DealHub** (DealHub avec son propre DealRoom et sa signature, sans PandaDoc, CaptivateIQ) : environ **80 000 $/an**.
+- **Nue avec ses order forms DocuSign natifs** à la place de PandaDoc, pour les équipes déjà sur DocuSign : environ **103 000 $/an** plus la dépense DocuSign existante.
+
+Le coût caché, c'est la migration elle-même. Salesforce situe les migrations de CPQ vers Revenue Cloud entre 3 et 6 mois ; les retours d'éditeurs et de partenaires annoncent DealHub en production en 4 à 8 semaines ; le chiffre de quatre semaines de Nue vient de Nue. Notre estimation pour une organisation mid-market avec des abonnements actifs : 8 à 16 semaines d'un admin RevOps plus un partenaire, et un cycle complet de commissions mené en parallèle avant la bascule.
+
+## Règles de choix
+
+**Ce stack est le bon choix quand :**
+
+- Salesforce est le CRM et le restera pendant les 24 prochains mois
+- Vous vendez du SaaS avec une base d'abonnement plus de l'usage, des crédits ou des commits, et les avenants en cours de contrat sont la routine
+- Entre 20 et 100 personnes interviennent sur un devis, et les approbations de remise sont le goulot d'étranglement
+- La personnalisation de Salesforce CPQ est devenue la raison pour laquelle un changement de prix met un trimestre à sortir
+
+**Ce stack est le mauvais choix quand :**
+
+- Vous vendez un ou deux SKU au prix catalogue. Un devis PandaDoc depuis l'Opportunity fait le travail ; un moteur de devis est de la surcharge. Voir [à quoi sert un CPQ](/fr/learn/cpq-configure-price-quote/).
+- Le problème de configuration porte sur des produits physiques avec des règles de contraintes. C'est le terrain de [Conga](/fr/tools/conga-clm/), Tacton ou Revenue Cloud Advanced.
+- Le CRM est HubSpot ou Dynamics, ou un changement de CRM est envisagé. Nue est réservé à Salesforce par conception.
+- Les achats exigent un seul éditeur sur un seul contrat pour toute la plateforme revenus. Achetez Revenue Cloud Advanced et budgétez la migration.
+
+## Variantes courantes
+
+**Remplacez Nue par DealHub** quand un changement de CRM est plausible sous 24 mois, quand la deal room côté acheteur compte (DealHub publie un DealRoom dans lequel l'acheteur travaille), ou quand l'objectif est de sortir la logique de devis du cycle de releases de Salesforce, puisque les règles de prix de DealHub vivent dans un playbook configuré et non dans Salesforce. DealHub apporte sa propre couche de signature et de CLM : retirez PandaDoc sur cette voie. Le prix à payer est la distance au modèle de données : la facturation de DealHub est arrivée avec le rachat de Subskribe en novembre 2025 et n'a pas de calendrier de fusion publié.
+
+**Remplacez PandaDoc par le flux DocuSign natif de Nue** quand l'order form est un contrat plus qu'une proposition et que l'entreprise paie déjà [DocuSign](/fr/tools/docusign-iam/). Nue mappe les champs du devis directement dans des modèles DocuSign, ce qui supprime l'étape devis vers produits de l'Opportunity. Gardez PandaDoc quand les reps construisent déjà leurs propositions depuis sa bibliothèque de contenu ou que vous encaissez le premier paiement à la signature.
+
+**Remplacez CaptivateIQ par [QuotaPath](/fr/tools/quotapath/)** sous environ 50 bénéficiaires avec deux ou trois variantes de plan, ou par [Xactly](/fr/tools/xactly/) quand la rémunération couvre des milliers de bénéficiaires et plusieurs entités. Le passage de relais ne change pas : les trois lisent Closed Won dans Salesforce.
+
+## Ce que ce stack ne remplace PAS
+
+- **Le grand livre et la clôture.** Nue émet les factures ; les échéanciers de reconnaissance du revenu et la comptabilité restent dans NetSuite ou votre ERP.
+- **Le calcul des taxes.** La sales tax et la TVA viennent d'Avalara ou du moteur fiscal de l'ERP, branché sur la couche de facturation.
+- **La gestion du cycle de vie des contrats négociés.** PandaDoc signe des order forms ; un MSA négocié en redline avec des obligations à suivre relève d'un CLM comme [Ironclad](/fr/tools/ironclad/).
+- **La stratégie de prix.** Aucun moteur ne répare un price book sur lequel personne ne s'est mis d'accord. Fixez d'abord le catalogue et la politique de remise, puis utilisez la [revue de prix du deal desk](/fr/workflows/deal-desk-pricing-skill/) pour y tenir les reps.
+- **Le forecasting.** Closed Won est l'entrée ; le forecast est un autre stack. Voir le [stack de forecasting du revenu](/fr/stacks/revenue-forecasting-stack/).
+
+## Points de vigilance
+
+- **Les plans de commission lisent des champs qui ne se mettent plus à jour.** Une feuille CaptivateIQ construite sur les totaux nets de `SBQQ__QuoteLine__c` ou les enregistrements `SBQQ__Subscription__c` continue de calculer après la bascule, sur des valeurs périmées, sans erreur. Parade : avant la bascule, listez chaque source de données CaptivateIQ qui pointe vers un objet `SBQQ__`, redirigez chacune vers le champ Opportunity ou Nue, et faites tourner une période de paie complète en parallèle de l'ancien calcul. Tout écart est un bug de migration, pas un litige de rémunération.
+- **Deux outils qui écrivent Closed Won.** Si les reps peuvent encore changer l'étape à la main et que le trigger PandaDoc se déclenche aussi, les dates de booking s'écartent des dates de signature et les commissions tombent dans la mauvaise période. Parade : une règle de validation sur l'Opportunity pour que seul l'utilisateur d'intégration puisse passer en Closed Won dès qu'un document PandaDoc existe.
+- **Des lignes de devis qui n'arrivent jamais sur l'Opportunity.** PandaDoc construit l'order form à partir des produits de l'Opportunity ; si les lignes approuvées n'y arrivent pas, le document signé et l'abonnement divergent. Parade : dans la sandbox Nue, approuvez un devis avec une remise, une rampe et une ligne d'usage, générez le formulaire PandaDoc et comparez ligne par ligne avant qu'un rep ne le voie.
+- **Les abonnements en cours restent dans les anciens objets.** Chaque contrat en cours a son historique d'avenants et de renouvellements dans CPQ. Parade : fixez une date de bascule après laquelle aucun avenant n'est fait dans CPQ, migrez les abonnements actifs comme unité de travail, et faites du renouvellement la première transaction de chaque compte dans le nouveau moteur.
+- **Les délais d'implémentation sont déclarés par les éditeurs.** Les chiffres de quatre semaines et de 4 à 8 semaines viennent d'éditeurs et de partenaires, pas d'une cohorte identifiée. Parade : délimitez la phase un dans le SOW (une ligne de produits, une devise, une entité de facturation) avec une date et un jalon de paiement associés.
