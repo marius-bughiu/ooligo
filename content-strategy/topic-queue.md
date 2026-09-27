@@ -69,7 +69,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:legal-ops] exterro — pricing 61d unverified (pricing_checked 2026-07-28, SLA 60d)
 - refresh:A: [type:tool] [vertical:legal-ops] intapp — pricing 61d unverified (pricing_checked 2026-07-28, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] seismic — pricing 61d unverified (pricing_checked 2026-07-28, SLA 60d)
-- refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (material: modernloop 2026-09-10 > stack's last_updated 2026-08-23) → claimed: refresh 2026-09-27T07:07:48Z
+- refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (material: modernloop 2026-09-10 > stack's last_updated 2026-08-23) → slug: ai-augmented-recruiting-stack
 - refresh:C: [type:stack] [vertical:revops] ai-agent-ops-stack — cascade (material: gumloop 2026-09-03 > stack's last_updated 2026-08-03) → slug: ai-agent-ops-stack
 - refresh:C: [type:stack] [vertical:recruiting] ai-sourcing-stack — cascade (material: hireez 2026-09-04, greenhouse 2026-09-03 > stack's last_updated 2026-07-29) → slug: ai-sourcing-stack
 - refresh:C: [type:stack] [vertical:recruiting] hiring-integrity-stack — cascade (material: greenhouse 2026-09-03 > stack's last_updated 2026-08-09) → slug: hiring-integrity-stack
