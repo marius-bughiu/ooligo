@@ -23,10 +23,52 @@ Each line carries at most one lifecycle marker, appended in place:
 
 `refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-09-13`
+`last-swept: 2026-09-27`
 
 ## Refresh queue
 
+- refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] 11x — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] 1mind — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] 6sense — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] agiloft — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] amplemarket — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] appcues — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] arrows — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] artisan — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] asknicely — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] avature — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] aviso — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] blackboiler — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:cross] calendly — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:cross] chatgpt — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:cross] churnzero — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:cross] claude — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:cross] clay — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] clientsuccess — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] cognism — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] contractworks — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] crossbeam — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:cross] cursor — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] custify — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] decagon — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] default — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] definely — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] demandbase — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] hightouch — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] landbase — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] legalon — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] pin — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] recruiterflow — pricing 63d unverified (pricing_checked 2026-07-26, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] brighthire — pricing 62d unverified (pricing_checked 2026-07-27, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] captivateiq — pricing 62d unverified (pricing_checked 2026-07-27, SLA 60d)
+- refresh:A: [type:tool] [vertical:cross] catalyst — pricing 62d unverified (pricing_checked 2026-07-27, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] dealhub — pricing 62d unverified (pricing_checked 2026-07-27, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] fullcast — pricing 62d unverified (pricing_checked 2026-07-27, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] checkr — pricing 61d unverified (pricing_checked 2026-07-28, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] exterro — pricing 61d unverified (pricing_checked 2026-07-28, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] intapp — pricing 61d unverified (pricing_checked 2026-07-28, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] seismic — pricing 61d unverified (pricing_checked 2026-07-28, SLA 60d)
 - refresh:C: [type:stack] [vertical:recruiting] ai-augmented-recruiting-stack — cascade (material: modernloop 2026-09-10 > stack's last_updated 2026-08-23)
 - refresh:C: [type:stack] [vertical:revops] ai-agent-ops-stack — cascade (material: gumloop 2026-09-03 > stack's last_updated 2026-08-03) → slug: ai-agent-ops-stack
 - refresh:C: [type:stack] [vertical:recruiting] ai-sourcing-stack — cascade (material: hireez 2026-09-04, greenhouse 2026-09-03 > stack's last_updated 2026-07-29) → slug: ai-sourcing-stack
