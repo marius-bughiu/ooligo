@@ -1,0 +1,89 @@
+---
+slug: agent-access-governance-stack
+canonical_slug: agent-access-governance-stack
+locale: fr
+verticals: [revops]
+title: "Agent access governance stack — quels agents peuvent atteindre le stack revenue, et avec quel plafond"
+tools: [gong, salesforce, chili-piper, leandata, clay]
+use_case: "Une équipe RevOps dont les commerciaux utilisent déjà Claude, ChatGPT ou Copilot, et qui décide, fournisseur par fournisseur, quels clients d'agents peuvent se connecter, sous quelle identité, avec quels chemins d'écriture et avec quel plafond mensuel de crédits."
+difficulty: intermediate
+related_workflows:
+  - crm-agent-access-audit-skill
+  - mcp-server-leandata-routing
+  - enrichment-credit-burn-monitor-n8n
+last_updated: "2026-09-30"
+---
+
+Entre le 8 et le 18 août 2025, un attaquant que le groupe de threat intelligence de Google suit sous le nom UNC6395 a utilisé des tokens OAuth volés à l'intégration Salesloft Drift pour exécuter des requêtes SOQL contre les orgs Salesforce de clients et exporter en masse les Users, Accounts, Opportunities et Cases, à la recherche de clés AWS et de mots de passe collés dans les enregistrements. Salesloft et Salesforce ont révoqué tous les tokens Drift le 20 août. Aucun modèle n'était impliqué dans cette attaque. Il y avait une intégration disposant d'un accès en lecture sur toute l'org du CRM, ce qui est exactement ce que détient un agent connecté sans précaution.
+
+Douze mois plus tard, chaque outil d'un stack revenue typique livre son propre serveur MCP officiel : Gong en a annoncé un le 21 octobre 2025, les serveurs hébergés de Salesforce sont passés en GA le 29 avril 2026, Chili Piper a livré le sien en mai 2026, le BookIt MCP de LeanData est arrivé dans sa release du 21 mai 2026, et le serveur de Clay expose ses fournisseurs de données et ses fonctions à Claude et ChatGPT. Chacun a son propre modèle de permissions, et ils ne concordent pas entre eux. Ce stack est l'ensemble des décisions que vous prenez dans la console d'administration de chaque fournisseur pour que l'agent d'un commercial puisse répondre à des questions sur un deal, enrichir un compte et réserver un rendez-vous — sans qu'aucune de ces connexions ne devienne le prochain Drift.
+
+La règle qu'impose ce stack : **chaque connexion d'agent s'exécute sous l'identité d'une personne nommée, lit avant d'écrire, et a un plafond financier partout où le fournisseur facture à l'usage.**
+
+## Comment les pièces s'emboîtent
+
+- **[Salesforce](/fr/tools/salesforce/) est le socle d'identité et de permissions.** Ses serveurs MCP hébergés exigent qu'un administrateur les active dans Setup et crée une External Client App avec le scope `mcp_api` et PKCE. Chaque utilisateur se connecte ensuite avec son propre OAuth, si bien que le CRUD, la sécurité au niveau des champs et les règles de partage s'appliquent à l'agent exactement comme au commercial. Salesforce a découpé la surface par verbe — `sobject-reads`, `sobject-mutations`, `sobject-deletes`, `sobject-all` — et ce stack n'active que les lectures. Comme tous les autres outils ici écrivent dans Salesforce, c'est la couche qui rend une mauvaise écriture attribuable et réversible.
+- **[Gong](/fr/tools/gong/) est la couche de preuves conversationnelles, en lecture seule par conception.** Son serveur à `mcp.gong.io/mcp` répond aux questions sur les comptes et les deals et génère des briefs ; seul un tech admin Gong peut créer l'intégration. Les deux réglages qui comptent sont le **mode d'accès** — Personal, où l'agent ne voit que ce que cet utilisateur peut voir, ou Shared, où il voit les appels de toute l'org — et le **type d'enregistrement**, Manual (un client ID et un secret liés à une seule installation) ou Automatic (tout client correspondant que l'utilisateur autorise). Ce stack choisit Personal et Manual.
+- **[Clay](/fr/tools/clay/) est la couche de dépense, et le seul outil ici doté d'un plafond de crédits par personne pour MCP.** Les administrateurs fixent une limite de crédits par défaut au niveau du workspace pour chaque nouvel utilisateur MCP, la modifient personne par personne, et choisissent quelles fonctions Clay les agents peuvent appeler en activant "Enable for MCP". Les agents ne peuvent pas parcourir les tables brutes du workspace. Un utilisateur qui atteint la limite est bloqué net jusqu'à minuit UTC le 1er du mois. Un rôle "Sales Rep" donne un accès MCP uniquement, pour qu'un commercial puisse utiliser Clay depuis Claude sans accès au table builder.
+- **[Chili Piper](/fr/tools/chili-piper/) est le chemin d'écriture des rendez-vous.** Son serveur MCP couvre l'Edge API — utilisateurs, distributions, règles de routage, rendez-vous — pour Claude, ChatGPT, Cursor, Codex et Copilot Studio. Les écritures comme les modifications de routeur, les changements de types de rendez-vous et l'offboarding d'utilisateurs passent par défaut en dry run et demandent une confirmation avant d'être appliquées. Il accepte une clé d'API ou OAuth ; ce stack utilise OAuth pour les personnes et n'autorise qu'une seule clé d'API, pour un compte de service nommé.
+- **[LeanData](/fr/tools/leandata/) est la couche d'application du routage.** BookIt MCP s'authentifie via l'OAuth Salesforce, sépare les outils admin des outils commerciaux, et chaque réservation, replanification ou réattribution qu'il effectue respecte vos règles de routage, l'équité des pools et la logique de SLA. C'est toute la raison de sa présence ici : un agent qui réserve des rendez-vous en écrivant des Events directement dans Salesforce contourne le round-robin, et votre commercial le plus équitablement servi cesse discrètement de recevoir des rendez-vous.
+
+### Passages de relais nommés
+
+1. **Un commercial interroge Claude sur un deal → le serveur de Gong répond en mode Personal**, à partir des appels que ce commercial peut déjà voir, tandis que le serveur `sobject-reads` de Salesforce renvoie les champs de l'opportunité selon les propres règles de partage du commercial. Aucun credential partagé n'intervient dans l'une ou l'autre lecture.
+2. **Le commercial demande l'enrichissement de 40 comptes → une fonction Clay activée pour MCP s'exécute** et débite le plafond personnel de ce commercial. À la limite, Clay bloque les appels suivants de ce commercial jusqu'à la réinitialisation mensuelle.
+3. **L'agent veut réserver un rendez-vous → il appelle BookIt MCP ou Chili Piper, jamais Salesforce directement.** La réservation passe par le routage, arrive chez le bon propriétaire et écrit l'Event avec la piste d'audit du routeur.
+4. **L'agent de quelqu'un propose une modification de routeur Chili Piper → le dry run affiche le diff**, et un humain confirme avant l'application.
+5. **Chaque trimestre, [l'audit d'accès des agents au CRM](/fr/workflows/crm-agent-access-audit-skill/) liste chaque External Client App et chaque intégration connectée**, et [le moniteur de consommation des crédits d'enrichissement](/fr/workflows/enrichment-credit-burn-monitor-n8n/) signale tout utilisateur Clay qui a dépensé 80 % de son plafond dès la première semaine.
+
+## Pourquoi cette combinaison
+
+Parce que ces cinq outils sont ceux où un agent d'une équipe revenue peut causer trois types de dégâts distincts : lire des données sensibles (appels Gong, enregistrements Salesforce), dépenser de l'argent (crédits Clay, Flex Credits Agentforce) et faire une promesse à un client (un rendez-vous réservé). Un broker de credentials comme l'[agent tool access stack](/fr/stacks/agent-tool-access-stack/) ne voit rien des deuxième et troisième, parce que la consommation de crédits et le routage se produisent chez le fournisseur. Les contrôles doivent être réglés là où le fournisseur les applique, et cela signifie cinq consoles d'administration, pas une.
+
+## Choisir quels clients peuvent entrer
+
+Autorisez les clients d'agents avec lesquels votre entreprise a déjà un contrat enterprise — celui dont le service juridique a lu les conditions de conservation des données — et aucun autre. Pour la plupart des équipes, c'est un ou deux parmi Claude, ChatGPT ou Microsoft 365 Copilot. Tous les fournisseurs ci-dessus prennent en charge les trois, donc la compatibilité client n'est jamais la contrainte ; votre contrat l'est. Enregistrez chaque client autorisé manuellement là où le fournisseur le propose (Gong), et créez une External Client App par client dans Salesforce, pour que révoquer ChatGPT ne révoque pas aussi Claude.
+
+Agentforce est le cas particulier. C'est un client qui facture à l'usage : les Flex Credits coûtent **500 $ pour 100 000**, et une action standard consomme 20 crédits, donc chaque action coûte **0,10 $**. Un agent Agentforce qui effectue 100 actions par jour coûte environ 3 650 $ par an avant que quiconque ne relise ce qu'il produit. Soumettez les agents Agentforce à la même discipline de plafond que Clay.
+
+## La réalité des coûts
+
+La couche de gouvernance n'ajoute presque aucun coût de licence — le serveur MCP de Gong est inclus dans tous les plans, Clay facture les appels MCP au même nombre de crédits qu'une exécution de table, Chili Piper liste MCP et l'Edge API comme fonctionnalités de ses plans, et les serveurs hébergés de Salesforce sont inclus dans l'Enterprise Edition. Ce que vous payez, c'est le stack en dessous et les plafonds que vous fixez. Pour une organisation commerciale de 40 commerciaux avec environ 50 utilisateurs Salesforce :
+
+- **Salesforce Enterprise** — 175 $/utilisateur/mois au prix catalogue, environ **105 000 $/an** pour 50 utilisateurs.
+- **Gong** — le contrat médian chez Vendr est d'environ **55 000 $/an**, frais de plateforme obligatoires compris.
+- **Chili Piper Routing & Scheduling** — 15 000 $/an pour 15 sièges plus 45 $/siège/mois au-delà, environ **28 500 $/an** à 40 sièges.
+- **LeanData** — sur devis uniquement ; les retours côté clients situent les déploiements mid-market à **30 000–80 000 $/an**.
+- **Clay Growth** — 446 $/mois en facturation annuelle, environ **5 400 $/an**, plus les plafonds MCP : les Data Credits commencent à 0,05 $, donc un plafond mensuel de 1 000 crédits par commercial limite le pire mois de chaque commercial à environ 50 $.
+
+**Environ 225 000–275 000 $/an au prix catalogue, que vous payez presque certainement déjà.** Le coût incrémental de ce stack, c'est deux à quatre jours d'administration pour configurer cinq consoles, une demi-journée par trimestre pour lancer l'audit, et les plafonds Clay et Agentforce eux-mêmes.
+
+## Variantes et quand permuter
+
+- **Utilisez Chili Piper ou LeanData comme chemin d'écriture de la planification, pas les deux.** La plupart des équipes n'en possèdent qu'un. La règle : exposez celui qui détient votre round-robin, et laissez les outils d'écriture de l'autre désactivés. Deux chemins de réservation accessibles en écriture aux agents, ce sont deux jeux de règles d'équité entre lesquels un agent peut choisir.
+- **Remplacez Salesforce par HubSpot dans une équipe centrée sur HubSpot.** Le serveur distant de HubSpot est passé en GA le 13 avril 2026 avec un seul outil d'écriture, `manage_crm_objects`, qui couvre contacts, entreprises, deals et tickets, si bien que vous ne pouvez pas accorder « enregistrer un appel » sans « modifier le montant d'un deal ». La règle : gardez les agents HubSpot en lecture seule jusqu'à ce que l'outil soit scindé.
+- **Ajoutez un broker de credentials quand des agents sur mesure ont besoin de credentials de plateforme sur plus d'environ cinq applications.** L'OAuth par utilisateur couvre les commerciaux qui travaillent dans Claude ou ChatGPT. Il ne couvre pas un agent planifié sans humain derrière lui ; c'est à ce moment que l'[agent tool access stack](/fr/stacks/agent-tool-access-stack/) vient s'ajouter par-dessus.
+
+## Ce que ce stack ne remplace pas
+
+- **Ce n'est pas une politique IA.** Il applique des décisions ; il ne les prend pas. Écrivez la règle d'abord — voir [politique IA pour les équipes RevOps](/fr/learn/ai-policy-for-revops-teams/).
+- **Il n'arrête pas la prompt injection.** L'agent d'un commercial qui lit un email entrant puis appelle Chili Piper reste à une phrase malveillante d'une mauvaise action. Les scopes en lecture d'abord et les dry runs limitent les dégâts ; ils ne suppriment pas le risque.
+- **Il ne vous donne pas un journal d'audit unique sur les cinq outils.** LeanData a livré des logs d'audit multi-produits optionnels (conservation de 24 mois, synchronisés toutes les 15 minutes) dans la même release que BookIt MCP. Nous n'avons trouvé aucun log documenté des appels MCP chez Clay ou Chili Piper, donc l'historique des champs Salesforce reste votre registre de ce qui a changé.
+- **Il ne gouverne pas Slack.** Les conditions d'API de Slack interdisent depuis 2025 l'export en masse et l'entraînement de LLM sur les données de l'API ; c'est une revue distincte.
+
+## Points de vigilance, chacun avec sa parade
+
+- **Le mode d'accès et le type d'enregistrement de Gong ne peuvent plus être modifiés une fois soumis.** **Parade :** décidez avant de cliquer. Personal plus Manual est le choix par défaut ici ; si une équipe a réellement besoin d'une recherche d'appels sur toute l'org, créez pour cette équipe une seconde intégration Shared, nommée séparément, plutôt que d'élargir la première.
+- **Clay ne peut pas révoquer la connexion MCP d'une seule personne** — le seul levier est de la retirer du workspace. **Parade :** ajoutez le retrait du workspace Clay à la checklist d'offboarding, et fixez un plafond par défaut bas au niveau du workspace pour qu'un compte oublié ne puisse dépenser que l'allocation de son mois.
+- **Les lectures des agents sont décomptées de l'allocation quotidienne d'API de Salesforce** — 100 000 requêtes par période glissante de 24 heures plus 1 000 par licence en Enterprise Edition, partagées avec chaque synchronisation que vous faites tourner. **Parade :** une External Client App par client, pour que le rapport d'utilisation de l'API montre quel agent la consomme avant que votre synchronisation d'enrichissement ne commence à échouer.
+- **Une clé d'API Chili Piper est un credential partagé.** **Parade :** OAuth pour chaque personne ; une seule clé d'API, détenue par un compte de service nommé, avec une rotation au même rythme que vos autres secrets d'intégration.
+- **Depuis septembre 2025, Salesforce bloque les connected apps non installées sauf si un utilisateur détient "Approve Uninstalled Connected Apps".** Les System Administrators l'obtiennent automatiquement. **Parade :** auditez qui détient cette permission ; c'est l'interrupteur qui permet à quelqu'un de connecter un client d'agent non approuvé.
+- **`sobject-all` est à un clic de `sobject-reads`.** **Parade :** traitez l'activation des mutations ou des suppressions comme une demande de changement avec un responsable nommé, conformément à [l'accès en écriture MCP pour votre CRM](/fr/learn/mcp-write-access-for-crm/).
+
+## Règles d'adéquation
+
+**Le bon choix quand :** vous utilisez Salesforce avec au moins deux outils parmi Gong, Chili Piper, LeanData et Clay, avez entre 20 et 150 commerciaux, et vos commerciaux connectent déjà Claude, ChatGPT ou Copilot de leur propre initiative. Le stack rentabilise son prix la première fois qu'un CFO demande qui a approuvé la dépense d'enrichissement du mois dernier et que la réponse est un plafond plutôt qu'une surprise.
+
+**Le mauvais choix quand :** vous avez moins d'environ 15 commerciaux et ne possédez ni Gong, ni LeanData, ni Chili Piper, auquel cas une connexion CRM en lecture seule est tout le travail ; quand des agents tournent sans supervision, sans identité humaine derrière eux, ce qui exige un broker ; ou quand vous êtes uniquement sur HubSpot, où l'outil d'écriture unique prend la plupart de ces décisions à votre place.
+
+**Si vous ne pouvez faire qu'une chose :** ouvrez Salesforce Setup, vérifiez que seul `sobject-reads` est activé, et listez qui détient "Approve Uninstalled Connected Apps". Cela prend 15 minutes, et c'est la vérification qui montre un token à l'échelle de l'org pour ce qu'il est avant que quelqu'un d'autre ne le trouve.
