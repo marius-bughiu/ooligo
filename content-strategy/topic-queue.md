@@ -27,31 +27,31 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:A: [type:tool] [vertical:revops] actively — pricing never verified (no pricing_checked field, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] aurasell — pricing never verified (no pricing_checked field, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] cargo — pricing 61d unverified (pricing_checked 2026-08-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] claude-for-legal — pricing 61d unverified (pricing_checked 2026-08-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] disco — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] dock — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] dover — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] draftwise — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] eightfold — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] eudia — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] eve-legal — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] evenup — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] everlaw — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] fetcher — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] filevine — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] findem — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] forethought — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] fountain — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] freshdesk — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] front — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] gainsight — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] gc-ai — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] gemini — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] gladly — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] glean — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] actively — pricing never verified (no pricing_checked field, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:revops] aurasell — pricing never verified (no pricing_checked field, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:revops] cargo — pricing 61d unverified (pricing_checked 2026-08-04, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] claude-for-legal — pricing 61d unverified (pricing_checked 2026-08-04, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] disco — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:customer-success] dock — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:recruiting] dover — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] draftwise — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:recruiting] eightfold — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] eudia — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] eve-legal — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] evenup — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] everlaw — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:recruiting] fetcher — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] filevine — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:recruiting] findem — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:customer-success] forethought — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:recruiting] fountain — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:customer-success] freshdesk — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:customer-success] front — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:revops] gainsight — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:legal-ops] gc-ai — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:revops] gemini — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:customer-success] gladly — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
+- refresh:A: [type:tool] [vertical:revops] glean — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-10-05T21:02:52Z
 - refresh:A: [type:tool] [vertical:recruiting] goperfect — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] granola — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] harver — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
