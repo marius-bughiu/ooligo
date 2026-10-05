@@ -331,7 +331,7 @@ The vertical spread was the most even of any month so far: no vertical exceeded 
 
 - Tools: 26 | Stacks: 6 | Comparisons: 0 | Learn: 0
 - By tier tag: tier C 32 | tier B 0 | tier A 0 (full-page) | untagged 0. The tier convention held for the second month running.
-- By vertical: Recruiting 18 | RevOps 9 | Legal Ops 4 | Customer Success 1. Recruiting includes all 5 recruiting stacks.
+- By vertical: Recruiting 17 | RevOps 10 | Legal Ops 4 | Customer Success 1. Recruiting includes 5 recruiting stacks; RevOps includes `ai-agent-ops-stack`.
 
 **Pricing verification: 1 tier-A batch (25 tools claimed), 8 stamped.** The `refresh(tools): verify pricing — tier A, 25 tools` commit on 09-27 touches only `topic-queue.md`. Its body records 8 tools verified unchanged and stamped in separate frontmatter-only commits (1mind, agiloft, avature, aviso, calendly, cognism, contractworks, decagon) and **17 escalated and requeued**: 16 as refresh:C (mostly stale `mcp_available` flags, plus pricing restructures at 11x, blackboiler, cursor and default, and a repositioning at arrows) and crossbeam as refresh:B. The 9 commits are excluded from the 32 above. A **68% escalation rate** means a 60-day pricing check now usually finds something wrong. That is a useful finding about how fast this market moves.
 
