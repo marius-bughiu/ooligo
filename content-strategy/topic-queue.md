@@ -23,10 +23,23 @@ Each line carries at most one lifecycle marker, appended in place:
 
 `refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-10-04`
+`last-swept: 2026-10-11`
 
 ## Refresh queue
 
+- refresh:A: [type:tool] [vertical:legal-ops] checkbox — pricing 65d unverified (pricing_checked 2026-08-07, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] deepjudge — pricing 63d unverified (pricing_checked 2026-08-09, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] imanage — pricing 67d unverified (pricing_checked 2026-08-05, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] legalfly — pricing 62d unverified (pricing_checked 2026-08-10, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] microsoft-purview-ediscovery — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] netdocuments — pricing 66d unverified (pricing_checked 2026-08-06, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] norm-ai — pricing 63d unverified (pricing_checked 2026-08-09, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] noxtua — pricing 62d unverified (pricing_checked 2026-08-10, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] salesforce — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] streamline-ai — pricing 65d unverified (pricing_checked 2026-08-07, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] successfactors-recruiting — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] vlex-vincent-ai — pricing 67d unverified (pricing_checked 2026-08-05, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] wordsmith — pricing 66d unverified (pricing_checked 2026-08-06, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] actively — pricing never verified (no pricing_checked field, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-10-06 — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:revops] aurasell — pricing never verified (no pricing_checked field, SLA 60d) → slug: aurasell
 - refresh:A: [type:tool] [vertical:revops] cargo — pricing 61d unverified (pricing_checked 2026-08-04, SLA 60d) → slug: cargo
