@@ -23,10 +23,27 @@ Each line carries at most one lifecycle marker, appended in place:
 
 `refresh:` items live in the top `## Refresh queue` section and carry a tier prefix — `refresh:A:` (verify pricing, one frontmatter field), `refresh:B:` (pricing patch), `refresh:C:` (full 6-locale re-author). Only Tier C consumes a full authoring slot. New-content items live under `## Tools`, `## Comparisons`, `## Workflows`, `## Learn`, `## Stacks`.
 
-`last-swept: 2026-10-18`
+`last-swept: 2026-10-25`
 
 ## Refresh queue
 
+- refresh:A: [type:tool] [vertical:revops] netsuite — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] zoho-crm — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] bullhorn — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] canny — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] spotdraft — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] summize — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] apollo — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] brightflag — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] chameleon — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] clearbrief — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] paxton-ai — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] steno — pricing 65d unverified (pricing_checked 2026-08-21, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] chili-piper — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] chorus — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] alexi — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] lawvu — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] casepoint — pricing 62d unverified (pricing_checked 2026-08-24, SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] ada — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] aisdr — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] amazon-connect-talent — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
