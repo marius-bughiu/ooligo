@@ -4936,3 +4936,130 @@ Capped at the 6 strongest candidates per source entry. Do the entries marked **n
 - [tools:zapier] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=2, need=1)
 - [tools:zapier] -> [tools:slack]: shares vertical legal-ops, recruiting, revops; named in relationship field; name "Slack" not in body (source ob=2, need=1)
 - [tools:zapier] -> [tools:activepieces]: shares vertical legal-ops, recruiting, revops; same category; name "Activepieces" not in body (source ob=2, need=1)
+
+## 2026-10-25
+
+### Auto-inserted this run (high confidence): 1
+
+- [tools:notion] -> [tools:confluence]: the new Confluence entry (added 2026-10) shares 3 verticals with Notion (revops, legal-ops, recruiting), and "Confluence" is named verbatim in Notion's "Who it's for" bullet, right before last week's Asana link. The link wraps that existing mention. Mirrored to de/es/fr/ja/pt-BR, where the bullet has the same single "Confluence" token. Notion goes from 1 to 2 outbound, still under its floor of 3. Confluence goes from 1 to 2 inbound.
+
+### Deliberately not inserted
+
+- [tools:braintrust] -> [tools:notion]: still rejected. The only mention is in the customer list.
+- The 12 high-confidence candidates with no body anchor are unchanged: chatgpt → notion/slack; make → airtable/notion/slack; notion → slack; zapier → airtable/notion/slack; braintrust → claude/chatgpt/gemini. They are deferred to a content refresh.
+- `tools:notion` (now 2 outbound) and `tools:juro` (0) still need a content refresh. This is the ninth run recommending one.
+- No entries are newly under the outbound floor since last run. The same 28 remain, and the ones with single verticals still cannot reach high confidence.
+
+### Below outbound floor with no candidate at all (1)
+
+- [workflows:pipeline-review-prompt-pack]: 1 outbound, floor 2 (unchanged since 2026-09-06).
+
+### Graph snapshot
+
+1208 EN entries: tools 604 (558 last run), comparisons 233, workflows 127, learn 191, stacks 53.
+
+- **Outbound < floor: 28** (28 last run): tools 26, workflows 1, learn 1.
+- **Inbound < floor: 475** (468 last run): tools 223, comparisons 191, workflows 25, learn 24, stacks 12. **385 entries have zero inbound.** A dedicated inbound pass is still the highest-value link work available.
+- The ARCHITECTURE.md conflict is still unresolved (eleventh run flagging it). It sets an 8-link composition floor and claims a CI link-budget gate that does not exist, while this routine uses 3 outbound / 2 inbound.
+
+### Medium confidence: 97
+
+This run only queues candidates that are named in a relationship field or in the body (same-category-only candidates were dropped, so the count is lower than last run's 146). Capped at the 6 strongest per source entry. Do the entries marked **name in body, unlinked** (62) first.
+
+- [learn:churn-rate-calculation] -> [tools:churnzero]: shares vertical customer-success; named in relationship field; name "ChurnZero" not in body (source ob=1, need=1)
+- [learn:churn-rate-calculation] -> [tools:gainsight]: shares vertical customer-success; named in relationship field; name "Gainsight" not in body (source ob=1, need=1)
+- [learn:churn-rate-calculation] -> [tools:totango]: shares vertical customer-success; named in relationship field; name "Totango" not in body (source ob=1, need=1)
+- [tools:6sense] -> [tools:bombora]: shares vertical revops; **name in body, unlinked** (source ob=1, need=2)
+- [tools:6sense] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:outreach]: shares vertical revops; named in relationship field; name "Outreach" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=1, need=2)
+- [tools:6sense] -> [tools:salesloft]: shares vertical revops; named in relationship field; name "Salesloft" not in body (source ob=1, need=2)
+- [tools:assembled] -> [tools:gladly]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:intercom]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:kustomer]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:salesforce]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:zendesk]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:assembled] -> [tools:amazon-connect]: shares vertical customer-success; **name in body, unlinked** (source ob=1, need=2)
+- [tools:braintrust] -> [tools:august]: shares vertical legal-ops; **name in body, unlinked** (source ob=1, need=2)
+- [tools:chattermill] -> [tools:asknicely]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:chattermill] -> [tools:claude]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:chattermill] -> [tools:delighted]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:chattermill] -> [tools:freshdesk]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:chattermill] -> [tools:gladly]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:chattermill] -> [tools:glean]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:demandbase] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:outreach]: shares vertical revops; named in relationship field; name "Outreach" not in body (source ob=2, need=1)
+- [tools:demandbase] -> [tools:salesloft]: shares vertical revops; named in relationship field; name "Salesloft" not in body (source ob=2, need=1)
+- [tools:discourse] -> [tools:salesforce]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:discourse] -> [tools:zendesk]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:discourse] -> [tools:slack]: shares vertical customer-success; named in relationship field; name "Slack" not in body (source ob=2, need=1)
+- [tools:eightfold] -> [tools:gem]: shares vertical recruiting; **name in body, unlinked** (source ob=2, need=1)
+- [tools:eightfold] -> [tools:greenhouse]: shares vertical recruiting; named in relationship field; name "Greenhouse" not in body (source ob=2, need=1)
+- [tools:eightfold] -> [tools:icims]: shares vertical recruiting; named in relationship field; name "iCIMS" not in body (source ob=2, need=1)
+- [tools:enterpret] -> [tools:amplitude]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:front]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:glean]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:gong]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:intercom]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:enterpret] -> [tools:kustomer]: shares vertical customer-success; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:evenup] -> [tools:proplaintiff]: shares vertical legal-ops; **name in body, unlinked** (source ob=2, need=1)
+- [tools:everlaw] -> [tools:spellbook]: shares vertical legal-ops; **name in body, unlinked** (source ob=2, need=1)
+- [tools:everlaw] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=2, need=1)
+- [tools:everstage] -> [tools:hubspot]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:pipedrive]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:salesforce]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:slack]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:claude]: shares vertical revops; **name in body, unlinked** (source ob=1, need=2)
+- [tools:everstage] -> [tools:cursor]: shares vertical revops; **name in body, unlinked** (source ob=1, need=2)
+- [tools:fetcher] -> [tools:gem]: shares vertical recruiting; **name in body, unlinked** (source ob=0, need=3)
+- [tools:fetcher] -> [tools:hireez]: shares vertical recruiting; **name in body, unlinked** (source ob=0, need=3)
+- [tools:fetcher] -> [tools:jazzhr]: shares vertical recruiting; **name in body, unlinked** (source ob=0, need=3)
+- [tools:fetcher] -> [tools:seekout]: shares vertical recruiting; **name in body, unlinked** (source ob=0, need=3)
+- [tools:fetcher] -> [tools:teamtailor]: shares vertical recruiting; **name in body, unlinked** (source ob=0, need=3)
+- [tools:fetcher] -> [tools:ashby]: shares vertical recruiting; named in relationship field; name "Ashby" not in body (source ob=0, need=3)
+- [tools:findem] -> [tools:gem]: shares vertical recruiting; **name in body, unlinked** (source ob=1, need=2)
+- [tools:findem] -> [tools:ashby]: shares vertical recruiting; named in relationship field; name "Ashby" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:greenhouse]: shares vertical recruiting; named in relationship field; name "Greenhouse" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:icims]: shares vertical recruiting; named in relationship field; name "iCIMS" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:lever]: shares vertical recruiting; named in relationship field; name "Lever" not in body (source ob=1, need=2)
+- [tools:findem] -> [tools:workday]: shares vertical recruiting; named in relationship field; name "Workday" not in body (source ob=1, need=2)
+- [tools:juro] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=0, need=3)
+- [tools:linksquares] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=1, need=2)
+- [tools:make] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:make] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=2, need=1)
+- [tools:notion] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:notion] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=2, need=1)
+- [tools:onit] -> [tools:brightflag]: shares vertical legal-ops; **name in body, unlinked** (source ob=0, need=3)
+- [tools:onit] -> [tools:mitratech]: shares vertical legal-ops; **name in body, unlinked** (source ob=0, need=3)
+- [tools:onit] -> [tools:thomson-reuters-legal-tracker]: shares vertical legal-ops; **name in body, unlinked** (source ob=0, need=3)
+- [tools:onit] -> [tools:docusign-iam]: shares vertical legal-ops; named in relationship field; name "DocuSign IAM" not in body (source ob=0, need=3)
+- [tools:onit] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=0, need=3)
+- [tools:papermark] -> [tools:hubspot]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:papermark] -> [tools:notion]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:papermark] -> [tools:slack]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:papermark] -> [tools:zapier]: shares vertical revops; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:papermark] -> [tools:chatgpt]: shares vertical revops; **name in body, unlinked** (source ob=1, need=2)
+- [tools:papermark] -> [tools:claude]: shares vertical revops; **name in body, unlinked** (source ob=1, need=2)
+- [tools:ravio] -> [tools:ashby]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:ravio] -> [tools:bamboohr]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:ravio] -> [tools:greenhouse]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:ravio] -> [tools:lever]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:ravio] -> [tools:personio]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:ravio] -> [tools:smartrecruiters]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:relativity] -> [tools:slack]: shares vertical legal-ops; named in relationship field; name "Slack" not in body (source ob=2, need=1)
+- [tools:sapia-ai] -> [tools:avature]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:sapia-ai] -> [tools:pageup]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:sapia-ai] -> [tools:hirevue]: shares vertical recruiting; **name in body, unlinked** (source ob=1, need=2)
+- [tools:sapia-ai] -> [tools:paradox]: shares vertical recruiting; **name in body, unlinked** (source ob=1, need=2)
+- [tools:sapia-ai] -> [tools:greenhouse]: shares vertical recruiting; named in relationship field; name "Greenhouse" not in body (source ob=1, need=2)
+- [tools:sapia-ai] -> [tools:smartrecruiters]: shares vertical recruiting; named in relationship field; name "SmartRecruiters" not in body (source ob=1, need=2)
+- [tools:seekout] -> [tools:workday]: shares vertical recruiting; named in relationship field; **name in body, unlinked** (source ob=1, need=2)
+- [tools:seekout] -> [tools:chatgpt]: shares vertical recruiting; **name in body, unlinked** (source ob=1, need=2)
+- [tools:seekout] -> [tools:claude]: shares vertical recruiting; **name in body, unlinked** (source ob=1, need=2)
+- [tools:seekout] -> [tools:gem]: shares vertical recruiting; **name in body, unlinked** (source ob=1, need=2)
+- [tools:seekout] -> [tools:hireez]: shares vertical recruiting; **name in body, unlinked** (source ob=1, need=2)
+- [tools:seekout] -> [tools:ashby]: shares vertical recruiting; named in relationship field; name "Ashby" not in body (source ob=1, need=2)
+- [tools:thomson-reuters-cocounsel] -> [tools:practical-law]: shares vertical legal-ops; named in relationship field; **name in body, unlinked** (source ob=2, need=1)
+- [tools:thomson-reuters-cocounsel] -> [tools:ironclad]: shares vertical legal-ops; named in relationship field; name "Ironclad" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:hubspot]: shares vertical revops; named in relationship field; name "HubSpot" not in body (source ob=2, need=1)
+- [tools:zapier] -> [tools:salesforce]: shares vertical revops; named in relationship field; name "Salesforce" not in body (source ob=2, need=1)
