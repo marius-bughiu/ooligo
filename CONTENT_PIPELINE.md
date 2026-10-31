@@ -33,7 +33,7 @@ LLM session (Claude Code, scheduled task, claude.ai with repo MCP, etc.)
   ├─ Translates inline into es, pt-BR, de, fr, ja per content-strategy/locale-register.md
   ├─ Writes six MDX files: content/<entity>/{en,es,pt-BR,de,fr,ja}/<slug>.mdx
   ├─ Runs `npm run validate:config` and `npm run check:vocab -- <the six files>`
-  ├─ Runs the full build (NODE_OPTIONS=--max-old-space-size=8192) BEFORE pushing
+  ├─ Runs `npm run build:page -- <the six files>` BEFORE pushing (never the full site build locally)
   ├─ If anything fails on any locale, DISCARDS that page (no half-state), frees its claim
   ├─ Commits all six files together
   └─ Pushes to main
@@ -45,11 +45,11 @@ LLM session (Claude Code, scheduled task, claude.ai with repo MCP, etc.)
   CI: deploy to Cloudflare Pages
 ```
 
-There is no separate async translation step. There is no queue, no SHA-256 bookkeeping, no drain. The authoring LLM is responsible for getting all six locales right in one session. The validators catch structural mistakes (schema violations, broken links, mismatched frontmatter) but they don't substitute for editorial judgment.
+There is no separate async translation step. There is no queue, no SHA-256 bookkeeping, no drain. The authoring LLM is responsible for getting all six locales right in one session. `npm run build:page` and CI's build catch structural mistakes (schema violations, malformed MDX, and in build:page broken internal links) but they don't substitute for editorial judgment.
 
 ## Frontmatter discipline
 
-Every entity file has frontmatter validated against the JSON Schema in `content/.schema/`. Mirror schemas live in Astro content collections in `apps/web/src/content.config.ts` so the build fails fast on drift.
+Every entity file's frontmatter is validated by the Zod schemas in `apps/web/src/content.config.ts`: locally by `npm run build:page` for the entries it builds, and by CI's full build for all of them. The JSON Schemas in `content/.schema/` describe the same shape, but no validator reads them for entity files.
 
 Required fields on every EN page:
 
@@ -311,11 +311,11 @@ A stack under 700 words almost always lists tools without naming roles or handof
 
 ## What the validators actually catch
 
-In CI (`npm run validate:config` and `npm run build`):
+In CI (`npm run validate:config` and `npm run build`), and locally for the entries you build with `npm run build:page`:
 
-- **Frontmatter schema** — every file's frontmatter is validated against its JSON Schema. Missing required fields, invalid enums, malformed types → build fails.
-- **Content collection schema** — Astro re-validates the same shape via Zod schemas in `content.config.ts`. Two checks for the price of one.
-- **Link integrity** — internal links that resolve to no page break the build (Astro raises on broken `<a href>` to a non-existent route).
+- **Config schema** — `validate:config` checks `content/verticals.json` and `content/locales.json` against their JSON Schemas.
+- **Content collection schema** — Astro validates every entry's frontmatter via the Zod schemas in `content.config.ts`. Missing required fields, invalid enums, malformed types → build fails.
+- **Link integrity** — CI's build does not check links. `npm run build:page` fails when a page it builds links to a missing entry or vertical, leaves out the locale prefix, uses `/comparisons/` instead of `/vs/`, or targets a missing `#fragment`; links already broken on main are reported as warnings.
 - **hreflang correctness** — `BaseLayout` only emits hreflang for locale variants that actually exist (computed from `canonical_slug` matches in the collection). Never points at 404s.
 - **Markup validity** — JSON-LD blocks must parse as JSON. Astro's MDX compiler enforces.
 

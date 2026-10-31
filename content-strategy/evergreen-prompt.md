@@ -185,16 +185,19 @@ For each of `es`, `pt-BR`, `de`, `fr`, `ja`:
 
 ## Step 4 — Validate
 
-From `C:\S\ooligo`:
+From the repo root:
 
 ```
 npm run validate:config
 npm run check:vocab -- <your six file paths>
+npm run build:page -- <your six file paths>
 ```
+
+`build:page` builds just your six pages (the real Astro build, seconds to a minute); see daily-prompt.md §Validate for what it fails on. Never run the full site build locally: CI builds and deploys on push.
 
 **Pass your six files to `check:vocab` explicitly.** A bare run walks the whole tree and reports ~247 pre-existing findings across ~172 legacy files, so it can never exit clean and is worthless as a gate. Scoped to your own files it is a hard binary gate.
 
-Both must pass for all 6 files. If either fails on any locale, discard that page — all six files — and clear its `→ claimed:` marker so the item returns to the pool. A page is atomic across its locales; a run is not atomic across pages.
+All three must pass for all 6 files. If one fails on any locale and you cannot fix it, discard that page — all six files — and clear its `→ claimed:` marker so the item returns to the pool. A page is atomic across its locales; a run is not atomic across pages.
 
 ## Step 5 — Mark queue + commit + push
 

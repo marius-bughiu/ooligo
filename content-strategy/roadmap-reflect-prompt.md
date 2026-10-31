@@ -6,7 +6,7 @@ This routine **does not edit ROADMAP.md**. Drift is surfaced for the user to act
 
 ## Step 1 — Snapshot repo reality
 
-Build a per-quarter snapshot of the current state:
+Build a per-quarter snapshot of the current state. Count pages from the content files; never run a build or read `apps/web/dist` to count them (nothing rebuilds it locally):
 
 ### Pages live (EN canonical)
 

@@ -115,15 +115,17 @@ Both must pass. If either fails, fix the offending file(s) and re-run. Never com
 
 **Pass your six files to `check:vocab` explicitly.** A bare `npm run check:vocab` walks the whole tree and reports ~247 pre-existing findings across ~172 legacy files, so it can never exit clean and is useless as a gate. Scoped to your own files it is a hard binary gate — treat any finding on your files as blocking. Legacy findings are not your problem and must not be "fixed" opportunistically in an authoring commit.
 
-**Run the full build before you push**, not after:
+**Build only your page before you push**, never the whole site:
 
 ```
-NODE_OPTIONS=--max-old-space-size=8192 npm run build
+npm run build:page -- content/<entity>/en/<slug>.mdx content/<entity>/es/<slug>.mdx content/<entity>/pt-BR/<slug>.mdx content/<entity>/de/<slug>.mdx content/<entity>/fr/<slug>.mdx content/<entity>/ja/<slug>.mdx
 ```
 
-This is a change from the previous instruction to skip the build and rely on CI. At 10 slots/day, one malformed file discovered by CI *after* the push fails the build for every commit behind it, and the autonomous run that caused it is already gone. The build is the only thing that catches two error classes the validators miss: a bare `<` followed by a digit in prose (MDX reads it as a tag), and `null` in a string-typed frontmatter field. Both are cheap to cause and expensive to find later.
+(`npm run build:page -- <section>/<slug>`, e.g. `tools/clay` or `vs/<slug>`, builds the same six pages.) It is the real `astro build` narrowed to your entry and the entries its frontmatter references: seconds to a minute instead of ~9 minutes and an 8 GB heap, written to a throwaway directory. At 10 slots/day, one malformed file discovered by CI *after* the push fails Deploy for every commit behind it, and the autonomous run that caused it is already gone, so this check is not optional. It is the only local check of entry frontmatter and MDX (`validate:config` reads only `verticals.json` and `locales.json`). It fails on a bare `<` followed by a digit in prose (MDX reads it as a tag), `null` in a string-typed frontmatter field, a template error, a page that is not emitted, and links on your pages that would 404: no locale prefix, `/comparisons/` instead of `/vs/`, an entry or vertical that does not exist or is not committed, a `#fragment` with no matching id. Write internal links as `/<locale>/<section>/<slug>/` in the file's own locale, with comparisons under `/vs/`. Links that were already broken on main print as warnings and do not fail the run.
 
-If the build fails on **your** files, fix them. If it fails on a file you did not touch, do not fix it — report it and exit; that is a pre-existing break and chasing it inside an authoring slot is how a run burns its whole session.
+Never run `npm run build`, `astro build|dev|sync|check|preview`, or any `NODE_OPTIONS=--max-old-space-size=8192` build locally, and do not read or delete `apps/web/dist`: nothing rebuilds it locally any more. CI (`deploy.yml`) runs the full build and deploys after you push. "[build-page] Waiting for another build:page run" is the per-checkout lock, not a failure.
+
+If build:page fails on **your** files, fix them; a broken link on your page means fixing the link, not discarding the page. If it fails on a file you did not touch, do not fix it — report it and exit; that is a pre-existing break and chasing it inside an authoring slot is how a run burns its whole session. Never fall back to the full build.
 
 ## Mark the queue
 

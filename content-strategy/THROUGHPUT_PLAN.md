@@ -49,7 +49,7 @@ Why: commit rate goes from ~11/wk to ~80/wk. Today an agent told to "complete en
 - **For workflows:** `apps/web/public/artifacts/<slug>/` exists, is non-trivial for its `artifact_type`, and **every `/artifacts/...` path in the body resolves on disk**
 - `check:vocab` scoped to just these files (needs 1a)
 - `canonical_slug` unique across `content/**/en/*.mdx`; `category` already exists in the catalog (no silent taxonomy growth); every `integrations[]` slug resolves
-- No prose `<digit`, no `null` in string-typed fields — the two MDX/schema classes only a 6.5-minute build catches today
+- No prose `<digit`, no `null` in string-typed fields — the two MDX/schema classes only a build catches (`npm run build:page` on the files in question, seconds to a minute)
 - **Pairwise contest test:** a comparison must place both tools in the same category AND share ≥1 integration or job-to-be-done. `apollo-vs-default.mdx` opens by conceding the two *"overlap almost zero"* — that page fails this test and should never have shipped.
 
 **Ship it in report-only mode first.** The critique is right and this is load-bearing: ~241 EN entries (37% of the catalog) are below their own word floors today — relativity 209 words, zapier 215, slack 225, notion 228, logikcull 210, juro 220. 13 of 104 workflows link to `/artifacts/` paths that 404, 11 from the 2026-06-06 batch, unnoticed for 7 weeks. So: **blocking for new pages immediately** (it only constrains work not yet done); legacy failures go to a remediation lane with its own budget (workstream 9).
@@ -290,7 +290,7 @@ This is the exact move that let Customer Success reach 45 tagged tools from 30 a
 3. **Vendor liveness DEAD/ACQUIRED at enqueue → the item never enters the queue.** Two web calls in the research lane. `lawgeex` is the next unconsumed refresh item right now and `pocus-vs-koala` is *live and published* despite both vendors being gone.
 4. **The four fact-verify classes** — ownership/liveness wrong; price off >20% or a named tier absent; a claimed integration/MCP/API capability absent from vendor docs; a regulation cited with a claim its primary text doesn't support, with citations required to resolve to eur-lex / gdpr-info / nyc.gov / hhs.gov. Fail → revert the commit, log to `CORRECTIONS.md`.
 5. **No `en_verified` → the page cannot enter the translation queue.** One line in `queue-build.ts`.
-6. **One full `npm run build` with `NODE_OPTIONS=--max-old-space-size=8192` before each batch push.** `daily-prompt.md` currently says skip it and rely on CI; at batch size that inverts — one malformed file fails CI for the whole batch after the push, across N candidate commits.
+6. **One `npm run build:page -- <every file in the batch>` before each batch push**, never the full site build locally (CI builds and deploys on push). At batch size, one malformed file fails CI for the whole batch after the push, across N candidate commits.
 7. **Legal/compliance lane is stricter, not looser.** 108 EN entries cite named regulations; 179 carry legal-ops. Any sentence pairing a regulation name with a modal obligation ("must", "requires") is mandatory-verify. This class does not get relaxed to buy speed — it's the one place where being wrong costs more than being slow.
 
 **LOGS but does not block:** market-share stats, ramp-time estimates, "typical paid" bands, verdict soundness, prose quality. Blocking on unfalsifiable claims stalls the pipeline for no accuracy gain.
@@ -314,7 +314,7 @@ This is the exact move that let Customer Success reach 45 tagged tools from 30 a
 
 Wire Google Search Console: verify the property, export 90 days, populate `gsc-candidates.json`. Fill the blank GA4 line in `TRAFFIC_RETRO.md`. Ship 1a/1b/1c, `check:page` in report-only mode, `sync-frontmatter.ts`, the `content.config.ts` fields, the `queue-build.ts` verified-gate, `lane-lock.mjs`. Backfill `source_sha256` unconditionally across all 3,290 non-EN files. Strip the Review JSON-LD and ship the AI disclosure. Delete the stale lock, the `C:Sooligocontentcomparisonsfr` dir, the stale worktree; gitignore the translation queue files. Add `NODE_OPTIONS` to both workflows; delete the CI build job. Mark `lawgeex`/`tezi`/`robin-ai`/`robin-ai-vs-spellbook` as `→ skip:`.
 
-**CHECKPOINT — this one can kill the plan.** `gsc-candidates.json` has a real `generated_at` and non-null data. `npm run queue:translations` returns **0 items** for all 5 locales (proving the backfill worked and the 658/658-stale false positive is gone). `check:page` runs clean on `tools/clay` and fails correctly on one of the 13 bundle-less workflows. Build green.
+**CHECKPOINT — this one can kill the plan.** `gsc-candidates.json` has a real `generated_at` and non-null data. `npm run queue:translations` returns **0 items** for all 5 locales (proving the backfill worked and the 658/658-stale false positive is gone). `check:page` runs clean on `tools/clay` and fails correctly on one of the 13 bundle-less workflows. CI Deploy green.
 
 **Then answer one question: do the existing 658 entries have non-trivial impressions, and does anything rank top-20?** If after ~3 months and 3,948 URLs impressions are near zero, **stop** — throughput was never the constraint, every version of this plan optimizes the wrong variable, and the correct move is Stage 1 only (remediation) until something ranks.
 

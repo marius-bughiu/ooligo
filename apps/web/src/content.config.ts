@@ -11,6 +11,19 @@ const LOCALE = z.enum([
 ]);
 const SLUG = z.string().regex(/^[a-z0-9-]+$/);
 
+// `npm run build:page` (apps/web/scripts/build-page.mjs) sets BUILD_ONLY to the
+// entries it builds: per collection, file paths relative to that collection's
+// content directory. Each collection then loads only those files, and one it
+// leaves out loads none, instead of every entry in every locale.
+const buildOnly: Record<string, string[]> | undefined = process.env.BUILD_ONLY
+  ? JSON.parse(process.env.BUILD_ONLY)
+  : undefined;
+
+function entryFiles(collection: string): string | string[] {
+  if (!buildOnly) return "**/*.mdx";
+  return buildOnly[collection] ?? "__not-selected-by-build-page__";
+}
+
 const baseFrontmatter = {
   slug: SLUG,
   canonical_slug: SLUG,
@@ -32,7 +45,7 @@ const freshnessFrontmatter = {
 
 const tools = defineCollection({
   loader: glob({
-    pattern: "**/*.mdx",
+    pattern: entryFiles("tools"),
     base: "../../content/tools",
     generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
@@ -71,7 +84,7 @@ const tools = defineCollection({
 
 const comparisons = defineCollection({
   loader: glob({
-    pattern: "**/*.mdx",
+    pattern: entryFiles("comparisons"),
     base: "../../content/comparisons",
     generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
@@ -106,7 +119,7 @@ const comparisons = defineCollection({
 
 const workflows = defineCollection({
   loader: glob({
-    pattern: "**/*.mdx",
+    pattern: entryFiles("workflows"),
     base: "../../content/workflows",
     generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
@@ -139,7 +152,7 @@ const workflows = defineCollection({
 
 const learn = defineCollection({
   loader: glob({
-    pattern: "**/*.mdx",
+    pattern: entryFiles("learn"),
     base: "../../content/learn",
     generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
@@ -160,7 +173,7 @@ const learn = defineCollection({
 
 const stacks = defineCollection({
   loader: glob({
-    pattern: "**/*.mdx",
+    pattern: entryFiles("stacks"),
     base: "../../content/stacks",
     generateId: ({ entry }) => entry.replace(/\.mdx$/, ""),
   }),
