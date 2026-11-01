@@ -23,12 +23,16 @@ env:
 jobs:
   deploy:
     name: Deploy to Cloudflare Pages
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       deployments: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The IndexNow receipt can predate cancelled deploy runs.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v5
         with:
@@ -43,6 +47,12 @@ jobs:
 
       - name: Typecheck pipeline
         run: npm run typecheck --workspace=packages/pipeline
+
+      - name: Test IndexNow notifications
+        run: node --test scripts/indexnow.test.mjs
+
+      - name: Test page metadata
+        run: node --import tsx --test apps/web/src/lib/pageMetadata.test.ts
 
       - name: Build site
         run: npm run build
@@ -64,6 +74,34 @@ jobs:
           workingDirectory: apps/web
           command: pages deploy dist --project-name=ooligo --branch=main --commit-dirty=true
 
+      - name: Restore last accepted IndexNow receipt
+        id: indexnow_cache
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: .cache/indexnow/receipt.json
+          key: indexnow-v1-main-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            indexnow-v1-main-
+
+      - name: Notify IndexNow of published URL changes
+        id: indexnow
+        # Publication has already succeeded. A notification outage is reported
+        # separately and must not misrepresent the production deployment.
+        continue-on-error: true
+        run: node scripts/indexnow.mjs submit
+        env:
+          INDEXNOW_DEPLOY_SUCCESS: ${{ steps.deploy.outcome == 'success' }}
+
+      - name: Save accepted IndexNow receipt
+        id: indexnow_save
+        if: steps.indexnow.outcome == 'success' && steps.indexnow.outputs.receipt_ready == 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: .cache/indexnow/receipt.json
+          key: indexnow-v1-main-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Summary
         if: success()
         run: |
@@ -74,4 +112,8 @@ jobs:
             echo "- Site URL (canonical): \`${PUBLIC_SITE_URL}\`"
             echo "- Branch: \`${GITHUB_REF_NAME}\`"
             echo "- Commit: \`${GITHUB_SHA::7}\`"
+            echo "- IndexNow step: ${{ steps.indexnow.outcome }}"
+            echo "- IndexNow receipt: ${{ steps.indexnow.outputs.status || 'unavailable' }} (${{ steps.indexnow.outputs.url_count || 'unknown' }} planned URLs)"
+            echo "- IndexNow receipt cache: ${{ steps.indexnow_save.outcome || 'not needed' }}"
+            echo "- IndexNow receipt means notification received, not search indexing confirmed. A notification/cache failure does not undo publication; the next deploy retries from the prior accepted receipt."
           } >> "$GITHUB_STEP_SUMMARY"

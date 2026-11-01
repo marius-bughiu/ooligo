@@ -23,7 +23,7 @@ export async function GET({
   const data = props.entry.data;
 
   const svg = renderLearnOg({
-    title: data.title,
+    title: data.seo_title ?? data.title,
     type: data.type,
     question: data.target_questions[0],
   });

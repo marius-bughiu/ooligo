@@ -16,6 +16,8 @@ canonical_slug: <slug>
 locale: en   # or es, pt-BR, de, fr, ja
 verticals: [revops]   # or [legal-ops], [recruiting], [revops, legal-ops] for cross
 name: "<Product Name>"
+title: "<Product name + specific page topic, in this locale>"   # optional search/social title; name stays the brand
+description: "<Concise, factual summary of this page in this locale>"
 category: <kebab-case-category>
 subcategories: [<kebab>, <kebab>]
 pricing_model: freemium   # one of: free, freemium, flat, usage-based, custom
@@ -43,6 +45,8 @@ slug: <a>-vs-<b>   # for pairwise; or <slug-of-roundup-topic>
 canonical_slug: <same>
 locale: en
 type: pairwise   # one of: pairwise, roundup, alternatives
+title: "<Specific localized comparison topic>"   # set for roundups and alternatives; don't infer an alternatives subject from tools[0]
+description: "<The decision this comparison helps the reader make>"
 tool_a: <slug>   # required for pairwise
 tool_b: <slug>   # required for pairwise
 tools: [<slug>, <slug>, <slug>]   # required for roundup/alternatives (>=2)
@@ -58,6 +62,7 @@ canonical_slug: <slug>
 locale: en
 verticals: [revops]
 title: "<Action verb + object>"
+description: "<What the reader can do with the workflow; no unverified test claims>"
 artifact_type: claude-skill   # one of: prompt, claude-skill, mcp-server, n8n-flow, cursor-rule, agent-template, sop
 tools_used: [<slug>, <slug>]
 roles: [<slug>]   # e.g. [sdr], [revops-leader], [legal-ops-manager]
@@ -75,6 +80,8 @@ canonical_slug: <slug>
 locale: en
 type: definition   # one of: definition, faq, how-to, framework, glossary
 title: "<Title>"
+seo_title: "<Optional shorter search/social title with the same meaning>"
+description: "<The question answered and the concrete help provided>"
 verticals: [revops]   # optional
 related_tools: [<slug>]   # optional
 related_workflows: [<slug>]   # optional
@@ -92,6 +99,7 @@ canonical_slug: <slug>
 locale: en
 verticals: [revops]
 title: "<Stack name>"
+description: "<The scope and tradeoffs covered by this stack>"
 tools: [<slug>, <slug>, <slug>]   # >=2
 use_case: "<one-line scope>"
 difficulty: intermediate
@@ -179,8 +187,8 @@ Run through this against the EN draft. If any unchecked box has no documented ex
 For each of `es`, `pt-BR`, `de`, `fr`, `ja`:
 
 1. Open [locale-register.md](locale-register.md) §<locale>. Apply the register, banned forms, and fixed translations.
-2. Translate the body. Keep code blocks, URLs, file paths, tool/product names verbatim. Translate headings, prose, list items, alt text.
-3. Write `content/<entity>/<locale>/<slug>.mdx` with `locale: <locale>` set; copy all other frontmatter fields verbatim from EN.
+2. Translate headings, body prose, list items and alt text. Keep code blocks, external URLs, artifact paths and tool/product names unchanged. Update internal page links to the destination locale.
+3. Write `content/<entity>/<locale>/<slug>.mdx` with `locale: <locale>`. Copy structural fields, IDs, brands and factual values from EN; translate reader-facing `title`, `seo_title`, `description`, `target_questions`, `use_case`, and `pricing_notes` prose per the locale register.
 4. The translated body must say the same thing as EN — same recommendations, same opinions, same numbers. If you find a factual issue while translating, STOP and surface it in the report. Do not silently "fix" the translation.
 
 ## Step 4 — Validate

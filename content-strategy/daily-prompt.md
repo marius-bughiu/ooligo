@@ -14,7 +14,7 @@ You run **headless**. There is no human review gate. A scheduled run that publis
 
 - Paths: `content/<entity>/<locale>/<slug>.mdx` where `<entity>` is one of `tools`, `comparisons`, `workflows`, `learn`, `stacks`.
 - Six files per page, six identical slugs.
-- The session drafts the EN body first, then translates inline into the 5 non-EN locales per [locale-register.md](locale-register.md). Frontmatter is structural — copy fields verbatim across locales except `locale`. Body prose is translated; fenced code, URLs, file paths, and tool names stay verbatim.
+- The session drafts EN first, then translates inline into the 5 non-EN locales per [locale-register.md](locale-register.md). Preserve structural frontmatter, IDs, brands and factual values; translate reader-facing `title`, `seo_title`, `description`, `target_questions`, `use_case`, and `pricing_notes` prose. Translate body prose and internal-link locale prefixes. Keep fenced code, external URLs, artifact paths and tool names unchanged.
 - **If any one locale fails validation, discard that page entirely** — all 6 of its files. Do not stage, do not commit a partial page. Clear the `→ claimed:` marker so the item returns to the pool, and report which locale failed and why. A page is atomic across its 6 locales; a run is not atomic across pages.
 
 ## Where to write

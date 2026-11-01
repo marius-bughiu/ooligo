@@ -58,6 +58,10 @@ Required fields on every EN page:
 - `locale: en`
 - `verticals` (array of vertical IDs from `content/verticals.json`)
 
+Reader-facing frontmatter is localized: `title`, `seo_title`, `description`, `target_questions`, `use_case`, and `pricing_notes` prose. Structural IDs, tool brand `name`, references and factual values stay consistent across locales. Follow [locale-register.md](content-strategy/locale-register.md) for the field distinction and internal-link prefixes.
+
+Author a concise `description` for new or substantively refreshed tools, comparisons, workflows, learn pages and stacks. It must describe the actual page, without unsupported ratings, outcomes or keyword lists. Legacy pages fall back to a plain-text excerpt of their own localized opening paragraph. Tool `title` is optional search/social copy while `name` remains the visible product identity. Learn `seo_title` can shorten a search/social title without changing the full `title` heading. Roundups and alternatives should supply an explicit localized `title`; the first item in `tools` is not necessarily the product being replaced. Metadata-only changes do not advance the body freshness date.
+
 The `translated_from`, `translated_at`, `translation_model`, and `source_sha256` fields are optional under the all-locales-in-one-session model. Existing translated files keep their values; new authoring runs may omit them. They remain in the schema for backwards compatibility with the legacy translated content already in the repo.
 
 ## Locale parity
