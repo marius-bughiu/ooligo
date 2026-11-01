@@ -7,6 +7,7 @@
 
 import { getCollection } from "astro:content";
 import { renderComparisonOg } from "~/lib/og";
+import { comparisonTitle } from "~/lib/comparisonTitle";
 
 export async function getStaticPaths() {
   const comparisons = await getCollection("comparisons");
@@ -23,16 +24,7 @@ export async function getStaticPaths() {
     const resolve = (slug: string): string =>
       nameByLocaleSlug.get(`${data.locale}:${slug}`) ?? slug;
 
-    let pageTitle: string;
-    if (data.type === "pairwise" && data.tool_a && data.tool_b) {
-      pageTitle = `${resolve(data.tool_a)} vs ${resolve(data.tool_b)}`;
-    } else if (data.type === "alternatives" && data.tools && data.tools[0]) {
-      pageTitle = `Alternatives to ${resolve(data.tools[0])}`;
-    } else if (data.type === "roundup") {
-      pageTitle = `Best ${data.verticals[0]} tools`;
-    } else {
-      pageTitle = data.slug.replace(/-/g, " ");
-    }
+    const pageTitle = comparisonTitle(data, resolve);
 
     return {
       params: { locale: data.locale, slug: data.slug },

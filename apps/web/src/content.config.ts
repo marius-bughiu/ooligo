@@ -92,6 +92,7 @@ const comparisons = defineCollection({
     .object({
       ...baseFrontmatter,
       type: z.enum(["pairwise", "roundup", "alternatives"]),
+      title: z.string().trim().min(1).optional(),
       tool_a: SLUG.optional(),
       tool_b: SLUG.optional(),
       tools: z.array(SLUG).optional(),
