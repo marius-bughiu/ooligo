@@ -27,31 +27,31 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:A: [type:tool] [vertical:revops] netsuite — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:revops] zoho-crm — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:recruiting] bullhorn — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:customer-success] canny — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:legal-ops] spotdraft — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:legal-ops] summize — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:revops] netsuite — pricing never verified (no pricing_checked field; SLA 60d) → slug: netsuite
+- refresh:A: [type:tool] [vertical:revops] zoho-crm — pricing never verified (no pricing_checked field; SLA 60d) → slug: zoho-crm
+- refresh:A: [type:tool] [vertical:recruiting] bullhorn — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → slug: bullhorn
+- refresh:A: [type:tool] [vertical:customer-success] canny — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → slug: canny
+- refresh:A: [type:tool] [vertical:legal-ops] spotdraft — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-11-01 — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:legal-ops] summize — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → slug: summize
 - refresh:A: [type:tool] [vertical:revops] apollo — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → slug: apollo
-- refresh:A: [type:tool] [vertical:legal-ops] brightflag — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:customer-success] chameleon — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:legal-ops] clearbrief — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:legal-ops] paxton-ai — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:legal-ops] steno — pricing 65d unverified (pricing_checked 2026-08-21, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:revops] chili-piper — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:revops] chorus — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:legal-ops] alexi — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:legal-ops] lawvu — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:legal-ops] casepoint — pricing 62d unverified (pricing_checked 2026-08-24, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:customer-success] ada — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:revops] aisdr — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:recruiting] amazon-connect-talent — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:customer-success] amplitude — pricing 63d unverified (pricing_checked 2026-08-16, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:recruiting] ashby — pricing 63d unverified (pricing_checked 2026-08-16, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:revops] attio — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:recruiting] bamboohr — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
-- refresh:A: [type:tool] [vertical:recruiting] beamery — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] brightflag — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → slug: brightflag
+- refresh:A: [type:tool] [vertical:customer-success] chameleon — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → slug: chameleon
+- refresh:A: [type:tool] [vertical:legal-ops] clearbrief — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → slug: clearbrief
+- refresh:A: [type:tool] [vertical:legal-ops] paxton-ai — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → slug: paxton-ai
+- refresh:A: [type:tool] [vertical:legal-ops] steno — pricing 65d unverified (pricing_checked 2026-08-21, SLA 60d) → slug: steno
+- refresh:A: [type:tool] [vertical:revops] chili-piper — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-11-01 — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:revops] chorus — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d) → slug: chorus
+- refresh:A: [type:tool] [vertical:legal-ops] alexi — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d) → slug: alexi
+- refresh:A: [type:tool] [vertical:legal-ops] lawvu — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d) → slug: lawvu
+- refresh:A: [type:tool] [vertical:legal-ops] casepoint — pricing 62d unverified (pricing_checked 2026-08-24, SLA 60d) → slug: casepoint
+- refresh:A: [type:tool] [vertical:customer-success] ada — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → slug: ada
+- refresh:A: [type:tool] [vertical:revops] aisdr — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-11-01 — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:recruiting] amazon-connect-talent — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-11-01 — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:customer-success] amplitude — pricing 63d unverified (pricing_checked 2026-08-16, SLA 60d) → slug: amplitude
+- refresh:A: [type:tool] [vertical:recruiting] ashby — pricing 63d unverified (pricing_checked 2026-08-16, SLA 60d) → slug: ashby
+- refresh:A: [type:tool] [vertical:revops] attio — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d) → slug: attio
+- refresh:A: [type:tool] [vertical:recruiting] bamboohr — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d) → slug: bamboohr
+- refresh:A: [type:tool] [vertical:recruiting] beamery — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d) → slug: beamery
 - refresh:A: [type:tool] [vertical:revops] boostup — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] day-ai — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] influ2 — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
@@ -672,6 +672,10 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:customer-success] front — material (mcp_available stale: Front runs an official MCP server at mcp.frontapp.com/mcp for Claude, ChatGPT, Gemini and Copilot -- search/triage conversations, draft and send replies, internal comments, tags, assignments, contact lookup -- announced as beta, help page now says custom connection "available now", per https://help.front.com/en/articles/4883136 -- set mcp_available: true; pricing unchanged at front.com/pricing: Starter $25 (up to 10 seats), Professional $65 (up to 50), Enterprise $105 (unlimited), billed annually; add-ons Copilot $20, Smart QA $20, Smart CSAT $10, Autopilot from $0.05/conversation, plus a new Smart QA + Smart CSAT bundle at $25/seat/mo)
 - refresh:B: [type:tool] [vertical:customer-success] forethought — pricing patch (forethought.ai/pricing now lists three quote-only tiers Team, Professional and Enterprise, priced as "a blend of platform access fees and an outcome-based pricing cost" plus optional add-ons and overage charges, with a Proof of Value instead of a free trial -- add tier names and the platform-fee-plus-outcome model; Zendesk acquisition closed 2026-03-26 per https://www.zendesk.com/se/newsroom/articles/zendesk-completes-forethought-acquisition/, add the exact close date; pricing_model custom and starts_at null unchanged)
 - refresh:B: [type:tool] [vertical:customer-success] freshdesk — pricing patch (plan prices hold at freshworks.com/freshdesk/pricing -- Growth $19, Pro $55, Enterprise $89 per agent/mo billed annually; Freddy AI Agent 500 sessions then $49 per 100 -- fixes: Freddy AI Copilot now $29/agent/mo on Pro and Enterprise only, not Growth; new metered costs MCP actions $15 per 1,000, connector app tasks $80 per 5,000, day passes $2-$12; Growth now includes AI Agent Studio with Email AI Agent; pricing page no longer shows the Free plan, only a 14-day Enterprise trial, while third-party 2026 sources say free still exists for 2 agents for 6 months -- word carefully; pricing_model freemium, starts_at 19, mcp/api true unchanged)
+- refresh:C: [type:tool] [vertical:revops] aisdr — material (aisdr.com/pricing replaced Solo $250 / Explore $900 / Scale $2,500 with two plans: Pay as you go at $1.50 per person prospected, billed daily with no monthly fee or contract, and a quote-based Teams plan on quarterly contract with 20% off annual; pricing_model flat -> usage-based and pricing_starts_at 250 needs rethinking; managed add-ons $149/campaign and $2,500/mo fully managed unchanged, new $33 warmed-up mailbox add-on; frontmatter lacks api_available; found by tier-A verify 2026-11-01)
+- refresh:C: [type:tool] [vertical:revops] chili-piper — material (tiers restructured: chilipiper.com/pricing renames "Routing & Scheduling" -> Growth ($1,250/mo, 15 seats, $45/seat, 45k credits) and "Experiences" -> Scale ($3,500/mo, 30 seats, $50/seat, 150k credits) and adds an Enterprise tier with volume pricing from 250 seats; ChiliCal $12/user (200-seat min), 15/25/40% multi-year discounts and annual-only billing unchanged; found by tier-A verify 2026-11-01)
+- refresh:C: [type:tool] [vertical:legal-ops] spotdraft — material (mcp_available stale: SpotDraft documents an official hosted MCP server at help.spotdraft.com/articles/1598618120-spotdraft-mcp-server with US/EU/IN/ME endpoints, OAuth, read-only by default, listed in the Claude connector directory, plus npm @spotdraft/spotdraft-mcp -- set mcp_available: true and add the agent-access framing; pricing unchanged, still quote-only by contract volume; found by tier-A verify 2026-11-01)
+- refresh:C: [type:tool] [vertical:recruiting] amazon-connect-talent — material (no longer free Preview: aws.amazon.com/products/connect/talent/pricing/ publishes $20.00 per completed candidate evaluation, metered, no platform or seat fees; a reseller dates GA to 2026-09-16/17 -- confirm on an official AWS page; pricing_model custom -> usage-based, pricing_starts_at null -> 20, add pricing_url; the entry's website URL now 404s; rewrite the Preview/no-price copy in intro, Pricing and guardrails; found by tier-A verify 2026-11-01)
 
 ## Tools
 
