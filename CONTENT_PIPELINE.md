@@ -319,7 +319,7 @@ In CI (`npm run validate:config` and `npm run build`), and locally for the entri
 
 - **Config schema** — `validate:config` checks `content/verticals.json` and `content/locales.json` against their JSON Schemas.
 - **Content collection schema** — Astro validates every entry's frontmatter via the Zod schemas in `content.config.ts`. Missing required fields, invalid enums, malformed types → build fails.
-- **Link integrity** — CI's build does not check links. `npm run build:page` fails when a page it builds links to a missing entry or vertical, leaves out the locale prefix, uses `/comparisons/` instead of `/vs/`, or targets a missing `#fragment`; links already broken on main are reported as warnings.
+- **Link integrity** — CI and deployment run `node scripts/check-content-links.mjs` across every MDX source file before publication. It checks Markdown links/references, autolinks and literal HTML/MDX `href` values against frontmatter routes, verticals and static pages. Missing destinations/locales, `/comparisons/` routes and wrong letter case fail, including pre-existing defects; no build or network access is needed. Dynamic JSX URLs, asset availability and fragment IDs are outside this source check. `npm run build:page` separately checks rendered links and same-page `#fragment` targets for the pages it builds; its existing-main link warnings do not exempt those defects from the source check.
 - **hreflang correctness** — `BaseLayout` only emits hreflang for locale variants that actually exist (computed from `canonical_slug` matches in the collection). Never points at 404s.
 - **Markup validity** — JSON-LD blocks must parse as JSON. Astro's MDX compiler enforces.
 
