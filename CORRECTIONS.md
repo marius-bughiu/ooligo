@@ -78,3 +78,27 @@ Not every report results in a fix. Common close-reasons:
 ## Log
 
 *New entries below this line. Most recent at the top.*
+
+### 2026-11-02 — Vendor access, module pricing and related shortlists — factual
+
+**Source**: internal editorial review
+**Pages**: ZoomInfo and Metaview tool profiles; conversation-intelligence and legal-operations shortlists. All six locales: en, es, pt-BR, de, fr, ja.
+**Reported by**: Codex-assisted internal review
+**Class**: factual / stale / missing-context
+**Severity**: high — capability and pricing premises changed the buying recommendations
+
+**What was wrong**:
+
+- ZoomInfo was marked as having no MCP server. The profiles also asserted regional data superiority, contract norms and numeric scores without a documented evaluation.
+- Metaview's Notetaker was described as quote-only, with Sourcing treated as the paid entry point. Application Review billing was incorrectly reduced to a per-user assumption. The MCP description said read-only despite current documentation describing writes and candidate messages.
+- The conversation-intelligence shortlist carried unsupported scores, bundle savings and adoption claims. Its Fathom description omitted paid deal/coaching features, and its Metaview framing was inconsistent with the module-specific purchase options.
+- The legal-operations shortlist used an outdated Claude Team seat minimum, an unverified combined Claude/Spellbook budget, and unsupported price ratios and buying thresholds. It also described Spellbook as limited to one document despite Associate's multi-document scope.
+
+**Resolution**:
+
+- Fixed in commit `76912887429599822dc156506ebae1b0755f5d26`: refreshed 24 localized pages against current official sources, corrected access and billing scope, removed unsupported ratings and commercial claims, and replaced them with task-specific evaluation criteria.
+- The shortlist price labels now use the same qualified pricing information as their articles. Internal links and metadata are localized; meaningful body revision dates are November 2.
+- Primary evidence includes [ZoomInfo MCP](https://docs.gtm.ai/docs/connect-to-zoominfo-mcp), [Metaview Notetaker pricing](https://www.metaview.ai/pricing?product=notes), [Application Review pricing](https://www.metaview.ai/pricing?product=application-review), [Metaview MCP actions](https://support.metaview.ai/integrations/mcp-integration/mcp-overview), [Claude pricing](https://claude.com/pricing), and [Spellbook scope/pricing](https://spellbook.com/pricing). Additional product sources are linked beside the relevant claims in each article.
+- Reviewed through primary-source checks, an independent editorial pass, locale parity checks, targeted builds and desktop/mobile browser QA. No paid-account benchmark or measured customer outcome is claimed.
+
+**Bar implication**: apply the existing source-verification rules to capability flags, billing units and recommendations derived from prices, including displayed summary labels. Review recurrence at the next quarterly corrections review.
