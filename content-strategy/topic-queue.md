@@ -27,31 +27,31 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:A: [type:tool] [vertical:revops] netsuite — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] zoho-crm — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] bullhorn — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] canny — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] spotdraft — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] summize — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] apollo — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] brightflag — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] chameleon — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] clearbrief — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] paxton-ai — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] steno — pricing 65d unverified (pricing_checked 2026-08-21, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] chili-piper — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] chorus — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] alexi — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] lawvu — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] casepoint — pricing 62d unverified (pricing_checked 2026-08-24, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] ada — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] aisdr — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] amazon-connect-talent — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] amplitude — pricing 63d unverified (pricing_checked 2026-08-16, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] ashby — pricing 63d unverified (pricing_checked 2026-08-16, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] attio — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] bamboohr — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] beamery — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] netsuite — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:revops] zoho-crm — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:recruiting] bullhorn — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:customer-success] canny — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] spotdraft — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] summize — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:revops] apollo — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → slug: apollo
+- refresh:A: [type:tool] [vertical:legal-ops] brightflag — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:customer-success] chameleon — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] clearbrief — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] paxton-ai — pricing 66d unverified (pricing_checked 2026-08-20, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] steno — pricing 65d unverified (pricing_checked 2026-08-21, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:revops] chili-piper — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:revops] chorus — pricing 64d unverified (pricing_checked 2026-08-22, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] alexi — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] lawvu — pricing 63d unverified (pricing_checked 2026-08-23, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:legal-ops] casepoint — pricing 62d unverified (pricing_checked 2026-08-24, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:customer-success] ada — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:revops] aisdr — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:recruiting] amazon-connect-talent — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:customer-success] amplitude — pricing 63d unverified (pricing_checked 2026-08-16, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:recruiting] ashby — pricing 63d unverified (pricing_checked 2026-08-16, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:revops] attio — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:recruiting] bamboohr — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
+- refresh:A: [type:tool] [vertical:recruiting] beamery — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d) → claimed: refresh 2026-11-01T21:14:24Z
 - refresh:A: [type:tool] [vertical:revops] boostup — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] day-ai — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] influ2 — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
