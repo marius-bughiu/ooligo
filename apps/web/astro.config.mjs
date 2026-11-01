@@ -1,6 +1,6 @@
 import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
-import sitemap from "@astrojs/sitemap";
+import { groupedSitemap } from "./scripts/sitemap.mjs";
 import tailwindcss from "@tailwindcss/vite";
 import { generateAllZips } from "./scripts/generate-artifact-zips.mjs";
 
@@ -18,29 +18,7 @@ const siteUrl = process.env.PUBLIC_SITE_URL ?? "https://ooligo.com";
 export default defineConfig({
   site: siteUrl,
   output: "static",
-  integrations: [mdx(), sitemap({
-    // Keep these out of the public sitemap:
-    //   - /design/  internal design-system gallery
-    //   - /og/      per-entity OG images (asset endpoints, not pages)
-    //   - /og.svg   default OG image
-    //   - /404      error page
-    filter: (page) =>
-      !page.includes("/design/") &&
-      !page.includes("/og/") &&
-      !page.endsWith("/og.svg") &&
-      !page.includes("/404"),
-    i18n: {
-      defaultLocale: "en",
-      locales: {
-        en: "en",
-        es: "es",
-        "pt-BR": "pt-BR",
-        ja: "ja",
-        fr: "fr",
-        de: "de",
-      },
-    },
-  })],
+  integrations: [mdx(), groupedSitemap({ site: siteUrl })],
   i18n: {
     defaultLocale: "en",
     locales: ["en", "es", "pt-BR", "ja", "fr", "de"],

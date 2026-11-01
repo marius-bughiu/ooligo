@@ -97,6 +97,7 @@ const comparisons = defineCollection({
       title: z.string().trim().min(1).optional(),
       description: z.string().trim().min(1).optional(),
       pricing_notes: z.record(SLUG, z.string().trim().min(1)).optional(),
+      show_scores: z.boolean().optional(),
       tool_a: SLUG.optional(),
       tool_b: SLUG.optional(),
       tools: z.array(SLUG).optional(),
