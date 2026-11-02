@@ -79,6 +79,12 @@ Not every report results in a fix. Common close-reasons:
 
 *New entries below this line. Most recent at the top.*
 
+### 2026-11-02 — Privilege logs, legal intake and MSA negotiation
+
+The privilege-log guide previously presented example columns, treatment of email threads and review percentages as general requirements. The six editions now distinguish the U.S. federal disclosure rule from choices governed by the matter’s orders and protocol. The editable workbook contains two fictional entries, including a possible work-product claim held for factual review. [Privilege log guide](https://ooligo.com/en/learn/privilege-log-format/) · [Current federal rules](https://www.uscourts.gov/forms-rules/current-rules-practice-procedure/federal-rules-civil-procedure)
+
+The intake guide and negotiation workflow quoted completion times, savings and costs without measured results. All six editions now follow one fictional SaaS agreement from a missing intake date to two rounds of clause review. The downloadable form names the next owner. The eight-prompt pack includes the source clauses, buyer playbook and a worked response for each prompt. The proposed 45-day exception remains with counsel. [Legal intake guide](https://ooligo.com/en/learn/legal-intake/) · [MSA negotiation pack](https://ooligo.com/en/workflows/msa-negotiation-prompt-pack/)
+
 ### 2026-11-02 — Sales-cycle percentiles and SaaS customer economics
 
 The sales-cycle guide called P90 a worst-case estimate. In the revised nine-opportunity example, the five wins have a 30-day median, a 76-day inclusive P90 and a 100-day maximum. Loss durations and the age of open deals are reported separately. [Sales cycle length](https://ooligo.com/en/learn/sales-cycle-length/)
