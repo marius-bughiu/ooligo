@@ -76,25 +76,25 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] sendspark — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-11-02 — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing 66d unverified (pricing_checked 2026-08-13, SLA 60d) → slug: sirionlabs
 - refresh:A: [type:tool] [vertical:legal-ops] spellbook — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → slug: spellbook
-- refresh:A: [type:tool] [vertical:legal-ops] supio — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] totango — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] velaris — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] vervoe — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] zapier — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] zendesk — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] checkbox — pricing 65d unverified (pricing_checked 2026-08-07, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] deepjudge — pricing 63d unverified (pricing_checked 2026-08-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] imanage — pricing 67d unverified (pricing_checked 2026-08-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] legalfly — pricing 62d unverified (pricing_checked 2026-08-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] microsoft-purview-ediscovery — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] netdocuments — pricing 66d unverified (pricing_checked 2026-08-06, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] norm-ai — pricing 63d unverified (pricing_checked 2026-08-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] noxtua — pricing 62d unverified (pricing_checked 2026-08-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] salesforce — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] streamline-ai — pricing 65d unverified (pricing_checked 2026-08-07, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] successfactors-recruiting — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] vlex-vincent-ai — pricing 67d unverified (pricing_checked 2026-08-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] wordsmith — pricing 66d unverified (pricing_checked 2026-08-06, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] supio — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:customer-success] totango — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:customer-success] velaris — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:recruiting] vervoe — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:revops] zapier — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:customer-success] zendesk — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] checkbox — pricing 65d unverified (pricing_checked 2026-08-07, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] deepjudge — pricing 63d unverified (pricing_checked 2026-08-09, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] imanage — pricing 67d unverified (pricing_checked 2026-08-05, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] legalfly — pricing 62d unverified (pricing_checked 2026-08-10, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] microsoft-purview-ediscovery — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] netdocuments — pricing 66d unverified (pricing_checked 2026-08-06, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] norm-ai — pricing 63d unverified (pricing_checked 2026-08-09, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] noxtua — pricing 62d unverified (pricing_checked 2026-08-10, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:revops] salesforce — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] streamline-ai — pricing 65d unverified (pricing_checked 2026-08-07, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:recruiting] successfactors-recruiting — pricing 61d unverified (pricing_checked 2026-08-11, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] vlex-vincent-ai — pricing 67d unverified (pricing_checked 2026-08-05, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] wordsmith — pricing 66d unverified (pricing_checked 2026-08-06, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
 - refresh:A: [type:tool] [vertical:revops] actively — pricing never verified (no pricing_checked field, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-10-06 — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:revops] aurasell — pricing never verified (no pricing_checked field, SLA 60d) → slug: aurasell
 - refresh:A: [type:tool] [vertical:revops] cargo — pricing 61d unverified (pricing_checked 2026-08-04, SLA 60d) → slug: cargo
@@ -120,11 +120,11 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] gemini — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → skip: requeued as refresh:B (found by tier-A verify 2026-10-06 — see the refresh:B line below)
 - refresh:A: [type:tool] [vertical:customer-success] gladly — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d) → slug: gladly
 - refresh:A: [type:tool] [vertical:revops] glean — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-10-06 — see the refresh:C line below)
-- refresh:A: [type:tool] [vertical:recruiting] goperfect — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] granola — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] harver — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] harvey — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] heap — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] goperfect — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:revops] granola — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:recruiting] harver — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:legal-ops] harvey — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
+- refresh:A: [type:tool] [vertical:customer-success] heap — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-02T23:14:14+02:00
 - refresh:A: [type:tool] [vertical:legal-ops] hebbia — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] help-scout — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] hireflix — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
