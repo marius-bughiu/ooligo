@@ -2,6 +2,10 @@
 
 Find queries where ooligo pages rank positions 8-25 and refresh `gsc-candidates.json`. Scheduled weekly (Saturday 21:00 local). Consumers: [freshness-prompt.md](freshness-prompt.md) and [topic-refill-prompt.md](topic-refill-prompt.md).
 
+## Fixed audit cohort
+
+Follow [the private cohort procedure](gsc-cohort.md) alongside the candidate harvest when the original manifest is available. Use stored URL inspections and exact-page performance totals, including zero counts. Neither the position nor impression threshold below applies to the cohort. Keep the dated report and snapshots in the ignored local directory. If the exact-page data could not be collected, mark it unavailable. The query/page CSV below can still supply candidates.
+
 ## Step 1 — Check for GSC credentials
 
 This routine needs **either**:

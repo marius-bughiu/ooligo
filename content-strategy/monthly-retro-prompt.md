@@ -37,11 +37,11 @@ From [pillar-index.json](pillar-index.json) (if present and updated):
 
 From [gsc-candidates.json](gsc-candidates.json):
 
-- **Refresh candidates** — how many were on the list at month-start vs. month-end. Decreases are a win (we refreshed them); increases are a backlog signal.
+- **Refresh candidates** — how many were on the list at month-start vs. month-end. Describe entries and exits against the dated harvests. Verify an actual refresh or ranking change before attributing either movement.
 - **Top 5 by impressions** in the refresh and gap buckets — list them with their `top_query`.
-- **Already-optimized pages** — count, plus any that moved off this list (regression signal).
+- **Already-optimized pages** — count, plus any that moved off this list. Check their observed position before describing a regression.
 
-If `gsc-candidates.json` is missing or empty, log `monthly-retro: no GSC data, ranking section skipped`.
+If no dated candidate harvest exists, log `monthly-retro: candidate harvest unavailable`. If a dated harvest returned empty buckets, report zero qualifying candidates for that harvest. Neither outcome measures domain traffic. If a [private fixed-cohort report](gsc-cohort.md) was collected for the period, record its availability and date. Keep its URLs, metrics and raw exports private.
 
 ## Step 4 — Pull roadmap signals
 

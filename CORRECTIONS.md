@@ -79,6 +79,12 @@ Not every report results in a fix. Common close-reasons:
 
 *New entries below this line. Most recent at the top.*
 
+### 2026-11-02 — Attio stack budgets and Claude versus Cursor
+
+The Attio CRM stack budget assumed ten Fathom Team seats while leaving readers to infer which CRM could receive all ten users’ summaries. All six editions now separate a manual Attio note from a supported ten-user HubSpot connection. The illustrative annual software totals start at USD 16,554 plus EUR 240 with Fathom Team and USD 17,754 plus EUR 240 with Business. They exclude implementation, usage overages and the cost of HubSpot. The guides give acceptance criteria for a custom Fathom-to-Attio handoff that still needs a workspace trial. [Fathom CRM connections](https://www.fathom.ai/integrations-crm) · [Fathom team prices](https://www.fathom.ai/pricing?plan=teams)
+
+The Claude versus Cursor comparisons previously treated Cursor as a single-model editor and described buying both products as typical. All six editions now distinguish Claude chat, Claude Code and Cursor, explain individual pricing and model charges, and include a two-record CRM import exercise. The supporting Cursor profiles also correct the listed API capability, personal pricing and Privacy Mode coverage. [Claude Code](https://code.claude.com/docs/en/overview) · [Cursor plans](https://cursor.com/pricing) · [Cursor Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints) · [Cursor security](https://cursor.com/security)
+
 ### 2026-11-02 — Workflow downloads and reproducible examples
 
 An internal review found that the candidate sourcing, forecast prep, renewal playbook and contract redlining guides described integrations or results beyond their downloaded instructions. The hiring-funnel detector also omitted data setup, missed inactive roles and referred to another schedule's output while processing time-to-hire alerts.
