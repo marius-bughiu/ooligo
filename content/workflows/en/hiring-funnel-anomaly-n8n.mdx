@@ -3,88 +3,57 @@ slug: hiring-funnel-anomaly-n8n
 canonical_slug: hiring-funnel-anomaly-n8n
 locale: en
 verticals: [recruiting]
-title: Hiring funnel anomaly detection with n8n
+title: Hiring funnel alerts with Ashby, PostgreSQL and n8n
+description: "Run a synthetic hiring-funnel detector, inspect four expected alerts and check the Ashby adapter, PostgreSQL rules and Slack delivery states before connecting accounts."
 artifact_type: n8n-flow
 tools_used: [n8n, ashby, claude, slack]
 roles: [recruiting-leader, talent-acquisition, recruiting-ops]
 difficulty: intermediate
-time_to_setup: 90min
 human_tested: false
-last_updated: "2026-05-03"
+last_updated: "2026-11-02"
 ---
 
-Most recruiting teams discover funnel problems in the quarterly business review. By then the role has been open for sixty days, two of the three best candidates have signed elsewhere, and the hiring manager has lost confidence in the [pipeline](/en/learn/recruiting-funnel-metrics/). This workflow closes that gap. An n8n flow runs nightly against your [ATS](/en/learn/ats-vs-recruiting-crm/), computes per-role-by-stage conversion rates and dwell times against a rolling 90-day baseline, flags statistically meaningful deviations, asks Claude to explain each one in one or two sentences, and posts the result to a routing-aware Slack channel before the next morning's stand-up.
+Use this workflow when recruiting operations needs to know which role or stage merits a closer look. The download includes an Ashby collector, a PostgreSQL schema and an inactive n8n workflow. Its synthetic example produces four aggregate alerts. You can inspect the evidence behind each one before connecting any accounts.
 
-The bundle at `apps/web/public/artifacts/hiring-funnel-anomaly-n8n/hiring-funnel-anomaly-n8n.json` ships fifteen fully configured nodes — two scheduled triggers, an Ashby pull, an aggregation Code node with the real anomaly logic, a Postgres baseline lookup, the detector, a deduplicating insert, the Claude narrative call, the Slack formatter, and a parallel time-to-hire trend path. The companion `_README.md` documents the four credentials, the three Postgres tables you must create, and a five-step first-run verification that exercises every branch.
+## Run the example
 
-## When to use this
+Extract the download and run `python3 -B check_fixture.py` with Python 3.10 or later. Then print the snapshot that feeds both detectors:
 
-You should ship this when your recruiting team is running at least eight to ten active roles in parallel, the team has been on the same [ATS](/en/learn/ats-vs-recruiting-crm/) ([Ashby](/en/tools/ashby/), [Greenhouse](/en/tools/greenhouse/), or [Lever](/en/tools/lever/)) for at least ninety days so a baseline exists, and at least one person on the team owns funnel health as part of their job. Below those thresholds the signal-to-noise ratio is wrong: the baselines are too noisy to set a useful z-score threshold, and there is nobody who will actually act on the alert when it fires.
+```sh
+python3 -B ashby_adapter.py --config config.example.json --fixture fixtures/ashby-pages.json --as-of 2026-11-02
+```
 
-The other precondition is taxonomic discipline. If your stages are named differently for every role, or hiring managers freely create new stages mid-search, the per-role-by-stage aggregation will produce a long tail of (role, stage) pairs with sample size of one. The detector's `MIN_SAMPLE = 20` guard suppresses those, which is correct, but you will end up with no signal at all rather than wrong signal. Fix the stage taxonomy first.
+The date is the exclusive UTC cutoff. The daily window covers November 1 and the weekly window starts October 26. The fixture contains two pages of applications for the Analyst role and two history pages for one application. It also includes a watched role with no applications and a recently added role. The adapter reads ten synthetic response pages and carries all three roles into the snapshot.
 
-## When NOT to use this
+| Expected alert | Evidence in the fixture |
+|---|---|
+| Stage conversion drop | One of four completed Screen departures advanced to Onsite. The 25% rate falls below the configured 75% reference mean minus two deviations of 10 percentage points. |
+| Completed stage dwell | The median completed Screen interval was 48 hours. The alert threshold is 1.5 times the configured 24-hour limit. |
+| Quiet role | The watched Quiet role had zero entries or exits in seven days. The newer role had fewer than seven monitored days and produced no alert. |
+| Hire trend | One application reached the configured hire stage 59 days after creation, above the example 30-day threshold. The fixture's minimum hire count is one. |
 
-Do not ship this if you are running fewer than five active roles. The math does not work — there are not enough events per (role, stage) pair to compute a meaningful baseline standard deviation, and you will spend more time tuning thresholds than acting on alerts. A weekly manual review in a spreadsheet is genuinely better at that scale.
+`fixtures/expected-alerts.json` contains the expected payloads. For one alert, run `node check_postgres.mjs --one-alert` after the PGlite setup in `_README.md`. Its quiet-role scenario queues one alert on the first run and zero new alerts on the second. The SQL check runs the hire detector first, then the stage detector. It gets one new hire alert and three new stage/role alerts. Running both again creates zero additional alerts. The example's thresholds and small sample sizes illustrate the rules. Choose reference values and minimum samples that fit your own [funnel metrics](/en/learn/recruiting-funnel-metrics/).
 
-Do not ship this if your ATS is the only place candidate data exists and you do not yet have a separate analytics warehouse. The flow assumes you can stand up a Postgres database that is allowed to mirror candidate data. If your privacy or AI-policy team has not yet signed off on candidate data leaving the ATS, run this exercise on aggregated stage-level counts only — drop the candidate-level dwell calculation — and revisit when policy catches up.
+## Prepare the source and database
 
-Do not ship this on top of a stage taxonomy that changes weekly. Anomaly detection on a moving definition of "stage" produces alerts that nobody can interpret. Stabilize the taxonomy for at least one quarter before turning the flow on.
+Copy `config.example.json` and replace every invented job ID, stage ID, label, monitoring date, reference value and limit. Define which successor stages count as advancement. Calculate reference mean and deviation from eligible daily rates using the same completed-departure denominator. The rule requires at least 20 reference days and a positive deviation. Refresh dates older than 35 days are rejected. Reference backfill and refresh scheduling belong to the operator.
 
-Finally, do not ship this if your team's response to a funnel alert would be "we already knew that". The workflow's value is the 24-hour latency on a metric that would otherwise surface in 60 days. If you already have a daily standup where this is reviewed live, the alert is redundant.
+The separate collector calls [Ashby application.list](https://developers.ashbyhq.com/reference/applicationlist) for each watched job, then [application.listHistory](https://developers.ashbyhq.com/reference/applicationlisthistory) for each application. Both are paginated POST requests using `candidatesRead`. The collector orders histories by stage number and uses stage IDs and timestamps. A missing page, duplicate record or inconsistent sequence aborts collection. Zero activity is meaningful only after that complete collection succeeds.
 
-## Setup
+Apply `schema.sql` with `psql`, set `ASHBY_API_KEY` for the collector and schedule the live command in `_README.md` before 02:00 UTC. `--persist` stores one complete snapshot using the configured PostgreSQL connection. The two tables are `hfa.snapshots` and `hfa.alerts`. An identical snapshot can be loaded again. A different payload for the same date requires review. Candidate names, emails and application IDs stay out of the persisted aggregates. Review role labels before sending them to external services.
 
-Build the baseline first. Run a one-time backfill over the trailing 90 days using the same Ashby application-feed endpoint the workflow uses, group by `(role_id, from_stage, to_stage)`, and write `conversion_rate_mean`, `conversion_rate_stddev`, `dwell_seconds_p50`, `stage_sla_seconds`, and `sample_size` to the `funnel_baselines` table. The DDL for that table — and for `role_tth_baselines` and `anomaly_alerts` — is in the bundle's `_README.md`.
+## Connect the two detectors and delivery
 
-Import `hiring-funnel-anomaly-n8n.json` from the bundle into n8n. The workflow comes inactive on purpose. Open `Settings` and confirm the timezone matches your team's working hours; both Cron nodes evaluate their expressions in the workflow timezone, not in UTC. Create the four credentials referenced by name in the JSON: `PLACEHOLDER_ASHBY_CRED_ID`, `PLACEHOLDER_POSTGRES_CRED_ID`, `PLACEHOLDER_ANTHROPIC_CRED_ID`, `PLACEHOLDER_SLACK_CRED_ID`. The README walks through each one including the Slack scopes (`chat:write`, `chat:write.public`) and the Anthropic Header Auth shape.
+Import `hiring-funnel-anomaly-n8n.json` into [n8n](/en/tools/n8n/). Bind PostgreSQL, Anthropic Header Auth and Slack Header Auth credentials. Set the approved stage and leadership channel IDs in **Check channel configuration**. Keep the workflow inactive until the two detectors return the expected fixture rows in a disposable database. The collector uses its own [Ashby](/en/tools/ashby/) credential outside n8n.
 
-Walk the five-step first-run verification before activating. Step two — inserting a synthetic baseline row that is guaranteed to flag — is the one most people skip and then wonder why no alert fires; do it. Step three confirms the dedupe key is doing its job, which is the cost guard for the Claude call.
+The 02:00 UTC detector evaluates conversion, completed dwell and seven-day role activity. Conversion counts completed exits with a consecutive observed successor inside the cutoff. Terminal exits without a successor and gaps in stage order are excluded. Dwell measures completed intervals, so an alert describes a stage rather than an individual currently waiting in it. The 03:00 detector independently checks elapsed time from application creation to first entry into the configured hire stage. It counts a hire only when history is complete from ordinal zero through that hire-stage entry. A missing prefix leaves the first hire date unverified and excludes the application from this statistic. Confirm the meaning of the stage in your ATS before treating the metric as [time to hire](/en/learn/time-to-fill-vs-time-to-hire/). Either detector fails visibly if that day's snapshot is missing.
 
-Refresh the baselines monthly. Conversion rates drift with seasonality, market conditions, and team composition, and a stale baseline produces either alert spam or missed regressions. The refresh is the same query that built the baseline; cron it as a separate n8n workflow or as a SQL job on the Postgres side.
+Both schedules write stable alert keys to the same outbox. A delivery tick claims one pending row after detection and every 15 minutes. [Claude](/en/tools/claude/) receives aggregate metrics for a short explanation. [Slack](/en/tools/slack/) receives the figures, explanation and reference key. Check the stored `delivery_state` result and the row's `state`. A confirmed Slack response includes `ok:true`, a channel and a timestamp. A known rejection such as `ok:false` with `channel_not_found` records a failed delivery. Slack says `internal_error` and `fatal_error` can follow partial success. Those errors, unknown codes, incomplete acknowledgements and send timeouts leave acceptance uncertain. Inspect the channel for the reference before deciding whether to retry. The bundle holds uncertain sends for review. See [Slack's response contract](https://api.slack.com/methods/chat.postMessage).
 
-## What the flow does
+## Verification and operating cost
 
-The 2am Cron triggers an Ashby application-feed pull for the last 24 hours. The aggregator Code node groups events by `(role_id, from_stage, to_stage)`, computes today's conversion rate and median dwell time for each pair, and emits one item per pair. The Postgres `Lookup Baseline` node joins each pair to its baseline row. The `Detect Anomalies` Code node applies three rules: a stage-conversion z-score below `-2.0` against the baseline mean is flagged as `stage_conversion_drop`, a median dwell exceeding `stage_sla_seconds * 1.5` is flagged as `candidate_stalled`, and a (role, stage) pair with zero events today and fewer than 20 historical events is flagged as `new_role_no_movement` with a low-severity note that thresholds were suppressed.
+Twelve offline Python checks cover pagination, invalid inputs, date boundaries, empty roles and export structure. The shipped SQL ran on PostgreSQL 18.6 through PGlite and independently on native PostgreSQL 18.4 with synthetic records. The tests exercised both schedules, exact alert payloads and replay. The PGlite checks also covered delivery leases, confirmed acknowledgements, definite rejection and uncertainty. The unmodified export imported into n8n 2.45.7. Seven CLI runs used copies with manual triggers, local test credentials and loopback model/Slack endpoints. The actual SQL, Code and HTTP nodes processed four mock explanations and four confirmed mock posts, two per channel. Repeating the stage, hire and delivery runs added zero calls or alerts. The README gives the fixture commands. Wall-clock schedules and live provider accounts still require an operator run.
 
-Each flag is written to `anomaly_alerts` with a `dedupe_key` of `role::from_stage::to_stage::anomaly_type::yyyy-mm-dd` under an `ON CONFLICT DO NOTHING` clause. Only inserts that returned a row — that is, alerts that did not already exist for today — proceed to the Claude narrative call and the Slack post. This is the cost guard: a same-day re-run of the workflow does not double-bill Anthropic and does not double-post to Slack. The Slack formatter routes by anomaly type: stage-level drops and stalled candidates go to `#recruiting-alerts`, time-to-hire trends and new-role-no-movement go to `#recruiting-leadership`, and source-channel drops go to `#sourcing`.
+Budget for the number of applications and history pages scanned per watched role, PostgreSQL storage, n8n executions and model calls on claimed alerts. In the four-alert example, four successful first attempts would request four explanations and four Slack posts. Pre-send retries can add model usage. Measure actual token counts, delivery delay and reviewer time in your environment before committing to a cost or response target.
 
-The 3am Cron runs the parallel time-to-hire trend path against a `hires` table. It reshapes any rows where the rolling 7-day average exceeds threshold into the same alert envelope and runs them through the same dedupe-and-post path.
-
-## Cost reality
-
-For a 30-role team running this nightly, expect about 600 (role, stage) aggregations per day. The Ashby pull and Postgres lookups cost essentially nothing. The Claude narrative call uses `claude-sonnet-4-6` with a 256-token cap and fires only on newly inserted alerts — for a healthy team that is typically 0 to 3 alerts per night, or roughly $0.05 to $0.15 per night in token spend. A spike of 20 simultaneous regressions costs about $1.00. The dedupe key keeps re-runs free.
-
-n8n self-hosted on a $20/month VPS handles this load with margin to spare; n8n Cloud's Starter plan ($24/month) is also fine. Postgres can be the same instance that backs anything else you run — the three tables are small, low-traffic, and indexed on a single composite key. Total marginal cost is dominated by the people-time to keep the baseline fresh and the stage taxonomy stable, not by the runtime.
-
-If you swap in Opus for the narrative call, expect roughly a 5x token-cost multiplier; that is rarely worth it for a 1-2 sentence explanation.
-
-## Success metric
-
-Track the median time between a (role, stage) regression actually starting and the recruiting team taking action on it. Before this flow, that latency is typically two to six weeks (the next pipeline review). With the flow shipped and watched, it should drop to 24 to 48 hours. If it does not — if alerts fire and nobody acts — the problem is not the detector, it is the routing or the threshold, and the fix is to either tighten the channels until the alert reaches a person who has the authority to act, or to loosen the z-score threshold until the alert volume matches what the team can absorb.
-
-A secondary metric worth watching: alerts dismissed without action as a percentage of total. Above 30% you are alerting on noise; below 5% you are probably under-alerting and missing signal.
-
-## vs alternatives
-
-The DIY alternative is a Python or SQL job that runs the same aggregation and posts to Slack via webhook. That works and the per-event cost is lower, but the n8n graph is the documentation — a recruiting-ops engineer who joins next quarter can open the workflow, see the eight nodes in order, and understand the system without reading code. The DIY path also typically skips the dedupe insert and the cost guard around the LLM call, which is where the bills come from.
-
-The off-the-shelf alternative is to buy [Gem](/en/tools/gem/), [Ashby Analytics](/en/tools/ashby/), or [Datapeople](/en/tools/datapeople/) for funnel reporting. Those are good products and are the right answer for teams that want managed dashboards and do not want to own a Postgres baseline table. They are the wrong answer when you want anomaly *alerts* in Slack with a narrative attached, because none of them ship that today; they ship dashboards that someone has to remember to check. The trade is: pay the vendor and lose the alert latency, or own the n8n flow and gain the 24-hour signal at the cost of running Postgres.
-
-The status-quo alternative — the quarterly pipeline review — is what most teams already do. It costs nothing and surfaces the same regressions, just sixty days late. If your roles take six months to fill and a sixty-day signal still leaves you time to course-correct, the status quo is genuinely fine.
-
-## Watch-outs
-
-**Alert fatigue is the dominant failure mode.** A team that gets ten alerts per morning will start ignoring all ten within a week, including the one that mattered. The guard is the `MIN_SAMPLE = 20` and `Z_THRESHOLD = 2.0` constants in the `Detect Anomalies` Code node, plus the `DWELL_MULTIPLIER = 1.5` for stalled candidates. Start with those values, watch the channel for the first three nights, and tighten — not loosen — until the median morning brings 0 to 2 alerts. Loosen later if you find you are missing real regressions.
-
-**Baseline drift produces silent false negatives.** Conversion rates change with the labor market, the team's sourcing mix, and the role itself. A baseline computed in November against a hot market will under-flag in a soft market and over-flag in a tight one. The guard is the monthly refresh of `funnel_baselines` and `role_tth_baselines` from the same query that built them — schedule it as a recurring n8n workflow or a Postgres job and treat the failure of that refresh as a P1 incident.
-
-**Auto-action on a recruiting alert is almost always wrong.** The narrative Claude returns is correlation, not causation; treating it as a directive ("conversion dropped 30%, automatically reject all phone-screen no-shows") will compound the problem. The guard is structural: the flow has no write-back path to the ATS. If a future contributor proposes adding one, push back. AI surfaces the anomaly; humans diagnose and act.
-
-**Privileged candidate data leaves the ATS.** The Postgres tables hold `role_id`, stage names, conversion rates, and dwell times, which is aggregate-only by design — but a careless extension that adds candidate names or contact info to enable richer narratives will create a new privacy surface. The guard is the schema in `_README.md`: the tables intentionally have no candidate-identifying columns. If a contributor wants to add them, route the change through your privacy and AI-policy review.
-
-**Source-channel attribution is only as good as the ATS data.** The optional `source_channel_drop` alert (referenced in the Slack routing map but not enabled by default in the bundle) depends on every applicant having a clean source attribution in Ashby. If your team is sloppy about source tagging, the alert will fire on data-quality issues, not on real channel problems. The guard is a precondition check: do not enable that alert type until source attribution is at least 90% complete in your ATS export. Verify with a one-line SQL query against the application feed before flipping it on.
-
-## Stack
-
-This flow assumes [n8n](/en/tools/n8n/) for orchestration, [Ashby](/en/tools/ashby/) (or [Greenhouse](/en/tools/greenhouse/) / [Lever](/en/tools/lever/)) as the ATS, Postgres for the baseline and alert state, [Claude](/en/tools/claude/) for narrative explanation, and [Slack](/en/tools/slack/) for delivery. It is the operational complement to the metrics defined in [recruiting funnel metrics](/en/learn/recruiting-funnel-metrics/) and uses the [time-to-hire vs time-to-fill](/en/learn/time-to-fill-vs-time-to-hire/) distinction in the trend-check path.
+Use a spreadsheet or your existing ATS report when nobody owns the reference values, routing or follow-up. Revisit the detector when stable stage definitions and a named reviewer are in place. The output supports investigation of aggregate recruiting operations. The graph contains no ATS mutation step.
