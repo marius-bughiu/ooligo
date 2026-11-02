@@ -79,6 +79,18 @@ Not every report results in a fix. Common close-reasons:
 
 *New entries below this line. Most recent at the top.*
 
+### 2026-11-02 — Workflow downloads and reproducible examples
+
+An internal review found that the candidate sourcing, forecast prep, renewal playbook and contract redlining guides described integrations or results beyond their downloaded instructions. The hiring-funnel detector also omitted data setup, missed inactive roles and referred to another schedule's output while processing time-to-hire alerts.
+
+Commit `5d9558651d64a40befbde7a2f4766a1b9176e31d` corrects all five guides in English, Spanish, Brazilian Portuguese, German, French and Japanese and updates their five download bundles.
+
+- The hiring detector now reads a documented Ashby API format, uses complete dated snapshots and supplies its PostgreSQL schema. The one-alert fixture queues one alert and zero more on replay. In seven n8n executions using native PostgreSQL, manual test triggers and local model and Slack responses, the larger fixture yielded four distinct deliveries and zero additional calls on replay. Live credentials and wall-clock scheduling still need an operator trial.
+- Forecast prep includes two dated CSVs and a local program that reproduces the expected briefing. Candidate sourcing includes a local evidence worksheet with explicit hold handling. The renewal example traces a change from 12 to 8 active seats, out of the same 20, to a named review owner and date.
+- Contract redlining includes two fictional Word documents. The review copy has a native replacement and two anchored comments. The verifier checks the accepted and rejected text and preservation of the rest of the fixture. The guides identify the editing tools and human review needed for a real matter.
+
+The examples use fictional records. The guides distinguish the checks performed from live account access, outcome measurement and human approval. Workflow file panels offer Word downloads and treat JSON fixtures as data files.
+
 ### 2026-11-02 — Vendor access, module pricing and related shortlists — factual
 
 **Source**: internal editorial review
