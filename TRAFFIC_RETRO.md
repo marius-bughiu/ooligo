@@ -399,3 +399,89 @@ Skipped. `content-strategy/gsc-candidates.json` is unchanged and empty (`generat
 - **Sponsors booked**: ____
 - **MRR**: ____
 - **Notes / decisions for next month**: ____
+
+## 2026-10
+
+*Bracketed: 2026-10-01 to 2026-10-31. Generated 2026-11-02.*
+
+> **The month the refresh lane went silent.** **406 commits** (September: 495) shipped **184 net-new EN pages**, and **all 184 were tool entries**: zero comparisons, workflows, learn or stacks. That is up from 95% tools in September. **Not one full-page refresh shipped all month.** The last tier-C refresh landed 2026-09-27. The only `refresh(` work was a single tier-A pricing batch on 10-06. Over the same month the refresh backlog grew from 82 to **210 available items**. The footprint reached **1,247 EN / 7,482 built pages**. GSC is dark for the sixth month running. The first engineering commits since July landed on 10-31: a per-entry `build:page` verifier, plus the locale bug it surfaced on its first run.
+
+### Shipped
+
+**New pages (convention-tagged, exact): 184 EN** (× 6 locales = 1,104 files).
+
+- Tools: 184 | Comparisons: 0 | Workflows: 0 | Learn: 0 | Stacks: 0
+- Customer Success: 42 | Legal Ops: 42 | Recruiting: 35 | Cross: 36 | RevOps: 29
+
+Every `content(` subject followed the `content(tools): <slug> — tool/<vertical>` convention. Verticals stayed evenly spread (none above 23%), and RevOps was the smallest for the first time. Daily output averaged **5.9 new pages/day**, below September's near-constant 7. Seven pages shipped on 17 of 31 days, and 10-03 (2), 10-17 (3), 10-10, 10-15, 10-26 and 10-31 (4 each) fell short.
+
+**Refreshed pages: 0 full-page** (September: 32). No `refresh(` commit carried tier C or tier B this month.
+
+**Pricing verification: 1 tier-A batch (25 tools claimed), 10 stamped.** The `refresh(tools): verify pricing — tier A, 25 tools` commit on 10-06 touches only `topic-queue.md`. Its body records 10 tools verified unchanged and stamped in separate frontmatter-only commits (aurasell, cargo, claude-for-legal, disco, draftwise, eightfold, eudia, evenup, fetcher, gladly) and **15 escalated and requeued**, 11 as refresh:C and 4 as refresh:B (gemini, forethought, freshdesk). Most escalations were stale `mcp_available` flags, plus repositionings at eve-legal (EveOS), filevine (LOIS) and fountain (Frontline OS). That is a **60% escalation rate** (September: 68%). The arithmetic does not reconcile; see Anomalies. These 11 commits are excluded from the refresh count above.
+
+- Maintenance commits: **19** `chore:`
+  - topic-refill: 5 | freshness: 4 | link-rot: 4 | internal-links: 4 | gsc-harvest: 0 | traffic-retro: 2 (the 2026-09 retro plus a same-day count fix)
+- Queue bookkeeping: **190** `chore(queue):` commits. That is 186 plain `[new]` claims, 1 stale-takeover (clarivate-ipone), 1 stale reclaim (nice-cxone), 1 skip (ezra-ai) and 1 `[refresh]` batch claim.
+- Engineering: **2 commits, both 2026-10-31.** These are the first `feat(`/`fix(` since July.
+  - `feat(build): add build:page to build single entries instead of the whole site` adds `apps/web/scripts/build-page.mjs`, which builds one entry across all six locales and fails on locale/slug mismatches, collisions, missing comparison tools and 404 links. The authoring prompts (`daily-prompt.md`, `evergreen-prompt.md`, `roadmap-reflect-prompt.md`, `CONTENT_PIPELINE.md`) now run it before pushing.
+  - `fix(tools): ja/richpanel declared locale fr` fixes a Japanese file that had been publishing over `/fr/tools/richpanel/` and leaving `/ja/tools/richpanel/` a 404. The new verifier caught it immediately. A bug class the full build never flagged suggests more may exist in older entries.
+
+The internal-link pass stayed effectively dry: **1 → 0 → 1 → 1** links per weekly pass (September: 0 → 1 → 2 → 2), while 184 new tool pages landed.
+
+### Catalog footprint at month end
+
+| Entity | EN | × 6 locales |
+|---|---|---|
+| Tools | 643 | 3,858 |
+| Comparisons | 233 | 1,398 |
+| Workflows | 127 | 762 |
+| Learn | 191 | 1,146 |
+| Stacks | 53 | 318 |
+| **Total** | **1,247** | **7,482** |
+
+Counted at the last in-bracket commit (`49fd040e`, 10-31 14:32). Delta vs. September-end (1,063 EN): **+184 EN**, all Tools. Every type matches its `content(` commit count exactly, the fourth clean reconciliation in a row. Tools are now **52% of the EN catalog** (September-end: 43%; June-end: 30%). Comparisons, workflows, learn and stacks have not moved since 2026-09-30, and workflows and learn since August.
+
+Per-vertical entity counts are still unavailable. `content-strategy/pillar-index.json` remains a zero-filled stub (`generated_at: null`, last touched 2026-05-17) for the **sixth consecutive month**.
+
+### Ranking signal (GSC)
+
+Skipped. `content-strategy/gsc-candidates.json` is unchanged and empty (`generated_at: null`; all three buckets `[]`). No `gsc-harvest` commit ran. `monthly-retro: no GSC data, ranking section skipped`.
+
+**Sixth consecutive month with no ranking signal.** The catalog has roughly doubled (612 → 1,247 EN) with no evidence of what is indexed. At this point the "6,000+ indexed pages" goal can only be argued from built-page counts.
+
+### Roadmap
+
+- **`ROADMAP.md` was not touched in October.** It was last edited 2026-06-06, and no `- [x]` was flipped in this bracket. **Fifth consecutive untouched month.**
+- Phase 0, 1, 3, 4: complete (7/7, 11/11, 6/6, 5/5).
+- Phase 2 (Localization): 5/7, unchanged. Pending: the ES/pt-BR drain (stale: parity is clean at 1,247/locale) and per-locale GSC properties.
+- Phase 5 (Locale-native newsletters): 0/6, unchanged.
+- Phase 6 (Monetization): 1/6, unchanged.
+- Phase 7 (Vertical 4 + scale): 1/5, unchanged. Built pages (7,482) remain past the 6,000 target, but the indexed count is unknown. "Add DE (or FR)" still looks shipped in practice (both locales at full parity). That is a ROADMAP accuracy question for the user.
+- New phase entries: none. `build:page` is pipeline tooling, not a roadmap item.
+
+### Anomalies
+
+- **Refresh lane produced zero full-page refreshes for the entire month.** The `ooligo-author-refresh` lane has 3 slots/day, yet its only claim in October was the 10-06 tier-A batch. Meanwhile **71 refresh:C and 9 refresh:B items sat available** at month end (September-end: 59 C, 6 B). The last tier-C refresh was 2026-09-27, and that page was again `ai-augmented-recruiting-stack`. The lane is either not firing, firing and no-op-ing without a commit, or blocked. Its scheduled-task run history is the place to look. This is the most important finding this month.
+- **New-content mix is now 100% tools while non-tool supply is plentiful.** At month end the queue held **43 comparisons, 31 workflows, 65 learn and 24 stacks available**, but only **42 tools**. Learn supply recovered from zero in September, but no learn page shipped. At October's ~41 pages/week, the **tool pool is about one week of runway**. Once it drains, the lane will either finally move to other types or starve. Either way, claim ordering, not supply, is producing the mix. This is the second month flagged.
+- **Tier-A pricing backlog keeps outrunning the lane.** Freshness sweeps (all four Saturdays ran this month, with no missed slot) reported 70 → 13 → 38 → 17 entries past SLA, all tier A. Month-end refresh queue: **130 refresh:A available** (September-end: 17). One 25-tool batch per month clears a fraction of that. A second batch (13 tools) ran 2026-11-02, outside this bracket.
+- **Pricing batch arithmetic doesn't reconcile.** The 10-06 body says "15 escalated … 11 as refresh:C … and 4 as refresh:B", but it names 12 tools for refresh:C (actively, dock, dover, everlaw, findem, front, gainsight, glean, gc-ai, eve-legal, filevine, fountain). With 10 stamped, that makes 26 named against 25 claimed. Either one name is miscounted or one tool was double-listed. It was not verified here.
+- **Dead links rising, still unrepaired.** Link-rot persistent dead counts went 7 → 8 → 9 → 10 (dead 8/8/11/14 across 10-04/11/18/25). The 10-25 log also records many domain redirects, including `plum.io` → Phenom's acquisition post (Plum was acquired). This is the fourth month flagged. The sweep detects but nothing fixes.
+- **Internal-link pass is not seeing new pages.** 3 links across 4 passes while 184 pages landed. Second month flagged. Candidate selection in `internal-link-prompt.md` likely needs to include newly published slugs.
+- **Locale-declaration bug found by the new verifier.** `ja/richpanel` declared `locale: fr`. The file-count parity check below does not catch this class, because a file can exist and still publish to the wrong URL. A one-off `build:page` sweep (or frontmatter-vs-path lint) over the whole catalog would establish how many more exist.
+- **Daily new-content output dipped.** 5.9/day vs. 7/day in September, and 14 of 31 days fell below the 7-slot cap. There are two stale-claim takeovers (clarivate-ipone 10-11 → 10-12, nice-cxone 10-16 → 10-17) and one duplicate claim (`zoho-desk` claimed twice on 10-29, shipped once).
+- **Claim/ship reconciliation: clean.** 189 `[new]`-tagged queue commits → 184 shipped. The 5-item difference is 2 takeover/reclaim re-claims, 1 duplicate claim (zoho-desk), and ezra-ai (claimed 10-19, skipped the same day as "absorbed into Greenhouse Voice AI"). No slug overrides.
+- **`plugin-admob-maui-article.md` is still in the repo root**, the fourth month flagged.
+- **ROADMAP public metrics are now five months stale.** They read "612 EN … 3,758 built pages" against actual **1,247 EN / 7,482 built**, understating EN by 51%. This retro is append-only and does not edit ROADMAP.
+- **Translation-only commits: 0** (September: 0, August: 0, July: 0).
+- **Locale parity (file counts): clean.** At month end all six locales (de, en, es, fr, ja, pt-BR) have identical counts for every entity type (tools 643, comparisons 233, workflows 127, learn 191, stacks 53).
+- **Queue health: 415 available items** (205 new, 210 refresh) against a 100-item new-content floor, with 2 active claims. Five refills added +48/+33/+31/+29/+31 = 172 items, and reported depth held at 237 → 218 → 216 → 213 → 219. New-content runway is about 5 weeks in aggregate, but only about 1 week for tools (see above).
+
+### Manual fill (user)
+
+- **GA4** — sessions / new users / countries top 5: ____
+- **beehiiv** — subscribers added / unsubscribed / clicks: ____
+- **Newsletter sends + open rate**: ____
+- **Discord / community signups**: ____
+- **Sponsors booked**: ____
+- **MRR**: ____
+- **Notes / decisions for next month**: ____
