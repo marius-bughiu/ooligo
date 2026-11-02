@@ -52,30 +52,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] attio — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d) → slug: attio
 - refresh:A: [type:tool] [vertical:recruiting] bamboohr — pricing 62d unverified (pricing_checked 2026-08-17, SLA 60d) → slug: bamboohr
 - refresh:A: [type:tool] [vertical:recruiting] beamery — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d) → slug: beamery
-- refresh:A: [type:tool] [vertical:revops] boostup — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] day-ai — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] influ2 — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] juro — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] karat — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] leandata — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] legora — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] linkedin-recruiter — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] linksquares — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] logikcull — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] luminance — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] maven-agi — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] parloa — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] persona — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] recruitee — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] relevance-ai — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] rippling — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] rollworks — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] salesforce-agentforce — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] seekout — pricing 66d unverified (pricing_checked 2026-08-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] sendspark — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing 66d unverified (pricing_checked 2026-08-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] spellbook — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] boostup — pricing 61d unverified (pricing_checked 2026-08-18, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:revops] day-ai — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:revops] influ2 — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:legal-ops] ivo — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:legal-ops] juro — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:recruiting] karat — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:revops] leandata — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:legal-ops] legora — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:recruiting] linkedin-recruiter — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:legal-ops] linksquares — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:legal-ops] logikcull — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:legal-ops] luminance — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:customer-success] maven-agi — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:customer-success] parloa — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:recruiting] persona — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:recruiting] recruitee — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:revops] relevance-ai — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:recruiting] rippling — pricing 65d unverified (pricing_checked 2026-08-14, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:revops] rollworks — pricing 67d unverified (pricing_checked 2026-08-12, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:revops] salesforce-agentforce — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:recruiting] seekout — pricing 66d unverified (pricing_checked 2026-08-13, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:revops] sendspark — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:legal-ops] sirionlabs — pricing 66d unverified (pricing_checked 2026-08-13, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
+- refresh:A: [type:tool] [vertical:legal-ops] spellbook — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d) → claimed: refresh 2026-11-02T01:14:27Z
 - refresh:A: [type:tool] [vertical:legal-ops] supio — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] totango — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] velaris — pricing 64d unverified (pricing_checked 2026-08-15, SLA 60d)
