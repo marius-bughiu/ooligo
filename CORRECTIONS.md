@@ -79,6 +79,12 @@ Not every report results in a fix. Common close-reasons:
 
 *New entries below this line. Most recent at the top.*
 
+### 2026-11-02 — Sales-cycle percentiles and SaaS customer economics
+
+The sales-cycle guide called P90 a worst-case estimate. In the revised nine-opportunity example, the five wins have a 30-day median, a 76-day inclusive P90 and a 100-day maximum. Loss durations and the age of open deals are reported separately. [Sales cycle length](https://ooligo.com/en/learn/sales-cycle-length/)
+
+The LTV:CAC and unit economics guides used universal spending thresholds and blurred revenue from new and existing customers. The new example attributes acquisition spending to ten new subscribers. It yields a 20-month simple payback, while a separate calculation for existing customers yields 102.5% net revenue retention. All six language editions link to the same editable workbook and explain the fictional inputs and assumptions. [LTV:CAC](https://ooligo.com/en/learn/ltv-cac/) · [Unit economics](https://ooligo.com/en/learn/unit-economics/) · [Example workbook](https://ooligo.com/downloads/revops-cohort-workbook.xlsx)
+
 ### 2026-11-02 — Attio stack budgets and Claude versus Cursor
 
 The Attio CRM stack budget assumed ten Fathom Team seats while leaving readers to infer which CRM could receive all ten users’ summaries. All six editions now separate a manual Attio note from a supported ten-user HubSpot connection. The illustrative annual software totals start at USD 16,554 plus EUR 240 with Fathom Team and USD 17,754 plus EUR 240 with Business. They exclude implementation, usage overages and the cost of HubSpot. The guides give acceptance criteria for a custom Fathom-to-Attio handoff that still needs a workspace trial. [Fathom CRM connections](https://www.fathom.ai/integrations-crm) · [Fathom team prices](https://www.fathom.ai/pricing?plan=teams)
