@@ -125,30 +125,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] harver — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → slug: harver
 - refresh:A: [type:tool] [vertical:legal-ops] harvey — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → slug: harvey
 - refresh:A: [type:tool] [vertical:customer-success] heap — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → skip: requeued as refresh:C (found by tier-A verify 2026-11-02 — see the refresh:C line below)
-- refresh:A: [type:tool] [vertical:legal-ops] hebbia — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] help-scout — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] hireflix — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] hirevue — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] hubspot-breeze — pricing 63d unverified (pricing_checked 2026-08-02, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] icertis — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] icims — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] instantly — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] intercom — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] koncert — pricing 62d unverified (pricing_checked 2026-08-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] lemlist — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] lorikeet — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] mixpanel — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] netomi — pricing never verified (no pricing_checked field, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] nooks — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] onit — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] openclaw — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] orum — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] paradox — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] perplexity — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] planhat — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] pocus — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] pylon — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] hebbia — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:customer-success] help-scout — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:recruiting] hireflix — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:recruiting] hirevue — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] hubspot-breeze — pricing 63d unverified (pricing_checked 2026-08-02, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] icertis — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:recruiting] icims — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] instantly — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] intercom — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] ironclad — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] koncert — pricing 62d unverified (pricing_checked 2026-08-03, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] lemlist — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:customer-success] lorikeet — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:customer-success] mixpanel — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:customer-success] netomi — pricing never verified (no pricing_checked field, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] nooks — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:legal-ops] onit — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] openclaw — pricing 66d unverified (pricing_checked 2026-07-30, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] orum — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:recruiting] paradox — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] perplexity — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:customer-success] planhat — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:revops] pocus — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
+- refresh:A: [type:tool] [vertical:customer-success] pylon — pricing 65d unverified (pricing_checked 2026-07-31, SLA 60d) → claimed: refresh 2026-11-03T01:14:31Z
 - refresh:A: [type:tool] [vertical:recruiting] radancy — pricing 67d unverified (pricing_checked 2026-07-29, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] rattle — pricing 61d unverified (pricing_checked 2026-08-04, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] rb2b — pricing 61d unverified (pricing_checked 2026-08-04, SLA 60d)
