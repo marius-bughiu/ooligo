@@ -27,7 +27,7 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:C: [type:stack] [vertical:recruiting] interview-intelligence-stack — cascade (material: pillar 2026-11-06 > stack's last_updated 2026-09-07)
+- refresh:C: [type:stack] [vertical:recruiting] interview-intelligence-stack — cascade (material: pillar 2026-11-06 > stack's last_updated 2026-09-07) → claimed: refresh 2026-11-08T01:13:58Z
 - refresh:C: [type:comparison] [vertical:revops] 6sense-vs-demandbase — body 190d stale (last_updated 2026-05-02, SLA 180d)
 - refresh:C: [type:comparison] [vertical:recruiting] alternatives-to-ashby — body 190d stale (last_updated 2026-05-02, SLA 180d)
 - refresh:C: [type:comparison] [vertical:revops] alternatives-to-attio — body 190d stale (last_updated 2026-05-02, SLA 180d)
