@@ -37,6 +37,11 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:revops] claude-cowork — material (tiers restructured at claude.com/pricing: Max 20x $200 is now a separate Ultra tier ($200/mo, 10x Pro weekly usage, no 5-hour limit, verified accounts); Max $100 now bundles $100/mo API credits, Ultra $200; Enterprise now 20-seat minimum at $20/seat annual + usage at API rates; Pro $20 ($17 annual) and Team $25/$20 std, $125/$100 premium unchanged; pricing_starts_at 20 holds; five-hour-cap prose no longer universal; verified 2026-11-10)
 - refresh:C: [type:tool] [vertical:customer-success] cresta — material (repositioned: cresta.com now "AI operating system for customer experience" (AI Agent, Deputy Agent, Agentic Assist, Conversation Intelligence); "Agent Assist" renamed "Agentic Assist"; still demo-led, no published pricing; AWS Marketplace $150k listing not re-checked; verified 2026-11-10)
 - refresh:C: [type:tool] [vertical:recruiting] crosschq — material (ownership changed: Crosschq now one of four companies in the Brilliant / BrilliantHire group (brillianthire.ai, with ApplicantX and Traitify); still demo-led, no published pricing; product lineup now AI Match, AI Interviews, Assessments, Reference Checks, Fraud Detection, ID Verification, QoH analytics; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:legal-ops] casetext — sunset path needed (Thomson Reuters retired Casetext 2025-04-01, subscribers migrated to CoCounsel; entry has no vendor_status: sunset / superseded_by and was flagged as a live tier-A pricing verify — apply CONTENT_PIPELINE §Higher-risk page classes sunset path: preserve URL, set vendor_status sunset + superseded_by, name the CoCounsel migration path; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:customer-success] dovetail — material (tiers restructured at dovetail.com/pricing: Free $0 and custom Enterprise gone, replaced by Bronze (up to 5 users, $4,800/yr platform fee + AI credits $0.15 each, annual, card), Silver (25+ users, SSO/access control/invoicing, sales-led) and Gold (100+ users, AI redaction/SCIM/custom retention/dedicated CSM, 30-day trial, sales-led); new credit meter; pricing_model freemium -> paid platform + usage, pricing_starts_at needs setting (~$400/mo); "only two plans, Free and Enterprise" prose obsolete; MCP still included; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:revops] dreamdata — material (tiers restructured at dreamdata.io/pricing: no separate quote-only Starter plan any more — "Plan for smaller teams" holds only Free $0; Advanced now two cards, "Attribution & Activation" (custom) and new "Dreamdata AI" (no price) which carries Data Warehouse and the MCP server; SCIM is an add-on; body's Free/Starter/Advanced description no longer matches; freemium and pricing_starts_at null hold; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:revops] fathom — material (tiers changed at fathom.ai/pricing: Enterprise moved from quote-only to published $35/user/mo annual-only; Business now shows a 2-user minimum; HIPAA with standard BAA now on Team; Business adds Deal View, coaching metrics, AI scorecards; Free $0, Premium $20/$16, Team $19/$15 (2-seat min), Business $34/$25 unchanged; pricing_starts_at 0 holds; API + MCP still listed; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:revops] heyreach — material (MCP flipped + tiers restructured at heyreach.io/pricing: "HeyReach MCP" now listed on Growth/Agency/Unlimited so mcp_available false -> true; Growth now volume-priced $79/sender/mo for 1-9 senders, $59 from 10 (annual $64/$48; entry says $63), capped at 50 senders; Agency now $999/mo 25 senders (annual $800, entry $799) or $1,399/mo 50 senders (annual $1,120); Unlimited $2,999 ($2,399 annual) unchanged but capped at 300 senders; new custom "Done for you" tier; body's "Agency cheaper from the 13th sender" crossover math is wrong; pricing_starts_at 79 holds; verified 2026-11-10)
 - refresh:C: [type:comparison] [vertical:revops] 6sense-vs-demandbase — body 190d stale (last_updated 2026-05-02, SLA 180d)
 - refresh:C: [type:comparison] [vertical:recruiting] alternatives-to-ashby — body 190d stale (last_updated 2026-05-02, SLA 180d)
 - refresh:C: [type:comparison] [vertical:revops] alternatives-to-attio — body 190d stale (last_updated 2026-05-02, SLA 180d)
@@ -129,7 +134,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] atlassian-rovo — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → slug: atlassian-rovo
 - refresh:A: [type:tool] [vertical:revops] avoma — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → skip: not tier A — requeued as refresh:C: above
 - refresh:A: [type:tool] [vertical:customer-success] bettermode — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → skip: not tier A — requeued as refresh:C: above
-- refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field; SLA 60d) → skip: known-dead, not a tier-A verify — requeued as refresh:C: above
 - refresh:A: [type:tool] [vertical:revops] champify — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → skip: not tier A — requeued as refresh:C: above
 - refresh:A: [type:tool] [vertical:customer-success] chattermill — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → slug: chattermill
 - refresh:A: [type:tool] [vertical:revops] clari — pricing 72d unverified (pricing_checked 2026-08-28, SLA 60d) → skip: not tier A — requeued as refresh:C: above
@@ -146,30 +151,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] crosschq — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → skip: not tier A — requeued as refresh:C: above
 - refresh:A: [type:tool] [vertical:legal-ops] darrow — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → slug: darrow
 - refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → skip: devrev.ai/pricing behind Vercel checkpoint (429) on 2026-11-10; PricingSaaS 2026-11-09 shows Mini Free / Pro / Max contact sales, consistent with entry but secondhand — retry next sweep
-- refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:customer-success] dovetail — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] dreamdata — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:customer-success] enterpret — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] everstage — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] fathom — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] fireflies — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] folk — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:recruiting] gem — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:customer-success] giga — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:recruiting] gloat — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] gong — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:customer-success] gorgias — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:customer-success] gradient-labs — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:recruiting] greenhouse — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] gumloop — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] guru — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:recruiting] hackerrank — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] heyreach — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:recruiting] hireez — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] hockeystack — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:recruiting] holly — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] hubspot — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
-- refresh:A: [type:tool] [vertical:revops] hyperbound — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → slug: docusign-iam
+- refresh:A: [type:tool] [vertical:customer-success] dovetail — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:revops] dreamdata — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:customer-success] enterpret — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → slug: enterpret
+- refresh:A: [type:tool] [vertical:revops] everstage — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → slug: everstage
+- refresh:A: [type:tool] [vertical:revops] fathom — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:revops] fireflies — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → slug: fireflies
+- refresh:A: [type:tool] [vertical:revops] folk — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → slug: folk
+- refresh:A: [type:tool] [vertical:recruiting] gem — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → slug: gem
+- refresh:A: [type:tool] [vertical:customer-success] giga — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → slug: giga
+- refresh:A: [type:tool] [vertical:recruiting] gloat — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → slug: gloat
+- refresh:A: [type:tool] [vertical:revops] gong — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → slug: gong
+- refresh:A: [type:tool] [vertical:customer-success] gorgias — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → slug: gorgias
+- refresh:A: [type:tool] [vertical:customer-success] gradient-labs — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → slug: gradient-labs
+- refresh:A: [type:tool] [vertical:recruiting] greenhouse — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → slug: greenhouse
+- refresh:A: [type:tool] [vertical:revops] gumloop — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → slug: gumloop
+- refresh:A: [type:tool] [vertical:revops] guru — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → slug: guru
+- refresh:A: [type:tool] [vertical:recruiting] hackerrank — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → slug: hackerrank
+- refresh:A: [type:tool] [vertical:revops] heyreach — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:recruiting] hireez — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → slug: hireez
+- refresh:A: [type:tool] [vertical:revops] hockeystack — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → skip: pricing moved <20% — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:recruiting] holly — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → slug: holly
+- refresh:A: [type:tool] [vertical:revops] hubspot — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → slug: hubspot
+- refresh:A: [type:tool] [vertical:revops] hyperbound — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → slug: hyperbound
 - refresh:A: [type:tool] [vertical:customer-success] intellum — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] joveo — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
@@ -921,6 +926,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:B: [type:tool] [vertical:revops] activepieces — pricing patch (activepieces.com/pricing: Free now "1,000 credits a month, up to 5 users" (entry: 100 credits/day, single user; page table still says daily reset — self-contradictory, quote both or pick FAQ); new Embed from $36k/yr; Plus $16 annual/$20 monthly, Team ~$166 annual/$200 monthly, overage $0.007/credit unchanged; verified 2026-11-10)
 - refresh:B: [type:tool] [vertical:revops] composio — pricing patch (composio.dev/pricing: Free renamed "Hobby" with $2 credits and 30-day log retention (entry says 7); new managed-app rates (20k free calls then $0.0005-$0.01/call; polling triggers $0.006 after 10k); new Pro add-ons (direct execution $0.0001, proxy $0.0002, sandbox $0.0001, firewall $0.50/1M tokens); Pro $29, $0.0003/call, $0.003/trigger unchanged; verified 2026-11-10)
 - refresh:B: [type:tool] [vertical:customer-success] contentsquare — pricing patch (contentsquare.com/pricing: billing basis wrong — Experience Analytics Growth is $49 monthly / $39 billed yearly (entry says $49 billed annually), VoC Growth $99 monthly / $79 yearly (entry says $99 annually); pricing_starts_at 49 holds on monthly basis; Pro MCP 72k/yr, Enterprise 108k/yr now listed; verified 2026-11-10)
+- refresh:B: [type:tool] [vertical:revops] hockeystack — pricing patch (hockeystack.com/pricing: still custom/demo-led, but the page no longer names the GTM Intelligence and GTM Execution plans the body describes, and now notes "Startup pricing is available"; PricingSaaS still tracks GTM Intelligence at Contact — rewrite the Pricing section to what the vendor page backs; custom/null hold; verified 2026-11-10)
 
 ## Tools
 
