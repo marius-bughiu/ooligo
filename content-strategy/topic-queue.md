@@ -129,7 +129,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] atlassian-rovo — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → slug: atlassian-rovo
 - refresh:A: [type:tool] [vertical:revops] avoma — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → skip: not tier A — requeued as refresh:C: above
 - refresh:A: [type:tool] [vertical:customer-success] bettermode — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → skip: not tier A — requeued as refresh:C: above
-- refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field; SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field; SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
 - refresh:A: [type:tool] [vertical:revops] champify — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → skip: not tier A — requeued as refresh:C: above
 - refresh:A: [type:tool] [vertical:customer-success] chattermill — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → slug: chattermill
 - refresh:A: [type:tool] [vertical:revops] clari — pricing 72d unverified (pricing_checked 2026-08-28, SLA 60d) → skip: not tier A — requeued as refresh:C: above
@@ -146,30 +146,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] crosschq — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → skip: not tier A — requeued as refresh:C: above
 - refresh:A: [type:tool] [vertical:legal-ops] darrow — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → slug: darrow
 - refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → skip: devrev.ai/pricing behind Vercel checkpoint (429) on 2026-11-10; PricingSaaS 2026-11-09 shows Mini Free / Pro / Max contact sales, consistent with entry but secondhand — retry next sweep
-- refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] dovetail — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] dreamdata — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] enterpret — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] everstage — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] fathom — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] fireflies — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] folk — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] gem — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] giga — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] gloat — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] gong — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] gorgias — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] gradient-labs — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] greenhouse — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] gumloop — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] guru — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] hackerrank — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] heyreach — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] hireez — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] hockeystack — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] holly — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] hubspot — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] hyperbound — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:customer-success] dovetail — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] dreamdata — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:customer-success] enterpret — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] everstage — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] fathom — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] fireflies — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] folk — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:recruiting] gem — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:customer-success] giga — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:recruiting] gloat — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] gong — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:customer-success] gorgias — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:customer-success] gradient-labs — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:recruiting] greenhouse — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] gumloop — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] guru — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:recruiting] hackerrank — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] heyreach — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:recruiting] hireez — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] hockeystack — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:recruiting] holly — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] hubspot — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
+- refresh:A: [type:tool] [vertical:revops] hyperbound — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-10T21:13:57Z
 - refresh:A: [type:tool] [vertical:customer-success] intellum — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] joveo — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
