@@ -28,6 +28,15 @@ Each line carries at most one lifecycle marker, appended in place:
 ## Refresh queue
 
 - refresh:C: [type:stack] [vertical:recruiting] interview-intelligence-stack — cascade (material: pillar 2026-11-06 > stack's last_updated 2026-09-07) → slug: interview-intelligence-stack
+- refresh:C: [type:tool] [vertical:revops] arcade-dev — material (billing meter restructured at arcade.dev/pricing: auth events (2,000 free, $0.10/event) gone; now Free $0 with 2,000 tool calls/mo, Team $25/mo platform fee + $0.01/tool call, Enterprise custom; prose built on the auth-event model ($365 example, 5,000-seat warning) is wrong; read blog.arcade.dev/pricing-updates; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:revops] avoma — material (price moved >=20% at avoma.com/pricing: Organization $24 -> $29/seat/mo annual (+20.8%), monthly still $39; Startup $19/$29 and Enterprise $39 unchanged; Gong-scope sum Org+CI+RI becomes $87/seat/mo (~$1,044/yr, was $82/~$984); pricing_starts_at 19 holds; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:customer-success] bettermode — material (price moved >=20% at bettermode.com/pricing: Starter $399 -> $149/mo yearly ($1,788/yr), $499 -> $199 month-to-month (-63%); Growth $1,500 yearly / $1,750 monthly unchanged; new Toggy add-on $750/mo; pricing_starts_at 399 -> 149, "$4,788" prose -> $1,788; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:revops] champify — material (tiers restructured at champify.io/pricing: new Lite from $500/mo (5k+ contacts), Core $2,000 removed, Pro $3,000 -> $2,500, Enterprise $6,000 -> $5,000; pricing_starts_at 2000 -> 500; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:revops] clari — material (vendor rebranded/merged: clari.com and clari.com/pricing 301 to salesloft.com; Clari–Salesloft merger closed 2025-12-03 and the combined company took the Salesloft name ~Sep 2026; Clari survives as the "Clari Forecast" product; website, pricing_url and positional framing stale — decide sunset/superseded_by vs reposition per CONTENT_PIPELINE §Higher-risk page classes; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:revops] clarify — material (tiers restructured at clarify.ai/pricing: Growth now "From $1,000/mo" with 100k+ credits (entry says custom), new custom Enterprise tier added, Starter $50 shows "5k to 40k" credits; Free $0/1k unchanged; pricing_starts_at 50 holds; MCP/API not mentioned on pricing page — re-check elsewhere; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:revops] claude-cowork — material (tiers restructured at claude.com/pricing: Max 20x $200 is now a separate Ultra tier ($200/mo, 10x Pro weekly usage, no 5-hour limit, verified accounts); Max $100 now bundles $100/mo API credits, Ultra $200; Enterprise now 20-seat minimum at $20/seat annual + usage at API rates; Pro $20 ($17 annual) and Team $25/$20 std, $125/$100 premium unchanged; pricing_starts_at 20 holds; five-hour-cap prose no longer universal; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:customer-success] cresta — material (repositioned: cresta.com now "AI operating system for customer experience" (AI Agent, Deputy Agent, Agentic Assist, Conversation Intelligence); "Agent Assist" renamed "Agentic Assist"; still demo-led, no published pricing; AWS Marketplace $150k listing not re-checked; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:recruiting] crosschq — material (ownership changed: Crosschq now one of four companies in the Brilliant / BrilliantHire group (brillianthire.ai, with ApplicantX and Traitify); still demo-led, no published pricing; product lineup now AI Match, AI Interviews, Assessments, Reference Checks, Fraud Detection, ID Verification, QoH analytics; verified 2026-11-10)
 - refresh:C: [type:comparison] [vertical:revops] 6sense-vs-demandbase — body 190d stale (last_updated 2026-05-02, SLA 180d)
 - refresh:C: [type:comparison] [vertical:recruiting] alternatives-to-ashby — body 190d stale (last_updated 2026-05-02, SLA 180d)
 - refresh:C: [type:comparison] [vertical:revops] alternatives-to-attio — body 190d stale (last_updated 2026-05-02, SLA 180d)
@@ -112,31 +121,31 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:recruiting] harver — body 189d stale (last_updated 2026-05-03, SLA 180d)
 - refresh:C: [type:tool] [vertical:recruiting] icims — body 189d stale (last_updated 2026-05-03, SLA 180d)
 - refresh:C: [type:tool] [vertical:recruiting] vervoe — body 189d stale (last_updated 2026-05-03, SLA 180d)
-- refresh:A: [type:tool] [vertical:revops] activepieces — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] airtable — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:legal-ops] anaqua — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] arcade-dev — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:customer-success] assembled — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] atlassian-rovo — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] avoma — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:customer-success] bettermode — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] activepieces — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → skip: pricing moved <20% — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:revops] airtable — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → slug: airtable
+- refresh:A: [type:tool] [vertical:legal-ops] anaqua — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → slug: anaqua
+- refresh:A: [type:tool] [vertical:revops] arcade-dev — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:customer-success] assembled — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → slug: assembled
+- refresh:A: [type:tool] [vertical:revops] atlassian-rovo — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → slug: atlassian-rovo
+- refresh:A: [type:tool] [vertical:revops] avoma — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:customer-success] bettermode — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → skip: not tier A — requeued as refresh:C: above
 - refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] champify — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:customer-success] chattermill — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] clari — pricing 72d unverified (pricing_checked 2026-08-28, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] clarify — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] claude-cowork — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] common-room — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:revops] composio — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:legal-ops] concord — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:legal-ops] conga-clm — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:customer-success] contentsquare — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:legal-ops] contractpodai — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:customer-success] crescendo — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:customer-success] cresta — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:recruiting] crosschq — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:legal-ops] darrow — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
-- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] champify — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:customer-success] chattermill — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → slug: chattermill
+- refresh:A: [type:tool] [vertical:revops] clari — pricing 72d unverified (pricing_checked 2026-08-28, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:revops] clarify — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:revops] claude-cowork — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:revops] common-room — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → slug: common-room
+- refresh:A: [type:tool] [vertical:revops] composio — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → skip: pricing moved <20% — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:legal-ops] concord — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → slug: concord
+- refresh:A: [type:tool] [vertical:legal-ops] conga-clm — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → slug: conga-clm
+- refresh:A: [type:tool] [vertical:customer-success] contentsquare — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → skip: pricing moved <20% — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:legal-ops] contractpodai — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → slug: contractpodai
+- refresh:A: [type:tool] [vertical:customer-success] crescendo — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → slug: crescendo
+- refresh:A: [type:tool] [vertical:customer-success] cresta — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:recruiting] crosschq — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → skip: not tier A — requeued as refresh:C: above
+- refresh:A: [type:tool] [vertical:legal-ops] darrow — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → slug: darrow
+- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → skip: devrev.ai/pricing behind Vercel checkpoint (429) on 2026-11-10; PricingSaaS 2026-11-09 shows Mini Free / Pro / Max contact sales, consistent with entry but secondhand — retry next sweep
 - refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] dovetail — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] dreamdata — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
@@ -909,6 +918,9 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:B: [type:tool] [vertical:revops] fullcast — field patch (mcp_available false -> true: Fullcast MCP server announced 2025-08-26, fullcast.com/content/fullcast-announces-the-release-of-its-model-context-protocol-mcp-server/; pricing_url fullcast.com/pricing/ 301s to fullcast.ai/pricing/; quote-only with same three-suite meters; optional: ICM now 'managed with Commissionly', Ebsta (Aug 2025) and Copy.ai (Oct 2025) acquisitions unmentioned; found by tier-A verify 2026-11-03)
 - refresh:B: [type:tool] [vertical:legal-ops] relativity — field patch (still quote-only; mcp_available false -> true: Relativity MCP GA for RelativityOne, relativity.com/data-solutions/mcp/; fix stale "kCura's certified providers" -> Relativity's certified partners; aiR for Review/Privilege bundled into standard RelativityOne pricing from early 2026; Gavel acquired Jun 2026; no pricing_url in frontmatter; found by tier-A verify 2026-11-03)
 - refresh:B: [type:tool] [vertical:legal-ops] reveal — field patch (still demo/contact-only at revealdata.com, no 2026 acquisition; corrections: Logikcull and IPRO acquired 2023 not 2022, Brainspace a 2021 merger not 2020 acquisition, Onna acquisition (May 2024) missing; homepage news of a Claude Connector for Onna — confirm whether it is an MCP server before flipping mcp_available; found by tier-A verify 2026-11-03)
+- refresh:B: [type:tool] [vertical:revops] activepieces — pricing patch (activepieces.com/pricing: Free now "1,000 credits a month, up to 5 users" (entry: 100 credits/day, single user; page table still says daily reset — self-contradictory, quote both or pick FAQ); new Embed from $36k/yr; Plus $16 annual/$20 monthly, Team ~$166 annual/$200 monthly, overage $0.007/credit unchanged; verified 2026-11-10)
+- refresh:B: [type:tool] [vertical:revops] composio — pricing patch (composio.dev/pricing: Free renamed "Hobby" with $2 credits and 30-day log retention (entry says 7); new managed-app rates (20k free calls then $0.0005-$0.01/call; polling triggers $0.006 after 10k); new Pro add-ons (direct execution $0.0001, proxy $0.0002, sandbox $0.0001, firewall $0.50/1M tokens); Pro $29, $0.0003/call, $0.003/trigger unchanged; verified 2026-11-10)
+- refresh:B: [type:tool] [vertical:customer-success] contentsquare — pricing patch (contentsquare.com/pricing: billing basis wrong — Experience Analytics Growth is $49 monthly / $39 billed yearly (entry says $49 billed annually), VoC Growth $99 monthly / $79 yearly (entry says $99 annually); pricing_starts_at 49 holds on monthly basis; Pro MCP 72k/yr, Enterprise 108k/yr now listed; verified 2026-11-10)
 
 ## Tools
 
