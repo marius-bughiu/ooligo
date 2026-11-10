@@ -112,31 +112,31 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:recruiting] harver — body 189d stale (last_updated 2026-05-03, SLA 180d)
 - refresh:C: [type:tool] [vertical:recruiting] icims — body 189d stale (last_updated 2026-05-03, SLA 180d)
 - refresh:C: [type:tool] [vertical:recruiting] vervoe — body 189d stale (last_updated 2026-05-03, SLA 180d)
-- refresh:A: [type:tool] [vertical:revops] activepieces — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] airtable — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] anaqua — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] arcade-dev — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] assembled — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] atlassian-rovo — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] avoma — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] bettermode — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] activepieces — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] airtable — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:legal-ops] anaqua — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] arcade-dev — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:customer-success] assembled — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] atlassian-rovo — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] avoma — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:customer-success] bettermode — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
 - refresh:A: [type:tool] [vertical:legal-ops] casetext — pricing never verified (no pricing_checked field; SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] champify — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] chattermill — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] clari — pricing 72d unverified (pricing_checked 2026-08-28, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] clarify — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] claude-cowork — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] common-room — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] composio — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] concord — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] conga-clm — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] contentsquare — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] contractpodai — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] crescendo — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] cresta — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] crosschq — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] darrow — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
+- refresh:A: [type:tool] [vertical:revops] champify — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:customer-success] chattermill — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] clari — pricing 72d unverified (pricing_checked 2026-08-28, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] clarify — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] claude-cowork — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] common-room — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:revops] composio — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:legal-ops] concord — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:legal-ops] conga-clm — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:customer-success] contentsquare — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:legal-ops] contractpodai — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:customer-success] crescendo — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:customer-success] cresta — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:recruiting] crosschq — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:legal-ops] darrow — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
+- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-10T01:14:04Z
 - refresh:A: [type:tool] [vertical:legal-ops] docusign-iam — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] dovetail — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] dreamdata — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
