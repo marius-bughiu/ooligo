@@ -175,30 +175,30 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] holly — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → slug: holly
 - refresh:A: [type:tool] [vertical:revops] hubspot — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → slug: hubspot
 - refresh:A: [type:tool] [vertical:revops] hyperbound — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → slug: hyperbound
-- refresh:A: [type:tool] [vertical:customer-success] intellum — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] joveo — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] kustomer — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] lavender — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] lever — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] litera — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] loxo — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] malbek — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] microsoft-agent-365 — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] nue — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] obot — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] ontra — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] onyx — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] otter-ai — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] patlytics — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] plain — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] posthog — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] read-ai — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] retool — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] rilla — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] rippit — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] sandstone — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] scribe — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] intellum — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:recruiting] jobvite — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:recruiting] joveo — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:customer-success] kustomer — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] lavender — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:recruiting] lever — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:legal-ops] litera — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:recruiting] loxo — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:legal-ops] malbek — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] microsoft-agent-365 — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] nue — pricing 67d unverified (pricing_checked 2026-09-02, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] obot — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:legal-ops] ontra — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] onyx — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] otter-ai — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:legal-ops] patlytics — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:customer-success] plain — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:customer-success] posthog — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] read-ai — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] retool — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] rilla — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:customer-success] rippit — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:legal-ops] sandstone — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
+- refresh:A: [type:tool] [vertical:revops] scribe — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → claimed: refresh 2026-11-11T21:13:39Z
 - refresh:A: [type:tool] [vertical:recruiting] shl — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
 - refresh:A: [type:tool] [vertical:customer-success] solidroad — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
 - refresh:A: [type:tool] [vertical:legal-ops] solve-intelligence — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d)
