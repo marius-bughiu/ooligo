@@ -30,31 +30,31 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:stack] [vertical:customer-success] customer-community-stack — cascade (material: bettermode 2026-11-10 > stack's last_updated 2026-09-01)
 - refresh:C: [type:stack] [vertical:revops] revenue-forecasting-stack — cascade (material: clari 2026-09-02 > stack's last_updated 2026-08-13)
 - refresh:C: [type:stack] [vertical:revops] revops-planning-stack — cascade (material: clari 2026-09-02 > stack's last_updated 2026-08-05)
-- refresh:A: [type:tool] [vertical:legal-ops] aderant — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] allego — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] athennian — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] avvoka — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] backstory — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] clarra — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] coderpad — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] crunchbase — pricing never verified (no pricing_checked, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] daxtra — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 68d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] entegrata — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] fullenrich — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] heymilo — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] impartner — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] insycle — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] lawtoolbox — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] leadfeeder — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] legartis — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-counsellink — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] marveri — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] midpage — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] mindtickle — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] aderant — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:revops] allego — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] athennian — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] avvoka — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:revops] backstory — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] clarra — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:recruiting] coderpad — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:revops] crunchbase — pricing never verified (no pricing_checked, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:recruiting] daxtra — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 68d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] entegrata — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:revops] fullenrich — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:recruiting] heymilo — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:revops] impartner — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:revops] insycle — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] lawtoolbox — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:revops] leadfeeder — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] legartis — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-counsellink — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] marveri — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] midpage — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:revops] mindtickle — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
 - refresh:A: [type:tool] [vertical:legal-ops] mitratech — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] modernloop — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] mutiny — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
