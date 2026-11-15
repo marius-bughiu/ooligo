@@ -30,31 +30,31 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:stack] [vertical:customer-success] customer-community-stack — cascade (material: bettermode 2026-11-10 > stack's last_updated 2026-09-01)
 - refresh:C: [type:stack] [vertical:revops] revenue-forecasting-stack — cascade (material: clari 2026-09-02 > stack's last_updated 2026-08-13)
 - refresh:C: [type:stack] [vertical:revops] revops-planning-stack — cascade (material: clari 2026-09-02 > stack's last_updated 2026-08-05)
-- refresh:A: [type:tool] [vertical:legal-ops] aderant — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:revops] allego — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] athennian — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] avvoka — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:revops] backstory — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] clarra — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:recruiting] coderpad — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:revops] crunchbase — pricing never verified (no pricing_checked, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:recruiting] daxtra — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 68d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] entegrata — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:revops] fullenrich — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:recruiting] heymilo — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:revops] impartner — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:revops] insycle — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] lawtoolbox — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:revops] leadfeeder — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] legartis — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-counsellink — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] marveri — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:legal-ops] midpage — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
-- refresh:A: [type:tool] [vertical:revops] mindtickle — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T01:13:44Z
+- refresh:A: [type:tool] [vertical:legal-ops] aderant — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: aderant
+- refresh:A: [type:tool] [vertical:revops] allego — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → slug: allego
+- refresh:A: [type:tool] [vertical:legal-ops] athennian — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → slug: athennian
+- refresh:A: [type:tool] [vertical:legal-ops] avvoka — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: avvoka
+- refresh:A: [type:tool] [vertical:revops] backstory — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → slug: backstory
+- refresh:A: [type:tool] [vertical:legal-ops] clarra — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: clarra
+- refresh:A: [type:tool] [vertical:recruiting] coderpad — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:revops] crunchbase — pricing never verified (no pricing_checked, SLA 60d) → slug: crunchbase
+- refresh:A: [type:tool] [vertical:recruiting] daxtra — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → slug: daxtra
+- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 68d unverified (pricing_checked 2026-09-08, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] entegrata — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: entegrata
+- refresh:A: [type:tool] [vertical:revops] fullenrich — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:recruiting] heymilo — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:revops] impartner — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → slug: impartner
+- refresh:A: [type:tool] [vertical:revops] insycle — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → slug: insycle
+- refresh:A: [type:tool] [vertical:legal-ops] lawtoolbox — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → skip: pricing moved <20% — requeued as refresh:B: below
+- refresh:A: [type:tool] [vertical:revops] leadfeeder — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → slug: leadfeeder
+- refresh:A: [type:tool] [vertical:legal-ops] legartis — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:legal-ops] lexisnexis-counsellink — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → slug: lexisnexis-counsellink
+- refresh:A: [type:tool] [vertical:recruiting] maki-people — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → slug: maki-people
+- refresh:A: [type:tool] [vertical:recruiting] manatal — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → slug: manatal
+- refresh:A: [type:tool] [vertical:legal-ops] marveri — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → slug: marveri
+- refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → slug: micro1
+- refresh:A: [type:tool] [vertical:legal-ops] midpage — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → slug: midpage
+- refresh:A: [type:tool] [vertical:revops] mindtickle — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:legal-ops] mitratech — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
 - refresh:A: [type:tool] [vertical:recruiting] modernloop — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] mutiny — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
@@ -996,6 +996,12 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:B: [type:tool] [vertical:customer-success] rippit — pricing patch (prices hold at rippit.com/pricing -- Free $0 100 Agent Runs + $100 AI credits, Starter $185 300 runs, Growth $495 1,000 runs, Enterprise custom -- but every tier now lists "integrations with Intercom, Decagon, Gong, Granola, and more" where the entry says Free gets "one Zendesk or Intercom connection"; do not bump last_updated; found by tier-A verify 2026-11-11)
 - refresh:B: [type:tool] [vertical:customer-success] posthog — pricing patch (free tier holds at posthog.com/pricing -- 1M events, 5K recordings -- but retention changed: paid plan now "2-year data retention - up from 1 year" (entry says 7-year), platform packages now up to 3 years Boost / 5 Scale / 7 Enterprise (entry says 60 months Enterprise); per-unit rates and Boost/Scale $250/$750 are JS-rendered -- need a rendered read; do not bump last_updated; found by tier-A verify 2026-11-11)
 - refresh:B: [type:tool] [vertical:legal-ops] ontra — flag fix (ontra.ai/products/pricing unchanged -- Standard no minimum, Advanced/Premier $2,000/mo minimums, Insight/Atlas/KYC quote-only -- but the page says Atlas annual license includes a "Standard API package", contradicting api_available: false; flip to true and mention in Pricing/integrations across 6 locales; do not bump last_updated; found by tier-A verify 2026-11-11)
+- refresh:C: [type:tool] [vertical:revops] mindtickle — material (MCP flipped: mindtickle.com/pricing now lists "Mindtickle MCP" under Platform Features, linking mindtickle.com/platform/mcp-server/ (authenticated, permission-scoped MCP server for any MCP client: find content, build Digital Sales Rooms, call summaries, Deal Guides); frontmatter has no mcp_available and body says no public MCP docs as of 2026-09-11 — set true and rewrite the agent-access framing; pricing still quote-only, free AI Role Play simulator; found by tier-A verify 2026-11-15)
+- refresh:C: [type:tool] [vertical:revops] fullenrich — material (price moved >=20% at fullenrich.com/pricing: public Pro credit ladder now starts at 500 credits $29/mo (annual from $26/mo, 6,000 credits/yr), up to 100,000 credits $3,500/mo, per-credit $0.058 -> $0.032; $55/1,000 still listed; pricing_starts_at 55 -> 29 (-47%); "larger packages not shown on public page" prose is wrong; 50-credit trial, Enterprise custom, API + MCP on all plans unchanged; found by tier-A verify 2026-11-15)
+- refresh:C: [type:tool] [vertical:recruiting] heymilo — material (MCP + API flipped: heymilo.ai now has an "MCP & API" section, an FAQ on an MCP server for querying hiring data, and API docs in the footer; entry has no mcp_available / api_available and the body is silent on both — set true and add the agent-access framing; pricing still demo-only; found by tier-A verify 2026-11-15)
+- refresh:C: [type:tool] [vertical:recruiting] coderpad — material (tiers restructured at coderpad.io/pricing: new Frontier Lite tier $1,000/mo annual-only ($12,000/yr, 360 interviews) between Team and Enterprise; $30 overage now listed on every plan incl. annual, contradicting the body's "annual plans have no overage / auto-renew" claim and the Starter-vs-Team math; FAQ mentions an "Enterprise Flex" plan; Starter $80/$120 and Team $400/$500 unchanged; pricing_starts_at 80 holds; API Enterprise-only, no MCP; found by tier-A verify 2026-11-15)
+- refresh:C: [type:tool] [vertical:legal-ops] legartis — material (tiers restructured at legartis.ai/ai-packages: only Free (1 seat, 2 NDA reviews/mo) and "Team to Enterprise" (on request) remain; Professional (CHF/€250/user/mo) and Team (CHF/€300, 5-seat floor) are gone, so pricing_starts_at 223 is unsupported and pricing_model should become free plan + custom; feature table now lists "Integrations via API and MCP" so mcp_available false -> true likely; found by tier-A verify 2026-11-15)
+- refresh:B: [type:tool] [vertical:legal-ops] lawtoolbox — pricing patch (lawtoolbox.com/pricing: every per-user tier up ~10% — annual 2-9 users $35 -> $39, 10-19 $33 -> $36, 20-79 $23 -> $25, 80+ $19 -> $21; monthly $42 -> $46, $40 -> $44, $30 -> $33, $22 -> $24; pricing_starts_at 19 -> 21 (+10.5%); tier structure, 1-year minimum, $4/user integration add-on, unpriced AI/MCP add-ons unchanged; body's 25-mailbox example becomes 25 x ($25 + $4) x 12 = $8,700; do not bump last_updated; found by tier-A verify 2026-11-15)
 
 ## Tools
 
