@@ -27,7 +27,7 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:C: [type:stack] [vertical:customer-success] customer-community-stack — cascade (material: bettermode 2026-11-10 > stack's last_updated 2026-09-01)
+- refresh:C: [type:stack] [vertical:customer-success] customer-community-stack — cascade (material: bettermode 2026-11-10 > stack's last_updated 2026-09-01) → claimed: refresh 2026-11-15T21:14:36Z
 - refresh:C: [type:stack] [vertical:revops] revenue-forecasting-stack — cascade (material: clari 2026-09-02 > stack's last_updated 2026-08-13)
 - refresh:C: [type:stack] [vertical:revops] revops-planning-stack — cascade (material: clari 2026-09-02 > stack's last_updated 2026-08-05)
 - refresh:A: [type:tool] [vertical:legal-ops] aderant — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: aderant
@@ -39,7 +39,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] coderpad — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:revops] crunchbase — pricing never verified (no pricing_checked, SLA 60d) → slug: crunchbase
 - refresh:A: [type:tool] [vertical:recruiting] daxtra — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → slug: daxtra
-- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 68d unverified (pricing_checked 2026-09-08, SLA 60d)
+- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 68d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
 - refresh:A: [type:tool] [vertical:legal-ops] entegrata — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: entegrata
 - refresh:A: [type:tool] [vertical:revops] fullenrich — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:recruiting] heymilo — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
@@ -55,29 +55,29 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → slug: micro1
 - refresh:A: [type:tool] [vertical:legal-ops] midpage — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → slug: midpage
 - refresh:A: [type:tool] [vertical:revops] mindtickle — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
-- refresh:A: [type:tool] [vertical:legal-ops] mitratech — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] modernloop — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] mutiny — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] mycase — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:cross] n8n — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] navattic — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] nuix — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] ocean-io — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] oddr — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] opus-2 — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] outreach — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:cross] pandadoc — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] paraform — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] performio — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] persuit — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] quotapath — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] recruit-crm — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] revenue-io — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] scratchpad — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] sendoso — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] showpad — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] spekit — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] storylane — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d)
+- refresh:A: [type:tool] [vertical:legal-ops] mitratech — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:recruiting] modernloop — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] mutiny — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:legal-ops] mycase — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:cross] n8n — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] navattic — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:legal-ops] nuix — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] ocean-io — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:legal-ops] oddr — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:legal-ops] opus-2 — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] outreach — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:cross] pandadoc — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:recruiting] paraform — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] performio — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:legal-ops] persuit — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] quotapath — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:recruiting] recruit-crm — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] revenue-io — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] scratchpad — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] sendoso — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] showpad — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] spekit — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:revops] storylane — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
 - refresh:A: [type:tool] [vertical:recruiting] textio — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] varicent — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] vivun — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d)
