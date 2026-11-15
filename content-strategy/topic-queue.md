@@ -27,7 +27,7 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:C: [type:stack] [vertical:customer-success] customer-community-stack — cascade (material: bettermode 2026-11-10 > stack's last_updated 2026-09-01) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:C: [type:stack] [vertical:customer-success] customer-community-stack — cascade (material: bettermode 2026-11-10 > stack's last_updated 2026-09-01) → slug: customer-community-stack
 - refresh:C: [type:stack] [vertical:revops] revenue-forecasting-stack — cascade (material: clari 2026-09-02 > stack's last_updated 2026-08-13)
 - refresh:C: [type:stack] [vertical:revops] revops-planning-stack — cascade (material: clari 2026-09-02 > stack's last_updated 2026-08-05)
 - refresh:A: [type:tool] [vertical:legal-ops] aderant — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: aderant
@@ -39,7 +39,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] coderpad — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:revops] crunchbase — pricing never verified (no pricing_checked, SLA 60d) → slug: crunchbase
 - refresh:A: [type:tool] [vertical:recruiting] daxtra — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → slug: daxtra
-- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 68d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:customer-success] devrev — pricing 68d unverified (pricing_checked 2026-09-08, SLA 60d)
 - refresh:A: [type:tool] [vertical:legal-ops] entegrata — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: entegrata
 - refresh:A: [type:tool] [vertical:revops] fullenrich — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:recruiting] heymilo — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
@@ -55,29 +55,29 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:recruiting] micro1 — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → slug: micro1
 - refresh:A: [type:tool] [vertical:legal-ops] midpage — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → slug: midpage
 - refresh:A: [type:tool] [vertical:revops] mindtickle — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
-- refresh:A: [type:tool] [vertical:legal-ops] mitratech — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:recruiting] modernloop — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] mutiny — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:legal-ops] mycase — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:cross] n8n — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] navattic — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:legal-ops] nuix — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] ocean-io — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:legal-ops] oddr — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:legal-ops] opus-2 — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] outreach — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:cross] pandadoc — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:recruiting] paraform — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] performio — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:legal-ops] persuit — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] quotapath — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:recruiting] recruit-crm — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] revenue-io — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] scratchpad — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] sendoso — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] showpad — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] spekit — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
-- refresh:A: [type:tool] [vertical:revops] storylane — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-15T21:14:36Z
+- refresh:A: [type:tool] [vertical:legal-ops] mitratech — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → slug: mitratech
+- refresh:A: [type:tool] [vertical:recruiting] modernloop — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → slug: modernloop
+- refresh:A: [type:tool] [vertical:revops] mutiny — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → slug: mutiny
+- refresh:A: [type:tool] [vertical:legal-ops] mycase — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:cross] n8n — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:revops] navattic — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:legal-ops] nuix — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → slug: nuix
+- refresh:A: [type:tool] [vertical:revops] ocean-io — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:legal-ops] oddr — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → slug: oddr
+- refresh:A: [type:tool] [vertical:legal-ops] opus-2 — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → slug: opus-2
+- refresh:A: [type:tool] [vertical:revops] outreach — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → slug: outreach
+- refresh:A: [type:tool] [vertical:cross] pandadoc — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → slug: pandadoc
+- refresh:A: [type:tool] [vertical:recruiting] paraform — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → slug: paraform
+- refresh:A: [type:tool] [vertical:revops] performio — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → slug: performio
+- refresh:A: [type:tool] [vertical:legal-ops] persuit — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → slug: persuit
+- refresh:A: [type:tool] [vertical:revops] quotapath — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:recruiting] recruit-crm — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:revops] revenue-io — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → slug: revenue-io
+- refresh:A: [type:tool] [vertical:revops] scratchpad — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:revops] sendoso — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
+- refresh:A: [type:tool] [vertical:revops] showpad — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → slug: showpad
+- refresh:A: [type:tool] [vertical:revops] spekit — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → slug: spekit
+- refresh:A: [type:tool] [vertical:revops] storylane — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
 - refresh:A: [type:tool] [vertical:recruiting] textio — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] varicent — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
 - refresh:A: [type:tool] [vertical:revops] vivun — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d)
@@ -101,6 +101,15 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:tool] [vertical:revops] dreamdata — material (tiers restructured at dreamdata.io/pricing: no separate quote-only Starter plan any more — "Plan for smaller teams" holds only Free $0; Advanced now two cards, "Attribution & Activation" (custom) and new "Dreamdata AI" (no price) which carries Data Warehouse and the MCP server; SCIM is an add-on; body's Free/Starter/Advanced description no longer matches; freemium and pricing_starts_at null hold; verified 2026-11-10)
 - refresh:C: [type:tool] [vertical:revops] fathom — material (tiers changed at fathom.ai/pricing: Enterprise moved from quote-only to published $35/user/mo annual-only; Business now shows a 2-user minimum; HIPAA with standard BAA now on Team; Business adds Deal View, coaching metrics, AI scorecards; Free $0, Premium $20/$16, Team $19/$15 (2-seat min), Business $34/$25 unchanged; pricing_starts_at 0 holds; API + MCP still listed; verified 2026-11-10)
 - refresh:C: [type:tool] [vertical:revops] heyreach — material (MCP flipped + tiers restructured at heyreach.io/pricing: "HeyReach MCP" now listed on Growth/Agency/Unlimited so mcp_available false -> true; Growth now volume-priced $79/sender/mo for 1-9 senders, $59 from 10 (annual $64/$48; entry says $63), capped at 50 senders; Agency now $999/mo 25 senders (annual $800, entry $799) or $1,399/mo 50 senders (annual $1,120); Unlimited $2,999 ($2,399 annual) unchanged but capped at 300 senders; new custom "Done for you" tier; body's "Agency cheaper from the 13th sender" crossover math is wrong; pricing_starts_at 79 holds; verified 2026-11-10)
+- refresh:C: [type:tool] [vertical:legal-ops] mycase — material (MCP flipped at mycase.com/pricing: "8am MyCase MCP" (official Claude connector) now listed on Basic, Pro and Advanced, so mcp_available false -> true; Basic $50/$60, Pro $100/$120, Advanced $130/$150, Accounting $39, OCR $30/5,000 pages, open API on Advanced all unchanged; pricing_starts_at 50 holds; verified 2026-11-15)
+- refresh:C: [type:tool] [vertical:cross] n8n — material (allowances cut >=20% at n8n.io/pricing: AI Assistant credits Starter 2,300 -> 1,600 and Pro 13,700 -> 9,600 (~-30%); Pro concurrency 20 -> up to 50; Business EUR4,000 per extra 300K executions overage no longer stated (FAQ: overage "may apply"); monthly-billing price no longer shown, "+20% monthly" unconfirmable; prices Starter EUR20, Pro EUR50, Business EUR667 annual and executions 2.5K/10K/40K unchanged; MCP still on Starter/Pro; borderline B/C, queued C for the allowance cut; verified 2026-11-15)
+- refresh:C: [type:tool] [vertical:revops] navattic — material (packaging changed at navattic.com/pricing: new "Navattic Agents" offering priced by conversations and agents (includes Base); Startup now "contact for pricing" (entry cites $125/mo); MCP server listed on Base, "MCP suggested demos" on Growth (entry puts MCP on Startup); Base adds premium AI voiceovers + 100 AI avatar minutes, Growth 300; mcp_available true holds; verified 2026-11-15)
+- refresh:C: [type:tool] [vertical:revops] ocean-io — material (tiers restructured at ocean.io/pricing (403 direct, read via proxy): credit pay-as-you-go ($0.069/credit), monthly and yearly ($0.063/credit, $567/yr) options gone; now Trial (free), Growth $250/mo billed annually ($3,000/yr, 60,000 credits valid 12 months), Revenue Navigator (custom); pricing_starts_at 47 -> 250 (or 0 with trial), pricing_model usage-based -> annual subscription; MCP + REST API on all plans; worked examples and Clay comparison wrong; verified 2026-11-15)
+- refresh:C: [type:tool] [vertical:revops] quotapath — material (tier added at quotapath.com/pricing: new Strategic tier (managed service with Atlas AI strategist, unpriced) plus unpriced "Enhanced" service option; entry says two tiers; Growth $35/user/mo + $525/mo platform, Premium $50 + $800, 5 users included, API on Premium unchanged; verified 2026-11-15)
+- refresh:C: [type:tool] [vertical:recruiting] recruit-crm — material (add-ons restructured + MCP moved at recruitcrm.io/pricing: dollar add-ons ($41 workflow, $20 multiposting, $250 enrichment, $12 LinkedIn, $25 analytics, $41 Recruit Craft) replaced by credits (~$0.10 each; included 100 Pro / 200 Business / 2,000 Enterprise per user/mo; e.g. analytics 300/user/mo, LinkedIn 150, multipost 25/job, workflow 500/mo); MCP now on all tiers incl. Pro (entry: Business+); open API still Business+; seats Pro $95, Business $135, Enterprise $215 unchanged; monthly $109/$159/$259 unconfirmed ("Save up to 17%"); verified 2026-11-15)
+- refresh:C: [type:tool] [vertical:revops] scratchpad — material (tiers restructured + repositioned at scratchpad.com/pricing: "One Simple Plan" $16/user/mo annual, $20 monthly, 30-day free trial; Free, Solo ($19/$24), Team ($49/$62), Enterprise and the AI-credit model gone; pricing_starts_at 19 -> 16, pricing_model freemium -> flat/trial; page now leads with making Salesforce easier, not AI agents and credits; verified 2026-11-15)
+- refresh:C: [type:tool] [vertical:revops] sendoso — material (tiers restructured at sendoso.com/pricing: Starter split into "Start with Merch" (5 licenses, Shopify only, no platform fee for custom merch) and "Start with Gifting" (5 licenses, 100 sends/mo, 1 integration + MCP Server); Core, Advanced (Oso agent), Enterprise unchanged; still no prices; footer now "SENDER, INC." and Merch on merch.co — check for ownership/rebrand; verified 2026-11-15)
+- refresh:C: [type:tool] [vertical:revops] storylane — material (RepX tiers restructured at storylane.io/pricing: Growth $2,000/mo now up to 25,000 visitors (was 10,000); Premium price no longer published (was $3,000/mo, 40,000 visitors), Premium/Enterprise only in FAQ unpriced; new unpriced 10,000-visitor tier; Demo Suite (Free, Starter $40/$50, Growth $500/$625, Premium $1,200/$1,500, Enterprise) unchanged; MCP Starter+, API Enterprise; verified 2026-11-15)
 - refresh:C: [type:comparison] [vertical:revops] 6sense-vs-demandbase — body 190d stale (last_updated 2026-05-02, SLA 180d)
 - refresh:C: [type:comparison] [vertical:recruiting] alternatives-to-ashby — body 190d stale (last_updated 2026-05-02, SLA 180d)
 - refresh:C: [type:comparison] [vertical:revops] alternatives-to-attio — body 190d stale (last_updated 2026-05-02, SLA 180d)
