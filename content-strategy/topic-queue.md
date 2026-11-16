@@ -78,14 +78,14 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:revops] showpad — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → slug: showpad
 - refresh:A: [type:tool] [vertical:revops] spekit — pricing 63d unverified (pricing_checked 2026-09-13, SLA 60d) → slug: spekit
 - refresh:A: [type:tool] [vertical:revops] storylane — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → skip: requeued as refresh:C (pricing moved or entry stale — see the refresh:C line below)
-- refresh:A: [type:tool] [vertical:recruiting] textio — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] varicent — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] vivun — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] weflow — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] wolters-kluwer-libra — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] workstream — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] xactly — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] xakia — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] textio — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] varicent — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] vivun — pricing 64d unverified (pricing_checked 2026-09-12, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] weflow — pricing 65d unverified (pricing_checked 2026-09-11, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:legal-ops] wolters-kluwer-libra — pricing 61d unverified (pricing_checked 2026-09-15, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:recruiting] workstream — pricing 66d unverified (pricing_checked 2026-09-10, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] xactly — pricing 62d unverified (pricing_checked 2026-09-14, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:legal-ops] xakia — pricing 67d unverified (pricing_checked 2026-09-09, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
 - refresh:C: [type:stack] [vertical:recruiting] interview-intelligence-stack — cascade (material: pillar 2026-11-06 > stack's last_updated 2026-09-07) → slug: interview-intelligence-stack
 - refresh:C: [type:tool] [vertical:revops] arcade-dev — material (billing meter restructured at arcade.dev/pricing: auth events (2,000 free, $0.10/event) gone; now Free $0 with 2,000 tool calls/mo, Team $25/mo platform fee + $0.01/tool call, Enterprise custom; prose built on the auth-event model ($365 example, 5,000-seat warning) is wrong; read blog.arcade.dev/pricing-updates; verified 2026-11-10) → slug: arcade-dev
 - refresh:C: [type:tool] [vertical:revops] avoma — material (price moved >=20% at avoma.com/pricing: Organization $24 -> $29/seat/mo annual (+20.8%), monthly still $39; Startup $19/$29 and Enterprise $39 unchanged; Gong-scope sum Org+CI+RI becomes $87/seat/mo (~$1,044/yr, was $82/~$984); pricing_starts_at 19 holds; verified 2026-11-10) → slug: avoma
@@ -267,19 +267,19 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:A: [type:tool] [vertical:customer-success] rippit — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → skip: pricing moved <20% — requeued as refresh:B: below
 - refresh:A: [type:tool] [vertical:legal-ops] sandstone — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → slug: sandstone
 - refresh:A: [type:tool] [vertical:revops] scribe — pricing 62d unverified (pricing_checked 2026-09-07, SLA 60d) → slug: scribe
-- refresh:A: [type:tool] [vertical:recruiting] shl — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] solidroad — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:legal-ops] solve-intelligence — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] sybill — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d)
-- refresh:A: [type:tool] [vertical:recruiting] teamtailor — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] tines — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] traction-complete — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] trumpet — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] unthread — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] userpilot — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d)
-- refresh:A: [type:tool] [vertical:customer-success] whatfix — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] workato — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d)
-- refresh:A: [type:tool] [vertical:revops] zenity — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d)
+- refresh:A: [type:tool] [vertical:recruiting] shl — pricing 64d unverified (pricing_checked 2026-09-05, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:customer-success] solidroad — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:legal-ops] solve-intelligence — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] sybill — pricing 66d unverified (pricing_checked 2026-09-03, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:recruiting] teamtailor — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] tines — pricing 69d unverified (pricing_checked 2026-08-31, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] traction-complete — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] trumpet — pricing 65d unverified (pricing_checked 2026-09-04, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:customer-success] unthread — pricing 61d unverified (pricing_checked 2026-09-08, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:customer-success] userpilot — pricing 71d unverified (pricing_checked 2026-08-29, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:customer-success] whatfix — pricing 70d unverified (pricing_checked 2026-08-30, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] workato — pricing 68d unverified (pricing_checked 2026-09-01, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
+- refresh:A: [type:tool] [vertical:revops] zenity — pricing 63d unverified (pricing_checked 2026-09-06, SLA 60d) → claimed: refresh 2026-11-16T01:14:29Z
 - refresh:A: [type:tool] [vertical:revops] netsuite — pricing never verified (no pricing_checked field; SLA 60d) → slug: netsuite
 - refresh:A: [type:tool] [vertical:revops] zoho-crm — pricing never verified (no pricing_checked field; SLA 60d) → slug: zoho-crm
 - refresh:A: [type:tool] [vertical:recruiting] bullhorn — pricing 67d unverified (pricing_checked 2026-08-19, SLA 60d) → slug: bullhorn
