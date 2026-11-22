@@ -27,7 +27,7 @@ Each line carries at most one lifecycle marker, appended in place:
 
 ## Refresh queue
 
-- refresh:C: [type:comparison] [vertical:revops] 11x-vs-artisan — body 183d stale (last_updated 2026-05-23, SLA 180d)
+- refresh:C: [type:comparison] [vertical:revops] 11x-vs-artisan — body 183d stale (last_updated 2026-05-23, SLA 180d) → claimed: refresh 2026-11-22T21:13:20Z
 - refresh:C: [type:comparison] [vertical:revops] amplemarket-vs-apollo — body 183d stale (last_updated 2026-05-23, SLA 180d)
 - refresh:C: [type:comparison] [vertical:recruiting] avature-vs-beamery — body 183d stale (last_updated 2026-05-23, SLA 180d)
 - refresh:C: [type:comparison] [vertical:recruiting] bullhorn-vs-loxo — body 183d stale (last_updated 2026-05-23, SLA 180d)
