@@ -33,7 +33,7 @@ Each line carries at most one lifecycle marker, appended in place:
 - refresh:C: [type:comparison] [vertical:recruiting] bullhorn-vs-loxo — body 183d stale (last_updated 2026-05-23, SLA 180d) → slug: bullhorn-vs-loxo
 - refresh:C: [type:tool] [vertical:revops] calendly — body 183d stale (last_updated 2026-05-23, SLA 180d) → slug: calendly
 - refresh:C: [type:comparison] [vertical:revops] clari-vs-aviso — body 183d stale (last_updated 2026-05-23, SLA 180d) → slug: clari-vs-aviso
-- refresh:C: [type:comparison] [vertical:revops] clari-vs-boostup — body 183d stale (last_updated 2026-05-23, SLA 180d)
+- refresh:C: [type:comparison] [vertical:revops] clari-vs-boostup — body 183d stale (last_updated 2026-05-23, SLA 180d) → claimed: refresh 2026-11-26T21:13:32Z
 - refresh:C: [type:comparison] [vertical:revops] default-vs-chili-piper — body 181d stale (last_updated 2026-05-25, SLA 180d)
 - refresh:C: [type:stack] [vertical:legal-ops] ediscovery-stack — body 183d stale (last_updated 2026-05-23, SLA 180d)
 - refresh:C: [type:comparison] [vertical:revops] gainsight-vs-churnzero — body 183d stale (last_updated 2026-05-23, SLA 180d)
